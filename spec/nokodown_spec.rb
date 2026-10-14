@@ -27,6 +27,19 @@ RSpec.describe Nokodown do
       result.title.should == "Frames"
     end
 
+    it "returns empty markdown, but the title, when the page has no content" do
+      result = Nokodown.extract('<title>Dashboard</title><body><div id="app"></div><script src="/app.js"></script></body>')
+
+      result.markdown.should == ""
+      result.title.should == "Dashboard"
+    end
+
+    it "keeps the headline of a page that has nothing else" do
+      html = "<title>Harbour Town Community Forum</title><body><h1>Is the ferry running today?</h1></body>"
+
+      Nokodown.to_markdown(html).should == "# Is the ferry running today?"
+    end
+
     it "accepts nil" do
       Nokodown.extract(nil).markdown.should == ""
     end

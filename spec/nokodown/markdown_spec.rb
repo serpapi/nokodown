@@ -208,5 +208,12 @@ RSpec.describe "Markdown conversion" do
     it "drops a trailing heading left without content" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
     end
+
+    it "keeps a trailing list of linked titles" do
+      html = '<h2>Candles</h2><p>3 products</p><h3><a href="/fig">Fig candle</a></h3>' \
+             '<h3><a href="/pear">Pear candle</a></h3><h3><a href="/sage">Sage candle</a></h3>'
+      convert(html).should == "## Candles\n\n3 products\n\n### [Fig candle](https://example.com/fig)\n\n" \
+                              "### [Pear candle](https://example.com/pear)\n\n### [Sage candle](https://example.com/sage)"
+    end
   end
 end

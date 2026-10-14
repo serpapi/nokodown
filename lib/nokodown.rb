@@ -37,7 +37,8 @@ module Nokodown
   #   url:          page URL, used to resolve relative links and images
   #   main_content: true (default) keeps only the main content; false converts
   #                 the whole page, removing only invisible elements and scripts
-  #   title:        prepend the page title as an H1 when the content has none
+  #   title:        prepend the page title as an H1 when the content has none;
+  #                 a page with no content gives empty Markdown, not the title
   #   images:       include images
   #   links:        keep links; false renders link text only
   def self.extract(html, **options)
