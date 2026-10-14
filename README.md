@@ -87,7 +87,9 @@ region, or most of the page's text, is never removed because of its class name.
    share required depends on the page type its metadata declares.
 6. **Pruner**: in articles, Readability's conditional cleaning plus removal of
    bylines, datelines and inline boxes of links to other stories; on other
-   pages, removal of leftover link clusters. If article cleaning removes almost
+   pages, removal of leftover link clusters, unless they hold most of the text
+   as on an index page. Short links and boxes styled as buttons ("Add to
+   cart", "Book a demo") go on both. If article cleaning removes almost
    everything, it is undone and light cleaning is used instead.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the

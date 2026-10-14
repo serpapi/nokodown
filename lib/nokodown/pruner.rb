@@ -7,6 +7,8 @@ module Nokodown
     TEXT_BLOCKS = "p, div, span, li, h1, h2, h3, h4, h5, h6, small, section, aside, figcaption, b, strong, em, i"
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
+    CALL_TO_ACTION = /(?<![a-z])(?:btn|btns|button|buttons|cta|ctas)(?![a-z])/.freeze
+    CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
 
     def initialize(nodes, mode)
       @nodes = nodes
@@ -17,6 +19,7 @@ module Nokodown
       @nodes.each do |root|
         @mode == :article ? prune_article(root) : remove_link_clusters(root)
         remove_boilerplate_text(root)
+        remove_calls_to_action(root)
       end
     end
 
@@ -133,11 +136,25 @@ module Nokodown
     # Navigation that survived as unlabeled markup: several links, almost no
     # other text, and no link long enough to be a headline.
     def remove_link_clusters(root)
+      clusters = root.css(CLUSTER_CONTAINERS).select { |node| !in_data_table?(node) && link_cluster?(node) }
+      # Removal can only start at one of these, so none means nothing to remove.
+      return if clusters.empty? || clusters_dominate?(root, clusters)
+
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
         next if in_data_table?(node)
 
         node.remove if link_cluster?(node)
       end
+    end
+
+    # On an index page (an A-Z list, a category grid) the clusters are the
+    # content, not navigation around it.
+    def clusters_dominate?(root, clusters)
+      keys = clusters.map { |node| Dom.key(node) }.to_set
+      outermost = clusters.reject do |node|
+        node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) }
+      end
+      outermost.sum { |node| Dom.text(node).length } >= Dom.text(root).length * 0.5
     end
 
     def link_cluster?(node)
@@ -161,8 +178,43 @@ module Nokodown
 
         boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
         copyright = text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
-        node.remove if boilerplate || copyright
+        # Highlighters wrap each token of code in a span: `print`, `email`.
+        node.remove if (boilerplate || copyright) && Dom.ancestors_named(node, "pre", "code").empty?
       end
+    end
+
+    # Links and boxes styled as buttons ("Add to cart", "Book a demo") are
+    # controls, not content. Cards (an image, a heading, a list) are content.
+    def remove_calls_to_action(root)
+      root.css("a, span, div, p").each do |node|
+        node.remove if call_to_action?(node)
+      end
+    end
+
+    def call_to_action?(node)
+      return false unless node["role"] == "button" || Dom.signature(node).match?(CALL_TO_ACTION)
+
+      text = Dom.text(node)
+      return false if text.length > 40 || text.split.size > 6 || toggle?(node, text)
+      return false if node.at_css(CALL_TO_ACTION_PARTS)
+
+      # In a data table the button is a cell value, like a plan's "Order" column.
+      !inside_sentence?(node, text) && !in_data_table?(node)
+    end
+
+    # Disclosure toggles, labelled with an FAQ question or a section title.
+    def toggle?(node, text)
+      node.key?("aria-expanded") || node.key?("aria-controls") || text.end_with?("?") ||
+        Dom.signature(node).match?(Preprocessor::DISCLOSURE)
+    end
+
+    # A button-styled link in running text ("<a class=btn>Download</a> the
+    # installer") is part of the sentence; one in a button group is not.
+    def inside_sentence?(node, text)
+      return false unless %w[a span].include?(node.name)
+
+      parent = node.parent
+      !Dom.signature(parent).match?(CALL_TO_ACTION) && Dom.text(parent).length - text.length >= 20
     end
   end
 end

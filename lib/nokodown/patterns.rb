@@ -80,7 +80,9 @@ module Nokodown
         (?:hide|show|toggle)\scaption|enlarge\sthis\simage|
         (?:image|photo|picture|slide)\s\d+\s(?:of|\/)\s\d+|\d*\s?comments?|
         (?:this\s\w+\srequires|please\senable|you\sneed\sto\senable)\sjavascript.*|
-        permalink|link\sto\sthis\s(?:heading|section)|direct\slink\sto\sthis\s(?:heading|section)
+        permalink|link\sto\sthis\s(?:heading|section)|direct\slink\sto\sthis\s(?:heading|section)|
+        add\sto\s(?:cart|bag|basket|wish\s?list|favou?rites|compare)|quick\s(?:shop|view|add)|
+        (?:choose|select|more|view)\soptions|compare\sproducts?(?:\s\(\d+\))?|filter\s(?:&|and)\ssort|sort\sby
       )[\s.:!…»›→>]*\z
     /xi.freeze
 
