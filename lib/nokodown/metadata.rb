@@ -19,8 +19,9 @@ module Nokodown
     HIERARCHY_SEPARATOR = %r{\s[\\/>»]\s}.freeze
     SITE_NAME_SEPARATOR = "[#{TITLE_SEPARATORS}:·•]"
     WORD = /[\p{L}\p{N}]+/.freeze
-    HEADING_END = /\A([?!.)\]"'”’]*)(?:#{SEPARATOR}|\s*[|:·•,])/.freeze
-    HOME_LINK = %r{\A(?:(?:https?:)?//[^/]+)?/?\z}.freeze
+    HEADING_END = /\A([?!.)\]"'”’]*)(?:\s[-–—]\s|\s*[|:·•,])/.freeze
+    HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?/?(?:index\.[a-z]+|[a-z]{2}(?:[-_][a-z]{2})?/?)?\z}i.freeze
+    LOGO_NAME = /logo|brand|site[-_]?(?:title|name)/i.freeze
 
     TITLE_KEYS = %w[dc:title dcterm:title og:title weibo:article:title weibo:webpage:title title twitter:title parsely-title].freeze
     BYLINE_KEYS = %w[dc:creator dcterm:creator author parsely-author].freeze
@@ -196,35 +197,61 @@ module Nokodown
 
     # Cut only at a separator: an H1 that is just the first words of a longer
     # name ("Trail Running" in "Trail Running Shoes for Women") says less than
-    # the title. An H1 linking home is the site's logo, not the page's name.
+    # the title. A logo H1 names the site, not the page.
     def title_from_h1(title, h1s)
       matches = title.enum_for(:scan, WORD).map { Regexp.last_match }
       title_words = matches.map { |match| match[0].downcase }
       h1s.each do |h1|
-        words = Dom.tokenize(h1.content)
-        next if words.empty? || words.size >= title_words.size || title_words.first(words.size) != words || home_link?(h1)
+        h1_words = tokens(h1.content)
+        next if h1_words.empty? || h1_words.size >= title_words.size || title_words.first(h1_words.size) != h1_words
+        next if logo?(h1)
 
-        cut = matches[words.size - 1].end(0)
+        cut = matches[h1_words.size - 1].end(0)
         rest = title[cut..].match(HEADING_END)
         return title[0, cut] + rest[1] if rest
       end
       nil
     end
 
-    # mdBook and similar generators put the book's name in an H1 outside the
-    # main content and at the end of every page's title. An H1 inside it is the
-    # page's own heading, as in "Site | Page" titles.
+    # mdBook and similar generators end every page's title with the book's
+    # name, which their menu bar shows as an H1. "Site | Page" titles end
+    # with the page's H1 too, so the part kept must itself be a heading on
+    # the page, and of at least 3 words, as in without_last_part.
     def title_without_site_h1(title, h1s)
       separator = title.enum_for(:scan, SEPARATOR).map { Regexp.last_match }.last
-      return if separator.nil? || words(title[0, separator.begin(0)]) < 3
+      return if separator.nil?
 
-      site_words = Dom.tokenize(title[separator.end(0)..])
-      site_h1 = h1s.any? { |h1| Dom.tokenize(h1.content) == site_words && Dom.ancestors_named(h1, "main", "article").empty? }
-      title[0, separator.begin(0)] if site_h1
+      page = title[0, separator.begin(0)]
+      site_words = tokens(title[separator.end(0)..])
+      return if words(page) < 3 || site_words.empty? || h1s.none? { |h1| tokens(h1.content) == site_words }
+
+      page if heading_text?(page)
     end
 
-    def home_link?(h1)
-      h1.css("a[href]").any? { |link| link["href"].strip.match?(HOME_LINK) }
+    def heading_text?(text)
+      text_words = tokens(text)
+      @doc.css("body h1, body h2, body h3").any? { |heading| tokens(heading.content) == text_words }
+    end
+
+    # A logo H1 links to the site's root or names itself a logo, brand or site
+    # title. A <header> around it, or its container's classes, say too little:
+    # most such H1s are the page's own title.
+    def logo?(h1)
+      nodes = [h1] + h1.css("[class], [id]").to_a
+      return true if nodes.any? { |node| "#{node["class"]} #{node["id"]}".match?(LOGO_NAME) }
+
+      h1.css("a[href]").any? { |link| home_link?(link["href"].strip) }
+    end
+
+    # An empty href links to the page itself, as a permalink does.
+    def home_link?(href)
+      !href.empty? && href.match?(HOME_LINK)
+    end
+
+    # Split before downcasing, like the title's words, which are scanned first
+    # for their offsets: downcasing "İ" adds a combining dot that splits words.
+    def tokens(text)
+      text.scan(WORD).map(&:downcase)
     end
 
     def document_byline

@@ -60,17 +60,43 @@ RSpec.describe Nokodown::Metadata do
     metadata('<meta property="og:title" content="Trail Running Shoes for Women">', "<h1>Trail Running</h1>")[:title].should == "Trail Running Shoes for Women"
   end
 
-  it "does not take a logo H1 that links home for the page's name" do
-    metadata('<meta property="og:title" content="Example Corp | Industrial Widgets">', '<header><h1><a href="/">Example Corp</a></h1></header>')[:title]
-      .should == "Example Corp | Industrial Widgets"
+  it "does not cut at a slash, which also joins words within a name" do
+    metadata("<title>Rock / Pop Music Store Online</title>", "<h1>Rock</h1>")[:title]
+      .should == "Rock / Pop Music Store Online"
   end
 
-  it "drops a book's name that an H1 outside the main content repeats at the end of the title" do
+  it "matches an H1 whose letters change length when downcased" do
+    metadata("<title>İstanbul Gezi Rehberi | Örnek Site</title>", "<h1>İstanbul Gezi Rehberi</h1>")[:title]
+      .should == "İstanbul Gezi Rehberi"
+  end
+
+  it "does not take a logo H1 for the page's name" do
+    title = "Example Corp | Industrial Widgets"
+    head = %(<meta property="og:title" content="#{title}">)
+
+    metadata(head, '<header><h1><a href="/">Example Corp</a></h1></header>')[:title].should == title
+    metadata(head, '<h1><a href="https://example.com/index.html">Example Corp</a></h1>')[:title].should == title
+    metadata(head, '<h1><a href="/en-us/">Example Corp</a></h1>')[:title].should == title
+    metadata(head, '<header><h1 class="site-title">Example Corp</h1></header>')[:title].should == title
+  end
+
+  it "drops a book's name that its H1 repeats at the end of the title when the rest is a heading" do
     body = '<div class="menu-bar"><h1 class="menu-title">The Example Book</h1></div><main><h2>Understanding Ownership Rules</h2></main>'
 
     metadata("<title>Understanding Ownership Rules - The Example Book</title>", body)[:title].should == "Understanding Ownership Rules"
-    metadata("<title>Example Search Weekly | State of Search</title>", "<article><h1>State of Search</h1></article>")[:title]
-      .should == "Example Search Weekly | State of Search"
+  end
+
+  it "keeps a site name that comes before the page's H1 in the title" do
+    metadata("<title>City of Springfield | Parks and Recreation</title>", "<div><h1>Parks and Recreation</h1></div>")[:title]
+      .should == "City of Springfield | Parks and Recreation"
+    metadata("<title>Acme | Contact Us</title>", "<div><h1>Contact Us</h1></div><footer><h3>Acme</h3></footer>")[:title]
+      .should == "Acme | Contact Us"
+  end
+
+  it "does not match an H1 without words to the end of a title without words" do
+    body = '<h1><img src="/logo.png" alt=""></h1><h2>Understanding Ownership Rules</h2>'
+
+    metadata("<title>Understanding Ownership Rules - ★★★</title>", body)[:title].should == "Understanding Ownership Rules - ★★★"
   end
 
   it "uses the document byline and language when there is no metadata" do
