@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><title>Retries – Courier HTTP Client Docs</title></head>
+<body>
+  <header class="navbar"><a href="/">Courier</a><a href="/docs">Docs</a><a href="/blog">Blog</a><a href="https://github.com/example/courier">GitHub</a></header>
+  <div class="layout">
+    <nav class="sidebar docs-nav">
+      <ul>
+        <li><a href="/docs/install">Installation</a></li>
+        <li><a href="/docs/requests">Making requests</a></li>
+        <li><a href="/docs/retries" aria-current="page">Retries</a></li>
+        <li><a href="/docs/timeouts">Timeouts</a></li>
+      </ul>
+    </nav>
+    <main class="markdown-body">
+      <h1 id="retries">Retries<a class="anchor" href="#retries">#</a></h1>
+      <p>Courier retries idempotent requests that fail with a connection error or a <code>5xx</code> status. Pass <code>retries:</code> to change the number of attempts.</p>
+      <div class="highlight highlight-source-ruby"><pre>client = Courier.new(retries: 3)
+client.get("/status")</pre></div>
+      <div class="admonition note"><p class="admonition-title">Note</p><p>Requests with a body are only retried when <code>retry_non_idempotent: true</code> is set.</p></div>
+      <h2 id="backoff">Backoff</h2>
+      <p>The delay between attempts grows exponentially: <em>base</em> × 2<sup>attempt</sup>, capped at <strong>30 seconds</strong>.</p>
+      <table>
+        <tr><th>Option</th><th>Default</th><th>Description</th></tr>
+        <tr><td><code>retries</code></td><td>2</td><td>Attempts after the first one</td></tr>
+        <tr><td><code>base_delay</code></td><td>0.5</td><td>Seconds before the first retry</td></tr>
+      </table>
+      <nav class="pagination-nav"><a href="/docs/requests">« Making requests</a><a href="/docs/timeouts">Timeouts »</a></nav>
+      <div class="feedback">Was this page helpful? <button>Yes</button><button>No</button></div>
+    </main>
+    <aside class="toc"><p>On this page</p><ul><li><a href="#retries">Retries</a></li><li><a href="#backoff">Backoff</a></li></ul></aside>
+  </div>
+</body>
+</html>

@@ -1,0 +1,213 @@
+# frozen_string_literal: true
+
+module ReadableMarkdown
+  # Readability's paragraph scoring, run without rewriting the DOM: paragraphs
+  # push score up to their ancestors, the best ancestor wins, and siblings that
+  # look like part of the same article are merged back in.
+  class Scorer
+    Result = Struct.new(:top, :nodes, :score)
+
+    SCORED = Set.new(%w[p td pre section h2 h3 h4 h5 h6]).freeze
+    PARAGRAPH_MIN = 25
+    TOP_CANDIDATES = 5
+    COMMAS = /[,\u060C\uFE50\uFE10\uFE11\u2E41\u2E34\u2E32\uFF0C]/.freeze
+
+    def self.class_weight(node)
+      [node["class"], node["id"]].sum do |value|
+        next 0 if value.nil? || value.empty?
+
+        value = value.downcase
+        (value.match?(Patterns::POSITIVE) ? 25 : 0) - (value.match?(Patterns::NEGATIVE) ? 25 : 0)
+      end
+    end
+
+    def initialize(root, stats)
+      @root = root
+      @root_key = Dom.key(root)
+      @stats = stats
+      @scores = {}
+      @nodes = {}
+    end
+
+    def call
+      @paragraph_keys = Dom.paragraph_keys(@root)
+      score_paragraphs
+      return if @scores.empty?
+
+      @scores.each_key { |key| @scores[key] *= 1 - @stats.link_density(@nodes[key]) }
+      ranked = @scores.keys.max_by(TOP_CANDIDATES) { |key| @scores[key] }.map { |key| @nodes[key] }
+      top = climb(shared_ancestor(ranked) || ranked.first)
+      Result.new(top, merge_siblings(top), score(top) || 0.0)
+    end
+
+    private
+
+    def paragraph?(node)
+      @paragraph_keys.include?(Dom.key(node))
+    end
+
+    def score(node)
+      @scores[Dom.key(node)]
+    end
+
+    def score_paragraphs
+      ignored = secondary_keys
+      @root.traverse do |node|
+        next unless node.element?
+        next if ignored.include?(Dom.key(node))
+
+        if SCORED.include?(node.name) || paragraph?(node)
+          add_score(Dom.text(node), scoring_parent(node))
+        elsif node.name == "div"
+          phrasing_runs(node).each { |text| add_score(text, node) }
+        end
+      end
+    end
+
+    # Comment threads are prose too, and on news sites they often outscore the
+    # article. A thread holding most of the page (a forum) still counts.
+    def secondary_keys
+      limit = @stats.text_chars(@root) * 0.5
+      regions = @root.css("*").select do |node|
+        Dom.signature(node).match?(Patterns::SECONDARY) && @stats.text_chars(node) < limit
+      end
+      regions.flat_map { |region| [region] + region.css("*").to_a }.map { |node| Dom.key(node) }.to_set
+    end
+
+    # A div wrapping a single paragraph is that paragraph, as far as scoring goes.
+    def scoring_parent(node)
+      parent = node.parent
+      return parent unless node.name == "p" && parent&.name == "div" && parent.element_children.size == 1
+      return parent unless parent.children.all? { |child| child.element? || child.content.strip.empty? }
+
+      parent.parent
+    end
+
+    # Text sitting directly in a div between block children counts as paragraphs.
+    def phrasing_runs(div)
+      runs = [+""]
+      div.children.each do |child|
+        if child.element? && (Dom::PARAGRAPH_BREAKERS.include?(child.name) || Dom.block?(child))
+          runs << +""
+        else
+          runs.last << child.content
+        end
+      end
+      runs.map { |run| Dom.squish(run) }.reject(&:empty?)
+    end
+
+    def add_score(text, parent)
+      return if text.length < PARAGRAPH_MIN || parent.nil? || !within_root?(parent)
+
+      points = 1 + text.split(COMMAS, -1).size + [text.length / 100, 3].min
+      ancestors_from(parent).each_with_index do |ancestor, level|
+        key = Dom.key(ancestor)
+        @nodes[key] ||= ancestor
+        @scores[key] ||= initial_score(ancestor)
+        @scores[key] += points.to_f / divider(level)
+      end
+    end
+
+    def divider(level)
+      case level
+      when 0 then 1
+      when 1 then 2
+      else level * 3
+      end
+    end
+
+    def ancestors_from(parent)
+      list = []
+      current = parent
+      while current&.element? && list.size < 5
+        list << current
+        break if Dom.key(current) == @root_key
+
+        current = current.parent
+      end
+      list
+    end
+
+    def within_root?(node)
+      Dom.key(node) == @root_key || node.ancestors.any? { |ancestor| ancestor.element? && Dom.key(ancestor) == @root_key }
+    end
+
+    def initial_score(node)
+      self.class.class_weight(node) +
+        case node.name
+        when "div" then 5
+        when "pre", "td", "blockquote" then 3
+        when "address", "ol", "ul", "dl", "dd", "dt", "li", "form" then -3
+        when "h1", "h2", "h3", "h4", "h5", "h6", "th" then -5
+        else 0
+        end
+    end
+
+    # When several near-equal candidates share an ancestor, the content is
+    # split across them: a list of posts, or an article broken up by ads.
+    def shared_ancestor(ranked)
+      top_score = score(ranked.first)
+      return if top_score <= 0
+
+      peers = ranked.drop(1).select { |node| score(node) / top_score >= 0.75 }
+      return if peers.size < 3
+
+      peer_ancestor_keys = peers.map { |node| node.ancestors.map { |ancestor| Dom.key(ancestor) } }
+      climbable_ancestors(ranked.first).find do |ancestor|
+        key = Dom.key(ancestor)
+        peer_ancestor_keys.count { |keys| keys.include?(key) } >= 3
+      end
+    end
+
+    def climbable_ancestors(node)
+      node.ancestors.take_while { |ancestor| ancestor.element? && ancestor.name != "body" && within_root?(ancestor) }
+    end
+
+    # Readability walks up while the parent scores higher than its child: the
+    # content probably continues in the parent's other children.
+    def climb(top)
+      last = score(top) || 0.0
+      threshold = last / 3
+      climbable_ancestors(top).each do |parent|
+        parent_score = score(parent)
+        next unless parent_score
+        break if parent_score < threshold
+
+        return single_child_ancestor(parent) if parent_score > last
+
+        last = parent_score
+      end
+      single_child_ancestor(top)
+    end
+
+    def single_child_ancestor(node)
+      climbable_ancestors(node).each do |parent|
+        break unless parent.element_children.size == 1
+
+        node = parent
+      end
+      node
+    end
+
+    def merge_siblings(top)
+      return [top] if Dom.key(top) == @root_key || top.parent.nil?
+
+      top_score = score(top) || 0.0
+      threshold = [10, top_score * 0.2].max
+      top.parent.element_children.select do |sibling|
+        sibling == top || related_sibling?(sibling, top, top_score, threshold)
+      end
+    end
+
+    def related_sibling?(sibling, top, top_score, threshold)
+      same_class = !top["class"].to_s.empty? && sibling["class"] == top["class"]
+      sibling_score = score(sibling)
+      return true if sibling_score && sibling_score + (same_class ? top_score * 0.2 : 0) >= threshold
+      return false unless paragraph?(sibling)
+
+      text = Dom.text(sibling)
+      density = @stats.link_density(sibling)
+      (text.length > 80 && density < 0.25) || (text.length.between?(1, 80) && density.zero? && text.match?(/\.( |\z)/))
+    end
+  end
+end
