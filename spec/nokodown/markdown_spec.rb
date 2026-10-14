@@ -103,6 +103,65 @@ RSpec.describe "Markdown conversion" do
              '<img src="/a-large.jpg" alt="Harbour at dawn"><figcaption>Credit</figcaption></figure>'
       convert(html).should == "![Harbour at dawn](https://example.com/a-small.jpg)\n\nCredit"
     end
+
+    it "drops later copies of an image standing alone, such as a logo strip rendered twice" do
+      html = '<h2>Trusted by</h2><ul><li><img src="/acme.png" alt="Acme"></li><li><img src="/globex.png" alt="Globex"></li></ul>' \
+             '<div><img src="/acme.png" alt="Acme"><img src="/globex.png" alt="Globex"></div>' \
+             '<p>Rated <img src="/star.png" alt="star"><img src="/star.png" alt="star"> by 2,000 teams</p>'
+      convert(html).should == "## Trusted by\n\n- ![Acme](https://example.com/acme.png)\n- ![Globex](https://example.com/globex.png)\n\n" \
+                              "Rated ![star](https://example.com/star.png)![star](https://example.com/star.png) by 2,000 teams"
+    end
+
+    describe "in the main content" do
+      def extract(html)
+        Nokodown.to_markdown("<body>#{html}</body>", url: "https://example.com/dir/page", title: false)
+      end
+
+      it "drops card thumbnails beside a text link to the same page" do
+        html = "<main><h1>Hiking boots</h1><ul>" \
+               '<li><a href="/p/1"><img src="/1.jpg" alt="Trail boot in brown leather"></a>' \
+               '<h3><a href="/p/1">Trail boot</a></h3><p>Waterproof leather for long days on rocky ground.</p></li>' \
+               '<li><a href="/p/2/"><img src="/2.jpg" alt="Ridge runner"><img src="/2-hover.jpg" alt="Ridge runner, side view"></a>' \
+               '<h3><a href="/p/2">Ridge runner</a></h3><p>A light mesh boot for fast summer hikes.</p></li>' \
+               '<li><a href="/lookbook.jpg"><img src="/lookbook-small.jpg" alt="Boots on a mountain trail"></a></li></ul></main>'
+        extract(html).should == "# Hiking boots\n\n" \
+                                "- ### [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
+                                "- ### [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes.\n\n" \
+                                "- ![Boots on a mountain trail](https://example.com/lookbook-small.jpg)"
+      end
+
+      it "keeps article images unless a short alt repeats a text link to the same page" do
+        prose = "<p>#{'Tidal lagoons release water through turbines as the tide turns. ' * 4}</p>"
+        html = "<article><h1>Tidal power</h1>#{prose}" \
+               '<p><a href="/media/harbour-full.jpg"><img src="/media/harbour.jpg" alt="Harbour wall at dawn"></a></p>' \
+               '<p><img src="/media/turbine.jpg" alt=""></p>' \
+               '<p>Next: <a href="/guide"><img src="/guide.jpg" alt="Tide guide"></a> <a href="/guide">A guide to tides</a></p>' \
+               "#{prose}</article>"
+        markdown = extract(html)
+
+        markdown.should include("![Harbour wall at dawn](https://example.com/media/harbour.jpg)")
+        markdown.should include("![](https://example.com/media/turbine.jpg)")
+        markdown.should include("Next: [A guide to tides](https://example.com/guide)")
+        markdown.should_not include("guide.jpg")
+      end
+
+      it "drops images marked decorative, but not the ticks of a comparison table" do
+        html = '<main><h1>Plans</h1><div class="hero"><img src="/hero.jpg" alt=""></div><p>Pick the plan that fits your team.</p>' \
+               "<table><tr><th>Feature</th><th>Basic</th><th>Pro</th></tr>" \
+               '<tr><td>Backups</td><td><img src="/tick.png" alt=""></td><td><img src="/tick.png" alt=""></td></tr>' \
+               '<tr><td>Support</td><td><img src="/cross.png" alt=""></td><td><img src="/tick.png" alt=""></td></tr></table></main>'
+        extract(html).should == "# Plans\n\nPick the plan that fits your team.\n\n| Feature | Basic | Pro |\n| --- | --- | --- |\n" \
+                                "| Backups | ![](https://example.com/tick.png) | ![](https://example.com/tick.png) |\n" \
+                                "| Support | ![](https://example.com/cross.png) | ![](https://example.com/tick.png) |"
+      end
+
+      it "keeps the headings of sections that held only decorative images" do
+        html = "<main><h1>Shop software</h1><p>Everything you need to run a small shop.</p>" \
+               '<h2>Why us</h2><h3>Fast</h3><div><img src="/fast.png" role="presentation"></div>' \
+               '<h3>Safe</h3><div><img src="/safe.png" alt=""></div></main>'
+        extract(html).should == "# Shop software\n\nEverything you need to run a small shop.\n\n## Why us\n\n### Fast\n\n### Safe"
+      end
+    end
   end
 
   describe "lists" do

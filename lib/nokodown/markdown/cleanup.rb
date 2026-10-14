@@ -3,18 +3,21 @@
 module Nokodown
   module Markdown
     # Block-level tidying after rendering: repeated blocks, stray rules,
-    # punctuation-only lines and section headings left without a section.
+    # punctuation-only lines, section headings left without a section, and
+    # redundant or repeated images.
     module Cleanup
       DEDUPE_WINDOW = 4
       IMAGE_ONLY = /\A!\[([^\]]*)\]\([^)]*\)\z/.freeze
 
       module_function
 
-      def call(blocks)
+      # images: the Renderer's rendered_images.
+      def call(blocks, images = {})
         blocks = blocks.reject { |block| noise?(block) }
         blocks = dedupe(blocks)
         blocks = trim_rules(blocks)
-        drop_empty_sections(blocks)
+        blocks = drop_empty_sections(blocks)
+        images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
       end
 
       def noise?(block)

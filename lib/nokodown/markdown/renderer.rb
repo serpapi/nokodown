@@ -10,8 +10,8 @@ module Nokodown
       MAX_DEPTH = 400
       SEPARATOR_LINE = /\A\s*([-=_*~])\1{2,}\s*\z/.freeze
 
-      def initialize(urls, images: true, links: true)
-        @inline = Inline.new(urls, images: images, links: links)
+      def initialize(urls, images: true, links: true, redundant_images: Set.new)
+        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
         @links = links
         @depth = 0
         @contains_block = {}
@@ -50,6 +50,10 @@ module Nokodown
 
       def inline(nodes)
         @inline.render(nodes)
+      end
+
+      def rendered_images
+        @inline.rendered_images
       end
 
       def block_level?(node)

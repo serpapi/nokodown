@@ -68,6 +68,10 @@ with `main_content: false`, `:none` for a document without a body.
   URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,
   "Read more" links, code line numbers, and repeated responsive copies of the
   same image.
+- In the main content, card thumbnails next to a text link to the same page,
+  and images marked decorative (`role="presentation"`, or `alt=""` outside
+  figures, image links and text-free paragraphs and table cells). Anywhere,
+  later copies of an image that stands alone on its line.
 
 Every structural rule is guarded: an element that contains the `<main>`
 region, or most of the page's text, is never removed because of its class name.

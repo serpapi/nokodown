@@ -2,6 +2,8 @@
 
 module Nokodown
   module Markdown
+    RenderedImage = Struct.new(:url, :redundant)
+
     # Renders a run of inline nodes (text, emphasis, code, links, images) to
     # one string. Line breaks from <br> are kept as "\n".
     class Inline
@@ -10,15 +12,21 @@ module Nokodown
       UNSAFE_SCHEME = /\A\s*(?:javascript|vbscript|data|tel|sms):/i.freeze
       FOOTNOTE_MARKER = /\A\s*(?:\[[^\]]{1,8}\]|[*†‡§]+)\s*\z/.freeze
 
-      def initialize(urls, images:, links:)
+      def initialize(urls, images:, links:, redundant_images: Set.new)
         @urls = urls
         @images = images
         @links = links
+        @redundant_images = redundant_images
+        @rendered_images = {}
         @emphasis = Hash.new(0)
         @in_heading = false
         @in_link = false
         @link_images = nil
       end
+
+      # Markup of every image written, for Cleanup to drop redundant images
+      # and repeats.
+      attr_reader :rendered_images
 
       def render(nodes, heading: false)
         outer = @in_heading
@@ -143,10 +151,17 @@ module Nokodown
         return "" if src.nil? || Image.decorative?(node, src, alt)
 
         markup = "![#{Text.link_text(Text.escape(alt))}](#{Text.destination(src)})"
+        record(markup, src, node)
         return markup unless @link_images
 
         @link_images << markup
         ""
+      end
+
+      # An image is redundant only if every copy of it is.
+      def record(markup, src, node)
+        image = (@rendered_images[markup] ||= RenderedImage.new(src, true))
+        image.redundant &&= @redundant_images.include?(Dom.key(node))
       end
 
       # Markdown has no superscript, and "2attempt" is wrong; footnote markers
