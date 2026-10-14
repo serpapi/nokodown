@@ -17,16 +17,24 @@ module Nokodown
       LIST_MARKER = /\A *(?:[-*+]|\d+\.) /.freeze
       # The indentation and markers before a line's text.
       LINE_PREFIX = /\A(?: |>|(?:[-*+]|\d+\.) )*/.freeze
+      # Text never starts a line with ``` (Text.escape_line_starts), so this
+      # is the fence of a code block nested in a list or a quote.
+      FENCE = /#{LINE_PREFIX.source}(`{3,})/.freeze
 
       def initialize(images)
         @images = images
-        @seen = Set.new
+        # Image URL => @text_lines when its last copy was written.
+        @seen = {}
+        @text_lines = 0
       end
 
       def call(blocks)
         @linked = linked_pages(blocks)
         blocks.select do |block|
-          next true if block.kind == :code || !block.text.include?("![")
+          if block.kind == :code || !block.text.include?("![")
+            @text_lines += 1
+            next true
+          end
 
           text = without_images(block.text)
           next true if text == block.text
@@ -45,31 +53,67 @@ module Nokodown
       end
 
       def without_images(text)
-        lines = text.split("\n").map { |line| [line, line_without_images(line)] }
-        drop_bare_lines(lines).join("\n").gsub(/\n{3,}/, "\n\n").strip
+        lines = with_code_flags(text.split("\n")).map do |line, code|
+          next [line, line_without_images(line), false] unless code
+
+          @text_lines += 1
+          [line, line, true]
+        end
+        squeeze(drop_bare_lines(lines)).strip
+      end
+
+      # Each line, and whether it belongs to a nested code block, whose lines
+      # stay as they are.
+      def with_code_flags(lines)
+        fence = nil
+        lines.map do |line|
+          run = line[FENCE, 1]
+          if fence
+            fence = nil if run && run.length >= fence.length
+            next [line, true]
+          end
+          fence = run
+          [line, !run.nil?]
+        end
       end
 
       # Text that followed a removed image can now start the line, where "#"
       # or ">" would turn it into a heading or a quote.
       def line_without_images(line)
-        alone = line.gsub(IMAGE) { |markup| @images.key?(markup) ? "" : markup }.match?(BARE_LINE)
-        kept = line.gsub(IMAGE) { |markup| keep?(markup, alone) ? markup : "" }
-        return line if kept == line
+        removed = removed_images(line)
+        return line if removed.empty?
 
+        kept = line.gsub(IMAGE) { |markup| removed.include?(markup) ? "" : markup }
         prefix = line[LINE_PREFIX]
         prefix + Text.escape_line_starts(kept[prefix.length..].strip.squeeze(" "))
       end
 
-      # A repeat goes only when it stands alone on its line: beside text, as
-      # in a table of tick marks or a row of rating stars, each copy counts.
-      def keep?(markup, alone)
-        image = @images[markup]
-        return true if image.nil?
-        return false if redundant?(image)
+      # Redundant images, and later copies of an image standing alone on its
+      # line. Beside text, as in a table of tick marks, each copy counts.
+      def removed_images(line)
+        markups = line.scan(IMAGE).select { |markup| @images.key?(markup) }
+        content = markups.reject { |markup| redundant?(@images[markup]) }
+        alone = line.gsub(IMAGE) { |markup| @images.key?(markup) ? "" : markup }.match?(BARE_LINE)
+        removed = Set.new(markups - content)
+        removed.merge(repeats(content)) if alone
+        content.each { |markup| @seen[@images[markup].url] = @text_lines }
+        @text_lines += 1 unless alone
+        removed
+      end
 
-        first_copy = !@seen.include?(image.url)
-        @seen << image.url
-        first_copy || !alone
+      # A line with several copies of one image is a count, such as a row of
+      # rating stars, and keeps them all. Otherwise a copy without alt text
+      # adds nothing. One with alt text can mark its own item (an award, a
+      # verified tick), so it goes only when nothing but images came since
+      # the last copy, as in a logo strip shown twice.
+      def repeats(content)
+        urls = content.map { |markup| @images[markup].url }
+        return [] if urls.uniq.size < urls.size
+
+        content.select do |markup|
+          seen = @seen[@images[markup].url]
+          seen && (markup.start_with?("![]") || seen == @text_lines)
+        end
       end
 
       # A thumbnail goes only while the Markdown still links to its page; a
@@ -82,17 +126,24 @@ module Nokodown
       # only images starts at its next line instead.
       def drop_bare_lines(lines)
         marker = nil
-        lines.filter_map do |line, kept|
+        lines.filter_map do |line, kept, code|
           if kept != line && kept.match?(BARE_LINE)
             marker = pending_marker(line, marker)
             next
           end
-          next kept if kept.empty?
+          next [kept, code] if kept.empty?
 
           kept = marker + kept[marker.length..] if marker && continues_item?(kept, marker)
           marker = nil
-          kept
+          [kept, code]
         end
+      end
+
+      # One blank line where dropped lines left several, except in code.
+      def squeeze(lines)
+        lines.each_with_object([]) do |(line, code), kept|
+          kept << line unless !code && line.empty? && kept.last == ""
+        end.join("\n")
       end
 
       # The outermost item still waiting for its text: a bare line nested in

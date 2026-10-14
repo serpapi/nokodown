@@ -7,6 +7,11 @@ module Nokodown
     # marks as decorative. They are still rendered, and Cleanup removes them
     # last, so a heading whose section held only an image keeps its place.
     class RedundantImages
+      MONTHS = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|" \
+               "aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
+      # A squashed label that is only a date: "Oct 1, 2026", "1 October".
+      DATE = /\A(?:\d+(?:#{MONTHS})\d*|(?:#{MONTHS})\d+)\z/.freeze
+
       # Where a link destination points, ignoring the fragment and a trailing
       # slash. ImageCleanup reads the links left in the Markdown this way.
       def self.page(destination)
@@ -67,7 +72,7 @@ module Nokodown
       def adds_nothing?(alt, labels)
         return true if alt.empty?
 
-        names = labels.select { |label| label.match?(/\p{L}/) }
+        names = labels.select { |label| label.match?(/\p{L}/) && !label.match?(DATE) }
         !names.empty? && (@mode == :page || repeats?(alt, names))
       end
 

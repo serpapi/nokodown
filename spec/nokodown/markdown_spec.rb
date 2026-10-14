@@ -83,6 +83,14 @@ RSpec.describe "Markdown conversion" do
       convert('<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/real.jpg" alt="Real">').should == "![Real](https://example.com/real.jpg)"
     end
 
+    it "uses the <noscript> copy of a lazy image once, on either side of the placeholder" do
+      html = '<p><noscript><img src="/a.jpg" alt="Harbour"></noscript>' \
+             '<img class="lazyload" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/a.jpg" alt="Harbour">' \
+             '<noscript><img src="/b.jpg" alt="Pier"></noscript><img class="lazyload" data-src="/b.jpg" alt="Pier"></p>' \
+             '<p><img class="lazyload" data-src="/c-small.jpg" alt="Quay"><noscript><img src="/c.jpg" alt="Quay"></noscript></p>'
+      convert(html).should == "![Harbour](https://example.com/a.jpg)![Pier](https://example.com/b.jpg)\n\n![Quay](https://example.com/c.jpg)"
+    end
+
     it "takes the largest srcset candidate when there is no src" do
       convert('<img srcset="/s.jpg 320w, /l.jpg 1280w, /m.jpg 640w" alt="Photo">').should == "![Photo](https://example.com/l.jpg)"
     end
@@ -112,9 +120,27 @@ RSpec.describe "Markdown conversion" do
                               "Rated ![star](https://example.com/star.png)![star](https://example.com/star.png) by 2,000 teams"
     end
 
-    it "does not remove repeated images from code blocks" do
-      html = '<p><img src="/logo.png" alt="Logo"></p><pre><code>![Logo](https://example.com/logo.png)</code></pre>'
-      convert(html).should == "![Logo](https://example.com/logo.png)\n\n```\n![Logo](https://example.com/logo.png)\n```"
+    it "keeps every row of rating stars whole, however often a row repeats" do
+      row = ->(full) { ('<img src="/star.png" alt="star">' * full) + ('<img src="/star-empty.png" alt="empty star">' * (5 - full)) }
+      stars = ->(full) { ("![star](https://example.com/star.png)" * full) + ("![empty star](https://example.com/star-empty.png)" * (5 - full)) }
+      ratings = [4, 2, 5, 4]
+      html = ratings.each_with_index.map { |full, i| "<div class=\"rating\">#{row.call(full)}</div><p>Review #{i + 1}</p>" }.join
+      convert(html).should == ratings.each_with_index.map { |full, i| "#{stars.call(full)}\n\nReview #{i + 1}" }.join("\n\n")
+    end
+
+    it "keeps a badge with alt text on each post, but drops later copies of an image without one" do
+      html = %w[Member Moderator Member].each_with_index.map do |role, i|
+        "<div><img src=\"/#{role.downcase}.png\" alt=\"#{role}\"><img src=\"/online.png\" alt=\"\"></div><p>Post #{i + 1}</p>"
+      end.join
+      convert(html).should == "![Member](https://example.com/member.png)![](https://example.com/online.png)\n\nPost 1\n\n" \
+                              "![Moderator](https://example.com/moderator.png)\n\nPost 2\n\n![Member](https://example.com/member.png)\n\nPost 3"
+    end
+
+    it "does not remove repeated images from code blocks, nested ones included" do
+      code = "<pre><code>![](https://example.com/logo.png)\n\n\nend</code></pre>"
+      html = %(<p><img src="/logo.png" alt=""></p>#{code}<ul><li><img src="/logo.png" alt=""></li><li>Use this:#{code}</li></ul>)
+      convert(html).should == "![](https://example.com/logo.png)\n\n```\n![](https://example.com/logo.png)\n\n\nend\n```\n\n" \
+                              "- Use this:\n\n  ```\n  ![](https://example.com/logo.png)\n\n\n  end\n  ```"
     end
 
     describe "in the main content" do
@@ -147,15 +173,17 @@ RSpec.describe "Markdown conversion" do
                                 "- ### [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes."
       end
 
-      it "keeps a thumbnail when no link left in the Markdown names its page" do
+      it "keeps a thumbnail when no link left in the Markdown names its page in words" do
         html = "<main><h1>Case studies</h1><p>How our customers ship faster with our software.</p>" \
                '<div><a href="/c/1"><img src="/1.jpg" alt="Acme warehouse floor"></a><p>Acme cut picking time in half.</p>' \
                '<a href="/c/1">Read more</a></div>' \
                '<div><a href="/c/2"><img src="/2.jpg" alt="Canvas tote bag"></a><p><a href="/c/2">$40</a></p></div>' \
+               '<div><a href="/c/4"><img src="/4.jpg" alt="Harbour wall at dawn"></a><p><a href="/c/4">Oct 1, 2026</a></p></div>' \
                '<div><a href="/c/3"><img src="/3.jpg" alt="Globex conveyor belts"></a><h4><a href="/c/3">Globex</a></h4></div></main>'
         extract(html).should == "# Case studies\n\nHow our customers ship faster with our software.\n\n" \
                                 "![Acme warehouse floor](https://example.com/1.jpg)\n\nAcme cut picking time in half.\n\n" \
                                 "![Canvas tote bag](https://example.com/2.jpg)\n\n[$40](https://example.com/c/2)\n\n" \
+                                "![Harbour wall at dawn](https://example.com/4.jpg)\n\n[Oct 1, 2026](https://example.com/c/4)\n\n" \
                                 "![Globex conveyor belts](https://example.com/3.jpg)"
       end
 

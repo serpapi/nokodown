@@ -67,7 +67,7 @@ module Nokodown
         fragment = @body.document.fragment(noscript.content)
         images = fragment.css("img")
         if images.size == 1 && Dom.text(fragment).empty?
-          (previous_image(noscript) || noscript).replace(images.first)
+          (lazy_copy(noscript, images.first) || noscript).replace(images.first)
         elsif Dom.char_count(fragment.content) >= 300 && empty_without_noscript?
           noscript.replace(fragment.children)
         end
@@ -84,13 +84,26 @@ module Nokodown
       Dom.char_count(@body.content) - invisible
     end
 
-    def previous_image(node)
-      sibling = node.previous_element
-      return unless sibling
-      return sibling if sibling.name == "img"
+    # The lazy copy sits just before the <noscript>, or just after it when it
+    # loads the same file. Otherwise both copies would be rendered.
+    def lazy_copy(noscript, image)
+      following = lone_image(noscript.next_element)
+      return following if following && same_source?(following, image)
 
-      images = sibling.css("img")
-      images.first if images.size == 1 && Dom.text(sibling).empty?
+      lone_image(noscript.previous_element)
+    end
+
+    def lone_image(node)
+      return unless node
+      return node if node.name == "img"
+
+      images = node.css("img")
+      images.first if images.size == 1 && Dom.text(node).empty?
+    end
+
+    def same_source?(img, image)
+      src = image["src"].to_s.strip
+      !src.empty? && ["src", *LAZY_SRC].any? { |name| img[name].to_s.strip == src }
     end
 
     def restore_lazy_image(img)
