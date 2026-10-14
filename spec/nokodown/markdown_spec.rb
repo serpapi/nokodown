@@ -35,15 +35,32 @@ RSpec.describe "Markdown conversion" do
         "2^(n-1), 2^(n - 1), x^(i=1), a_n, a_(n+1)"
     end
 
-    it "writes raised cents after a price as decimals" do
-      html = "<p>$549<sup>99</sup>, <span>$2,799</span><sup>00</sup>, <sup>$</sup>19<sup>95</sup>, the 10<sup>15</sup> scale</p>"
-      convert(html).should == "$549.99, $2,799.00, $19.95, the 10¹⁵ scale"
+    it "groups decimals, comma-separated indices, products and scripts followed by a letter" do
+      html = "<p>10<sup>2.5</sup>, 10<sup>-0.5</sup>, O(n<sup>2.373</sup>), a<sub>i,j</sub>, Smith<sup>a,b</sup>, " \
+             "e<sup>(x-1)(x+1)</sup>, e<sup>(n-1)</sup>, x<sub>i</sub>y<sub>i</sub></p>"
+      convert(html).should == "10^(2.5), 10^(-0.5), O(n^(2.373)), a_(i,j), Smith^(a,b), e^((x-1)(x+1)), e^(n-1), x_(i)y_i"
     end
 
-    it "keeps French and wrapped ordinals as text and uses the characters for raised o and TM" do
-      html = "<p>le 1<sup>er</sup> mai, le XIX<sup>e</sup> siècle, the 21<span><sup>st</sup></span>, " \
-             "1<sup>o</sup> piso, 30<sup>o</sup>C, Acme<sup>TM</sup></p>"
-      convert(html).should == "le 1er mai, le XIXe siècle, the 21st, 1º piso, 30ºC, Acme™"
+    it "reads formatted scripts by their text" do
+      convert("<p>2<sup><i>p</i></sup> &minus; 1, M<sub><i>p</i></sub>, <i>x</i><sup><i>n</i></sup>, 2<sup><i>n</i>&minus;1</sup></p>").should ==
+        "2^p − 1, M_p, *x*^n, 2^(n−1)"
+    end
+
+    it "keeps other raised words apart from the words around them and badges after a space as text" do
+      html = "<p>Smith<sup>a, b</sup>, studies<sup>1–3</sup>, Feature <sup>NEW</sup>, Feature <sup><b>NEW</b></sup></p><p><sup>a</sup>Adjusted</p>"
+      convert(html).should == "Smith a, b, studies 1–3, Feature NEW, Feature **NEW**\n\na Adjusted"
+    end
+
+    it "writes raised cents after a price as decimals" do
+      html = "<p>$549<sup>99</sup>, <span>$2,799</span><sup>00</sup>, <sup>$</sup>19<sup>95</sup>, the 10<sup>15</sup> scale, " \
+             "€12,<sup>99</sup>, 549<sup>99</sup> €</p>"
+      convert(html).should == "$549.99, $2,799.00, $19.95, the 10¹⁵ scale, €12,99, 549.99 €"
+    end
+
+    it "keeps French and wrapped ordinals and titles as text and uses the characters for raised o, degrees and TM" do
+      html = "<p>le 1<sup>er</sup> mai, le XIX<sup>e</sup> siècle, M<sup>me</sup> Roux, the 21<span><sup>st</sup></span>, " \
+             "1<sup>o</sup> piso, 30<sup>o</sup>C, Acme<sup>TM</sup>, Bar<sup>tm</sup></p>"
+      convert(html).should == "le 1er mai, le XIXe siècle, Mme Roux, the 21st, 1º piso, 30°C, Acme™, Bar™"
     end
   end
 
@@ -157,12 +174,32 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "- ● Waterproof\n- ○ Insulated\n\n- Cold\n- Dry\n\n- -5 °C\n- -3 °C"
     end
 
+    it "keeps any markers that differ between items, as in pros and cons" do
+      html = "<ul><li>+ Light</li><li>+ Cheap</li><li>- Fragile</li></ul><ul><li>✓ Fast</li><li>✗ Loud</li><li>• Big</li></ul>" \
+             "<ul><li>← Previous</li><li>→ Next</li></ul>"
+      convert(html).should == "- + Light\n- + Cheap\n- - Fragile\n\n- ✓ Fast\n- ✗ Loud\n- • Big\n\n- ← Previous\n- → Next"
+    end
+
+    it "keeps a run of glyphs, as in ratings" do
+      convert("<ul><li>●●●○○ Comfort</li><li>●●●○○ Warmth</li></ul>").should == "- ●●●○○ Comfort\n- ●●●○○ Warmth"
+    end
+
     it "keeps typed numbers that are not the item's own" do
       convert("<ol><li>1.5 kg flour</li><li>3. Salt</li></ol>").should == "1. 1.5 kg flour\n2. 3. Salt"
     end
 
     it "moves up a bulleted list that opens an item instead of printing an empty marker" do
       convert("<ul><li><ul><li>a</li><li>b</li></ul></li><li>c</li></ul>").should == "- a\n- b\n- c"
+    end
+
+    it "nests a list under the item with text before it" do
+      html = "<ul><li>Parent</li><li><ul><li>Child</li></ul></li></ul>" \
+             "<ul><strong>Minimum:</strong><br><ul><li>OS: Linux</li><li>Memory: 8 GB</li></ul></ul>"
+      convert(html).should == "- Parent\n  - Child\n\n- **Minimum:**\n  - OS: Linux\n  - Memory: 8 GB"
+    end
+
+    it "does not join a wrapped list to an item that ends with a list" do
+      convert("<ul><li>Mouse<ul><li>Quiet</li></ul></li><li><ul><li>Heavy</li></ul></li></ul>").should == "- Mouse\n  - Quiet\n- Heavy"
     end
 
     it "keeps an item together when content follows its nested list" do

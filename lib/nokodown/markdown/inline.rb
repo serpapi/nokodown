@@ -14,16 +14,25 @@ module Nokodown
       SCRIPT_SOURCE = "0123456789+−=()-"
       SUPERSCRIPTS = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾⁻"
       SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎₋"
-      SCRIPT_WORD = %r{\A[\p{L}\p{N}+\-−=/()]+\z}.freeze
+      # A point or a comma only between digits or letters: 10^(2.5), a_(i,j).
+      SCRIPT_WORD = %r{\A(?:[\p{L}\p{N}+\-−=/()]|(?<=[\p{L}\p{N}])[.,](?=[\p{L}\p{N}]))+\z}.freeze
       SCRIPT_OPERATOR = %r{[+\-−=/]}.freeze
-      # These have characters of their own: 1º, 30ºC, nº, Acme™.
+      GROUPED = /\A(\((?:[^()]|\g<1>)*\))\z/.freeze
+      # These have characters of their own (1º, nº, Acme™); a raised o before
+      # C or F is a degree (30°C).
       RAISED_LETTERS = { "o" => "º", "TM" => "™", "SM" => "℠" }.freeze
+      DEGREE_UNIT = /\A\s?[CF]\b/.freeze
       # English and French endings: 21st, 1er, 2nde, XIXe.
       ORDINAL_SUFFIX = /\A(?:st|nd|rd|th|er|ers|re|res|e|es|ème|eme|nde)\z/i.freeze
       NUMBER_END = /(?:\d|\b[IVXLCDM]+)\z/.freeze
+      # French titles: Mme, Mlle, Mgr.
+      TITLE_SUFFIX = /\A(?:me|mes|lle|lles|gr)\z/.freeze
       PRICE_END = /\p{Sc}\s?\d[\d,]*\z/.freeze
+      PRICE_START = /\A\s?\p{Sc}/.freeze
       CENTS = /\A\d\d\z/.freeze
       ATTACHED = /[\p{L}\p{N})\]]\z/.freeze
+      WORD_START = /\A[\p{L}\p{N}]/.freeze
+      WORD_END = /[\p{L}\p{N}]\z/.freeze
 
       def initialize(urls, images:, links:)
         @urls = urls
@@ -167,23 +176,40 @@ module Nokodown
       # Markdown has no superscript, and "2attempt" is wrong. Digits and signs
       # have Unicode forms (10⁶, H₂O); other raised and lowered words get a
       # caret or an underscore (x^n, a_n). Footnote markers such as [1],
-      # symbols such as ® and small print read fine as plain text.
+      # symbols such as ® and small print read fine as plain text. The plain
+      # text decides, so 2<sup><i>p</i></sup> is 2^p like 2<sup>p</sup>.
       def script(node)
         text = render(node.children)
-        core = text.strip
-        return text if core.empty? || text.match?(FOOTNOTE_MARKER) || node.at_css("a")
+        core = Text.collapse(node.content).strip
+        return text if core.empty? || core.match?(FOOTNOTE_MARKER) || node.at_css("a, img, math")
 
-        previous = previous_node(node)
-        before = previous&.content.to_s
-        marked = node.name == "sup" ? superscript(core, previous, before) : subscript(core, before)
-        marked || text
+        before = text_before(node) + text[/\A\s*/]
+        after = text[/\s*\z/] + adjacent(node, :next_sibling)&.content.to_s
+        marked = node.name == "sup" ? superscript(core, before, after) : subscript(core, before, after)
+        marked ? surround_like(text, marked) : unmarked(text, core, before, after)
       end
 
-      # The node right before this one, looking past inline wrappers that it
-      # opens (21<span><sup>st</sup></span>).
-      def previous_node(node)
-        node = node.parent while node.previous_sibling.nil? && inline_parent?(node)
-        node.previous_sibling
+      # Glued on, a raised or lowered word would merge with the words around
+      # it: Smitha, b for Smith<sup>a, b</sup>, aNote for <sup>a</sup>Note.
+      def unmarked(text, core, before, after)
+        leading = before.match?(WORD_END) && core.match?(WORD_START) ? " " : ""
+        trailing = core.match?(WORD_END) && after.match?(WORD_START) ? " " : ""
+        "#{leading}#{text}#{trailing}"
+      end
+
+      # Text of the node before, with the one before that when it is a bare
+      # amount (<sup>$</sup>549<sup>99</sup>).
+      def text_before(node)
+        previous = adjacent(node, :previous_sibling)
+        before = previous&.content.to_s
+        before.match?(/\A[\d,]+\z/) ? "#{previous.previous_sibling&.content}#{before}" : before
+      end
+
+      # The node right before or after this one, looking past inline wrappers
+      # that it opens or closes (21<span><sup>st</sup></span>).
+      def adjacent(node, direction)
+        node = node.parent while node.public_send(direction).nil? && inline_parent?(node)
+        node.public_send(direction)
       end
 
       def inline_parent?(node)
@@ -191,27 +217,41 @@ module Nokodown
         parent&.element? && !Dom::BLOCK.include?(parent.name)
       end
 
-      # Cents and ordinals are raised only for looks: $549.99, 21st, XIXe.
-      def superscript(core, previous, before)
-        return ".#{core}" if core.match?(CENTS) && price_before?(previous, before)
+      # Cents and ordinals are raised only for looks: $549.99, 21st, XIXe. A
+      # badge after a space (Feature <sup>NEW</sup>) is not an exponent.
+      def superscript(core, before, after)
+        return cents(core, before) if core.match?(CENTS) && price?(before, after)
         return core.tr(SCRIPT_SOURCE, SUPERSCRIPTS) if core.match?(SCRIPT_TEXT)
-        return RAISED_LETTERS[core] if RAISED_LETTERS.key?(core)
-        return if core.match?(ORDINAL_SUFFIX) && before.match?(NUMBER_END)
+        return core if plain_suffix?(core, before)
 
-        "^#{grouped(core)}" if expression?(core)
+        raised_letter(core, after) || ("^#{grouped(core, after)}" if expression?(core) && before.match?(/\S\z/))
       end
 
       # A lowered word is an index only when it hangs off the word before it.
-      def subscript(core, before)
+      def subscript(core, before, after)
         return core.tr(SCRIPT_SOURCE, SUBSCRIPTS) if core.match?(SCRIPT_TEXT)
 
-        "_#{grouped(core)}" if expression?(core) && before.match?(ATTACHED)
+        "_#{grouped(core, after)}" if expression?(core) && before.match?(ATTACHED)
       end
 
-      # $549<sup>99</sup> and <sup>$</sup>549<sup>99</sup>.
-      def price_before?(previous, before)
-        before = "#{previous.previous_sibling&.content}#{before}" if before.match?(/\A[\d,]+\z/)
-        before.match?(PRICE_END)
+      # $549<sup>99</sup>, <sup>$</sup>549<sup>99</sup> and 549<sup>99</sup> €.
+      def price?(before, after)
+        before.match?(PRICE_END) || (before.match?(/\d,?\z/) && after.match?(PRICE_START))
+      end
+
+      # €12,<sup>99</sup> has its decimal comma already.
+      def cents(core, before)
+        before.end_with?(",") ? core : ".#{core}"
+      end
+
+      def plain_suffix?(core, before)
+        (core.match?(ORDINAL_SUFFIX) && before.match?(NUMBER_END)) || (core.match?(TITLE_SUFFIX) && before.match?(/\bM\z/))
+      end
+
+      def raised_letter(core, after)
+        return "°" if core == "o" && after.match?(DEGREE_UNIT)
+
+        RAISED_LETTERS[core] || RAISED_LETTERS[core.upcase]
       end
 
       # Spaces count only around operators (n - 1), so small print is not an
@@ -221,9 +261,11 @@ module Nokodown
         compact.match?(SCRIPT_WORD) && (compact == core || compact.match?(SCRIPT_OPERATOR))
       end
 
-      # 2^n-1 would read as 2^n minus 1, and 2^2n as 2^2 times n.
-      def grouped(core)
-        return core if core.length == 1 || core.match?(/\A\p{L}+\z/) || core.match?(/\A\(.*\)\z/)
+      # 2^n-1 would read as 2^n minus 1, 2^2n as 2^2 times n, e^(a)(b) as
+      # e^(a) times (b), and x_iy_i as x with the index iy_i.
+      def grouped(core, after)
+        return core if core.match?(GROUPED)
+        return core if (core.length == 1 || core.match?(/\A\p{L}+\z/)) && !after.match?(WORD_START)
 
         "(#{core})"
       end

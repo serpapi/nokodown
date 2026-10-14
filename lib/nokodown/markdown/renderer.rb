@@ -9,7 +9,12 @@ module Nokodown
     class Renderer
       MAX_DEPTH = 400
       SEPARATOR_LINE = /\A\s*([-=_*~])\1{2,}\s*\z/.freeze
-      BULLET_GLYPH = /\A(?:[•·▪◦‣►▶▸➤→■●○]|[-–—](?=\s))\s*/.freeze
+      GLYPHS = "•·▪◦‣►▶▸➤→■●○"
+      # A run of glyphs (●●●○○) is a rating, not a bullet.
+      BULLET_GLYPH = /\A(?:[#{GLYPHS}](?![#{GLYPHS}])|[-–—](?=\s))\s*/.freeze
+      # Any symbols before a space can be an item's marker (+ and - in pros
+      # and cons, ✓ and ✗), not only the glyphs that are stripped.
+      LEADING_SYMBOLS = /\A[^\p{L}\p{N}\s]+(?=\s)/.freeze
 
       def initialize(urls, images: true, links: true)
         @inline = Inline.new(urls, images: images, links: links)
@@ -114,15 +119,30 @@ module Nokodown
       def list(node)
         items = []
         list_children(node).each do |child|
-          if child.element? && %w[ul ol].include?(child.name) && items.any?
-            items.last.concat(list(child))
-          else
-            items << list_item(child)
-          end
+          blocks = list_item(child)
+          owner = list_owner(items, wrapped: child.name == "li") if sublist?(child, blocks)
+          owner ? owner.concat(blocks) : items << blocks
         end
         items.reject!(&:empty?)
         start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
         format_list(items, start)
+      end
+
+      # A nested list belongs to the item before it, also when a site wraps
+      # it in an item of its own (<li>Parent</li><li><ul>…</ul></li>).
+      def sublist?(node, blocks)
+        return false unless node.element? && blocks.size == 1 && blocks.first.kind == :list
+        return true if %w[ul ol].include?(node.name)
+
+        node.name == "li" && node.element_children.all? { |child| %w[ul ol].include?(child.name) }
+      end
+
+      # The last item with text of its own; empty items (<br>, whitespace) and
+      # items that open with a list cannot hold one. A wrapped list does not
+      # join an item that ends with a list already, as cons after pros.
+      def list_owner(items, wrapped:)
+        owner = items.reverse_each.find(&:any?)
+        owner if owner && owner.first.kind != :list && !(wrapped && owner.last.kind == :list)
       end
 
       def list_item(node)
@@ -153,11 +173,17 @@ module Nokodown
         [Block.new(:list, rendered.join(loose ? "\n\n" : "\n"))]
       end
 
-      # Glyphs that differ between items carry meaning, as in legends where ●
-      # and ○ mean yes and no; one glyph throughout is the site's own bullet.
+      # Markers that differ between items carry meaning, as in legends where
+      # ● and ○ mean yes and no, or pros and cons with + and -; one glyph
+      # throughout is the site's own bullet.
       def typed_bullet?(items)
-        glyphs = items.filter_map { |blocks| blocks.first.text[BULLET_GLYPH]&.strip if blocks.first.kind == :paragraph }
-        glyphs.uniq.size == 1
+        items.filter_map { |blocks| leading_marker(blocks.first) }.uniq.size == 1
+      end
+
+      def leading_marker(block)
+        return unless block.kind == :paragraph
+
+        (block.text[BULLET_GLYPH] || block.text[LEADING_SYMBOLS])&.strip
       end
 
       # Sites type their own bullet or number into items, which would repeat
