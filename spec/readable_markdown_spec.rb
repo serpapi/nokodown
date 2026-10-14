@@ -15,11 +15,16 @@ RSpec.describe ReadableMarkdown do
       result.mode.should == :article
     end
 
-    it "returns empty markdown for a document without a body" do
-      result = ReadableMarkdown.extract("")
+    it "returns empty markdown for an empty document" do
+      ReadableMarkdown.extract("").markdown.should == ""
+    end
 
+    it "reports :none for a frameset page, which has no body" do
+      result = ReadableMarkdown.extract('<html><head><title>Frames</title></head><frameset><frame src="a.html"></frameset></html>')
+
+      result.mode.should == :none
       result.markdown.should == ""
-      result.mode.should == :page
+      result.title.should == "Frames"
     end
 
     it "accepts nil" do
