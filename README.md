@@ -68,10 +68,15 @@ with `main_content: false`, `:none` for a document without a body.
   URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,
   "Read more" links, code line numbers, and repeated responsive copies of the
   same image.
-- In the main content, card thumbnails next to a text link to the same page,
-  and images marked decorative (`role="presentation"`, or `alt=""` outside
-  figures, image links and text-free paragraphs and table cells). Anywhere,
-  later copies of an image that stands alone on its line.
+- In the main content, images marked decorative (`role="presentation"`;
+  outside an `:article`, also `alt=""` outside figures, image links and
+  text-free paragraphs and table cells), and card thumbnails while the
+  Markdown still has a text link to the same page. "Read more" or
+  "3 comments" never names the page, and a price or a date names it only for
+  an image without alt text. Any other text does, so in `:page` mode a
+  thumbnail beside a "Shop now" link goes too; in an `:article`, only one
+  whose alt is a word or two or repeats the link text. Anywhere, later copies
+  of an image that stands alone on its line.
 
 Every structural rule is guarded: an element that contains the `<main>`
 region, or most of the page's text, is never removed because of its class name.

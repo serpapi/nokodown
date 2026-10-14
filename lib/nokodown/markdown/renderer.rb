@@ -10,7 +10,7 @@ module Nokodown
       MAX_DEPTH = 400
       SEPARATOR_LINE = /\A\s*([-=_*~])\1{2,}\s*\z/.freeze
 
-      def initialize(urls, images: true, links: true, redundant_images: Set.new)
+      def initialize(urls, images: true, links: true, redundant_images: {})
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
         @links = links
         @depth = 0

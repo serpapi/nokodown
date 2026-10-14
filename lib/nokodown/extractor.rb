@@ -38,7 +38,7 @@ module Nokodown
 
     # Converting the whole page keeps every visible image.
     def redundant_images(nodes, mode, urls)
-      return Set.new if mode == :full || !@images
+      return {} if mode == :full || !@images
 
       Markdown::RedundantImages.new(nodes, mode, urls).call
     end
