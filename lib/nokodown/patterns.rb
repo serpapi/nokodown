@@ -51,6 +51,9 @@ module Nokodown
     # Site headers only; "card-header" or "plan-header" hold content.
     HEADER = /(?<![\w-])(?:(?:site|global|main|top|page|app|l|c|o|g)-?)?header(?:-(?:wrapper|container|inner|main|top|bar|nav))?(?![\w-])|masthead/.freeze
 
+    # Collapsed regions that still hold content: accordions, tab panels, FAQs.
+    DISCLOSURE = /accordion|collaps|tab-?pane|tab-?panel|tab-?content|faq|answer|expand|disclosure/.freeze
+
     # Readability's class weighting regexes.
     POSITIVE = /article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story/.freeze
     NEGATIVE = /

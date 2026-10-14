@@ -52,7 +52,10 @@ RSpec.describe Nokodown do
     let(:prose) { "<p>#{'The command line tool runs on every major platform and needs nothing else to work. ' * 3}</p>" }
 
     it "keeps the link lists of an index page, which are its content" do
-      sections = { "A" => %w[Anatomy Astronomy Architecture], "B" => %w[Biology Botany Banking], "C" => %w[Chemistry Climate Cooking] }
+      sections = {
+        "A" => %w[Anatomy Astronomy Architecture Art], "B" => %w[Biology Botany Banking Baking],
+        "C" => %w[Chemistry Climate Cooking Crafts], "D" => %w[Dentistry Design Drama Diving]
+      }
       html = sections.map do |letter, topics|
         "<h2>#{letter}</h2><ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
       end.join
@@ -60,7 +63,27 @@ RSpec.describe Nokodown do
       markdown = extract("<main><h1>Topics A-Z</h1>#{html}</main>")
 
       markdown.should include("## A\n\n- [Anatomy](https://example.com/topics/anatomy)")
-      markdown.should include("- [Cooking](https://example.com/topics/cooking)")
+      markdown.should include("- [Diving](https://example.com/topics/diving)")
+    end
+
+    it "drops the few menu links left in a content area that holds almost nothing else" do
+      html = '<main><a href="#content">Skip to content</a><div><a href="/shop">Shop all products</a> ' \
+             '<a href="/help">Help and contact</a> <a href="/account">Your account</a></div><p>Sold out.</p></main>'
+
+      markdown = extract(html)
+
+      markdown.should include("Sold out.")
+      ["Shop all", "Help and", "Your account"].each { |noise| markdown.should_not include(noise) }
+    end
+
+    it "drops a footer sitemap even when it holds most of the text" do
+      links = %w[Autoscaling Networking Postgres Disks Previews Deploys Workers Cron Blog Docs Pricing Careers Status]
+      footer = "<footer><ul>#{links.map { |link| "<li><a href=\"/#{link.downcase}\">#{link}</a></li>" }.join}</ul></footer>"
+
+      markdown = extract("<main><h1>The cloud for builders</h1><p>Deploy in minutes.</p>#{footer}</main>")
+
+      markdown.should include("Deploy in minutes.")
+      markdown.should_not include("Autoscaling")
     end
 
     it "drops the cart controls of product cards and the links beside them" do
@@ -84,12 +107,24 @@ RSpec.describe Nokodown do
       markdown.should_not include("Book a demo")
     end
 
-    it "keeps a button inside a sentence, FAQ toggles and buttons in data tables" do
+    it "drops a button after a heading, a group of buttons and links with role=button" do
       html = <<~HTML
         <article>#{prose}
-          <p>Use the <a class="btn btn-sm" href="/download">Download</a> button to get the installer for your system.</p>
-          <h2><a role="button" aria-expanded="false" href="#offline">Does it work offline?</a></h2>
-          <div id="offline">#{prose}</div>
+          <section><h2>Ship faster</h2>#{prose}<a class="c-button" href="/start">Get started</a></section>
+          <div><a class="btn" href="/mac">Download for Mac</a> / <a class="btn" href="/windows">Download for Windows</a> / <a class="btn" href="/linux">Download for Linux</a></div>
+          <div><a role="button" href="/trial">Start a free trial</a></div>
+        </article>
+      HTML
+
+      markdown = extract(html)
+
+      ["Get started", "Download for", "Start a free trial"].each { |noise| markdown.should_not include(noise) }
+    end
+
+    it "keeps a button inside a sentence and buttons in data tables" do
+      html = <<~HTML
+        <article>#{prose}
+          <p>Use the <span><a class="btn btn-sm" href="/download">Download</a></span> button to get the installer for your system.</p>
           <table><tr><th>Plan</th><th>Price</th><th>Order</th></tr><tr><td>Solo</td><td>$5</td><td><a class="btn" href="/buy">Buy</a></td></tr></table>
         </article>
       HTML
@@ -97,8 +132,47 @@ RSpec.describe Nokodown do
       markdown = extract(html)
 
       markdown.should include("Use the [Download](https://example.com/download) button")
-      markdown.should include("## Does it work offline?")
       markdown.should include("| Solo | $5 | [Buy](https://example.com/buy) |")
+    end
+
+    it "keeps disclosure toggles and the labels inside them" do
+      html = <<~HTML
+        <article>#{prose}
+          <div><a role="button" aria-expanded="false" href="#shipping">Shipping and returns</a></div>
+          <div><a class="btn" aria-controls="sizes" href="#sizes">Size guide</a></div>
+          <div><a class="btn" href="#offline">Does it work offline?</a></div>
+          <div><a class="btn accordion-toggle" href="#warranty">Warranty</a></div>
+          <div><a href="#care" aria-expanded="false"><span class="button">Care instructions</span></a></div>
+          #{prose}
+        </article>
+      HTML
+
+      markdown = extract(html)
+
+      ["Shipping and returns", "Size guide", "Does it work offline?", "Warranty", "Care instructions"].each do |label|
+        markdown.should include(label)
+      end
+    end
+
+    it "keeps titles, terms, footnote markers and names that are styled as buttons" do
+      authors = { "ada" => "Ada Lovelace", "alan" => "Alan Turing", "grace" => "Grace Hopper" }
+      html = <<~HTML
+        <article>
+          <h1>KALLAX Shelf unit, <span><a role="button" href="/kallax?size=30x57">30x57</a></span></h1>
+          <p>The sessions ran every week.<sup><a role="button" href="#fn1">1</a></sup> And they kept going.</p>#{prose}
+          <h3><a class="btn btn-link" href="/jobs/elixir">Elixir Observability Engineer</a></h3>
+          <dl><dt><a role="button" href="#ingredients">Ingredients</a></dt><dd>Sugar, pectin and citric acid.</dd></dl>
+          <ul>#{authors.map { |slug, name| "<li><a class=\"btn-view-author-options\" href=\"/authors/#{slug}\">#{name}</a></li>" }.join}</ul>
+        </article>
+      HTML
+
+      markdown = extract(html)
+
+      markdown.should include("# KALLAX Shelf unit, [30x57](https://example.com/kallax?size=30x57)")
+      markdown.should include("every week.1 And")
+      markdown.should include("### [Elixir Observability Engineer](https://example.com/jobs/elixir)")
+      markdown.should include("- **Ingredients**: Sugar")
+      markdown.should include("- [Alan Turing](https://example.com/authors/alan)")
     end
 
     it "keeps highlighted code whose tokens look like page furniture" do

@@ -7,8 +7,20 @@ module Nokodown
     TEXT_BLOCKS = "p, div, span, li, h1, h2, h3, h4, h5, h6, small, section, aside, figcaption, b, strong, em, i"
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
-    CALL_TO_ACTION = /(?<![a-z])(?:btn|btns|button|buttons|cta|ctas)(?![a-z])/.freeze
+    # A class names a button when that is its last word, before a modifier,
+    # a size or a rank: "btn", "c-button", "hero-cta", "btn--ghost",
+    # "btn_medium", "button-primary". "button-text" and
+    # "btn-view-author-options" name something else, and Bootstrap's
+    # "btn-link" is a button that looks like a link.
+    BUTTON_CLASS = /
+      (?:\A|[-_])(?:btn|btns|button|buttons|cta|ctas)\d*
+      (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|sm|md|lg))?\z
+    /x.freeze
+    LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
+    # Inside these a button is a title, a term or a footnote marker.
+    LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
+    MIN_INDEX_LENGTH = 80
 
     def initialize(nodes, mode)
       @nodes = nodes
@@ -148,13 +160,21 @@ module Nokodown
     end
 
     # On an index page (an A-Z list, a category grid) the clusters are the
-    # content, not navigation around it.
+    # content, not navigation around it. A footer sitemap, or a few skip and
+    # account links left in a root that missed the content, is no index.
     def clusters_dominate?(root, clusters)
-      keys = clusters.map { |node| Dom.key(node) }.to_set
-      outermost = clusters.reject do |node|
+      index = outermost(clusters).reject do |node|
+        %w[header footer].include?(node.name) || Dom.ancestors_named(node, "header", "footer").any?
+      end
+      length = index.sum { |node| Dom.text(node).length }
+      length >= MIN_INDEX_LENGTH && length >= Dom.text(root).length * 0.5
+    end
+
+    def outermost(nodes)
+      keys = nodes.map { |node| Dom.key(node) }.to_set
+      nodes.reject do |node|
         node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) }
       end
-      outermost.sum { |node| Dom.text(node).length } >= Dom.text(root).length * 0.5
     end
 
     def link_cluster?(node)
@@ -185,36 +205,65 @@ module Nokodown
 
     # Links and boxes styled as buttons ("Add to cart", "Book a demo") are
     # controls, not content. Cards (an image, a heading, a list) are content.
+    # All are judged before any is removed, so document order does not matter.
     def remove_calls_to_action(root)
-      root.css("a, span, div, p").each do |node|
-        node.remove if call_to_action?(node)
-      end
+      root.css("a, span, div, p").select { |node| call_to_action?(node) }.each(&:remove)
     end
 
     def call_to_action?(node)
-      return false unless node["role"] == "button" || Dom.signature(node).match?(CALL_TO_ACTION)
+      return false unless button?(node)
 
       text = Dom.text(node)
-      return false if text.length > 40 || text.split.size > 6 || toggle?(node, text)
-      return false if node.at_css(CALL_TO_ACTION_PARTS)
+      return false if text.length > 40 || text.split.size > 6 || node.at_css(CALL_TO_ACTION_PARTS)
+      return false if Dom.ancestors_named(node, *LABEL_HOLDERS).any?
+
+      # FAQ questions and section titles that open a disclosure; the toggle
+      # may be a wrapper around the styled label.
+      wrappers = wrappers(node, text)
+      return false if text.end_with?("?") || wrappers.any? { |wrapper| toggle?(wrapper) }
 
       # In a data table the button is a cell value, like a plan's "Order" column.
-      !inside_sentence?(node, text) && !in_data_table?(node)
+      !inside_sentence?(wrappers) && !in_data_table?(node)
     end
 
-    # Disclosure toggles, labelled with an FAQ question or a section title.
-    def toggle?(node, text)
-      node.key?("aria-expanded") || node.key?("aria-controls") || text.end_with?("?") ||
-        Dom.signature(node).match?(Preprocessor::DISCLOSURE)
+    def button?(node)
+      return true if node["role"] == "button"
+
+      tokens = Dom.signature(node).split
+      tokens.any? { |token| token.match?(BUTTON_CLASS) } && tokens.none? { |token| token.match?(LINK_STYLED_BUTTON) }
+    end
+
+    # The node and the elements around it that hold nothing else, such as the
+    # link of an accordion title around a styled label.
+    def wrappers(node, text)
+      chain = [node]
+      parent = node.parent
+      while parent&.element? && Dom.text(parent) == text
+        chain << parent
+        parent = parent.parent
+      end
+      chain
+    end
+
+    def toggle?(node)
+      node.key?("aria-expanded") || node.key?("aria-controls") || Dom.signature(node).match?(Patterns::DISCLOSURE)
     end
 
     # A button-styled link in running text ("<a class=btn>Download</a> the
-    # installer") is part of the sentence; one in a button group is not.
-    def inside_sentence?(node, text)
-      return false unless %w[a span].include?(node.name)
+    # installer") is part of the sentence. Blocks and other buttons beside it
+    # are not running text, so a button after a heading or in a group is not.
+    def inside_sentence?(wrappers)
+      control = wrappers.last
+      return false if control.parent.nil? || wrappers.any? { |wrapper| Dom.block?(wrapper) }
 
-      parent = node.parent
-      !Dom.signature(parent).match?(CALL_TO_ACTION) && Dom.text(parent).length - text.length >= 20
+      control.parent.children.sum { |child| running_text_length(child, control) } >= 20
+    end
+
+    def running_text_length(child, control)
+      return Dom.text(child).length if child.text?
+      return 0 if !child.element? || Dom.block?(child) || Dom.key(child) == Dom.key(control) || button?(child)
+
+      Dom.text(child).length
     end
   end
 end

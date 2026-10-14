@@ -26,9 +26,6 @@ module Nokodown
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
-    # Collapsed regions that still hold content: accordions, tab panels, FAQs.
-    DISCLOSURE = /accordion|collaps|tab-?pane|tab-?panel|tab-?content|faq|answer|expand|disclosure/.freeze
-
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
 
     VIDEO_HOSTS = %r{//(?:www\.)?(?:(?:dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq|bilibili|live\.bilibili)\.com|(?:archive|upload\.wikimedia)\.org|player\.twitch\.tv|fast\.wistia\.(?:net|com)|play\.vidyard\.com|loom\.com/embed)}i.freeze
@@ -165,7 +162,7 @@ module Nokodown
     end
 
     def disclosure?(node)
-      node["role"] == "tabpanel" || Dom.signature(node).match?(DISCLOSURE)
+      node["role"] == "tabpanel" || Dom.signature(node).match?(Patterns::DISCLOSURE)
     end
 
     def remove_form_controls
