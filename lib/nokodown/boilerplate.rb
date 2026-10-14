@@ -36,8 +36,11 @@ module Nokodown
       landmarks.flat_map { |node| [node] + node.ancestors.to_a }.map { |node| Dom.key(node) }.compact.to_set
     end
 
+    # Code is never furniture, whatever classes its highlighter gives tokens.
     def walk(node)
       node.element_children.each do |child|
+        next if Dom::CODE.include?(child.name)
+
         if remove?(child)
           child.remove
         else
