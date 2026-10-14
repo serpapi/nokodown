@@ -56,6 +56,12 @@ RSpec.describe Nokodown::Metadata do
       .should == "Do Smart Thermostats Save Money?"
   end
 
+  it "takes an H1 whose permalink links to the page itself for the page's name" do
+    body = '<h1>Using the Widget API <a href="#using-the-widget-api">¶</a></h1>'
+
+    metadata("<title>Using the Widget API - Web APIs | Example Docs</title>", body)[:title].should == "Using the Widget API"
+  end
+
   it "keeps the title when the H1 only matches its first words" do
     metadata('<meta property="og:title" content="Trail Running Shoes for Women">', "<h1>Trail Running</h1>")[:title].should == "Trail Running Shoes for Women"
   end
@@ -77,6 +83,7 @@ RSpec.describe Nokodown::Metadata do
     metadata(head, '<header><h1><a href="/">Example Corp</a></h1></header>')[:title].should == title
     metadata(head, '<h1><a href="https://example.com/index.html">Example Corp</a></h1>')[:title].should == title
     metadata(head, '<h1><a href="/en-us/">Example Corp</a></h1>')[:title].should == title
+    metadata(head, '<h1><a href="/?ref=logo">Example Corp</a></h1>')[:title].should == title
     metadata(head, '<header><h1 class="site-title">Example Corp</h1></header>')[:title].should == title
   end
 
@@ -86,11 +93,34 @@ RSpec.describe Nokodown::Metadata do
     metadata("<title>Understanding Ownership Rules - The Example Book</title>", body)[:title].should == "Understanding Ownership Rules"
   end
 
-  it "keeps a site name that comes before the page's H1 in the title" do
+  it "takes a heading in the article's own header for the page's name" do
+    body = "<header><h1>The Example Baking Blog</h1></header><article><header><h2>How to Bake Bread</h2></header></article>"
+
+    metadata("<title>How to Bake Bread - The Example Baking Blog</title>", body)[:title].should == "How to Bake Bread"
+  end
+
+  it "keeps a 'Site | Page' title whose site name is not a heading" do
     metadata("<title>City of Springfield | Parks and Recreation</title>", "<div><h1>Parks and Recreation</h1></div>")[:title]
       .should == "City of Springfield | Parks and Recreation"
-    metadata("<title>Acme | Contact Us</title>", "<div><h1>Contact Us</h1></div><footer><h3>Acme</h3></footer>")[:title]
+  end
+
+  it "keeps a 'Site | Page' title whose site name is a heading of fewer than 3 words" do
+    metadata("<title>Acme | Contact Us</title>", "<div><h1>Contact Us</h1></div><aside><h3>Acme</h3></aside>")[:title]
       .should == "Acme | Contact Us"
+  end
+
+  it "keeps a 'Site | Page' title whose site name is an H1, a logo, or a heading in the site's header or footer" do
+    title = "City of Springfield | Parks and Recreation"
+    page = "<main><h1>Parks and Recreation</h1></main>"
+    site_headings = [
+      '<header><h1 class="site-title"><a href="/">City of Springfield</a></h1></header>',
+      '<div class="masthead"><h2 class="site-name">City of Springfield</h2></div>',
+      "<footer><h3>City of Springfield</h3></footer>"
+    ]
+
+    site_headings.each { |site| metadata("<title>#{title}</title>", site + page)[:title].should == title }
+    metadata("<title>City of Springfield » Parks and Recreation</title>", "<div><h1>City of Springfield</h1></div>#{page}")[:title]
+      .should == "City of Springfield » Parks and Recreation"
   end
 
   it "does not match an H1 without words to the end of a title without words" do

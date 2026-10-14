@@ -20,7 +20,7 @@ module Nokodown
     SITE_NAME_SEPARATOR = "[#{TITLE_SEPARATORS}:·•]"
     WORD = /[\p{L}\p{N}]+/.freeze
     HEADING_END = /\A([?!.)\]"'”’]*)(?:\s[-–—]\s|\s*[|:·•,])/.freeze
-    HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?/?(?:index\.[a-z]+|[a-z]{2}(?:[-_][a-z]{2})?/?)?\z}i.freeze
+    HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?/?(?:index\.[a-z]+|[a-z]{2}(?:[-_][a-z]{2})?/?)?(?:[?#].*)?\z}i.freeze
     LOGO_NAME = /logo|brand|site[-_]?(?:title|name)/i.freeze
 
     TITLE_KEYS = %w[dc:title dcterm:title og:title weibo:article:title weibo:webpage:title title twitter:title parsely-title].freeze
@@ -215,8 +215,8 @@ module Nokodown
 
     # mdBook and similar generators end every page's title with the book's
     # name, which their menu bar shows as an H1. "Site | Page" titles end
-    # with the page's H1 too, so the part kept must itself be a heading on
-    # the page, and of at least 3 words, as in without_last_part.
+    # with the page's H1 too, so the part kept must be a heading of the page,
+    # not of the site, and of at least 3 words, as in without_last_part.
     def title_without_site_h1(title, h1s)
       separator = title.enum_for(:scan, SEPARATOR).map { Regexp.last_match }.last
       return if separator.nil?
@@ -228,24 +228,36 @@ module Nokodown
       page if heading_text?(page)
     end
 
+    # H1s are left out: title_from_h1 has already cut at a page H1 that starts
+    # the title, so an H1 that matches here is most often the site's logo.
     def heading_text?(text)
       text_words = tokens(text)
-      @doc.css("body h1, body h2, body h3").any? { |heading| tokens(heading.content) == text_words }
+      @doc.css("body h2, body h3").any? do |heading|
+        tokens(heading.content) == text_words && !logo?(heading) && !site_chrome?(heading)
+      end
     end
 
-    # A logo H1 links to the site's root or names itself a logo, brand or site
-    # title. A <header> around it, or its container's classes, say too little:
-    # most such H1s are the page's own title.
-    def logo?(h1)
-      nodes = [h1] + h1.css("[class], [id]").to_a
+    # A <header> or <footer> names the site, unless it is the header of the
+    # page's <main> or <article>.
+    def site_chrome?(node)
+      names = Dom.ancestors_named(node, "header", "footer", "main", "article").map(&:name)
+      (names & %w[header footer]).any? && (names & %w[main article]).empty?
+    end
+
+    # A logo heading links to the site's root or names itself a logo, brand or
+    # site title. A <header> around an H1, or its container's classes, say too
+    # little: most such H1s are the page's own title.
+    def logo?(heading)
+      nodes = [heading] + heading.css("[class], [id]").to_a
       return true if nodes.any? { |node| "#{node["class"]} #{node["id"]}".match?(LOGO_NAME) }
 
-      h1.css("a[href]").any? { |link| home_link?(link["href"].strip) }
+      heading.css("a[href]").any? { |link| home_link?(link["href"].strip) }
     end
 
-    # An empty href links to the page itself, as a permalink does.
+    # An empty href, or one that starts with a fragment or query, links to
+    # the page itself, as a permalink does.
     def home_link?(href)
-      !href.empty? && href.match?(HOME_LINK)
+      !href.empty? && !href.start_with?("#", "?") && href.match?(HOME_LINK)
     end
 
     # Split before downcasing, like the title's words, which are scanned first
