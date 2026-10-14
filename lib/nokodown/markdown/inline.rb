@@ -9,6 +9,13 @@ module Nokodown
       CODE = Set.new(%w[code kbd samp tt]).freeze
       UNSAFE_SCHEME = /\A\s*(?:javascript|vbscript|data|tel|sms):/i.freeze
       FOOTNOTE_MARKER = /\A\s*(?:\[[^\]]{1,8}\]|[*†‡§]+)\s*\z/.freeze
+      # Exponents are often written with the minus sign "−", not "-".
+      SCRIPT_TEXT = /\A[0-9+\-−=()]+(?:,[0-9+\-−=()]+)*\z/.freeze
+      SCRIPT_SOURCE = "0123456789+−=()-"
+      SUPERSCRIPTS = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾⁻"
+      SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎₋"
+      RAISED_WORD = /\A[\p{L}\p{N}+\-−=()]+\z/.freeze
+      ORDINAL_SUFFIX = /\A(?:st|nd|rd|th)\z/i.freeze
 
       def initialize(urls, images:, links:)
         @urls = urls
@@ -149,13 +156,18 @@ module Nokodown
         ""
       end
 
-      # Markdown has no superscript, and "2attempt" is wrong; footnote markers
-      # such as [1] read fine without the tag.
+      # Markdown has no superscript, and "2attempt" is wrong. Digits and signs
+      # have Unicode forms (10⁶, H₂O); other raised words get a caret (x^n).
+      # Footnote markers such as [1], ordinals, symbols such as ® and lowered
+      # words read fine as plain text.
       def script(node)
         text = render(node.children)
-        return text if text.strip.empty? || text.match?(FOOTNOTE_MARKER) || node.at_css("a")
+        core = text.strip
+        return text if core.empty? || text.match?(FOOTNOTE_MARKER) || node.at_css("a")
+        return core.tr(SCRIPT_SOURCE, node.name == "sup" ? SUPERSCRIPTS : SUBSCRIPTS) if core.match?(SCRIPT_TEXT)
+        return "^#{core}" if node.name == "sup" && core.match?(RAISED_WORD) && !core.match?(ORDINAL_SUFFIX)
 
-        "<#{node.name}>#{text.strip}</#{node.name}>"
+        text
       end
 
       def math(node)

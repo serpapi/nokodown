@@ -9,6 +9,7 @@ module Nokodown
     class Renderer
       MAX_DEPTH = 400
       SEPARATOR_LINE = /\A\s*([-=_*~])\1{2,}\s*\z/.freeze
+      BULLET_GLYPH = /\A(?:[•·▪◦‣►▶▸➤→■●○]|[-–—](?=\s))\s*/.freeze
 
       def initialize(urls, images: true, links: true)
         @inline = Inline.new(urls, images: images, links: links)
@@ -140,13 +141,39 @@ module Nokodown
       end
 
       def format_list(items, start)
+        items = items.each_with_index.map { |blocks, index| without_typed_marker(blocks, start && start + index) }
+        items.reject!(&:empty?)
         return [] if items.empty?
 
         rendered = items.each_with_index.map do |blocks, index|
-          indent_item(start ? "#{start + index}. " : "- ", join_item(blocks))
+          list_entry(start ? "#{start + index}. " : "- ", blocks)
         end
         loose = items.any? { |blocks| blocks.drop(1).any? { |block| block.kind != :list } }
         [Block.new(:list, rendered.join(loose ? "\n\n" : "\n"))]
+      end
+
+      # Sites type their own bullet or number into items, which would repeat
+      # the marker ("- • a", "2. 2. b").
+      def without_typed_marker(blocks, number)
+        first = blocks.first
+        return blocks unless first.kind == :paragraph
+
+        text = first.text.sub(BULLET_GLYPH, "")
+        text = text.sub(/\A#{number}[.)](?!\d)\s*/, "") if number
+        return blocks if text == first.text
+
+        rest = blocks.drop(1)
+        text.empty? ? rest : [Block.new(:paragraph, Text.escape_line_starts(text))] + rest
+      end
+
+      # An item that opens with a nested list would print an empty marker
+      # ("- - a"), so the nested items stand in for it.
+      def list_entry(marker, blocks)
+        nested, *rest = blocks
+        return indent_item(marker, join_item(blocks)) unless nested.kind == :list
+        return nested.text if rest.empty?
+
+        nested.text + separator(rest.first) + list_entry(marker, rest)
       end
 
       def indent_item(marker, body)
@@ -171,28 +198,52 @@ module Nokodown
         [Block.new(:quote, inner.split("\n", -1).map { |line| line.empty? ? ">" : "> #{line}" }.join("\n"))]
       end
 
+      # Definitions of one paragraph each go on their term's line, so spec
+      # sheets stay one line per row; longer ones keep their paragraphs, lists
+      # and code under the term.
       def definition_list(node)
+        entries = definition_groups(node).map do |term, definitions|
+          compact?(definitions) ? definition_line(term, definitions) : list_entry("- ", definition_item(term, definitions))
+        end
+        return [] if entries.empty?
+
+        runs = entries.slice_when { |a, b| a.include?("\n") || b.include?("\n") }
+        [Block.new(:list, runs.map { |run| run.join("\n") }.join("\n\n"))]
+      end
+
+      # [term, [blocks of each <dd>]] pairs; a term may be nil or have no <dd>.
+      def definition_groups(node)
         groups = []
         definition_items(node).each do |item|
           if item.name == "dt"
             term = Text.escape(Dom.text(item))
             groups << [term, []] unless term.empty?
           else
-            definition = Text.single_line(children_blocks(item).map(&:text).join(" "))
-            next if definition.empty?
+            blocks = children_blocks(item)
+            next if blocks.empty?
 
             groups << [nil, []] if groups.empty?
-            groups.last[1] << definition
+            groups.last[1] << blocks
           end
         end
-        groups.empty? ? [] : [Block.new(:list, groups.map { |term, definitions| definition_line(term, definitions) }.join("\n"))]
+        groups
+      end
+
+      def compact?(definitions)
+        definitions.all? { |blocks| blocks.size == 1 && blocks.first.kind == :paragraph }
       end
 
       def definition_line(term, definitions)
-        return "- #{definitions.join('; ')}" if term.nil?
-        return "- **#{term}**" if definitions.empty?
+        text = definitions.map { |blocks| Text.single_line(blocks.first.text) }.join("; ")
+        return "- #{text}" if term.nil?
+        return "- **#{term}**" if text.empty?
 
-        "- **#{term}**: #{definitions.join('; ')}"
+        term.end_with?(":") ? "- **#{term}** #{text}" : "- **#{term}**: #{text}"
+      end
+
+      def definition_item(term, definitions)
+        blocks = definitions.flatten(1)
+        term ? [Block.new(:paragraph, "**#{term}**")] + blocks : blocks
       end
 
       def definition_items(node)

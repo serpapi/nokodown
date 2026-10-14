@@ -22,8 +22,12 @@ RSpec.describe "Markdown conversion" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
     end
 
-    it "keeps superscripts and drops the tag from footnote markers" do
-      convert("<p>10<sup>6</sup> cells, H<sub>2</sub>O, cited<sup>[1]</sup></p>").should == "10<sup>6</sup> cells, H<sub>2</sub>O, cited[1]"
+    it "writes raised and lowered digits as Unicode characters and drops the tag from footnote markers" do
+      convert("<p>10<sup>-6</sup> cells, H<sub>2</sub>O, cited<sup>[1]</sup></p>").should == "10⁻⁶ cells, H₂O, cited[1]"
+    end
+
+    it "marks other raised words with a caret and leaves ordinals and symbols as text" do
+      convert("<p>x<sup>n</sup>, the 21<sup>st</sup> Acme<sup>®</sup>, <sub>small print</sub></p>").should == "x^n, the 21st Acme®, small print"
     end
   end
 
@@ -126,9 +130,27 @@ RSpec.describe "Markdown conversion" do
       convert('<ul><li><input type="checkbox" checked> Done</li><li><input type="checkbox"> Todo</li></ul>').should == "- [x] Done\n- [ ] Todo"
     end
 
+    it "drops bullets and repeated numbers typed into items" do
+      convert("<ul><li>• One</li><li>►Two</li></ul><ol><li><span>1.</span> First</li><li>2. Second</li></ol>").should ==
+        "- One\n- Two\n\n1. First\n2. Second"
+    end
+
+    it "moves up a list that opens an item instead of printing an empty marker" do
+      convert("<ul><li><ul><li>a</li><li>b</li></ul></li><li>c</li></ul>").should == "- a\n- b\n- c"
+    end
+
     it "renders definition lists as term and definition pairs" do
       convert("<dl><dt>Weight</dt><dd>540 g</dd><dt>Colors</dt><dd>Brown</dd><dd>Black</dd></dl>").should ==
         "- **Weight**: 540 g\n- **Colors**: Brown; Black"
+    end
+
+    it "does not add a colon after a term that ends with one" do
+      convert("<dl><dt>Material:</dt><dd>Leather</dd></dl>").should == "- **Material:** Leather"
+    end
+
+    it "keeps the paragraphs and code of a longer definition under its term" do
+      html = "<dl><dt>cache(f)</dt><dd><p>Caches results.</p><pre>cache(f)(1)</pre></dd><dt>Since</dt><dd>3.9</dd></dl>"
+      convert(html).should == "- **cache(f)**\n\n  Caches results.\n\n  ```\n  cache(f)(1)\n  ```\n\n- **Since**: 3.9"
     end
   end
 
