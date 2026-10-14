@@ -18,6 +18,9 @@ module Nokodown
     SEPARATOR = /\s[#{TITLE_SEPARATORS}]\s/.freeze
     HIERARCHY_SEPARATOR = %r{\s[\\/>»]\s}.freeze
     SITE_NAME_SEPARATOR = "[#{TITLE_SEPARATORS}:·•]"
+    WORD = /[\p{L}\p{N}]+/.freeze
+    HEADING_END = /\A([?!.)\]"'”’]*)(?:#{SEPARATOR}|\s*[|:·•,])/.freeze
+    HOME_LINK = %r{\A(?:(?:https?:)?//[^/]+)?/?\z}.freeze
 
     TITLE_KEYS = %w[dc:title dcterm:title og:title weibo:article:title weibo:webpage:title title twitter:title parsely-title].freeze
     BYLINE_KEYS = %w[dc:creator dcterm:creator author parsely-author].freeze
@@ -31,8 +34,9 @@ module Nokodown
       json = json_ld
       meta = meta_values
       site_name = clean(json[:site_name] || meta["og:site_name"] || meta["application-name"])
+      title = strip_site_name(clean(json[:title] || first_value(meta, TITLE_KEYS)) || document_title, site_name)
       {
-        title: strip_site_name(clean(json[:title] || first_value(meta, TITLE_KEYS)) || document_title, site_name),
+        title: title && heading_title(title),
         byline: clean(json[:byline] || first_value(meta, BYLINE_KEYS) || article_author(meta)) || document_byline,
         excerpt: clean(json[:excerpt] || first_value(meta, EXCERPT_KEYS)),
         site_name: site_name,
@@ -181,6 +185,46 @@ module Nokodown
       escaped = Regexp.escape(site_name)
       stripped = title.sub(/\s*#{SITE_NAME_SEPARATOR}\s*#{escaped}\s*\z/i, "").sub(/\A\s*#{escaped}\s*#{SITE_NAME_SEPARATOR}\s*/i, "")
       stripped.empty? ? title : stripped
+    end
+
+    # SEO titles wrap the page's name in sections, site names and keywords
+    # ("Using the Fetch API - Web APIs | MDN"); the H1s tell which part it is.
+    def heading_title(title)
+      h1s = @doc.css("body h1")
+      title_from_h1(title, h1s) || title_without_site_h1(title, h1s) || title
+    end
+
+    # Cut only at a separator: an H1 that is just the first words of a longer
+    # name ("Trail Running" in "Trail Running Shoes for Women") says less than
+    # the title. An H1 linking home is the site's logo, not the page's name.
+    def title_from_h1(title, h1s)
+      matches = title.enum_for(:scan, WORD).map { Regexp.last_match }
+      title_words = matches.map { |match| match[0].downcase }
+      h1s.each do |h1|
+        words = Dom.tokenize(h1.content)
+        next if words.empty? || words.size >= title_words.size || title_words.first(words.size) != words || home_link?(h1)
+
+        cut = matches[words.size - 1].end(0)
+        rest = title[cut..].match(HEADING_END)
+        return title[0, cut] + rest[1] if rest
+      end
+      nil
+    end
+
+    # mdBook and similar generators put the book's name in an H1 outside the
+    # main content and at the end of every page's title. An H1 inside it is the
+    # page's own heading, as in "Site | Page" titles.
+    def title_without_site_h1(title, h1s)
+      separator = title.enum_for(:scan, SEPARATOR).map { Regexp.last_match }.last
+      return if separator.nil? || words(title[0, separator.begin(0)]) < 3
+
+      site_words = Dom.tokenize(title[separator.end(0)..])
+      site_h1 = h1s.any? { |h1| Dom.tokenize(h1.content) == site_words && Dom.ancestors_named(h1, "main", "article").empty? }
+      title[0, separator.begin(0)] if site_h1
+    end
+
+    def home_link?(h1)
+      h1.css("a[href]").any? { |link| link["href"].strip.match?(HOME_LINK) }
     end
 
     def document_byline

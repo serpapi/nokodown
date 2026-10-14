@@ -49,6 +49,30 @@ RSpec.describe Nokodown::Metadata do
     metadata("<title>Pricing | Example Corp</title>")[:title].should == "Pricing | Example Corp"
   end
 
+  it "keeps the H1's part of the title, dropping sections, site names and keywords" do
+    metadata("<title>Using the Widget API - Web APIs | Example Docs</title>", "<main><h1>Using the Widget API</h1></main>")[:title]
+      .should == "Using the Widget API"
+    metadata('<meta property="og:title" content="Do Smart Thermostats Save Money? | Heating, Cooling and Air Quality">', "<h1>Do smart thermostats save money?</h1>")[:title]
+      .should == "Do Smart Thermostats Save Money?"
+  end
+
+  it "keeps the title when the H1 only matches its first words" do
+    metadata('<meta property="og:title" content="Trail Running Shoes for Women">', "<h1>Trail Running</h1>")[:title].should == "Trail Running Shoes for Women"
+  end
+
+  it "does not take a logo H1 that links home for the page's name" do
+    metadata('<meta property="og:title" content="Example Corp | Industrial Widgets">', '<header><h1><a href="/">Example Corp</a></h1></header>')[:title]
+      .should == "Example Corp | Industrial Widgets"
+  end
+
+  it "drops a book's name that an H1 outside the main content repeats at the end of the title" do
+    body = '<div class="menu-bar"><h1 class="menu-title">The Example Book</h1></div><main><h2>Understanding Ownership Rules</h2></main>'
+
+    metadata("<title>Understanding Ownership Rules - The Example Book</title>", body)[:title].should == "Understanding Ownership Rules"
+    metadata("<title>Example Search Weekly | State of Search</title>", "<article><h1>State of Search</h1></article>")[:title]
+      .should == "Example Search Weekly | State of Search"
+  end
+
   it "uses the document byline and language when there is no metadata" do
     result = metadata("<title>Post title with enough words</title>", '<p class="byline">By Sam Rivera</p>')
 
