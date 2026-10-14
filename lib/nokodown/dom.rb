@@ -26,6 +26,8 @@ module Nokodown
     # cannot be hash keys. Elements get a numbered attribute to key on instead.
     KEY = "data-nokodown-key"
 
+    UUID = /\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/.freeze
+
     module_function
 
     def assign_keys(root)
@@ -84,6 +86,8 @@ module Nokodown
       return "" if classes.nil? && id.nil?
 
       value = "#{classes} #{id}"
+      # Generated ids (Webflow "w-node-<uuid>") would otherwise read as words.
+      value = value.gsub(UUID, " ") if value.match?(UUID)
       value = value.gsub(/([a-z\d])([A-Z])/, '\1-\2') if value.match?(/[a-z\d][A-Z]/)
       value.downcase
     end
