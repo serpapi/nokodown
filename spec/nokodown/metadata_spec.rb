@@ -1,8 +1,8 @@
 # frozen_string_literal: true
 
-RSpec.describe ReadableMarkdown::Metadata do
+RSpec.describe Nokodown::Metadata do
   def metadata(head, body = "")
-    ReadableMarkdown::Metadata.new(Nokolexbor::HTML("<html><head>#{head}</head><body>#{body}</body></html>")).to_h
+    Nokodown::Metadata.new(Nokolexbor::HTML("<html><head>#{head}</head><body>#{body}</body></html>")).to_h
   end
 
   it "prefers JSON-LD article data" do
@@ -53,6 +53,6 @@ RSpec.describe ReadableMarkdown::Metadata do
     result = metadata("<title>Post title with enough words</title>", '<p class="byline">By Sam Rivera</p>')
 
     result[:byline].should == "Sam Rivera"
-    ReadableMarkdown.extract('<html lang="pt-BR"><p>Olá</p></html>').lang.should == "pt-BR"
+    Nokodown.extract('<html lang="pt-BR"><p>Olá</p></html>').lang.should == "pt-BR"
   end
 end

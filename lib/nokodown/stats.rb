@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   # Character and link counts for every element under a root, computed in one
   # pass. Counts are non-whitespace characters, so indentation and line breaks
   # in the source do not skew them.

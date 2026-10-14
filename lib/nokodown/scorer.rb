@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   # Readability's paragraph scoring, run without rewriting the DOM: paragraphs
   # push score up to their ancestors, the best ancestor wins, and siblings that
   # look like part of the same article are merged back in.

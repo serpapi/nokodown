@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   module Tables
     module_function
 

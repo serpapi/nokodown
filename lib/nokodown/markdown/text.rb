@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   module Markdown
     # Escaping and whitespace rules. Escapes only what would otherwise change
     # meaning, so prose stays free of backslashes.

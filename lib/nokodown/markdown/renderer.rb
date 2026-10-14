@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   module Markdown
     Block = Struct.new(:kind, :text, :level)
 

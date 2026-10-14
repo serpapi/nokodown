@@ -2,7 +2,7 @@
 
 require "set"
 
-module ReadableMarkdown
+module Nokodown
   module Dom
     BLOCK = Set.new(%w[
       address article aside blockquote body caption center dd details dialog dir div dl dt
@@ -24,7 +24,7 @@ module ReadableMarkdown
 
     # Nokolexbor returns a new Ruby object every time a node is read, so nodes
     # cannot be hash keys. Elements get a numbered attribute to key on instead.
-    KEY = "data-readable-key"
+    KEY = "data-nokodown-key"
 
     module_function
 

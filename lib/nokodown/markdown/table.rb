@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   module Markdown
     # Data tables become GFM tables; layout tables are unwrapped into the
     # blocks they hold.

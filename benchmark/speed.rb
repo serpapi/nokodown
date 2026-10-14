@@ -7,7 +7,7 @@
 #   ruby benchmark/speed.rb DIRECTORY [--runs 5] [--per-page]
 
 require "zlib"
-require_relative "../lib/readable_markdown"
+require_relative "../lib/nokodown"
 
 module Speed
   module_function
@@ -18,8 +18,8 @@ module Speed
 
     timings = files.map do |path|
       html = read(path)
-      ReadableMarkdown.extract(html)
-      ms = median(Array.new(runs) { time { ReadableMarkdown.extract(html) } })
+      Nokodown.extract(html)
+      ms = median(Array.new(runs) { time { Nokodown.extract(html) } })
       puts format("%8.1f ms  %6d KB  %s", ms, html.bytesize / 1024, path.delete_prefix("#{directory}/")) if per_page
       ms
     end

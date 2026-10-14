@@ -3,7 +3,7 @@
 require "cgi"
 require "json"
 
-module ReadableMarkdown
+module Nokodown
   # Title, byline, excerpt, site name, publish date and language, from JSON-LD,
   # <meta> tags and the document, in Readability's order of preference. Runs
   # before the document is cleaned.

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   class Extractor
     TITLE_SIMILARITY = 0.75
     MIN_ARTICLE_LENGTH = 500

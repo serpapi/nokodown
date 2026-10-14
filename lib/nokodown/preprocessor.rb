@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   # Removes everything that can never be content: scripts, invisible elements,
   # form controls, embeds. Lazy-loaded images are restored first so their
   # placeholders are not mistaken for decoration.

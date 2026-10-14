@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   # Readability's conditional cleaning for one container: what it holds (link
   # density, images per paragraph, inputs, embeds) decides whether it is prose
   # or page furniture.

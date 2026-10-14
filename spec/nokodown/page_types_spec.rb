@@ -2,7 +2,7 @@
 
 RSpec.describe "Main content of different kinds of pages" do
   def extract(name)
-    ReadableMarkdown.extract(fixture("#{name}.html"), url: "https://example.com/page")
+    Nokodown.extract(fixture("#{name}.html"), url: "https://example.com/page")
   end
 
   describe "a news article" do

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   module Markdown
     module Image
       TRACKING = %r{(?:\A|/)(?:pixel|spacer|blank|transparent|clear|tracking|beacon|1x1|[\w-]*placeholder)\.(?:gif|png|svg|jpe?g|webp)(?:\?|\z)|/(?:pixel|beacon)(?:/|\?)}i.freeze

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   module Markdown
     # Block-level tidying after rendering: repeated blocks, stray rules,
     # punctuation-only lines and section headings left without a section.

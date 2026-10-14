@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
-require_relative "lib/readable_markdown/version"
+require_relative "lib/nokodown/version"
 
 Gem::Specification.new do |spec|
-  spec.name = "readable_markdown"
-  spec.version = ReadableMarkdown::VERSION
+  spec.name = "nokodown"
+  spec.version = Nokodown::VERSION
   spec.authors = ["SerpApi"]
   spec.summary = "Clean, low-noise Markdown from any web page"
   spec.description = "Extracts the main content of articles, listings, product pages, docs and every other kind of " \
                      "web page as Markdown, with Readability-style metadata. Built on Nokolexbor."
-  spec.homepage = "https://github.com/serpapi/readable_markdown"
+  spec.homepage = "https://github.com/serpapi/nokodown"
   spec.license = "Apache-2.0"
   spec.required_ruby_version = ">= 2.7"
 

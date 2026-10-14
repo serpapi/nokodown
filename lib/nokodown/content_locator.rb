@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   # Decides what part of the cleaned page is the content.
   #
   # Pages with one dominant body of prose (articles, posts, documentation)

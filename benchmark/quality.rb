@@ -15,7 +15,7 @@
 
 require "json"
 require "zlib"
-require_relative "../lib/readable_markdown"
+require_relative "../lib/nokodown"
 
 module Quality
   module_function
@@ -90,7 +90,7 @@ module Quality
     seconds = 0.0
     scores = pages.map do |id, expected, html, url|
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      result = ReadableMarkdown.extract(html, url: url)
+      result = Nokodown.extract(html, url: url)
       seconds += Process.clock_gettime(Process::CLOCK_MONOTONIC) - started
       tp, fp, fn = compare(expected, plain_text(body(result.markdown)))
       total = tp + fp + fn

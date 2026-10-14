@@ -2,7 +2,7 @@
 
 require "uri"
 
-module ReadableMarkdown
+module Nokodown
   # Resolves hrefs against the page URL (and <base>), tolerating the malformed
   # URLs real pages contain, and drops click-tracking query parameters.
   class UrlResolver

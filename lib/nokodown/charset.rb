@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   # Lexbor reads bytes as UTF-8 and ignores <meta charset>, so HTML is
   # transcoded first. Invalid bytes are dropped: they would make every regex
   # downstream raise.

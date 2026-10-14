@@ -1,4 +1,6 @@
-# readable_markdown
+# nokodown
+
+Any web page to main-content Markdown, at Nokolexbor speed.
 
 Extracts the main content of a web page as clean Markdown, together with the
 metadata Readability returns (title, byline, excerpt, site name, publish date,
@@ -6,12 +8,13 @@ language). It works on articles and on everything else: home pages, search
 results, product and pricing pages, documentation, forums.
 
 Built on [Nokolexbor](https://github.com/serpapi/nokolexbor), for the
-`include_markdown` option of SerpApi's Extract API.
+`include_markdown` option of SerpApi's Extract API. The name is Nokolexbor's
+"noko" plus Markdown's "down".
 
 ## Installation
 
 ```ruby
-gem "readable_markdown", git: "git@github.com:serpapi/readable_markdown.git"
+gem "nokodown", git: "git@github.com:serpapi/nokodown.git"
 ```
 
 Ruby 2.7 or newer, nokolexbor 0.6 or newer.
@@ -19,9 +22,9 @@ Ruby 2.7 or newer, nokolexbor 0.6 or newer.
 ## Usage
 
 ```ruby
-require "readable_markdown"
+require "nokodown"
 
-result = ReadableMarkdown.extract(html, url: "https://example.com/post")
+result = Nokodown.extract(html, url: "https://example.com/post")
 
 result.markdown       # "# Post title\n\nFirst paragraph..."
 result.title          # "Post title"
@@ -32,7 +35,7 @@ result.published_time # "2026-09-30T08:00:00Z"
 result.lang           # "en"
 result.mode           # :article, :page, :full or :none
 
-ReadableMarkdown.to_markdown(html, url: "https://example.com/post") # just the Markdown
+Nokodown.to_markdown(html, url: "https://example.com/post") # just the Markdown
 ```
 
 `html` is a string in any encoding. Binary strings are decoded using their
@@ -138,7 +141,7 @@ The Extract API currently fills `text_content.markdown` from the page's
 `<main>`, its only `<article>`, or the whole body. With this gem:
 
 ```ruby
-markdown = ReadableMarkdown.to_markdown(html, url: final_url)
+markdown = Nokodown.to_markdown(html, url: final_url)
 ```
 
 `main_content: false` gives the whole-page conversion if a request needs it.

@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   # Removes site furniture (navigation, headers, footers, sidebars) and noise
   # widgets (ads, cookie banners, share bars) from the whole page.
   #

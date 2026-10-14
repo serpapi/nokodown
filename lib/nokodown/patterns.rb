@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-module ReadableMarkdown
+module Nokodown
   # Class/id/role vocabularies. Matched against Dom.signature, which lowercases
   # and splits camelCase so "adContainer" reads as "ad-container".
   module Patterns
