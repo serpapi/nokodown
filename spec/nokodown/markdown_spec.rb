@@ -49,6 +49,30 @@ RSpec.describe "Markdown conversion" do
 
     it "strips click-tracking parameters" do
       convert('<p><a href="https://shop.example/p?id=7&utm_source=mail&gclid=abc">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
+      convert('<p><a href="https://shop.example/p?id=7&_ga=2.1.2-3&srsltid=AfmBOx">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
+    end
+
+    it "shortens Amazon links to the product or the search" do
+      product = "https://www.amazon.com/Trail-Boot/dp/B000O3LUEI/ref=sr_1_1?crid=2X&dib=eyJ2IjoiMSJ9.abc&qid=1&sr=8-1&tag=site-20&linkCode=ll1"
+      convert(%(<p><a href="#{product}">Boot</a></p>)).should == "[Boot](https://www.amazon.com/Trail-Boot/dp/B000O3LUEI?tag=site-20)"
+      search = "https://www.amazon.com/s/ref=nb_sb_noss?k=trail+boot&crid=2X&qid=1&ref=sr_pg_1"
+      convert(%(<p><a href="#{search}">Boots</a></p>)).should == "[Boots](https://www.amazon.com/s?k=trail+boot)"
+    end
+
+    it "keeps Amazon parameter names on other sites" do
+      href = "https://go.microsoft.com/fwlink/?linkid=2300933"
+      convert(%(<p><a href="#{href}">Docs</a></p>)).should == "[Docs](#{href})"
+    end
+
+    it "unwraps known click redirectors" do
+      html = '<p><a href="https://www.google.com/url?q=https%3A%2F%2Fexample.org%2Fdoc%3Fid%3D3&sa=D&usg=AOv">Doc</a> ' \
+             '<a href="https://go.skimresources.com/?id=1X2&url=https%3A%2F%2Fshop.example%2Fkettle%3Futm_source%3Dskim">Kettle</a></p>'
+      convert(html).should == "[Doc](https://example.org/doc?id=3) [Kettle](https://shop.example/kettle)"
+    end
+
+    it "recognises links back to the page when only tracking parameters differ" do
+      html = '<body><p>See <a href="https://example.com/post#comments">comments</a>.</p></body>'
+      Nokodown.to_markdown(html, url: "https://example.com/post?utm_source=feed", main_content: false, title: false).should == "See comments."
     end
 
     it "keeps only the text of in-page anchors, scripts and phone links" do
@@ -102,6 +126,23 @@ RSpec.describe "Markdown conversion" do
       html = '<figure><img src="/a-small.jpg" alt="Harbour at dawn"><figcaption>Credit</figcaption>' \
              '<img src="/a-large.jpg" alt="Harbour at dawn"><figcaption>Credit</figcaption></figure>'
       convert(html).should == "![Harbour at dawn](https://example.com/a-small.jpg)\n\nCredit"
+    end
+
+    it "drops image CDN size, quality and version parameters" do
+      convert('<img src="https://cdn.shop.example/files/kettle.jpg?v=1549149242&width=640&q=75" alt="Kettle">').should ==
+        "![Kettle](https://cdn.shop.example/files/kettle.jpg)"
+    end
+
+    it "uses the original image behind Next.js and fetch proxies" do
+      html = '<p><img src="/_next/image?url=%2Fimages%2Fkettle.png&w=3840&q=75" alt="Kettle"> ' \
+             '<img src="https://res.cloudinary.com/demo/image/fetch/w_800,q_auto/https://cdn.example.org/mug.png" alt="Mug"></p>'
+      convert(html).should == "![Kettle](https://example.com/images/kettle.png) ![Mug](https://cdn.example.org/mug.png)"
+    end
+
+    it "keeps signed image URLs as they are" do
+      s3 = "https://bucket.s3.amazonaws.com/chart.png?w=800&X-Amz-Signature=0f3a9c"
+      imgix = "https://img.evbuc.com/https%3A%2F%2Fcdn.evbuc.com%2Fimages%2F1%2Foriginal.jpg?w=460&s=ccc672"
+      convert(%(<p><img src="#{s3}" alt="Chart"> <img src="#{imgix}" alt="Event"></p>)).should == "![Chart](#{s3}) ![Event](#{imgix})"
     end
   end
 
