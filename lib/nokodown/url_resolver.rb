@@ -13,10 +13,8 @@ module Nokodown
     # Amazon session, search-rank and affiliate parameters; on other sites
     # these names can matter (Microsoft fwlinks need linkid).
     AMAZON_PARAM = /\A(?:ref|qid|sr|th|smid|psc|crid|dib|dib_tag|spLa|sprefix|linkCode|linkId|ascsubtag|camp|creative)\z/.freeze
-    AMAZON = /(?:\A|\.)amazon\.(?:com?\.)?[a-z]{2,3}\z/.freeze
+    AMAZON = /\A(?:www\.|smile\.)?amazon\.(?:com?\.)?[a-z]{2,3}\z/i.freeze
     AMAZON_PRODUCT = %r{\A.*?/(?:dp|gp/product|gp/aw/d)/[A-Z0-9]{10}}.freeze
-    # Click redirectors, as host and path, which carry the destination in a
-    # url, u, murl or q parameter.
     REDIRECTOR = %r{
       \A(?:www\.)?google\.(?:com?\.)?[a-z]{2,3}/url\z |
       \A(?:www\.)?youtube\.com/redirect\z |
@@ -35,10 +33,17 @@ module Nokodown
     # same picture. Signed URLs stop working once any parameter changes.
     PRESENTATION_PARAM = /\A(?:w|h|width|height|q|quality|fit|crop|auto|dpr|fm|format|resize|wid|hei|qlt|fmt|resMode|op_usm|ixlib|
                            imwidth|imheight|impolicy)\z/x.freeze
-    SIGNATURE_PARAM = /\A(?:s|sig|sign|signature|token|expires|x-amz-[a-z-]+|key-pair-id|policy|hmac|hash|jwt|itok)\z/i.freeze
-    # Image proxies: Next.js and Vercel take the original as ?url=, fetch CDNs
-    # (Cloudinary, Cloudflare, Substack) append it to their own path.
+    SIGNATURE_PARAM = /\A(?:s|sig|sign|signature|token|__token__|hdnts|expires|x-amz-[a-z-]+|x-goog-[a-z-]+|key-pair-id|
+                        policy|hmac|hash|jwt|itok)\z/ix.freeze
     NEXT_IMAGE = %r{/_(?:next|vercel)/image/?\z}.freeze
+    # Cloudinary (on any domain), Forem, Cloudflare and ShortPixel append the
+    # original to their path. Screenshot services and web archives do too, but
+    # they do not serve the image at that URL.
+    FETCH_PROXY = %r{
+      \A[^/]*(?:/[\w-]+)?/image/fetch/ |
+      \A[^/]*/(?:dynamic|cdn-cgi)/image/ |
+      \Asp-ao\.shortpixel\.ai/client/
+    }ix.freeze
     EMBEDDED_URL = %r{/(https?(?::|%3A)(?:/|%2F){2}.+)\z}i.freeze
     CDN_CGI_IMAGE = %r{\A/cdn-cgi/image/[^/]+(/.+)\z}.freeze
     UNSAFE = %r{[^A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]}.freeze
@@ -109,12 +114,13 @@ module Nokodown
     def redirect_target(uri)
       return unless "#{uri.host}#{uri.path}".match?(REDIRECTOR)
 
-      target = parse(param_value(uri, DESTINATION_PARAM))
-      target if target.is_a?(URI::HTTP) && target.host
+      param_values(uri, DESTINATION_PARAM).map { |value| parse(value) }.find { |target| web?(target) }
     end
 
-    # A product page is /dp/ASIN; the rest of the path and every parameter but
-    # the affiliate tag record how the visitor got there.
+    def web?(uri)
+      uri.is_a?(URI::HTTP) && !uri.host.to_s.empty?
+    end
+
     def clean_amazon(uri)
       product = uri.path[AMAZON_PRODUCT]
       uri = uri.dup
@@ -127,45 +133,76 @@ module Nokodown
     def clean_image(uri)
       return uri if signed_image?(uri)
 
-      original = proxied_image(uri)
-      return clean_image(original) if original
+      embedded = embedded_image(uri)
+      embedded ? original_image(uri, embedded) : strip_presentation(uri)
+    end
 
+    # A proxy needs its options, so it stays whole when its original is unusable;
+    # the original is not unwrapped again, as a relative one can be the proxy.
+    def original_image(proxy, embedded)
+      original = join(proxy, embedded) unless embedded.empty?
+      return proxy unless web?(original)
+
+      signed_image?(original) ? original : strip_presentation(original)
+    end
+
+    def strip_presentation(uri)
       reject_params(uri) { |key, value| key.match?(PRESENTATION_PARAM) || (key == "v" && value.match?(/\A\d+\z/)) }
     end
 
     def signed_image?(uri)
-      uri.query.to_s.split("&").any? { |pair| pair.split("=", 2).first.to_s.match?(SIGNATURE_PARAM) }
+      uri.query.to_s.split("&").any? { |pair| param(pair).first.match?(SIGNATURE_PARAM) }
     end
 
-    def proxied_image(uri)
+    def embedded_image(uri)
       path = uri.path.to_s
-      original = if path.match?(NEXT_IMAGE)
-                   param_value(uri, /\Aurl\z/)
-                 elsif path.match?(EMBEDDED_URL)
-                   URI::DEFAULT_PARSER.unescape(path[EMBEDDED_URL, 1])
-                 else
-                   path[CDN_CGI_IMAGE, 1]
-                 end
-      join(uri, original) if original && !original.empty?
+      return param_values(uri, /\Aurl\z/).first.to_s if path.match?(NEXT_IMAGE)
+      return fetched_image(uri) if "#{uri.host}#{path}".match?(FETCH_PROXY) && path.match?(EMBEDDED_URL)
+
+      path[CDN_CGI_IMAGE, 1]
     end
 
-    def param_value(uri, key)
-      pair = uri.query.to_s.split("&").find { |candidate| candidate.split("=", 2).first.to_s.match?(key) }
-      URI.decode_www_form_component(pair.split("=", 2)[1].to_s) if pair
+    # An encoded original ends where the proxy's query starts. A plain one was
+    # split in two by the parser, so that query is the original's own.
+    def fetched_image(uri)
+      embedded = uri.path[EMBEDDED_URL, 1]
+      return unescape(embedded).to_s if embedded.match?(/\Ahttps?%3A/i)
+
+      uri.query ? "#{embedded}?#{uri.query}" : embedded
+    end
+
+    def param_values(uri, key)
+      params = uri.query.to_s.split("&").map { |pair| param(pair) }
+      params.select { |name, _| name.match?(key) }.map { |_, value| decode(value) }.compact
+    end
+
+    def param(pair)
+      key, value = pair.split("=", 2)
+      [key.to_s, value.to_s]
+    end
+
+    def decode(value)
+      decoded = URI.decode_www_form_component(value)
+      decoded if decoded.valid_encoding?
     rescue ArgumentError
       nil
     end
 
-    # The query without the pairs the block picks, or no query when none are left.
+    def unescape(value)
+      decoded = URI::DEFAULT_PARSER.unescape(value)
+      decoded if decoded.valid_encoding?
+    end
+
     def reject_params(uri)
       return uri unless uri.query
 
-      pairs = uri.query.split("&").reject do |pair|
-        key, value = pair.split("=", 2)
-        pair.empty? || yield(key, value.to_s)
-      end
+      pairs = uri.query.split("&")
+      kept = pairs.reject { |pair| yield(*param(pair)) }
+      return uri if kept.size == pairs.size
+
+      kept -= [""]
       uri = uri.dup
-      uri.query = pairs.empty? ? nil : pairs.join("&")
+      uri.query = kept.empty? ? nil : kept.join("&")
       uri
     end
 

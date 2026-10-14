@@ -57,11 +57,19 @@ RSpec.describe "Markdown conversion" do
       convert(%(<p><a href="#{product}">Boot</a></p>)).should == "[Boot](https://www.amazon.com/Trail-Boot/dp/B000O3LUEI?tag=site-20)"
       search = "https://www.amazon.com/s/ref=nb_sb_noss?k=trail+boot&crid=2X&qid=1&ref=sr_pg_1"
       convert(%(<p><a href="#{search}">Boots</a></p>)).should == "[Boots](https://www.amazon.com/s?k=trail+boot)"
+      convert('<p><a href="https://WWW.AMAZON.CO.UK/dp/B000O3LUEI?psc=1">Boot</a></p>').should == "[Boot](https://WWW.AMAZON.CO.UK/dp/B000O3LUEI)"
     end
 
-    it "keeps Amazon parameter names on other sites" do
+    it "keeps Amazon parameter names on other sites and other Amazon services" do
       href = "https://go.microsoft.com/fwlink/?linkid=2300933"
       convert(%(<p><a href="#{href}">Docs</a></p>)).should == "[Docs](#{href})"
+      aws = "https://docs.aws.amazon.com/ec2/ref=guide?sr=1&qid=2"
+      convert(%(<p><a href="#{aws}">EC2</a></p>)).should == "[EC2](#{aws})"
+    end
+
+    it "leaves a query without tracking parameters as written" do
+      href = "https://example.com/search?a=1&&b=2&"
+      convert(%(<p><a href="#{href}">Search</a></p>)).should == "[Search](#{href})"
     end
 
     it "unwraps known click redirectors" do
@@ -70,9 +78,23 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "[Doc](https://example.org/doc?id=3) [Kettle](https://shop.example/kettle)"
     end
 
+    it "takes the redirect destination from the first parameter that holds a URL" do
+      href = "https://www.google.com/url?sa=t&q=&esrc=s&url=https%3A%2F%2Fexample.org%2Fdoc&usg=AOv"
+      convert(%(<p><a href="#{href}">Doc</a></p>)).should == "[Doc](https://example.org/doc)"
+    end
+
+    it "keeps redirects whose destination is not valid UTF-8" do
+      latin1 = "https://www.google.com/url?q=https%3A%2F%2Fexample.org%2Fcaf%E9&sa=D"
+      truncated = "https://l.facebook.com/l.php?u=https%3A%2F%2Fexample.org%2Fcaf%E2%80"
+      convert(%(<p><a href="#{latin1}">Cafe</a> <a href="#{truncated}">Menu</a></p>)).should == "[Cafe](#{latin1}) [Menu](#{truncated})"
+    end
+
     it "recognises links back to the page when only tracking parameters differ" do
       html = '<body><p>See <a href="https://example.com/post#comments">comments</a>.</p></body>'
       Nokodown.to_markdown(html, url: "https://example.com/post?utm_source=feed", main_content: false, title: false).should == "See comments."
+      product = "https://www.amazon.com/Trail-Boot/dp/B000O3LUEI/ref=sr_1_1?qid=1&sr=8-1"
+      html = '<body><p>Read <a href="#customerReviews">reviews</a>.</p></body>'
+      Nokodown.to_markdown(html, url: product, main_content: false, title: false).should == "Read reviews."
     end
 
     it "keeps only the text of in-page anchors, scripts and phone links" do
@@ -133,16 +155,42 @@ RSpec.describe "Markdown conversion" do
         "![Kettle](https://cdn.shop.example/files/kettle.jpg)"
     end
 
-    it "uses the original image behind Next.js and fetch proxies" do
+    it "uses the original image behind Next.js, fetch and Cloudflare proxies" do
       html = '<p><img src="/_next/image?url=%2Fimages%2Fkettle.png&w=3840&q=75" alt="Kettle"> ' \
-             '<img src="https://res.cloudinary.com/demo/image/fetch/w_800,q_auto/https://cdn.example.org/mug.png" alt="Mug"></p>'
-      convert(html).should == "![Kettle](https://example.com/images/kettle.png) ![Mug](https://cdn.example.org/mug.png)"
+             '<img src="https://res.cloudinary.com/demo/image/fetch/w_800,q_auto/https://cdn.example.org/mug.png" alt="Mug"> ' \
+             '<img src="https://cdn.example.net/image/fetch/w_36/https%3A%2F%2Fmedia.example.org%2Fcup.png" alt="Cup"> ' \
+             '<img src="/cdn-cgi/image/width=800,quality=75/uploads/pot.jpg" alt="Pot"></p>'
+      convert(html).should == "![Kettle](https://example.com/images/kettle.png) ![Mug](https://cdn.example.org/mug.png) " \
+                              "![Cup](https://media.example.org/cup.png) ![Pot](https://example.com/uploads/pot.jpg)"
+    end
+
+    it "keeps the query of a fetched original that is not encoded" do
+      src = "https://res.cloudinary.com/demo/image/fetch/w_800/https://cdn.example.org/render.php?id=7"
+      convert(%(<img src="#{src}" alt="Chart">)).should == "![Chart](https://cdn.example.org/render.php?id=7)"
+    end
+
+    it "keeps screenshot and archive URLs that embed a page URL" do
+      shot = "https://s.example.com/mshots/v1/https%3A%2F%2Fexample.org"
+      archive = "https://web.archive.org/web/2020im_/https://example.org/logo.png"
+      convert(%(<p><img src="#{shot}" alt="Site"> <img src="#{archive}" alt="Logo"></p>)).should == "![Site](#{shot}) ![Logo](#{archive})"
+    end
+
+    it "keeps image proxies whose original is not a web URL" do
+      data = "/_next/image?url=data%3Aimage%2Fgif%3Bbase64%2CR0lGOD&w=64&q=75"
+      script = "/_next/image?url=javascript%3Aalert(1)&w=64&q=75"
+      latin1 = "/_next/image?url=%2Fcaf%E9.png&w=64&q=75"
+      convert(%(<p><img src="#{data}" alt="Dot"> <img src="#{script}" alt="Icon"> <img src="#{latin1}" alt="Cafe"></p>)).should ==
+        "![Dot](https://example.com#{data}) ![Icon](https://example.com#{script}) ![Cafe](https://example.com#{latin1})"
+      convert('<img src="/_next/image?url=%23top&w=64" alt="Top">').should include("/_next/image?url=%23top")
     end
 
     it "keeps signed image URLs as they are" do
       s3 = "https://bucket.s3.amazonaws.com/chart.png?w=800&X-Amz-Signature=0f3a9c"
       imgix = "https://img.evbuc.com/https%3A%2F%2Fcdn.evbuc.com%2Fimages%2F1%2Foriginal.jpg?w=460&s=ccc672"
       convert(%(<p><img src="#{s3}" alt="Chart"> <img src="#{imgix}" alt="Event"></p>)).should == "![Chart](#{s3}) ![Event](#{imgix})"
+      gcs = "https://storage.googleapis.com/b/map.png?X-Goog-Expires=900&X-Goog-Signature=0f3a9c&width=800"
+      akamai = "https://img.example.net/team.jpg?imwidth=800&__token__=exp%3D1~hmac%3D0f3a9c"
+      convert(%(<p><img src="#{gcs}" alt="Map"> <img src="#{akamai}" alt="Team"></p>)).should == "![Map](#{gcs}) ![Team](#{akamai})"
     end
   end
 
