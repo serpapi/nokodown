@@ -71,6 +71,10 @@ RSpec.describe "Main content of different kinds of pages" do
       markdown.should include("| `retries` | 2 | Attempts after the first one |")
     end
 
+    it "keeps headings that carry a scroll-margin utility class" do
+      markdown.should include("## Backoff\n\n")
+    end
+
     it "drops the sidebar, table of contents, pager and feedback widget" do
       ["Installation", "Timeouts", "On this page", "Making requests", "Was this page helpful", "[#]"].each do |noise|
         markdown.should_not include(noise)

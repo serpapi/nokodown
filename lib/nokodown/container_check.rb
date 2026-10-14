@@ -13,7 +13,7 @@ module Nokodown
     def initialize(node, content_length, paragraph_keys)
       @node = node
       @text = Dom.text(node)
-      @weight = Scorer.class_weight(node)
+      @weight = Scorer.cleaning_weight(node)
       @content_length = content_length
       @paragraph_keys = paragraph_keys
     end
