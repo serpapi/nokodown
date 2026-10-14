@@ -64,6 +64,47 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "accordions and tabs" do
+    def article(widget)
+      Nokodown.to_markdown("<title>Trail stove</title><article><h1>Trail stove</h1><p>#{'It boils a litre in three minutes. ' * 6}</p>#{widget}</article>")
+    end
+
+    it "keeps a closed accordion panel that a button opens" do
+      html = '<button aria-controls="faq-1" aria-expanded="false">Do you ship abroad?</button>' \
+             '<div id="faq-1" class="accordion-panel" aria-hidden="true"><p>Yes, to most of Europe.</p></div>'
+
+      convert(html).should == "Do you ship abroad?\n\nYes, to most of Europe."
+    end
+
+    it "keeps a closed tab panel labelled by its tab" do
+      convert('<div role="tabpanel" aria-labelledby="tab-2" aria-hidden="true"><p>Weighs 85 g.</p></div>').should == "Weighs 85 g."
+    end
+
+    it "drops aria-hidden icons and the full copy behind a read-more link" do
+      html = '<p><span class="icon" aria-hidden="true">★</span> Used, with light wear on the ... ' \
+             '<span class="expandable-text" aria-hidden="true">Used, with light wear on the cover.</span></p>'
+
+      convert(html).should == "Used, with light wear on the ..."
+    end
+
+    it "drops a strip of tab labels" do
+      article('<ul role="tablist"><li role="tab">Specifications</li><li role="tab">Reviews</li></ul>').should_not include("Specifications")
+    end
+
+    it "keeps a tab list wrapped around its panels" do
+      markdown = article('<div role="tablist"><ul><li role="tab">Specifications</li></ul><div role="tabpanel"><p>Weighs 85 g.</p></div></div>')
+
+      markdown.should include("Weighs 85 g.")
+    end
+
+    it "keeps an FAQ marked up as a tab list" do
+      answer = "No. It only takes screw-on canisters of isobutane and propane, sold at most outdoor shops. " * 3
+      markdown = article("<div role='tablist'><h2>Can it burn white gas?</h2><p>#{answer}</p></div>")
+
+      markdown.should include("## Can it burn white gas?\n\nNo. It only takes")
+    end
+  end
+
   describe "title: false" do
     it "does not prepend the metadata title" do
       markdown = Nokodown.to_markdown(fixture("article.html"), title: false)

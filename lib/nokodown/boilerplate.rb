@@ -85,8 +85,18 @@ module Nokodown
       when "complementary" then aside_noise?(node)
       when "banner" then site_header?(node)
       when "alert", "status" then Dom.char_count(node.content) < 300
+      when "tablist" then tab_strip?(node)
       else true
       end
+    end
+
+    # Sites also put role=tablist on the wrapper around the tabs and their
+    # panels, or on an FAQ accordion; only a strip of short labels or links
+    # is chrome.
+    def tab_strip?(node)
+      return false if node.at_css("[role=tabpanel]")
+
+      @stats.text_chars(node) < 200 || @stats.link_density(node) > 0.5
     end
 
     def advertising?(node)
