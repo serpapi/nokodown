@@ -141,7 +141,8 @@ module Nokodown
       end
 
       def format_list(items, start)
-        items = items.each_with_index.map { |blocks, index| without_typed_marker(blocks, start && start + index) }
+        typed = typed_bullet?(items)
+        items = items.each_with_index.map { |blocks, index| without_typed_marker(blocks, typed, start && start + index) }
         items.reject!(&:empty?)
         return [] if items.empty?
 
@@ -152,13 +153,20 @@ module Nokodown
         [Block.new(:list, rendered.join(loose ? "\n\n" : "\n"))]
       end
 
+      # Glyphs that differ between items carry meaning, as in legends where ●
+      # and ○ mean yes and no; one glyph throughout is the site's own bullet.
+      def typed_bullet?(items)
+        glyphs = items.filter_map { |blocks| blocks.first.text[BULLET_GLYPH]&.strip if blocks.first.kind == :paragraph }
+        glyphs.uniq.size == 1
+      end
+
       # Sites type their own bullet or number into items, which would repeat
       # the marker ("- • a", "2. 2. b").
-      def without_typed_marker(blocks, number)
+      def without_typed_marker(blocks, typed_bullet, number)
         first = blocks.first
         return blocks unless first.kind == :paragraph
 
-        text = first.text.sub(BULLET_GLYPH, "")
+        text = typed_bullet ? first.text.sub(BULLET_GLYPH, "") : first.text
         text = text.sub(/\A#{number}[.)](?!\d)\s*/, "") if number
         return blocks if text == first.text
 
@@ -166,14 +174,18 @@ module Nokodown
         text.empty? ? rest : [Block.new(:paragraph, Text.escape_line_starts(text))] + rest
       end
 
-      # An item that opens with a nested list would print an empty marker
-      # ("- - a"), so the nested items stand in for it.
+      # An item holding nothing but a bulleted list would print an empty
+      # marker ("- - a"), so the nested items stand in for it. An item with
+      # more content stays one item, so product cards keep their boundaries,
+      # and numbered lists keep their numbering.
       def list_entry(marker, blocks)
-        nested, *rest = blocks
-        return indent_item(marker, join_item(blocks)) unless nested.kind == :list
-        return nested.text if rest.empty?
+        return blocks.first.text if marker == "- " && blocks.size == 1 && bulleted_list?(blocks.first)
 
-        nested.text + separator(rest.first) + list_entry(marker, rest)
+        indent_item(marker, join_item(blocks))
+      end
+
+      def bulleted_list?(block)
+        block.kind == :list && block.text.start_with?("- ")
       end
 
       def indent_item(marker, body)
@@ -238,7 +250,7 @@ module Nokodown
         return "- #{text}" if term.nil?
         return "- **#{term}**" if text.empty?
 
-        term.end_with?(":") ? "- **#{term}** #{text}" : "- **#{term}**: #{text}"
+        term.match?(/[:：]\z/) ? "- **#{term}** #{text}" : "- **#{term}**: #{text}"
       end
 
       def definition_item(term, definitions)

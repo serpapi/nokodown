@@ -29,6 +29,22 @@ RSpec.describe "Markdown conversion" do
     it "marks other raised words with a caret and leaves ordinals and symbols as text" do
       convert("<p>x<sup>n</sup>, the 21<sup>st</sup> Acme<sup>®</sup>, <sub>small print</sub></p>").should == "x^n, the 21st Acme®, small print"
     end
+
+    it "groups raised and lowered expressions so they keep their meaning" do
+      convert("<p>2<sup>n-1</sup>, 2<sup>n - 1</sup>, x<sup>i=1</sup>, a<sub>n</sub>, a<sub>n+1</sub></p>").should ==
+        "2^(n-1), 2^(n - 1), x^(i=1), a_n, a_(n+1)"
+    end
+
+    it "writes raised cents after a price as decimals" do
+      html = "<p>$549<sup>99</sup>, <span>$2,799</span><sup>00</sup>, <sup>$</sup>19<sup>95</sup>, the 10<sup>15</sup> scale</p>"
+      convert(html).should == "$549.99, $2,799.00, $19.95, the 10¹⁵ scale"
+    end
+
+    it "keeps French and wrapped ordinals as text and uses the characters for raised o and TM" do
+      html = "<p>le 1<sup>er</sup> mai, le XIX<sup>e</sup> siècle, the 21<span><sup>st</sup></span>, " \
+             "1<sup>o</sup> piso, 30<sup>o</sup>C, Acme<sup>TM</sup></p>"
+      convert(html).should == "le 1er mai, le XIXe siècle, the 21st, 1º piso, 30ºC, Acme™"
+    end
   end
 
   describe "emphasis" do
@@ -131,12 +147,31 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops bullets and repeated numbers typed into items" do
-      convert("<ul><li>• One</li><li>►Two</li></ul><ol><li><span>1.</span> First</li><li>2. Second</li></ol>").should ==
-        "- One\n- Two\n\n1. First\n2. Second"
+      html = "<ul><li>Zero</li><li>• One</li><li>•Two</li></ul><ol><li><span>1.</span> First</li><li>2. Second</li></ol>"
+      convert(html).should == "- Zero\n- One\n- Two\n\n1. First\n2. Second"
     end
 
-    it "moves up a list that opens an item instead of printing an empty marker" do
+    it "keeps glyphs that differ between items and minus signs" do
+      html = "<ul><li>● Waterproof</li><li>○ Insulated</li></ul><ul><li>- Cold</li><li>- Dry</li></ul>" \
+             "<ul><li>-5 °C</li><li>-3 °C</li></ul>"
+      convert(html).should == "- ● Waterproof\n- ○ Insulated\n\n- Cold\n- Dry\n\n- -5 °C\n- -3 °C"
+    end
+
+    it "keeps typed numbers that are not the item's own" do
+      convert("<ol><li>1.5 kg flour</li><li>3. Salt</li></ol>").should == "1. 1.5 kg flour\n2. 3. Salt"
+    end
+
+    it "moves up a bulleted list that opens an item instead of printing an empty marker" do
       convert("<ul><li><ul><li>a</li><li>b</li></ul></li><li>c</li></ul>").should == "- a\n- b\n- c"
+    end
+
+    it "keeps an item together when content follows its nested list" do
+      convert("<ul><li><ul><li>Photo</li></ul>Boot $5</li><li><ul><li>Photo</li></ul>Sock $6</li></ul>").should ==
+        "- - Photo\n\n  Boot $5\n\n- - Photo\n\n  Sock $6"
+    end
+
+    it "keeps a numbered list nested at the start of an item under its own number" do
+      convert("<ol><li><ol><li>a</li><li>b</li></ol></li><li>c</li></ol>").should == "1. 1. a\n   2. b\n2. c"
     end
 
     it "renders definition lists as term and definition pairs" do
@@ -145,7 +180,14 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "does not add a colon after a term that ends with one" do
-      convert("<dl><dt>Material:</dt><dd>Leather</dd></dl>").should == "- **Material:** Leather"
+      convert("<dl><dt>Material:</dt><dd>Leather</dd><dt>材料：</dt><dd>革</dd></dl>").should ==
+        "- **Material:** Leather\n- **材料：** 革"
+    end
+
+    it "keeps a list or a table inside a definition under its term" do
+      html = "<dl><dt>Colors</dt><dd><ul><li>Brown</li><li>Black</li></ul></dd>" \
+             "<dt>Sizes</dt><dd><table><tr><th>S</th><th>M</th></tr><tr><td>36</td><td>38</td></tr></table></dd></dl>"
+      convert(html).should == "- **Colors**\n  - Brown\n  - Black\n\n- **Sizes**\n\n  | S | M |\n  | --- | --- |\n  | 36 | 38 |"
     end
 
     it "keeps the paragraphs and code of a longer definition under its term" do

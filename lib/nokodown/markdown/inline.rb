@@ -14,8 +14,16 @@ module Nokodown
       SCRIPT_SOURCE = "0123456789+−=()-"
       SUPERSCRIPTS = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾⁻"
       SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎₋"
-      RAISED_WORD = /\A[\p{L}\p{N}+\-−=()]+\z/.freeze
-      ORDINAL_SUFFIX = /\A(?:st|nd|rd|th)\z/i.freeze
+      SCRIPT_WORD = %r{\A[\p{L}\p{N}+\-−=/()]+\z}.freeze
+      SCRIPT_OPERATOR = %r{[+\-−=/]}.freeze
+      # These have characters of their own: 1º, 30ºC, nº, Acme™.
+      RAISED_LETTERS = { "o" => "º", "TM" => "™", "SM" => "℠" }.freeze
+      # English and French endings: 21st, 1er, 2nde, XIXe.
+      ORDINAL_SUFFIX = /\A(?:st|nd|rd|th|er|ers|re|res|e|es|ème|eme|nde)\z/i.freeze
+      NUMBER_END = /(?:\d|\b[IVXLCDM]+)\z/.freeze
+      PRICE_END = /\p{Sc}\s?\d[\d,]*\z/.freeze
+      CENTS = /\A\d\d\z/.freeze
+      ATTACHED = /[\p{L}\p{N})\]]\z/.freeze
 
       def initialize(urls, images:, links:)
         @urls = urls
@@ -157,17 +165,67 @@ module Nokodown
       end
 
       # Markdown has no superscript, and "2attempt" is wrong. Digits and signs
-      # have Unicode forms (10⁶, H₂O); other raised words get a caret (x^n).
-      # Footnote markers such as [1], ordinals, symbols such as ® and lowered
-      # words read fine as plain text.
+      # have Unicode forms (10⁶, H₂O); other raised and lowered words get a
+      # caret or an underscore (x^n, a_n). Footnote markers such as [1],
+      # symbols such as ® and small print read fine as plain text.
       def script(node)
         text = render(node.children)
         core = text.strip
         return text if core.empty? || text.match?(FOOTNOTE_MARKER) || node.at_css("a")
-        return core.tr(SCRIPT_SOURCE, node.name == "sup" ? SUPERSCRIPTS : SUBSCRIPTS) if core.match?(SCRIPT_TEXT)
-        return "^#{core}" if node.name == "sup" && core.match?(RAISED_WORD) && !core.match?(ORDINAL_SUFFIX)
 
-        text
+        previous = previous_node(node)
+        before = previous&.content.to_s
+        marked = node.name == "sup" ? superscript(core, previous, before) : subscript(core, before)
+        marked || text
+      end
+
+      # The node right before this one, looking past inline wrappers that it
+      # opens (21<span><sup>st</sup></span>).
+      def previous_node(node)
+        node = node.parent while node.previous_sibling.nil? && inline_parent?(node)
+        node.previous_sibling
+      end
+
+      def inline_parent?(node)
+        parent = node.parent
+        parent&.element? && !Dom::BLOCK.include?(parent.name)
+      end
+
+      # Cents and ordinals are raised only for looks: $549.99, 21st, XIXe.
+      def superscript(core, previous, before)
+        return ".#{core}" if core.match?(CENTS) && price_before?(previous, before)
+        return core.tr(SCRIPT_SOURCE, SUPERSCRIPTS) if core.match?(SCRIPT_TEXT)
+        return RAISED_LETTERS[core] if RAISED_LETTERS.key?(core)
+        return if core.match?(ORDINAL_SUFFIX) && before.match?(NUMBER_END)
+
+        "^#{grouped(core)}" if expression?(core)
+      end
+
+      # A lowered word is an index only when it hangs off the word before it.
+      def subscript(core, before)
+        return core.tr(SCRIPT_SOURCE, SUBSCRIPTS) if core.match?(SCRIPT_TEXT)
+
+        "_#{grouped(core)}" if expression?(core) && before.match?(ATTACHED)
+      end
+
+      # $549<sup>99</sup> and <sup>$</sup>549<sup>99</sup>.
+      def price_before?(previous, before)
+        before = "#{previous.previous_sibling&.content}#{before}" if before.match?(/\A[\d,]+\z/)
+        before.match?(PRICE_END)
+      end
+
+      # Spaces count only around operators (n - 1), so small print is not an
+      # expression.
+      def expression?(core)
+        compact = core.delete(" ")
+        compact.match?(SCRIPT_WORD) && (compact == core || compact.match?(SCRIPT_OPERATOR))
+      end
+
+      # 2^n-1 would read as 2^n minus 1, and 2^2n as 2^2 times n.
+      def grouped(core)
+        return core if core.length == 1 || core.match?(/\A\p{L}+\z/) || core.match?(/\A\(.*\)\z/)
+
+        "(#{core})"
       end
 
       def math(node)
