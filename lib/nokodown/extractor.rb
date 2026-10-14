@@ -4,6 +4,7 @@ module Nokodown
   class Extractor
     TITLE_SIMILARITY = 0.75
     MIN_ARTICLE_LENGTH = 500
+    CONDITIONAL_SHARE = 0.5
 
     def initialize(html, url: nil, main_content: true, title: true, images: true, links: true)
       @html = html
@@ -41,17 +42,27 @@ module Nokodown
       [selection.nodes, :page]
     end
 
-    # Like Readability, fall back to light cleaning when conditional cleaning
-    # leaves almost nothing; markup made of many small linky blocks (React
-    # apps, card grids) trips it. Cleaning runs on a copy so it can be undone.
+    # Like Readability, fall back to lighter cleaning when conditional cleaning
+    # throws away most of what it sees; markup made of many small linky blocks
+    # (React apps, card grids) trips it, and a short intro would otherwise pass
+    # for the article. When almost nothing is left at all, the content is
+    # pruned like a page. Cleaning runs on a copy so it can be undone.
     def cleaned_article(nodes)
       copies = nodes.map(&:dup)
-      Pruner.new(copies, :article).call
-      kept = copies.sum { |node| Dom.text(node).length }
-      return copies if kept >= MIN_ARTICLE_LENGTH || kept >= nodes.sum { |node| Dom.text(node).length } * 0.25
+      pruner = Pruner.new(copies, :article).call
+      if almost_nothing_kept?(copies, nodes)
+        Pruner.new(nodes, :page).call
+        return nodes
+      end
+      return copies if pruner.conditional_share >= CONDITIONAL_SHARE
 
-      Pruner.new(nodes, :page).call
+      Pruner.new(nodes, :article, conditional: false).call
       nodes
+    end
+
+    def almost_nothing_kept?(copies, nodes)
+      kept = copies.sum { |node| Dom.text(node).length }
+      kept < MIN_ARTICLE_LENGTH && kept < nodes.sum { |node| Dom.text(node).length } * 0.25
     end
 
     # One H1 at the top: the page's own if the content has one, otherwise the

@@ -8,9 +8,12 @@ module Nokodown
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
 
-    def initialize(nodes, mode)
+    def initialize(nodes, mode, conditional: true)
       @nodes = nodes
       @mode = mode
+      @conditional = conditional
+      @conditional_seen = 0
+      @conditional_kept = 0
     end
 
     def call
@@ -18,6 +21,12 @@ module Nokodown
         @mode == :article ? prune_article(root) : remove_link_clusters(root)
         remove_boilerplate_text(root)
       end
+      self
+    end
+
+    # Share of the text conditional cleaning was given that it kept.
+    def conditional_share
+      @conditional_seen.zero? ? 1.0 : @conditional_kept.fdiv(@conditional_seen)
     end
 
     private
@@ -99,7 +108,11 @@ module Nokodown
     end
 
     # Innermost containers first, so an outer one is judged on what is left.
+    # Turned off, it still drops unlabeled navigation, as page pruning does.
     def clean_conditionally(root, content_length)
+      return remove_link_clusters(root) unless @conditional
+
+      @conditional_seen += Dom.text(root).length
       paragraph_keys = Dom.paragraph_keys(root)
       ["form, fieldset", "table", "ul", "div"].each do |selector|
         root.css(selector).reverse_each do |node|
@@ -108,6 +121,7 @@ module Nokodown
           node.remove if ContainerCheck.new(node, content_length, paragraph_keys).remove?
         end
       end
+      @conditional_kept += Dom.text(root).length
     end
 
     def remove_secondary(root, total)
