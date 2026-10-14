@@ -74,6 +74,23 @@ RSpec.describe "Main content of different kinds of pages" do
     it "drops the header and footer links" do
       ["Men", "Sale", "Returns", "Privacy"].each { |noise| markdown.should_not include(noise) }
     end
+
+    it "still drops the byline and the box of related links, as article cleaning does" do
+      ["Jo Pine", "Related reading", "How to choose"].each { |noise| markdown.should_not include(noise) }
+    end
+  end
+
+  describe "a short news story above a grid of headline teasers" do
+    let(:markdown) { extract("news_brief").markdown }
+
+    it "keeps the story" do
+      markdown.should include("Crews replaced six bearings")
+      markdown.should include("the temporary ferry service ends on Friday.")
+    end
+
+    it "drops the teasers for other stories" do
+      ["School board", "Fishing season", "Ferry company"].each { |noise| markdown.should_not include(noise) }
+    end
   end
 
   describe "a recipe index made only of small linky cards" do

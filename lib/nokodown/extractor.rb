@@ -5,6 +5,7 @@ module Nokodown
     TITLE_SIMILARITY = 0.75
     MIN_ARTICLE_LENGTH = 500
     CONDITIONAL_SHARE = 0.5
+    REMOVED_LINK_SHARE = 0.5
 
     def initialize(html, url: nil, main_content: true, title: true, images: true, links: true)
       @html = html
@@ -36,7 +37,7 @@ module Nokodown
 
       Boilerplate.new(body).call
       selection = ContentLocator.new(body, page_type: page_type).call
-      return [cleaned_article(selection.nodes), :article] if selection.mode == :article
+      return [cleaned_article(selection.nodes, page_type), :article] if selection.mode == :article
 
       Pruner.new(selection.nodes, :page).call
       [selection.nodes, :page]
@@ -47,17 +48,26 @@ module Nokodown
     # (React apps, card grids) trips it, and a short intro would otherwise pass
     # for the article. When almost nothing is left at all, the content is
     # pruned like a page. Cleaning runs on a copy so it can be undone.
-    def cleaned_article(nodes)
+    def cleaned_article(nodes, page_type)
       copies = nodes.map(&:dup)
       pruner = Pruner.new(copies, :article).call
       if almost_nothing_kept?(copies, nodes)
         Pruner.new(nodes, :page).call
         return nodes
       end
-      return copies if pruner.conditional_share >= CONDITIONAL_SHARE
+      return copies if keep_conditional_cleaning?(pruner, page_type)
 
       Pruner.new(nodes, :article, conditional: false).call
       nodes
+    end
+
+    # When what conditional cleaning removed from a declared article is mostly
+    # links, it was a grid of teasers for other stories, not the article. On
+    # listings and hubs the same teasers are the content.
+    def keep_conditional_cleaning?(pruner, page_type)
+      return true if pruner.conditional_share >= CONDITIONAL_SHARE
+
+      page_type == :article && pruner.removed_link_share > REMOVED_LINK_SHARE
     end
 
     def almost_nothing_kept?(copies, nodes)
