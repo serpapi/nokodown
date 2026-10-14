@@ -45,6 +45,13 @@ RSpec.describe "Main content of different kinds of pages" do
         markdown.should_not include(noise)
       end
     end
+
+    it "drops customer reviews and questions but keeps the rating next to the price" do
+      markdown.should include("$149.00\n\n212 reviews")
+      ["Customer reviews", "Average 4.6", "Grippy on wet granite", "hut trip", "verified buyer", "Questions", "resole"].each do |noise|
+        markdown.should_not include(noise)
+      end
+    end
   end
 
   describe "a search results page" do
