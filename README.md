@@ -84,7 +84,11 @@ region, or most of the page's text, is never removed because of its class name.
    candidate holds most of the page's prose the content is narrowed to it
    (`:article`); otherwise the whole main region is kept (`:page`), because a
    listing or a product page spreads its content over many small blocks. The
-   share required depends on the page type its metadata declares.
+   share required depends on the page type its metadata declares. On forum
+   threads (schema.org types or the forum software's generator tag) replies
+   are content even in comment-named containers, and on forums and Q&A pages
+   where no single post holds the page, the whole main region is cleaned as an
+   article.
 6. **Pruner**: in articles, Readability's conditional cleaning plus removal of
    bylines, datelines and inline boxes of links to other stories; on other
    pages, removal of leftover link clusters. If article cleaning removes almost

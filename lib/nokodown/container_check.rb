@@ -20,7 +20,7 @@ module Nokodown
 
     def remove?
       return false if majority? || data_table_involved? || Dom.ancestors_named(@node, "code", "pre").any?
-      return true if @weight.negative?
+      return true if @weight.negative? && !thread_post?
       return false if @text.count(",") >= 10 || video_embed?
       return true if @text.match?(AD_WORDS) || @text.match?(LOADING_WORDS)
 
@@ -39,6 +39,12 @@ module Nokodown
       return true if @node.name == "table" && Tables.data_table?(@node)
 
       (Dom.ancestors_named(@node, "table") + @node.css("table").to_a).any? { |table| Tables.data_table?(table) }
+    end
+
+    # In a forum's thread, a container named like a comment is a post, though
+    # Readability weighs "comment" down.
+    def thread_post?
+      Dom.thread?(@node) && Dom.signature(@node).match?(Patterns::SECONDARY)
     end
 
     def video_embed?

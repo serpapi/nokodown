@@ -18,6 +18,14 @@ module Nokodown
     REQUIRED_SHARE = { article: 0.15, product: 0.9 }.freeze
     DEFAULT_SHARE = 0.7
 
+    # Page types whose replies are content: forum threads and Q&A pages.
+    DISCUSSIONS = %i[forum qa].freeze
+
+    # Share of a forum page that one comment-named container, or a run of
+    # same-named ones, must hold to be the thread itself.
+    THREAD_SHARE = 0.25
+    THREAD_RUN_SHARE = 0.5
+
     def initialize(body, page_type: nil)
       @body = body
       @page_type = page_type
@@ -26,8 +34,14 @@ module Nokodown
     def call
       stats = Stats.new(@body)
       root = main_region(stats) || @body
+      mark_thread(root, stats) if @page_type == :forum
       result = Scorer.new(root, stats).call
       return Selection.new(result.nodes, :article) if result && article?(result, root, stats)
+
+      # A thread's posts score alike, so no candidate holds it, and the replies'
+      # container alone would leave out the question. Cleaning the whole region
+      # as an article still drops per-answer comments, badges and chrome.
+      return Selection.new([root], :article) if DISCUSSIONS.include?(@page_type)
 
       Selection.new([root], :page)
     end
@@ -54,7 +68,7 @@ module Nokodown
     end
 
     # Comment threads and "most popular" rails beside an article do not count
-    # against it.
+    # against it. A forum's own thread is not beside it.
     def secondary_text(root, article_nodes, stats)
       article_keys = article_nodes.map { |node| Dom.key(node) }
       article_ancestor_keys = article_nodes.flat_map { |node| node.ancestors.map { |ancestor| Dom.key(ancestor) } }
@@ -63,7 +77,7 @@ module Nokodown
       until stack.empty?
         node = stack.pop
         key = Dom.key(node)
-        next if article_keys.include?(key)
+        next if article_keys.include?(key) || Dom.thread?(node)
 
         if Dom.signature(node).match?(Patterns::SECONDARY) && !article_ancestor_keys.include?(key)
           total += stats.text_chars(node)
@@ -72,6 +86,33 @@ module Nokodown
         end
       end
       total
+    end
+
+    # A forum's replies sit in containers named like a comment section: one
+    # holding a fair share of the page, or a run of them, one per post. Not on
+    # Q&A pages, where the comments under a short question pass the share.
+    def mark_thread(root, stats)
+      total = stats.text_chars(root)
+      regions = outermost_secondary(root)
+      thread = regions.select { |node| stats.text_chars(node) >= total * THREAD_SHARE }
+      regions.group_by { |node| "#{node.name} #{Dom.signature(node).delete("0-9")}" }.each_value do |run|
+        thread.concat(run) if run.sum { |node| stats.text_chars(node) } >= total * THREAD_RUN_SHARE
+      end
+      thread.each { |node| Dom.mark_as_thread(node) }
+    end
+
+    def outermost_secondary(root)
+      found = []
+      stack = root.element_children.to_a
+      until stack.empty?
+        node = stack.pop
+        if Dom.signature(node).match?(Patterns::SECONDARY)
+          found << node
+        else
+          stack.concat(node.element_children.to_a)
+        end
+      end
+      found
     end
   end
 end

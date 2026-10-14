@@ -10,6 +10,7 @@ module Nokodown
   class Metadata
     ARTICLE_TYPES = /\A(?:Article|AdvertiserContentArticle|NewsArticle|AnalysisNewsArticle|AskPublicNewsArticle|BackgroundNewsArticle|OpinionNewsArticle|ReportageNewsArticle|ReviewNewsArticle|Report|SatiricalArticle|ScholarlyArticle|MedicalScholarlyArticle|SocialMediaPosting|BlogPosting|LiveBlogPosting|DiscussionForumPosting|TechArticle|APIReference)\z/.freeze
     PRODUCT_TYPES = /\A(?:Product|ProductGroup|IndividualProduct|Offer|SoftwareApplication|MobileApplication|Book|Vehicle)\z/.freeze
+    FORUM_GENERATOR = /\A\s*(?:Discourse|XenForo|vBulletin|phpBB|Invision|Vanilla|NodeBB|Flarum|MyBB)/i.freeze
 
     PROPERTY = /\s*(article|dc|dcterm|og|twitter)\s*:\s*(author|creator|description|published_time|title|site_name|type)\s*/i.freeze
     NAME = /\A\s*(?:(dc|dcterm|og|twitter|parsely|weibo:(?:article|webpage))\s*[-.:]\s*)?(author|creator|pub-date|description|title|site_name|application-name)\s*\z/i.freeze
@@ -28,7 +29,8 @@ module Nokodown
     end
 
     def to_h
-      json = json_ld
+      documents = json_ld_documents
+      json = json_ld(documents)
       meta = meta_values
       site_name = clean(json[:site_name] || meta["og:site_name"] || meta["application-name"])
       {
@@ -38,7 +40,7 @@ module Nokodown
         site_name: site_name,
         published_time: clean(json[:published_time] || meta["article:published_time"] || meta["parsely-pub-date"] || document_published_time),
         lang: clean(@doc.root&.[]("lang")) || clean(@doc.at_css("meta[http-equiv='content-language'], meta[http-equiv='Content-Language']")&.[]("content")),
-        page_type: json[:type] || og_type(meta)
+        page_type: discussion_type(documents) || json[:type] || og_type(meta)
       }
     end
 
@@ -48,8 +50,12 @@ module Nokodown
       keys.map { |key| meta[key] }.compact.first
     end
 
-    def json_ld
-      items = @doc.css("script[type='application/ld+json']").flat_map { |script| flatten(parse_json(script.content)) }
+    def json_ld_documents
+      @doc.css("script[type='application/ld+json']").map { |script| parse_json(script.content) }
+    end
+
+    def json_ld(documents)
+      items = documents.flat_map { |document| flatten(document) }
       article = items.find { |item| types(item).any? { |type| type.match?(ARTICLE_TYPES) } }
       return article_fields(article).merge(type: :article) if article
 
@@ -73,6 +79,29 @@ module Nokodown
 
     def types(item)
       Array(item["@type"]).grep(String)
+    end
+
+    # Threads and Q&A pages, whose replies are content. Takes precedence over
+    # the article types, since a thread declares its opening post as a
+    # DiscussionForumPosting, often under mainEntity where flatten does not look.
+    def discussion_type(documents)
+      declared = documents.flat_map { |document| nested_types(document) }
+      return :qa if declared.include?("QAPage") || @doc.at_css("[itemtype*='schema.org/QAPage']")
+
+      forum = declared.include?("DiscussionForumPosting") || @doc.at_css("[itemtype*='schema.org/DiscussionForumPosting']")
+      :forum if forum || forum_generator?
+    end
+
+    def nested_types(node)
+      case node
+      when Array then node.flat_map { |item| nested_types(item) }
+      when Hash then types(node) + node.values.flat_map { |value| nested_types(value) }
+      else []
+      end
+    end
+
+    def forum_generator?
+      @doc.css("meta[name=generator]").any? { |meta| meta["content"].to_s.match?(FORUM_GENERATOR) }
     end
 
     def article_fields(item)

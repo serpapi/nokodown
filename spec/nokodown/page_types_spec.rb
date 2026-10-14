@@ -26,6 +26,15 @@ RSpec.describe "Main content of different kinds of pages" do
     it "moves the byline into metadata" do
       markdown.should_not include("Mara Lindqvist")
     end
+
+    it "drops a comment section longer than the article" do
+      comments = Array.new(15) do |index|
+        %(<div class="comment"><p>Reader #{index} wonders how the lagoon walls will change the way the estuary silts up over the coming decades.</p></div>)
+      end
+      html = fixture("article.html").sub("<h2>3 comments</h2>", "<h2>18 comments</h2>#{comments.join}")
+
+      Nokodown.extract(html, url: "https://example.com/page").markdown.should_not include("Reader 7 wonders")
+    end
   end
 
   describe "a product page" do
@@ -71,6 +80,10 @@ RSpec.describe "Main content of different kinds of pages" do
       markdown.should include("| `retries` | 2 | Attempts after the first one |")
     end
 
+    it "keeps comments in highlighted code" do
+      markdown.should include("```ruby\n# Never wait more than 10 seconds\nclient = Courier.new(max_delay: 10)\n```")
+    end
+
     it "drops the sidebar, table of contents, pager and feedback widget" do
       ["Installation", "Timeouts", "On this page", "Making requests", "Was this page helpful", "[#]"].each do |noise|
         markdown.should_not include(noise)
@@ -106,6 +119,43 @@ RSpec.describe "Main content of different kinds of pages" do
 
     it "drops the forum navigation and footer" do
       ["Latest", "Terms", "Rules"].each { |noise| markdown.should_not include(noise) }
+    end
+  end
+
+  describe "a forum thread whose posts are named like comments" do
+    it "keeps replies in a replies section" do
+      markdown = extract("forum_replies").markdown
+
+      markdown.should include("Is it realistic to plan the whole trip ourselves")
+      markdown.should include("a two week rail pass covers Tokyo")
+      markdown.should include("Kyoto alone deserves five days")
+      markdown.should include("look at the Nakasendo trail")
+      ["Guides", "Privacy"].each { |noise| markdown.should_not include(noise) }
+    end
+
+    it "keeps Vanilla comments under the opening post, though Readability weighs them down" do
+      markdown = extract("forum_vanilla").markdown
+
+      markdown.should include("we need to decide where this community goes next")
+      markdown.should include("plan a weekend for redirects")
+      markdown.should include("ask for a quote before the vote")
+    end
+  end
+
+  describe "a Q&A page" do
+    let(:markdown) { extract("qa").markdown }
+
+    it "keeps the question and every answer" do
+      markdown.should include("what is the difference between redundancy and a backup?")
+      markdown.should include("RAID guards against one kind of failure")
+      markdown.should include("redundancy gives you two copies of garbage")
+      markdown.should include("snapshots on the array do not count as a backup")
+    end
+
+    it "drops the comments under the question and answers" do
+      ["vendor's own guide", "controller firmware bugs", "sending this to my manager", "replicated to another site"].each do |comment|
+        markdown.should_not include(comment)
+      end
     end
   end
 end
