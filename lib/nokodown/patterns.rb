@@ -44,14 +44,17 @@ module Nokodown
     /x.freeze
 
     # Customer reviews, ratings and Q&A on a product page, by name or by the
-    # class prefixes of review widget vendors.
+    # class prefixes of review widget vendors. Modifiers ("has-reviews",
+    # "reviews-enabled") and WordPress terms ("category-reviews") sit on the
+    # wrapper that has reviews, often around the description, so they must
+    # not match.
     REVIEWS = /
-      #{WORD_START}(?:reviews|(?:customer|product|user|individual|pdp|seo|all)-?reviews?|
+      #{WORD_START}(?<!has-|no-|with-|category-|tag-)(?:reviews|(?:customer|product|user|individual|pdp|seo|all)-?reviews?|
       review-?(?:lists?|section|container|wrapper|widget|summary|snapshot|stars|histogram|filters?|cards?|items?|content-list)|
       ratings?-?(?:histogram|summary|snapshot|breakdown)|questions?-?(?:and|&|n)?-?answers?|qna|q-?and-?a|
-      customer-?questions|ask-?(?:a-)?question)#{WORD_END}|
-      yotpo|bazaarvoice|#{WORD_START}bv-|jdgm|judgeme|okendo|stamped-|loox|trustpilot|powerreviews|
-      #{WORD_START}pr-(?:review|rd|snippet)|reviews-?io|junip|spr-review|rvw-|#{WORD_START}ruk_
+      customer-?questions|ask-?(?:a-)?question)(?!-(?:enabled|disabled))#{WORD_END}|
+      yotpo|bazaarvoice|#{WORD_START}bv-|jdgm|judgeme|okendo|#{WORD_START}stamped-|loox|trustpilot|powerreviews|
+      #{WORD_START}pr-(?:review|rd|snippet)|reviews-?io|#{WORD_START}junip-|spr-review|rvw-|#{WORD_START}ruk_
     /x.freeze
 
     # Cheap first pass: most elements match none of the patterns below.

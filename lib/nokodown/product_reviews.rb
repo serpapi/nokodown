@@ -7,10 +7,10 @@ module Nokodown
   # pages a reviews section is usually the content itself (a review article,
   # a service's testimonials), so only product pages are cleaned.
   class ProductReviews
-    # Shops that declare no product type in JSON-LD or Open Graph. <head> and
-    # form controls are gone once the body is cleaned, so this is checked on
-    # the raw document.
-    PRODUCT_MARKUP = "[itemtype*='schema.org/Product'], meta[property='product:price:amount'], #add-to-cart-button, form[action*='/cart/add']"
+    # Shops that declare no page type in JSON-LD or Open Graph. Form controls
+    # are gone once the body is cleaned, so this is checked on the raw
+    # document.
+    PRODUCT_MARKUP = "[itemtype*='schema.org/Product'], form[action*='/cart/add']"
 
     # The product's title and description stay even when a wrapper around
     # them is named after its reviews.
@@ -20,13 +20,16 @@ module Nokodown
     SELLER_CONTENT = /testimonial|editorial/.freeze
 
     ITEMPROP = /\Areviews?\z/i.freeze
-    ARIA_LABEL = /\A(?:customer\s)?reviews\z/i.freeze
 
     # With less text than this left, the reviews are what the page is about.
     MIN_REMAINING_CHARS = 200
 
+    # Review articles embed affiliate product boxes and quick-add forms too,
+    # so the markup only counts on a page that declares no type.
     def self.product_page?(doc, page_type)
-      page_type == :product || !doc.at_css(PRODUCT_MARKUP).nil?
+      return page_type == :product unless page_type.nil?
+
+      !doc.at_css(PRODUCT_MARKUP).nil?
     end
 
     def initialize(body)
@@ -74,7 +77,7 @@ module Nokodown
     def widget?(node, signature)
       return false if kept?(node, signature)
 
-      @review_names[signature] || node["itemprop"].to_s.match?(ITEMPROP) || node["aria-label"].to_s.strip.match?(ARIA_LABEL)
+      @review_names[signature] || node["itemprop"].to_s.match?(ITEMPROP)
     end
 
     # A rating badge in a line of text ("4.7 stars, 212 reviews") sums the

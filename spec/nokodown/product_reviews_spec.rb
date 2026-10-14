@@ -6,18 +6,37 @@ RSpec.describe Nokodown::ProductReviews do
   end
 
   let(:product_type) { '<script type="application/ld+json">{"@type": "Product", "name": "Field Notebook"}</script>' }
-  let(:description) do
-    "<h1>Field Notebook</h1><p>A pocket notebook with 96 pages of dot-grid paper, a waterproof cover and a lay-flat " \
-      "binding, sewn to survive a season of field work and sized to fit the back pocket of a pair of jeans. The paper " \
-      "is acid-free and takes ink, pencil and wax crayon.</p>"
+  let(:paragraph) do
+    "<p>A pocket notebook with 96 pages of dot-grid paper, a waterproof cover and a lay-flat binding, sewn to survive " \
+      "a season of field work and sized to fit the back pocket of a pair of jeans. The paper is acid-free and takes " \
+      "ink, pencil and wax crayon.</p>"
+  end
+  let(:description) { "<h1>Field Notebook</h1>#{paragraph}" }
+  let(:details) do
+    "<p>Each notebook ships with a spare elastic band, a pencil loop and a pocket inside the back cover for receipts " \
+      "and maps. The dot grid is printed in a pale grey that stays out of the way of your notes and disappears from " \
+      "photocopies and scans of the pages.</p>"
   end
   let(:reviews) do
     '<div id="reviews"><h2>Reviews</h2><div class="review-item"><p>It survived a whole summer of surveys in my back ' \
       "pocket, and the paper takes pencil and fountain pen alike without any bleeding through the page.</p></div></div>"
   end
+  let(:product_box) { '<div itemscope itemtype="https://schema.org/Product"><span itemprop="name">Field Notebook</span></div>' }
+  let(:cart_form) { '<form action="/cart/add"><button>Add to cart</button></form>' }
+  let(:verdict) do
+    '<div class="review-summary"><h2>Verdict</h2><p>The sturdiest pocket notebook we tested this year, ' \
+      "and the only one whose binding did not crack after a month of daily use in the field.</p></div>"
+  end
 
   it "finds shops that declare no product type by their cart form" do
-    result = markdown("", %(#{description}<form action="/cart/add"><button>Add to cart</button></form>#{reviews}))
+    result = markdown("", "#{description}#{cart_form}#{reviews}")
+
+    result.should include("dot-grid paper")
+    result.should_not include("summer of surveys")
+  end
+
+  it "finds shops that declare no product type by their Product microdata" do
+    result = markdown("", "#{description}#{product_box}#{reviews}")
 
     result.should include("dot-grid paper")
     result.should_not include("summer of surveys")
@@ -58,11 +77,45 @@ RSpec.describe Nokodown::ProductReviews do
 
   it "keeps reviews on pages that are not product pages" do
     head = '<meta property="og:type" content="article">'
-    verdict = '<div class="review-summary"><h2>Verdict</h2><p>The sturdiest pocket notebook we tested this year, ' \
-              "and the only one whose binding did not crack after a month of daily use in the field.</p></div>"
     result = markdown(head, "#{description}#{verdict}")
 
     result.should include("sturdiest pocket notebook")
+  end
+
+  it "keeps reviews on an article that embeds a product box or a cart form" do
+    head = '<script type="application/ld+json">{"@type": "BlogPosting", "headline": "Field Notebook review"}</script>'
+    [product_box, cart_form].each do |embed|
+      markdown(head, "#{description}#{embed}#{verdict}").should include("sturdiest pocket notebook")
+    end
+  end
+
+  it "keeps the title and description when a wrapper around them is named after the reviews" do
+    around_title = %(<div class="yotpo-main">#{description}#{reviews}</div>)
+    around_description = %(<h1>Field Notebook</h1><div class="yotpo-main"><div itemprop="description">#{paragraph}</div>#{reviews}</div>)
+    [around_title, around_description].each do |main|
+      result = markdown(product_type, "#{main}#{details}")
+
+      result.should include("dot-grid paper")
+      result.should_not include("summer of surveys")
+    end
+  end
+
+  it "keeps wrappers whose class only says that the product has reviews" do
+    names = ["product-main has-reviews", "product--no-reviews", "with-reviews", "reviews-enabled", "category-reviews", "tag-reviews"]
+    names.each do |name|
+      result = markdown(product_type, %(<h1>Field Notebook</h1><div class="#{name}">#{paragraph}</div>#{details}#{reviews}))
+
+      result.should include("dot-grid paper")
+      result.should_not include("summer of surveys")
+    end
+  end
+
+  it "does not take a word that contains a vendor's prefix for its widget" do
+    ["juniper-product-info", "timestamped-notes"].each do |name|
+      result = markdown(product_type, %(<h1>Field Notebook</h1><div class="#{name}">#{paragraph}</div>#{details}))
+
+      result.should include("dot-grid paper")
+    end
   end
 
   it "keeps the reviews when they are all the page has" do

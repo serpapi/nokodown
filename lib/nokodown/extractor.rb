@@ -21,7 +21,7 @@ module Nokodown
       body = doc.at_css("body")
       return result([], metadata, :none) if body.nil?
 
-      product_page = ProductReviews.product_page?(doc, metadata[:page_type])
+      product_page = @main_content && ProductReviews.product_page?(doc, metadata[:page_type])
       Preprocessor.new(body).call
       nodes, mode = select_content(body, metadata[:page_type], product_page)
       blocks = Markdown::Cleanup.call(Markdown::Renderer.new(urls, images: @images, links: @links).render(nodes))
