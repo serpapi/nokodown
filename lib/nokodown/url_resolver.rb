@@ -14,7 +14,9 @@ module Nokodown
     # these names can matter (Microsoft fwlinks need linkid).
     AMAZON_PARAM = /\A(?:ref|qid|sr|th|smid|psc|crid|dib|dib_tag|spLa|sprefix|linkCode|linkId|ascsubtag|camp|creative)\z/.freeze
     AMAZON = /\A(?:www\.|smile\.)?amazon\.(?:com?\.)?[a-z]{2,3}\z/i.freeze
-    AMAZON_PRODUCT = %r{\A.*?/(?:dp|gp/product|gp/aw/d)/[A-Z0-9]{10}}.freeze
+    AMAZON_PRODUCT = %r{\A.*?/(?:dp|gp/product|gp/aw/d)/[A-Z0-9]{10}(?![A-Za-z0-9])}.freeze
+    # Bestseller links put the session id after the ref segment.
+    AMAZON_REF = %r{/ref=[^/]*(?:/\d{3}-\d{7}-\d{7})?\z}.freeze
     REDIRECTOR = %r{
       \A(?:www\.)?google\.(?:com?\.)?[a-z]{2,3}/url\z |
       \A(?:www\.)?youtube\.com/redirect\z |
@@ -27,12 +29,16 @@ module Nokodown
       \A[\w-]+\.(?:pxf|sjv)\.io/c/ |
       \A(?:www\.)?(?:anrdoezrs\.net|dpbolvw\.net|jdoqocy\.com|kqzyfj\.com|tkqlhce\.com)/click- |
       \Asteamcommunity\.com/linkfilter/?\z
-    }x.freeze
+    }xi.freeze
     DESTINATION_PARAM = /\A(?:url|u|murl|q)\z/.freeze
     # Image CDN size, crop and format options; the default rendition shows the
-    # same picture. Signed URLs stop working once any parameter changes.
-    PRESENTATION_PARAM = /\A(?:w|h|width|height|q|quality|fit|crop|auto|dpr|fm|format|resize|wid|hei|qlt|fmt|resMode|op_usm|ixlib|
-                           imwidth|imheight|impolicy)\z/x.freeze
+    # same picture.
+    PRESENTATION_PARAM = /\A(?:fit|crop|auto|dpr|fm|fmt|resize|resMode|op_usm|ixlib|impolicy)\z/.freeze
+    # Only a number is a size: Google and Bing thumbnails name the image in q.
+    SIZE_PARAM = /\A(?:w|h|width|height|q|quality|wid|hei|qlt|imwidth|imheight)\z/.freeze
+    NUMBER = /\A\d+(?:[.,]\d+)?\z/.freeze
+    EXTENSION = /\.[A-Za-z][A-Za-z0-9]{1,4}\z/.freeze
+    # Signed URLs stop working once any parameter changes.
     SIGNATURE_PARAM = /\A(?:s|sig|sign|signature|token|__token__|hdnts|expires|x-amz-[a-z-]+|x-goog-[a-z-]+|key-pair-id|
                         policy|hmac|hash|jwt|itok)\z/ix.freeze
     NEXT_IMAGE = %r{/_(?:next|vercel)/image/?\z}.freeze
@@ -108,6 +114,10 @@ module Nokodown
       return clean_link(target) if target
       return clean_amazon(uri) if uri.host.to_s.match?(AMAZON)
 
+      strip_tracking(uri)
+    end
+
+    def strip_tracking(uri)
       reject_params(uri) { |key, _| key.match?(TRACKING_PARAM) }
     end
 
@@ -124,7 +134,7 @@ module Nokodown
     def clean_amazon(uri)
       product = uri.path[AMAZON_PRODUCT]
       uri = uri.dup
-      uri.path = product || uri.path.sub(%r{/ref=.*\z}, "")
+      uri.path = product || uri.path.sub(AMAZON_REF, "")
       return reject_params(uri) { |key, _| key != "tag" } if product
 
       reject_params(uri) { |key, _| key.match?(TRACKING_PARAM) || key.match?(AMAZON_PARAM) }
@@ -137,17 +147,31 @@ module Nokodown
       embedded ? original_image(uri, embedded) : strip_presentation(uri)
     end
 
-    # A proxy needs its options, so it stays whole when its original is unusable;
-    # the original is not unwrapped again, as a relative one can be the proxy.
+    # A proxy needs its options, so it stays whole when its original is unusable
+    # or is the proxy itself. The original is not unwrapped in turn, because
+    # proxies can point at each other.
     def original_image(proxy, embedded)
       original = join(proxy, embedded) unless embedded.empty?
-      return proxy unless web?(original)
+      return strip_tracking(proxy) unless web?(original) && !same_resource?(original, proxy)
 
       signed_image?(original) ? original : strip_presentation(original)
     end
 
+    def same_resource?(uri, other)
+      uri.host == other.host && uri.path == other.path
+    end
+
     def strip_presentation(uri)
-      reject_params(uri) { |key, value| key.match?(PRESENTATION_PARAM) || (key == "v" && value.match?(/\A\d+\z/)) }
+      extension = uri.path.to_s.match?(EXTENSION)
+      reject_params(uri) { |key, value| key.match?(TRACKING_PARAM) || presentation?(key, value, extension) }
+    end
+
+    # Twitter media has no file extension and is a 404 without its format.
+    def presentation?(key, value, extension)
+      return value.match?(NUMBER) if key.match?(SIZE_PARAM)
+      return extension if key == "format"
+
+      key.match?(PRESENTATION_PARAM) || (key == "v" && value.match?(/\A\d+\z/))
     end
 
     def signed_image?(uri)

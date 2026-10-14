@@ -58,6 +58,12 @@ RSpec.describe "Markdown conversion" do
       search = "https://www.amazon.com/s/ref=nb_sb_noss?k=trail+boot&crid=2X&qid=1&ref=sr_pg_1"
       convert(%(<p><a href="#{search}">Boots</a></p>)).should == "[Boots](https://www.amazon.com/s?k=trail+boot)"
       convert('<p><a href="https://WWW.AMAZON.CO.UK/dp/B000O3LUEI?psc=1">Boot</a></p>').should == "[Boot](https://WWW.AMAZON.CO.UK/dp/B000O3LUEI)"
+      isbn = "https://www.amazon.com/dp/9781234567890/ref=sr_1_1?qid=1"
+      convert(%(<p><a href="#{isbn}">Book</a></p>)).should == "[Book](https://www.amazon.com/dp/9781234567890)"
+      ranking = "https://www.amazon.com/gp/bestsellers/ref=zg_bs_nav/books/123"
+      convert(%(<p><a href="#{ranking}">Books</a></p>)).should == "[Books](#{ranking})"
+      author = "https://www.amazon.com/Jane-Doe/e/B00HVQPIH6/ref=zg_bs_g_books_1/131-7552878-9432557"
+      convert(%(<p><a href="#{author}">Jane Doe</a></p>)).should == "[Jane Doe](https://www.amazon.com/Jane-Doe/e/B00HVQPIH6)"
     end
 
     it "keeps Amazon parameter names on other sites and other Amazon services" do
@@ -76,6 +82,7 @@ RSpec.describe "Markdown conversion" do
       html = '<p><a href="https://www.google.com/url?q=https%3A%2F%2Fexample.org%2Fdoc%3Fid%3D3&sa=D&usg=AOv">Doc</a> ' \
              '<a href="https://go.skimresources.com/?id=1X2&url=https%3A%2F%2Fshop.example%2Fkettle%3Futm_source%3Dskim">Kettle</a></p>'
       convert(html).should == "[Doc](https://example.org/doc?id=3) [Kettle](https://shop.example/kettle)"
+      convert('<p><a href="https://WWW.GOOGLE.COM/url?q=https%3A%2F%2Fexample.org%2Fdoc">Doc</a></p>').should == "[Doc](https://example.org/doc)"
     end
 
     it "takes the redirect destination from the first parameter that holds a URL" do
@@ -151,8 +158,23 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops image CDN size, quality and version parameters" do
-      convert('<img src="https://cdn.shop.example/files/kettle.jpg?v=1549149242&width=640&q=75" alt="Kettle">').should ==
+      convert('<img src="https://cdn.shop.example/files/kettle.jpg?v=1549149242&width=640&q=75&fm=webp" alt="Kettle">').should ==
         "![Kettle](https://cdn.shop.example/files/kettle.jpg)"
+    end
+
+    it "keeps image parameters that name the picture or its required format" do
+      google = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQabc&usqp=CAU"
+      bing = "https://tse1.mm.bing.net/th?q=red+kettle&w=120&h=120&c=1"
+      twitter = "https://pbs.twimg.com/media/GabcXYZ?format=jpg&name=small"
+      convert(%(<p><img src="#{google}" alt="Kettle"> <img src="#{bing}" alt="Red kettle"> <img src="#{twitter}" alt="Photo"></p>)).should ==
+        "![Kettle](#{google}) ![Red kettle](https://tse1.mm.bing.net/th?q=red+kettle&c=1) ![Photo](#{twitter})"
+    end
+
+    it "drops tracking parameters from images" do
+      html = '<p><img src="https://cdn.example.org/a.jpg?utm_source=mail&id=3" alt="A"> ' \
+             '<img src="https://cdn.example.org/b.jpg?fbclid=IwAR0" alt="B"> ' \
+             '<img src="https://cdn.example.org/c.jpg?w=800&utm_source=mail" alt="C"></p>'
+      convert(html).should == "![A](https://cdn.example.org/a.jpg?id=3) ![B](https://cdn.example.org/b.jpg) ![C](https://cdn.example.org/c.jpg)"
     end
 
     it "uses the original image behind Next.js, fetch and Cloudflare proxies" do
@@ -175,13 +197,13 @@ RSpec.describe "Markdown conversion" do
       convert(%(<p><img src="#{shot}" alt="Site"> <img src="#{archive}" alt="Logo"></p>)).should == "![Site](#{shot}) ![Logo](#{archive})"
     end
 
-    it "keeps image proxies whose original is not a web URL" do
+    it "keeps image proxies whose original is not a web URL or is the proxy itself" do
       data = "/_next/image?url=data%3Aimage%2Fgif%3Bbase64%2CR0lGOD&w=64&q=75"
       script = "/_next/image?url=javascript%3Aalert(1)&w=64&q=75"
       latin1 = "/_next/image?url=%2Fcaf%E9.png&w=64&q=75"
       convert(%(<p><img src="#{data}" alt="Dot"> <img src="#{script}" alt="Icon"> <img src="#{latin1}" alt="Cafe"></p>)).should ==
         "![Dot](https://example.com#{data}) ![Icon](https://example.com#{script}) ![Cafe](https://example.com#{latin1})"
-      convert('<img src="/_next/image?url=%23top&w=64" alt="Top">').should include("/_next/image?url=%23top")
+      convert('<img src="/_next/image?url=%23top&w=64" alt="Top">').should == "![Top](https://example.com/_next/image?url=%23top&w=64)"
     end
 
     it "keeps signed image URLs as they are" do
