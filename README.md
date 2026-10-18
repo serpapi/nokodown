@@ -45,7 +45,7 @@ Nokodown.to_markdown(html, url: "https://example.com/post") # just the Markdown
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
 | `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
-| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`. |
+| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |
 
