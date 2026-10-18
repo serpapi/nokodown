@@ -45,7 +45,7 @@ Nokodown.to_markdown(html, url: "https://example.com/post") # just the Markdown
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
 | `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
-| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`. |
+| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |
 
@@ -102,6 +102,50 @@ region, or most of the page's text, is never removed because of its class name.
 
 ## Quality
 
+### All kinds of pages: WCXB
+
+[WCXB][wcxb] has 2,008 human-reviewed pages: 1,050 articles and 958 product,
+collection, listing, forum, documentation and service (SaaS, pricing) pages,
+split into a development set (1,497) and a held-out test set (511). Scores use
+its metric: word-level F1 against the reference main content, plus the share
+of "must include" snippets found and of boilerplate snippets leaked. All
+systems ran on the same pages with links, images and tables on; their Markdown
+was converted back to text for scoring, and tokens were counted on the Markdown
+an LLM would read (o200k tokenizer). Word F1 is identical to WCXB's
+`evaluate.py`. The snippet rates average only the pages that have snippets and
+compare text with whitespace collapsed, while `evaluate.py` counts a page
+without snippets as 100% and compares raw text, so its rates differ by about a
+point.
+
+| System | F1 (dev) | F1 (test) | Boilerplate leaked (test) | Content snippets found (test) | Tokens per page (test) | Tokens on URLs (test) |
+| --- | --- | --- | --- | --- | --- | --- |
+| nokodown | 0.836 | 0.874 | 8.3% | 83.6% | 2,718 | 21% |
+| rs-trafilatura 0.1.1 | 0.838 | 0.873 | 12.7% | 87.7% | 2,664 | 18% |
+| Trafilatura 2.3.1 | 0.816 | 0.858 | 8.1% | 81.8% | 2,552 | 17% |
+| Readability.js 0.6 + Turndown | 0.770 | 0.830 | 10.0% | 76.5% | 2,899 | 23% |
+| Current Extract rule | 0.782 | 0.802 | 43.2% | 90.1% | 4,356 | 35% |
+
+F1 by page type on the test set (257 articles; 28 to 59 pages of each other type):
+
+| System | Article | Product | Collection | Listing | Forum | Documentation | Service |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| nokodown | 0.949 | 0.806 | 0.736 | 0.724 | 0.783 | 0.922 | 0.807 |
+| rs-trafilatura 0.1.1 | 0.942 | 0.740 | 0.732 | 0.714 | 0.829 | 0.953 | 0.801 |
+| Trafilatura 2.3.1 | 0.934 | 0.719 | 0.589 | 0.757 | 0.786 | 0.941 | 0.817 |
+| Readability.js 0.6 + Turndown | 0.931 | 0.634 | 0.614 | 0.637 | 0.711 | 0.882 | 0.805 |
+| Current Extract rule | 0.874 | 0.666 | 0.647 | 0.727 | 0.679 | 0.906 | 0.727 |
+
+"Current Extract rule" is the Extract API's present `include_markdown`
+behaviour (the page's `<main>`, else its only `<article>`, else `<body>`)
+reproduced with nokodown's converter. See
+[benchmark/compare](benchmark/compare/README.md) to reproduce the table.
+
+```sh
+bundle exec ruby benchmark/wcxb.rb tmp/corpora/wcxb test
+```
+
+### Articles
+
 Scored with the [Scrapinghub article extraction benchmark][benchmark]'s metric
 (precision and recall over 4-token shingles, averaged per page). The Markdown is
 converted back to text and the leading title is removed, since both references
@@ -116,12 +160,8 @@ Published results on the same Scrapinghub corpus, for comparison:
 Trafilatura 0.958, newspaper4k 0.949, Readability.js 0.947, go-readability
 0.934, readability-lxml 0.922, goose3 0.896, jusText 0.804, html2text 0.662.
 
-Both corpora are articles. Non-article pages are covered by the fixtures in
-`spec/fixtures` (product, search results, documentation, pricing, forum) and
-were spot-checked on 45 live pages of all kinds.
-
 ```sh
-bundle exec rake benchmark:quality   # downloads both corpora at pinned commits into tmp/
+bundle exec rake benchmark:quality   # downloads the corpora at pinned commits into tmp/
 ```
 
 ## Speed
@@ -169,3 +209,4 @@ Apache License 2.0. The scoring and cleaning heuristics are adapted from
 
 [benchmark]: https://github.com/scrapinghub/article-extraction-benchmark
 [mozilla]: https://github.com/mozilla/readability
+[wcxb]: https://github.com/Murrough-Foley/web-content-extraction-benchmark
