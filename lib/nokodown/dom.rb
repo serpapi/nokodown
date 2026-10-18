@@ -53,6 +53,10 @@ module Nokodown
       !node[THREAD].nil?
     end
 
+    def thread_post?(node)
+      thread?(node) && signature(node).match?(Patterns::SECONDARY)
+    end
+
     # Keys of the <p>s and of the divs Readability would rewrite into <p>
     # (no block-level descendants), found in one bottom-up pass.
     def paragraph_keys(root)

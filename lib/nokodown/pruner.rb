@@ -110,11 +110,10 @@ module Nokodown
       end
     end
 
-    # Syntax highlighters class their spans "comment" and "tag", and a
-    # forum's thread is content.
+    # A forum's thread is content.
     def remove_secondary(root, total)
       root.element_children.each do |node|
-        next if Dom.thread?(node) || %w[pre code].include?(node.name)
+        next if Dom.thread?(node)
 
         if Dom.signature(node).match?(Patterns::SECONDARY) && Dom.text(node).length <= total * 0.5
           remove(node)

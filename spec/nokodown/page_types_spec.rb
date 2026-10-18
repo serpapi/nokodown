@@ -142,6 +142,34 @@ RSpec.describe "Main content of different kinds of pages" do
     end
   end
 
+  describe "a forum thread in a list of posts" do
+    def thread(first_post, second_reply)
+      reply = "Discus prefer slow water, so turn the pump down or spread the outflow, and keep the tank near thirty degrees."
+      posts = [first_post, reply, second_reply, reply, reply].map.with_index do |text, index|
+        classes = index.zero? ? "b-post js-comment-entry b-post--first js-conversation-starter" : "b-post js-comment-entry"
+        %(<li class="#{classes}"><div class="b-post__body"><p>#{text}</p></div></li>)
+      end
+      html = '<html><head><meta name="generator" content="vBulletin 6.0.6"><title>New discus setup</title></head>' \
+             "<body><main><h1>New discus setup</h1><ul class=\"conversation-list\">#{posts.join}</ul></main></body></html>"
+      Nokodown.to_markdown(html)
+    end
+
+    it "keeps an opening post whose classes differ from the replies'" do
+      markdown = thread("I am setting up a discus tank that held goldfish, with a sump, and wonder whether the pump is too strong.", "Agreed.")
+
+      markdown.should include("wonder whether the pump is too strong")
+      markdown.should include("keep the tank near thirty degrees")
+    end
+
+    it "keeps a reply with several links" do
+      reply = 'Fit <a href="https://shop.example/ball-valve">a ball valve on the return line</a> or ' \
+              '<a href="https://shop.example/pump-2000">a smaller return pump</a>, as I did last spring.'
+      markdown = thread("I am setting up a discus tank that held goldfish, with a sump, and wonder whether the pump is too strong.", reply)
+
+      markdown.should include("as I did last spring")
+    end
+  end
+
   describe "a Q&A page" do
     let(:markdown) { extract("qa").markdown }
 

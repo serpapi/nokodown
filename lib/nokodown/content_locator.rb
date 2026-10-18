@@ -95,9 +95,9 @@ module Nokodown
       total = stats.text_chars(root)
       regions = outermost_secondary(root)
       thread = regions.select { |node| stats.text_chars(node) >= total * THREAD_SHARE }
-      regions.group_by { |node| "#{node.name} #{Dom.signature(node).delete("0-9")}" }.each_value do |run|
-        thread.concat(run) if run.sum { |node| stats.text_chars(node) } >= total * THREAD_RUN_SHARE
-      end
+      runs = regions.group_by { |node| "#{node.name} #{Dom.signature(node).delete("0-9")}" }.values +
+             regions.group_by { |node| "#{node.name} #{Dom.key(node.parent)}" }.values
+      runs.each { |run| thread.concat(run) if run.sum { |node| stats.text_chars(node) } >= total * THREAD_RUN_SHARE }
       thread.each { |node| Dom.mark_as_thread(node) }
     end
 

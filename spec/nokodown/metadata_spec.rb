@@ -37,6 +37,14 @@ RSpec.describe Nokodown::Metadata do
     metadata('<meta name="generator" content="Discourse 3.4.0 - https://github.com/discourse/discourse">')[:page_type].should == :forum
   end
 
+  it "keeps a news article whose reader comments are forum postings an article" do
+    json = { "@type" => "NewsArticle", "headline" => "Council votes", "comment" => [{ "@type" => "DiscussionForumPosting", "text" => "Shame" }] }
+    microdata = '<article itemscope itemtype="https://schema.org/NewsArticle"><div itemprop="comment" itemscope itemtype="https://schema.org/DiscussionForumPosting"></div></article>'
+
+    metadata(%(<script type="application/ld+json">#{JSON.generate(json)}</script>))[:page_type].should == :article
+    metadata('<meta property="og:type" content="article">', microdata)[:page_type].should == :article
+  end
+
   it "detects Q&A pages" do
     json = { "@type" => "QAPage", "mainEntity" => { "@type" => "Question", "name" => "Why is RAID not a backup?" } }
 

@@ -10,6 +10,8 @@ module Nokodown
   class Metadata
     ARTICLE_TYPES = /\A(?:Article|AdvertiserContentArticle|NewsArticle|AnalysisNewsArticle|AskPublicNewsArticle|BackgroundNewsArticle|OpinionNewsArticle|ReportageNewsArticle|ReviewNewsArticle|Report|SatiricalArticle|ScholarlyArticle|MedicalScholarlyArticle|SocialMediaPosting|BlogPosting|LiveBlogPosting|DiscussionForumPosting|TechArticle|APIReference)\z/.freeze
     PRODUCT_TYPES = /\A(?:Product|ProductGroup|IndividualProduct|Offer|SoftwareApplication|MobileApplication|Book|Vehicle)\z/.freeze
+    MICRODATA_FORUM = "[itemtype*='schema.org/DiscussionForumPosting']:not([itemprop]), " \
+                      "[itemtype*='schema.org/DiscussionForumPosting'][itemprop~=mainEntity]"
     FORUM_GENERATOR = /\A\s*(?:Discourse|XenForo|vBulletin|phpBB|Invision|Vanilla|NodeBB|Flarum|MyBB)/i.freeze
 
     PROPERTY = /\s*(article|dc|dcterm|og|twitter)\s*:\s*(author|creator|description|published_time|title|site_name|type)\s*/i.freeze
@@ -88,21 +90,15 @@ module Nokodown
 
     # Threads and Q&A pages, whose replies are content. Takes precedence over
     # the article types, since a thread declares its opening post as a
-    # DiscussionForumPosting, often under mainEntity where flatten does not look.
+    # DiscussionForumPosting, often under mainEntity. A posting nested deeper,
+    # such as an article's reader comments, does not make the page a thread.
     def discussion_type(documents)
-      declared = documents.flat_map { |document| nested_types(document) }
+      items = documents.flat_map { |document| flatten(document) }
+      declared = (items + items.flat_map { |item| flatten(item["mainEntity"]) }).flat_map { |item| types(item) }
       return :qa if declared.include?("QAPage") || @doc.at_css("[itemtype*='schema.org/QAPage']")
 
-      forum = declared.include?("DiscussionForumPosting") || @doc.at_css("[itemtype*='schema.org/DiscussionForumPosting']")
+      forum = declared.include?("DiscussionForumPosting") || @doc.at_css(MICRODATA_FORUM)
       :forum if forum || forum_generator?
-    end
-
-    def nested_types(node)
-      case node
-      when Array then node.flat_map { |item| nested_types(item) }
-      when Hash then types(node) + node.values.flat_map { |value| nested_types(value) }
-      else []
-      end
     end
 
     def forum_generator?
