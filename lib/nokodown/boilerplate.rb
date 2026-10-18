@@ -13,6 +13,9 @@ module Nokodown
     SECTIONING = %w[article aside main nav section].freeze
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
+    DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
+    MIN_CARD_RUN = 3
+    CARD_RUN_SHARE = 0.2
 
     def initialize(body)
       @body = body
@@ -24,6 +27,9 @@ module Nokodown
       @shielded = shielded_keys
       # Card grids repeat the same class list hundreds of times.
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
+      @prose_blocks = Set.new
+      @card_classes = card_classes
+      @card_bases = @card_classes.map { |classes| base_classes(classes) }
       walk(@body)
     end
 
@@ -36,8 +42,11 @@ module Nokodown
       landmarks.flat_map { |node| [node] + node.ancestors.to_a }.map { |node| Dom.key(node) }.compact.to_set
     end
 
+    # Code is never furniture, whatever classes its highlighter gives tokens.
     def walk(node)
       node.element_children.each do |child|
+        next if Dom::CODE.include?(child.name)
+
         if remove?(child)
           child.remove
         else
@@ -85,8 +94,18 @@ module Nokodown
       when "complementary" then aside_noise?(node)
       when "banner" then site_header?(node)
       when "alert", "status" then Dom.char_count(node.content) < 300
+      when "tablist" then tab_strip?(node)
       else true
       end
+    end
+
+    # Sites also put role=tablist on the wrapper around the tabs and their
+    # panels, or on an FAQ accordion; only a strip of short labels or links
+    # is chrome.
+    def tab_strip?(node)
+      return false if node.at_css("[role=tabpanel]")
+
+      @stats.text_chars(node) < 200 || @stats.link_density(node) > 0.5
     end
 
     def advertising?(node)
@@ -103,6 +122,25 @@ module Nokodown
     end
 
     def class_noise?(node)
+      return false if prose_part?(node)
+
+      furniture_class?(node) && !card?(node)
+    end
+
+    def card?(node)
+      classes = base_classes(node["class"])
+      @card_bases.any? { |base| (base - classes).empty? } && card_candidate?(node)
+    end
+
+    def base_classes(classes)
+      classes.to_s.split.reject { |token| token.include?("--") }
+    end
+
+    def prose_part?(node)
+      node["class"].to_s.split.any? { |token| @prose_blocks.any? { |block| token.start_with?("#{block}_", "#{block}-") } }
+    end
+
+    def furniture_class?(node)
       signature = Dom.signature(node)
       return false if signature.empty?
 
@@ -110,8 +148,53 @@ module Nokodown
       return site_header?(node) if !chrome && signature.match?(Patterns::HEADER)
       return @stats.link_density(node) > 0.5 if !chrome && signature.match?(Patterns::MENU)
       return false unless chrome
+      return false if prose_section?(node, signature)
 
       !(signature.match?(Patterns::POSITIVE) && @stats.text_chars(node) >= 200)
+    end
+
+    # Sections named after the TOC entry or skip link that points to them
+    # ("toc-para", "skip-item") and accordions named "drawer" like slide-out
+    # panels are content when they hold prose. Furniture named for its place
+    # on the page or for an overlay, ad or share bar is not.
+    def prose_section?(node, signature)
+      return false if @stats.text_chars(node) < 400 || @stats.link_density(node) >= 0.2
+      return false if signature.match?(Patterns::PLACE) || signature.gsub(DRAWER, " ").match?(Patterns::NOISE)
+      return false if node.css("p").size < 2
+
+      @prose_blocks.merge(node["class"].to_s.split.select { |token| token.downcase.match?(Patterns::PAGE_FURNITURE) })
+      true
+    end
+
+    # A hub page often splits its content into modules named after their role
+    # elsewhere ("recirc-list", "hide-read-more-ad"). None holds enough of the
+    # page to be dominant, so a run of them is judged as a whole. Card text
+    # is link text, so all characters count.
+    def card_classes
+      min_chars = @stats.chars(@body) * CARD_RUN_SHARE
+      runs = @body.css("[class]").group_by { |node| node["class"] }
+      runs.each_with_object(Set.new) do |(classes, nodes), cards|
+        cards << classes if card_run?(classes, nodes, min_chars)
+      end
+    end
+
+    def card_run?(classes, nodes, min_chars)
+      # Most class lists fail on size alone, before the slower checks below.
+      return false if nodes.size < MIN_CARD_RUN || nodes.sum { |node| @stats.chars(node) } < min_chars
+
+      cards = nodes.select { |node| card_candidate?(node) }
+      # Wrappers repeating their child's class would count its text twice.
+      cards.reject! { |node| node.ancestors.any? { |ancestor| ancestor.element? && ancestor["class"] == classes } }
+      cards.size >= MIN_CARD_RUN && cards.sum { |node| @stats.chars(node) } >= min_chars
+    end
+
+    # Menus repeat their items too, so a run named after a place is never
+    # content, and neither is a run of cookie categories or dialogs.
+    def card_candidate?(node)
+      return false if @shielded.include?(Dom.key(node)) || !furniture_class?(node)
+      return false if Dom.signature(node).match?(Patterns::PLACE) || Dom.signature(node).match?(Patterns::OVERLAY)
+
+      !chrome_element?(node) && !chrome_role?(node)
     end
 
     # Per the HTML spec a header inside sectioning content belongs to that

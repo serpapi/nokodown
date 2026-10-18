@@ -19,11 +19,13 @@ module Nokodown
     /x.freeze
 
     # Overlays, ads, prompts and widgets that are never part of the content.
+    # "ad" may carry a size ("ad300x250") but must not touch other digits:
+    # generated hashes such as "elementor-element-38ad5ea" contain it.
     NOISE = /
       cookie|consent|gdpr|#{WORD_START}ccpa#{WORD_END}|onetrust|didomi|cookiebot|usercentrics|
       newsletter|subscribe|#{WORD_START}sign-?up#{WORD_END}|#{WORD_START}opt-?in#{WORD_END}|#{WORD_START}log-?in#{WORD_END}|#{WORD_START}sign-?in#{WORD_END}|
       advert|adsbygoogle|adsense|#{WORD_START}ad-?(?:slot|unit|container|wrapper|wrap|box|banner|block|label|zone|space)s?#{WORD_END}|
-      #{WORD_START}(?:ad|ads|dfp|gpt-ad)#{WORD_END}|doubleclick|taboola|outbrain|revcontent|zergnet|
+      (?<![a-z\d])(?:ad|ads|dfp|gpt-ad)(?:\d+(?:x\d+)?)?(?![a-z\d])|doubleclick|taboola|outbrain|revcontent|zergnet|
       sponsor|#{WORD_START}promoted#{WORD_END}|
       #{WORD_START}(?:share|shares|sharing|share-?bar|share-?buttons?|share-?tools|sharedaddy|addthis|sharethis)#{WORD_END}|
       social|#{WORD_START}follow-?us#{WORD_END}|
@@ -45,6 +47,13 @@ module Nokodown
 
     # Cheap first pass: most elements match none of the patterns below.
     PAGE_FURNITURE = Regexp.union(CHROME, NOISE)
+
+    # Furniture named after where it sits. A section may be named after the
+    # table-of-contents entry or skip link that points to it ("toc-para",
+    # "skip-item"), but never after a place on the page.
+    PLACE = /sidebar|rail|footer|nav|menu|masthead|breadcrumb|crumbs|pager|pagination|copyright|colophon|toolbar|top-?bar/.freeze
+
+    OVERLAY = /cookie|consent|gdpr|onetrust|didomi|cookiebot|usercentrics|modal|popup|pop-up|popover|dialog|flyout|off-?canvas|interstitial|snackbar|toast|tooltip/.freeze
 
     MENU = /#{WORD_START}(?:menu|menus|menu-?items?)#{WORD_END}/.freeze
 
