@@ -107,7 +107,11 @@ its metric: word-level F1 against the reference main content, plus the share
 of "must include" snippets found and of boilerplate snippets leaked. All
 systems ran on the same pages with links, images and tables on; their Markdown
 was converted back to text for scoring, and tokens were counted on the Markdown
-an LLM would read (o200k tokenizer).
+an LLM would read (o200k tokenizer). Word F1 is identical to WCXB's
+`evaluate.py`. The snippet rates average only the pages that have snippets and
+compare text with whitespace collapsed, while `evaluate.py` counts a page
+without snippets as 100% and compares raw text, so its rates differ by about a
+point.
 
 | System | F1 (dev) | F1 (test) | Boilerplate leaked (test) | Content snippets found (test) | Tokens per page (test) | Tokens on URLs (test) |
 | --- | --- | --- | --- | --- | --- | --- |
