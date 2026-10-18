@@ -140,6 +140,34 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "conditional cleaning" do
+    def story(extra)
+      paragraphs = [
+        "Tidal lagoons hold water behind a wall at high tide, then release it through turbines once the sea has dropped, which lets operators time their output to demand.",
+        "Unlike a run-of-river dam, a lagoon can pump extra water in at high tide using surplus grid power, and recover it later, because the head is larger on the way out.",
+        "Bulb turbines in modern barrages generate on both the flood and the ebb tide, and reversing the blade pitch keeps the mechanical design simple and efficient.",
+        "Sihwa Lake in South Korea and La Rance in France are the largest schemes in operation, and both have run for decades with modest maintenance costs."
+      ]
+      html = "<title>Tides</title><body><article><h1>Tides</h1>#{paragraphs.map { |text| "<p>#{text}</p>" }.join}#{extra}</article></body>"
+      Nokodown.to_markdown(html, title: false)
+    end
+
+    ["rounded-xl overflow-hidden", "field field--label-hidden", "product__description quick-add-hidden"].each do |classes|
+      it "keeps prose in a container classed #{classes}" do
+        markdown = story(%(<div class="#{classes}"><p>Lagoon walls are built from rock and sand.</p><p>Sluice gates let the sea in.</p><p>Fish pass through slow turbines.</p></div>))
+
+        markdown.should include("Lagoon walls are built from rock and sand.\n\nSluice gates let the sea in.\n\nFish pass through slow turbines.")
+      end
+    end
+
+    it "still drops copies shown only at some screen sizes" do
+      markdown = story('<div class="hidden sm:block"><p>Wide screen copy of the intro.</p></div><div class="md:hidden"><p>Narrow screen copy of the intro.</p></div>')
+
+      markdown.should include("modest maintenance costs.")
+      markdown.should_not include("copy of the intro")
+    end
+  end
+
   describe "encodings" do
     it "transcodes binary input using the declared charset" do
       html = "<html><head><meta charset=\"windows-1252\"></head><body><p>caf\xE9</p></body></html>".b

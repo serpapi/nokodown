@@ -46,7 +46,7 @@ module Nokodown
       remove_related_links(root)
       remove_stray_lines(root)
       clean_conditionally(root, content_length)
-      root.css("h1, h2").each { |heading| remove(heading) if Scorer.class_weight(heading).negative? }
+      root.css("h1, h2").each { |heading| remove(heading) if Scorer.cleaning_weight(heading).negative? }
     end
 
     # Boxes of links to other stories placed inside the body: "READ MORE:

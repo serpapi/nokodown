@@ -67,6 +67,16 @@ module Nokodown
       media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|widget
     /x.freeze
 
+    # Class tokens where "hidden" or "scroll" names a CSS value or a widget
+    # state, not page furniture: overflow-hidden, scroll-mt-20, quick-add-hidden,
+    # field--label-hidden. Elements that are really hidden are gone by the time
+    # this is used. Bare "hidden", as in "hidden md:block", is not one: it marks
+    # a responsive duplicate.
+    UTILITY_CLASS = /
+      \A-?(?:overflow|overscroll|scroll|snap)(?:-[\w.\[\]]+)*\z|.-+hidden\z|
+      scroll-(?:m[trblxy]?|p[trblxy]?|margin|padding)(?![a-z])
+    /x.freeze
+
     CHROME_ROLES = Set.new(%w[
       banner navigation contentinfo complementary search menu menubar toolbar tablist
       dialog alertdialog tooltip alert status marquee timer

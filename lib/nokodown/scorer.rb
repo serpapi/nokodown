@@ -13,13 +13,30 @@ module Nokodown
     COMMAS = /[,\u060C\uFE50\uFE10\uFE11\u2E41\u2E34\u2E32\uFF0C]/.freeze
 
     def self.class_weight(node)
-      [node["class"], node["id"]].sum do |value|
-        next 0 if value.nil? || value.empty?
+      [node["class"], node["id"]].sum { |value| words_weight(value.to_s.downcase) }
+    end
 
-        value = value.downcase
-        (value.match?(Patterns::POSITIVE) ? 25 : 0) - (value.match?(Patterns::NEGATIVE) ? 25 : 0)
+    # Conditional cleaning deletes whatever weighs negative, so it ignores CSS
+    # utility tokens. Candidate scoring keeps Readability's weight, which some
+    # pages need to pick the right candidate.
+    def self.cleaning_weight(node)
+      [node["class"], node["id"]].sum do |value|
+        tokens = value.to_s.downcase.split.reject { |token| utility_class?(token) }
+        words_weight(tokens.join(" "))
       end
     end
+
+    # "lg:overflow-hidden" is judged without its variant prefix.
+    def self.utility_class?(token)
+      token.rpartition(":").last.match?(Patterns::UTILITY_CLASS)
+    end
+
+    def self.words_weight(value)
+      return 0 if value.empty?
+
+      (value.match?(Patterns::POSITIVE) ? 25 : 0) - (value.match?(Patterns::NEGATIVE) ? 25 : 0)
+    end
+    private_class_method :utility_class?, :words_weight
 
     def initialize(root, stats)
       @root = root
