@@ -94,8 +94,12 @@ region, or most of the page's text, is never removed because of its class name.
    article.
 6. **Pruner**: in articles, Readability's conditional cleaning plus removal of
    bylines, datelines and inline boxes of links to other stories; on other
-   pages, removal of leftover link clusters. If article cleaning removes almost
-   everything, it is undone and light cleaning is used instead.
+   pages, removal of leftover link clusters, unless they hold most of the text
+   as on an index page. In both modes, short links and boxes styled as
+   buttons ("Add to cart", "Book a demo") are removed, except for disclosure
+   toggles, buttons inside a sentence and titles or labels styled as buttons.
+   If article cleaning removes almost everything, it is undone and light
+   cleaning is used instead.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data

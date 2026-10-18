@@ -72,8 +72,8 @@ RSpec.describe "Main content of different kinds of pages" do
       markdown.should include("[88 comments](https://example.com/notes/balcony-solar#comments)")
     end
 
-    it "drops the top bar, pagination and footer links" do
-      ["login", "past", "Next", "Guidelines"].each { |noise| markdown.should_not include(noise) }
+    it "drops the top bar, result buttons, pagination and footer links" do
+      ["login", "past", "Save", "Hide", "Next", "Guidelines"].each { |noise| markdown.should_not include(noise) }
     end
   end
 

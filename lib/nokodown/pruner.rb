@@ -7,6 +7,21 @@ module Nokodown
     TEXT_BLOCKS = "p, div, span, li, h1, h2, h3, h4, h5, h6, small, section, aside, figcaption, b, strong, em, i"
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
+    # A class names a button when that is its last word, before a modifier,
+    # a size or a rank: "btn", "c-button", "hero-cta", "btn--ghost",
+    # "btn_medium", "button-primary". "button-text" and
+    # "btn-view-author-options" name something else, and Bootstrap's
+    # "btn-link" is a button that looks like a link.
+    BUTTON_CLASS = /
+      (?:\A|[-_])(?:btn|btns|button|buttons|cta|ctas)\d*
+      (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|sm|md|lg))?\z
+    /x.freeze
+    LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
+    CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
+    # Inside these a button is a title, a term or a footnote marker.
+    LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
+    MIN_INDEX_LENGTH = 80
+    DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
     def initialize(nodes, mode, conditional: true)
       @nodes = nodes
@@ -21,6 +36,7 @@ module Nokodown
       @nodes.each do |root|
         @mode == :article ? prune_article(root) : remove_link_clusters(root)
         remove_boilerplate_text(root)
+        remove_calls_to_action(root)
       end
       self
     end
@@ -168,10 +184,30 @@ module Nokodown
     # Navigation that survived as unlabeled markup: several links, almost no
     # other text, and no link long enough to be a headline.
     def remove_link_clusters(root)
-      root.css(CLUSTER_CONTAINERS).reverse_each do |node|
-        next if in_data_table?(node)
+      clusters = root.css(CLUSTER_CONTAINERS).select { |node| link_cluster?(node) && !in_data_table?(node) }
+      # Removal can only start at one of these, so none means nothing to remove.
+      return if clusters.empty? || clusters_dominate?(root, clusters)
 
-        remove(node) if link_cluster?(node)
+      root.css(CLUSTER_CONTAINERS).reverse_each do |node|
+        remove(node) if link_cluster?(node) && !in_data_table?(node)
+      end
+    end
+
+    # On an index page (an A-Z list, a category grid) the clusters are the
+    # content, not navigation around it. A footer sitemap, or a few skip and
+    # account links left in a root that missed the content, is no index.
+    def clusters_dominate?(root, clusters)
+      index = outermost(clusters).reject do |node|
+        %w[header footer].include?(node.name) || Dom.ancestors_named(node, "header", "footer").any?
+      end
+      length = index.sum { |node| Dom.text(node).length }
+      length >= MIN_INDEX_LENGTH && length >= Dom.text(root).length * 0.5
+    end
+
+    def outermost(nodes)
+      keys = nodes.map { |node| Dom.key(node) }.to_set
+      nodes.reject do |node|
+        node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) }
       end
     end
 
@@ -198,6 +234,96 @@ module Nokodown
         copyright = text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
         remove(node) if boilerplate || copyright
       end
+    end
+
+    # Links and boxes styled as buttons ("Add to cart", "Book a demo") are
+    # controls, not content. Cards (an image, a heading, a list) are content.
+    # All are judged before any is removed, so document order does not matter.
+    def remove_calls_to_action(root)
+      @destinations = root.css("a[href]").filter_map { |link| destination(link) }.tally
+      @running_text = {}
+      root.css("a, span, div, p").select { |node| call_to_action?(node) }.each { |node| remove(node) }
+    end
+
+    def destination(link)
+      href = link["href"].to_s.strip
+      href unless href.empty? || href.start_with?("#") || href.match?(/\Ajavascript:/i)
+    end
+
+    def links_of(node)
+      (node.name == "a" ? [node] : node.css("a[href]").to_a).select { |link| destination(link) }
+    end
+
+    def download?(node)
+      links_of(node).any? { |link| destination(link).sub(/[?#].*/m, "").match?(DOWNLOAD) }
+    end
+
+    def only_link_in_card?(node, card)
+      own = links_of(node).map { |link| Dom.key(link) }
+      return false if own.empty? || card.nil?
+
+      card.css("a[href]").none? { |link| destination(link) && !own.include?(Dom.key(link)) }
+    end
+
+    def call_to_action?(node)
+      return false unless button?(node)
+
+      text = Dom.text(node)
+      return false if text.length > 40 || text.split.size > 6 || text.match?(/\d/) || node.at_css(CALL_TO_ACTION_PARTS)
+      return false if Dom.ancestors_named(node, *LABEL_HOLDERS).any?
+
+      # FAQ questions and section titles that open a disclosure; the toggle
+      # may be a wrapper around the styled label.
+      wrappers = wrappers(node, text)
+      return false if text.end_with?("?") || wrappers.any? { |wrapper| toggle?(wrapper) }
+      return false if download?(node) || only_link_in_card?(node, wrappers.last.parent)
+
+      # In a data table the button is a cell value, like a plan's "Order" column.
+      !inside_sentence?(wrappers) && !in_data_table?(node)
+    end
+
+    def button?(node)
+      return true if node["role"] == "button"
+
+      tokens = Dom.signature(node).split
+      tokens.any? { |token| token.match?(BUTTON_CLASS) } && tokens.none? { |token| token.match?(LINK_STYLED_BUTTON) }
+    end
+
+    # The node and the elements around it that hold nothing else, such as the
+    # link of an accordion title around a styled label.
+    def wrappers(node, text)
+      chain = [node]
+      parent = node.parent
+      while parent&.element? && Dom.text(parent) == text
+        chain << parent
+        parent = parent.parent
+      end
+      chain
+    end
+
+    def toggle?(node)
+      node.key?("aria-expanded") || node.key?("aria-controls") || Dom.signature(node).match?(Patterns::DISCLOSURE)
+    end
+
+    # A button-styled link in running text ("<a class=btn>Download</a> the
+    # installer") is part of the sentence. Blocks and other buttons beside it
+    # are not running text, so a button after a heading or in a group is not.
+    def inside_sentence?(wrappers)
+      control = wrappers.last
+      return false if control.parent.nil? || wrappers.any? { |wrapper| Dom.block?(wrapper) }
+
+      running_text(control.parent) - running_text_length(control) >= 20
+    end
+
+    def running_text(parent)
+      @running_text[Dom.key(parent)] ||= parent.children.sum { |child| running_text_length(child) }
+    end
+
+    def running_text_length(child)
+      return Dom.text(child).length if child.text?
+      return 0 if !child.element? || Dom.block?(child) || button?(child)
+
+      Dom.text(child).length
     end
 
     # Every rule removes through here: nothing inside code is furniture.

@@ -74,6 +74,9 @@ module Nokodown
     # Site headers only; "card-header" or "plan-header" hold content.
     HEADER = /(?<![\w-])(?:(?:site|global|main|top|page|app|l|c|o|g)-?)?header(?:-(?:wrapper|container|inner|main|top|bar|nav))?(?![\w-])|masthead/.freeze
 
+    # Collapsed regions that still hold content: accordions, tab panels, FAQs.
+    DISCLOSURE = /accordion|collaps|tab-?pane|tab-?panel|tab-?content|faq|answer|expand|disclosure/.freeze
+
     # Readability's class weighting regexes.
     POSITIVE = /article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story/.freeze
     NEGATIVE = /
@@ -113,7 +116,9 @@ module Nokodown
         (?:hide|show|toggle)\scaption|enlarge\sthis\simage|
         (?:image|photo|picture|slide)\s\d+\s(?:of|\/)\s\d+|\d*\s?comments?|
         (?:this\s\w+\srequires|please\senable|you\sneed\sto\senable)\sjavascript.*|
-        permalink|link\sto\sthis\s(?:heading|section)|direct\slink\sto\sthis\s(?:heading|section)
+        permalink|link\sto\sthis\s(?:heading|section)|direct\slink\sto\sthis\s(?:heading|section)|
+        add\sto\s(?:cart|bag|basket|wish\s?list|favou?rites|compare)|quick\s(?:shop|view|add)|
+        (?:choose|select|more|view)\soptions|compare\sproducts?(?:\s\(\d+\))?|filter\s(?:&|and)\ssort|sort\sby
       )[\s.:!…»›→>]*\z
     /xi.freeze
 
