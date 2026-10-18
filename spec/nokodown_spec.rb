@@ -120,10 +120,26 @@ RSpec.describe Nokodown do
       markdown.should_not include("Book a demo")
     end
 
+    it "keeps buttons that hold a number, a download or a card's only link" do
+      html = <<~HTML
+        <article>#{prose}
+          <div class="mover"><h3>Lone Star Movers</h3><p>Long distance moves.</p><a href="/movers/lone-star">Profile</a> <span class="btn">Call (734) 338-1828</span></div>
+          <p>Annual report <a href="/reports/2023">Summary</a> <a class="btn btn-sm" href="/reports/2023.pdf">PDF</a></p>
+          <div class="recipe"><h3>Lemon tart</h3><p>Sharp and sweet, with a shortcrust base, lemon curd and a crisp sugar top that takes an hour.</p><a class="btn" href="/recipes/lemon-tart">Get the recipe</a></div>
+        </article>
+      HTML
+
+      markdown = extract(html)
+
+      markdown.should include("Call (734) 338-1828")
+      markdown.should include("[PDF](https://example.com/reports/2023.pdf)")
+      markdown.should include("[Get the recipe](https://example.com/recipes/lemon-tart)")
+    end
+
     it "drops a button after a heading, a group of buttons and links with role=button" do
       html = <<~HTML
         <article>#{prose}
-          <section><h2>Ship faster</h2>#{prose}<a class="c-button" href="/start">Get started</a></section>
+          <section><h2>Ship faster</h2>#{prose}<a href="/docs">Read the docs</a> <a class="c-button" href="/start">Get started</a></section>
           <div><a class="btn" href="/mac">Download for Mac</a> / <a class="btn" href="/windows">Download for Windows</a> / <a class="btn" href="/linux">Download for Linux</a></div>
           <div><a role="button" href="/trial">Start a free trial</a></div>
         </article>
