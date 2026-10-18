@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en" itemscope itemtype="https://schema.org/QAPage">
+<head><title>Why is RAID not a backup? - Server Questions</title></head>
+<body class="question-page">
+  <header class="top-bar"><a href="/">Server Questions</a> <a href="/questions">Questions</a> <a href="/tags">Tags</a></header>
+  <div id="content">
+    <div id="question-header"><h1>Why is RAID not a backup?</h1></div>
+    <div id="mainbar" role="main">
+      <div class="question">
+        <div class="s-prose js-post-body"><p>Whenever RAID comes up in a conversation about backups, someone says that RAID is not a backup. Mirrored disks keep a second copy of everything, so what is the difference between redundancy and a backup?</p></div>
+        <div class="comments"><ul class="comments-list">
+          <li class="comment"><span class="comment-copy">Related reading: the vendor's own guide says the same thing.</span> <a class="comment-user" href="/users/9">pat</a></li>
+        </ul></div>
+      </div>
+      <div id="answers">
+        <h2>3 Answers</h2>
+        <div class="answer">
+          <div class="s-prose js-post-body">
+            <p>RAID guards against one kind of failure: a disk dying. It does nothing when a file is deleted by mistake, corrupted by a bug, encrypted by malware or lost in a fire, because every one of those changes is copied to the mirror at once.</p>
+            <p>A backup is a separate copy, ideally kept somewhere else, that you can restore from after the original is gone or damaged.</p>
+          </div>
+          <div class="comments"><ul class="comments-list">
+            <li class="comment"><span class="comment-copy">Nor does it help with controller firmware bugs, which can take out the whole array.</span> <a class="comment-user" href="/users/12">ines</a></li>
+            <li class="comment"><span class="comment-copy">Great answer, I am sending this to my manager tomorrow.</span> <a class="comment-user" href="/users/13">rob</a></li>
+          </ul></div>
+        </div>
+        <div class="answer">
+          <div class="s-prose js-post-body"><p>If you overwrite your thesis with garbage, redundancy gives you two copies of garbage. A backup gives you your thesis back.</p></div>
+        </div>
+        <div class="answer">
+          <div class="s-prose js-post-body"><p>Redundancy keeps the service running while hardware fails, while a backup keeps the data, and the two answer different questions. Most setups need both, and snapshots on the array do not count as a backup either, since they live on the same disks.</p></div>
+          <div class="comments"><ul class="comments-list">
+            <li class="comment"><span class="comment-copy">Snapshots replicated to another site come close, though.</span> <a class="comment-user" href="/users/14">ola</a></li>
+          </ul></div>
+        </div>
+      </div>
+    </div>
+    <div id="sidebar"><h4>Linked</h4><ul><li><a href="/q/1">Is a mirror enough?</a></li><li><a href="/q/2">Offsite backup options</a></li></ul></div>
+  </div>
+</body>
+</html>

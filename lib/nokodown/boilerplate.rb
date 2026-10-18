@@ -36,8 +36,11 @@ module Nokodown
       landmarks.flat_map { |node| [node] + node.ancestors.to_a }.map { |node| Dom.key(node) }.compact.to_set
     end
 
+    # Code is never furniture, whatever classes its highlighter gives tokens.
     def walk(node)
       node.element_children.each do |child|
+        next if Dom::CODE.include?(child.name)
+
         if remove?(child)
           child.remove
         else
@@ -85,8 +88,18 @@ module Nokodown
       when "complementary" then aside_noise?(node)
       when "banner" then site_header?(node)
       when "alert", "status" then Dom.char_count(node.content) < 300
+      when "tablist" then tab_strip?(node)
       else true
       end
+    end
+
+    # Sites also put role=tablist on the wrapper around the tabs and their
+    # panels, or on an FAQ accordion; only a strip of short labels or links
+    # is chrome.
+    def tab_strip?(node)
+      return false if node.at_css("[role=tabpanel]")
+
+      @stats.text_chars(node) < 200 || @stats.link_density(node) > 0.5
     end
 
     def advertising?(node)
