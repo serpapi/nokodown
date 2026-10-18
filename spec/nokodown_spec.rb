@@ -27,6 +27,19 @@ RSpec.describe Nokodown do
       result.title.should == "Frames"
     end
 
+    it "returns empty markdown, but the title, when the page has no content" do
+      result = Nokodown.extract('<title>Dashboard</title><body><div id="app"></div><script src="/app.js"></script></body>')
+
+      result.markdown.should == ""
+      result.title.should == "Dashboard"
+    end
+
+    it "keeps the headline of a page that has nothing else" do
+      html = "<title>Harbour Town Community Forum</title><body><h1>Is the ferry running today?</h1></body>"
+
+      Nokodown.to_markdown(html).should == "# Is the ferry running today?"
+    end
+
     it "accepts nil" do
       Nokodown.extract(nil).markdown.should == ""
     end
@@ -61,6 +74,47 @@ RSpec.describe Nokodown do
 
     it "reports :full mode" do
       Nokodown.extract("<p>x</p>", main_content: false).mode.should == :full
+    end
+  end
+
+  describe "accordions and tabs" do
+    def article(widget)
+      Nokodown.to_markdown("<title>Trail stove</title><article><h1>Trail stove</h1><p>#{'It boils a litre in three minutes. ' * 6}</p>#{widget}</article>")
+    end
+
+    it "keeps a closed accordion panel that a button opens" do
+      html = '<button aria-controls="faq-1" aria-expanded="false">Do you ship abroad?</button>' \
+             '<div id="faq-1" class="accordion-panel" aria-hidden="true"><p>Yes, to most of Europe.</p></div>'
+
+      convert(html).should == "Do you ship abroad?\n\nYes, to most of Europe."
+    end
+
+    it "keeps a closed tab panel labelled by its tab" do
+      convert('<div role="tabpanel" aria-labelledby="tab-2" aria-hidden="true"><p>Weighs 85 g.</p></div>').should == "Weighs 85 g."
+    end
+
+    it "drops aria-hidden icons and the full copy behind a read-more link" do
+      html = '<p><span class="icon" aria-hidden="true">★</span> Used, with light wear on the ... ' \
+             '<span class="expandable-text" aria-hidden="true">Used, with light wear on the cover.</span></p>'
+
+      convert(html).should == "Used, with light wear on the ..."
+    end
+
+    it "drops a strip of tab labels" do
+      article('<ul role="tablist"><li role="tab">Specifications</li><li role="tab">Reviews</li></ul>').should_not include("Specifications")
+    end
+
+    it "keeps a tab list wrapped around its panels" do
+      markdown = article('<div role="tablist"><ul><li role="tab">Specifications</li></ul><div role="tabpanel"><p>Weighs 85 g.</p></div></div>')
+
+      markdown.should include("Weighs 85 g.")
+    end
+
+    it "keeps an FAQ marked up as a tab list" do
+      answer = "No. It only takes screw-on canisters of isobutane and propane, sold at most outdoor shops. " * 3
+      markdown = article("<div role='tablist'><h2>Can it burn white gas?</h2><p>#{answer}</p></div>")
+
+      markdown.should include("## Can it burn white gas?\n\nNo. It only takes")
     end
   end
 
