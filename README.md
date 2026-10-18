@@ -104,8 +104,9 @@ region, or most of the page's text, is never removed because of its class name.
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data
    tables while layout tables are unwrapped, definition lists, details, TeX
-   from MathML, `<sup>`/`<sub>`. Text is escaped only where it would otherwise
-   change meaning.
+   from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
+   other scripts as 2^(n-1) and a_n. Text is escaped only where it would
+   otherwise change meaning.
 
 ## Quality
 

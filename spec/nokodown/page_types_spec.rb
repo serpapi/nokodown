@@ -139,7 +139,7 @@ RSpec.describe "Main content of different kinds of pages" do
     it "keeps prose, code with its language and the options table" do
       markdown.should start_with("# Retries\n\n")
       markdown.should include("```ruby\nclient = Courier.new(retries: 3)\nclient.get(\"/status\")\n```")
-      markdown.should include("*base* × 2<sup>attempt</sup>, capped at **30 seconds**")
+      markdown.should include("*base* × 2^attempt, capped at **30 seconds**")
       markdown.should include("| `retries` | 2 | Attempts after the first one |")
     end
 

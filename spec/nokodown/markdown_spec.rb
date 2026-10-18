@@ -22,8 +22,67 @@ RSpec.describe "Markdown conversion" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
     end
 
-    it "keeps superscripts and drops the tag from footnote markers" do
-      convert("<p>10<sup>6</sup> cells, H<sub>2</sub>O, cited<sup>[1]</sup></p>").should == "10<sup>6</sup> cells, H<sub>2</sub>O, cited[1]"
+    it "writes raised and lowered digits as Unicode characters and drops the tag from footnote markers" do
+      convert("<p>10<sup>-6</sup> cells, H<sub>2</sub>O, cited<sup>[1]</sup></p>").should == "10⁻⁶ cells, H₂O, cited[1]"
+    end
+
+    it "marks other raised words with a caret and leaves ordinals and symbols as text" do
+      convert("<p>x<sup>n</sup>, the 21<sup>st</sup> Acme<sup>®</sup>, <sub>small print</sub></p>").should == "x^n, the 21st Acme®, small print"
+    end
+
+    it "groups raised and lowered expressions so they keep their meaning" do
+      convert("<p>2<sup>n-1</sup>, 2<sup>n - 1</sup>, x<sup>i=1</sup>, a<sub>n</sub>, a<sub>n+1</sub></p>").should ==
+        "2^(n-1), 2^(n - 1), x^(i=1), a_n, a_(n+1)"
+    end
+
+    it "groups decimals, comma-separated indices, products and scripts followed by a letter" do
+      html = "<p>10<sup>2.5</sup>, 10<sup>-0.5</sup>, O(n<sup>2.373</sup>), a<sub>i,j</sub>, Smith<sup>a,b</sup>, " \
+             "e<sup>(x-1)(x+1)</sup>, e<sup>(n-1)</sup>, x<sub>i</sub>y<sub>i</sub></p>"
+      convert(html).should == "10^(2.5), 10^(-0.5), O(n^(2.373)), a_(i,j), Smith a,b, e^((x-1)(x+1)), e^(n-1), x_(i)y_i"
+    end
+
+    it "reads formatted scripts by their text" do
+      convert("<p>2<sup><i>p</i></sup> &minus; 1, M<sub><i>p</i></sub>, <i>x</i><sup><i>n</i></sup>, 2<sup><i>n</i>&minus;1</sup></p>").should ==
+        "2^p − 1, M_p, *x*^n, 2^(n−1)"
+    end
+
+    it "keeps other raised words apart from the words around them and badges after a space as text" do
+      html = "<p>Smith<sup>a, b</sup>, studies<sup>1–3</sup>, Feature <sup>NEW</sup>, Feature <sup><b>NEW</b></sup></p><p><sup>a</sup>Adjusted</p>"
+      convert(html).should == "Smith a, b, studies 1–3, Feature NEW, Feature **NEW**\n\na Adjusted"
+    end
+
+    it "writes footnote letters and badges after a word or a bracket as text, not as exponents" do
+      html = "<p>20.02 (6.16)<sup>b</sup>, Age (years)<sup>a</sup>, <a href='https://aur.example/p'>pacman-static</a><sup>AUR</sup>, Trade-In<sup>Δ</sup>, " \
+             "A<sup>H</sup>A, (x+1)<sup>n-1</sup></p>"
+      convert(html).should == "20.02 (6.16) b, Age (years) a, [pacman-static](https://aur.example/p) AUR, Trade-In Δ, A^(H)A, (x+1)^(n-1)"
+    end
+
+    it "groups nested scripts and escapes a subscript after emphasis" do
+      convert("<p>e<sup>-x<sup>2</sup></sup>, 2<sup>2<sup><i>n</i></sup></sup> + 1, x<sup>a<sub>i</sub></sup></p>").should ==
+        "e^(-x²), 2^(2^n) + 1, x^(a_i)"
+      convert("<p><i>x</i><sub><i>i</i></sub> + a<sub>n+1</sub></p>").should == "*x*\\_i + a_(n+1)"
+      convert("<p>^ <sup><i><b>a</b></i></sup> <sup><i><b>b</b></i></sup> Source</p>").should == "^ ***a*** ***b*** Source"
+    end
+
+    it "writes raised cents after a price as decimals" do
+      html = "<p>$549<sup>99</sup>, <span>$2,799</span><sup>00</sup>, <sup>$</sup>19<sup>95</sup>, the 10<sup>15</sup> scale, " \
+             "€12,<sup>99</sup>, 549<sup>99</sup> €</p>"
+      convert(html).should == "$549.99, $2,799.00, $19.95, the 10¹⁵ scale, €12,99, 549.99 €"
+    end
+
+    it "reads cents after European amounts, currency codes and spaced spans" do
+      html = "<p>1.299<sup>99</sup> €, € 1.299<sup>99</sup>, CHF 49<sup>90</sup>, <span>$</span>\n<span>549</span>\n<sup>99</sup></p>"
+      convert(html).should == "1.299,99 €, € 1.299,99, CHF 49.90, $ 549 .99"
+    end
+
+    it "keeps Spanish and Portuguese ordinals as text" do
+      convert("<p>1<sup>a</sup> edición, 2<sup>do</sup> lugar, 1<sup>ª</sup> vez</p>").should == "1a edición, 2do lugar, 1ª vez"
+    end
+
+    it "keeps French and wrapped ordinals and titles as text and uses the characters for raised o, degrees and TM" do
+      html = "<p>le 1<sup>er</sup> mai, le XIX<sup>e</sup> siècle, M<sup>me</sup> Roux, the 21<span><sup>st</sup></span>, " \
+             "1<sup>o</sup> piso, 30<sup>o</sup>C, Acme<sup>TM</sup>, Bar<sup>tm</sup></p>"
+      convert(html).should == "le 1er mai, le XIXe siècle, Mme Roux, the 21st, 1º piso, 30°C, Acme™, Bar™"
     end
   end
 
@@ -253,9 +312,79 @@ RSpec.describe "Markdown conversion" do
       convert('<ul><li><input type="checkbox" checked> Done</li><li><input type="checkbox"> Todo</li></ul>').should == "- [x] Done\n- [ ] Todo"
     end
 
+    it "drops bullets and repeated numbers typed into items" do
+      html = "<ul><li>Zero</li><li>• One</li><li>•Two</li></ul><ol><li><span>1.</span> First</li><li>2. Second</li></ol>"
+      convert(html).should == "- Zero\n- One\n- Two\n\n1. First\n2. Second"
+    end
+
+    it "keeps a typed dash that only one item has and separate groups of nested lists" do
+      convert("<ul><li>–5%</li><li>– 3%</li></ul>").should == "- –5%\n- – 3%"
+      convert("<ul><li><ul><li>Camera</li><li>Strap</li></ul></li><li><ul><li>Lens</li><li>Cap</li></ul></li></ul>").should ==
+        "- - Camera\n  - Strap\n- - Lens\n  - Cap"
+    end
+
+    it "keeps glyphs that differ between items and minus signs" do
+      html = "<ul><li>● Waterproof</li><li>○ Insulated</li></ul><ul><li>- Cold</li><li>- Dry</li></ul>" \
+             "<ul><li>-5 °C</li><li>-3 °C</li></ul>"
+      convert(html).should == "- ● Waterproof\n- ○ Insulated\n\n- Cold\n- Dry\n\n- -5 °C\n- -3 °C"
+    end
+
+    it "keeps any markers that differ between items, as in pros and cons" do
+      html = "<ul><li>+ Light</li><li>+ Cheap</li><li>- Fragile</li></ul><ul><li>✓ Fast</li><li>✗ Loud</li><li>• Big</li></ul>" \
+             "<ul><li>← Previous</li><li>→ Next</li></ul>"
+      convert(html).should == "- + Light\n- + Cheap\n- - Fragile\n\n- ✓ Fast\n- ✗ Loud\n- • Big\n\n- ← Previous\n- → Next"
+    end
+
+    it "keeps a run of glyphs, as in ratings" do
+      convert("<ul><li>●●●○○ Comfort</li><li>●●●○○ Warmth</li></ul>").should == "- ●●●○○ Comfort\n- ●●●○○ Warmth"
+    end
+
+    it "keeps typed numbers that are not the item's own" do
+      convert("<ol><li>1.5 kg flour</li><li>3. Salt</li></ol>").should == "1. 1.5 kg flour\n2. 3. Salt"
+    end
+
+    it "moves up a bulleted list that opens an item instead of printing an empty marker" do
+      convert("<ul><li><ul><li>a</li><li>b</li></ul></li><li>c</li></ul>").should == "- a\n- b\n- c"
+    end
+
+    it "nests a list under the item with text before it" do
+      html = "<ul><li>Parent</li><li><ul><li>Child</li></ul></li></ul>" \
+             "<ul><strong>Minimum:</strong><br><ul><li>OS: Linux</li><li>Memory: 8 GB</li></ul></ul>"
+      convert(html).should == "- Parent\n  - Child\n\n- **Minimum:**\n  - OS: Linux\n  - Memory: 8 GB"
+    end
+
+    it "does not join a wrapped list to an item that ends with a list" do
+      convert("<ul><li>Mouse<ul><li>Quiet</li></ul></li><li><ul><li>Heavy</li></ul></li></ul>").should == "- Mouse\n  - Quiet\n- Heavy"
+    end
+
+    it "keeps an item together when content follows its nested list" do
+      convert("<ul><li><ul><li>Photo</li></ul>Boot $5</li><li><ul><li>Photo</li></ul>Sock $6</li></ul>").should ==
+        "- - Photo\n\n  Boot $5\n\n- - Photo\n\n  Sock $6"
+    end
+
+    it "keeps a numbered list nested at the start of an item under its own number" do
+      convert("<ol><li><ol><li>a</li><li>b</li></ol></li><li>c</li></ol>").should == "1. 1. a\n   2. b\n2. c"
+    end
+
     it "renders definition lists as term and definition pairs" do
       convert("<dl><dt>Weight</dt><dd>540 g</dd><dt>Colors</dt><dd>Brown</dd><dd>Black</dd></dl>").should ==
         "- **Weight**: 540 g\n- **Colors**: Brown; Black"
+    end
+
+    it "does not add a colon after a term that ends with one" do
+      convert("<dl><dt>Material:</dt><dd>Leather</dd><dt>材料：</dt><dd>革</dd></dl>").should ==
+        "- **Material:** Leather\n- **材料：** 革"
+    end
+
+    it "keeps a list or a table inside a definition under its term" do
+      html = "<dl><dt>Colors</dt><dd><ul><li>Brown</li><li>Black</li></ul></dd>" \
+             "<dt>Sizes</dt><dd><table><tr><th>S</th><th>M</th></tr><tr><td>36</td><td>38</td></tr></table></dd></dl>"
+      convert(html).should == "- **Colors**\n  - Brown\n  - Black\n\n- **Sizes**\n\n  | S | M |\n  | --- | --- |\n  | 36 | 38 |"
+    end
+
+    it "keeps the paragraphs and code of a longer definition under its term" do
+      html = "<dl><dt>cache(f)</dt><dd><p>Caches results.</p><pre>cache(f)(1)</pre></dd><dt>Since</dt><dd>3.9</dd></dl>"
+      convert(html).should == "- **cache(f)**\n\n  Caches results.\n\n  ```\n  cache(f)(1)\n  ```\n\n- **Since**: 3.9"
     end
   end
 
