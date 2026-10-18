@@ -16,7 +16,7 @@ module Nokodown
         src = largest_srcset(node["srcset"].to_s) if src.empty? || src.start_with?("data:")
         return if src.nil? || src.empty? || src.start_with?("data:")
 
-        urls.resolve(src)
+        urls.resolve_image(src)
       end
 
       def largest_srcset(srcset)

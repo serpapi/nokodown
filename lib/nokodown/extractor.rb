@@ -4,6 +4,8 @@ module Nokodown
   class Extractor
     TITLE_SIMILARITY = 0.75
     MIN_ARTICLE_LENGTH = 500
+    CONDITIONAL_SHARE = 0.5
+    REMOVED_LINK_SHARE = 0.5
 
     def initialize(html, url: nil, main_content: true, title: true, images: true, links: true)
       @html = html
@@ -37,28 +39,51 @@ module Nokodown
       Boilerplate.new(body).call
       ProductReviews.new(body).call if product_page
       selection = ContentLocator.new(body, page_type: page_type).call
-      return [cleaned_article(selection.nodes), :article] if selection.mode == :article
+      return [cleaned_article(selection.nodes, page_type), :article] if selection.mode == :article
 
       Pruner.new(selection.nodes, :page).call
       [selection.nodes, :page]
     end
 
-    # Like Readability, fall back to light cleaning when conditional cleaning
-    # leaves almost nothing; markup made of many small linky blocks (React
-    # apps, card grids) trips it. Cleaning runs on a copy so it can be undone.
-    def cleaned_article(nodes)
+    # Like Readability, fall back to lighter cleaning when conditional cleaning
+    # throws away most of what it sees; markup made of many small linky blocks
+    # (React apps, card grids) trips it, and a short intro would otherwise pass
+    # for the article. When almost nothing is left at all, the content is
+    # pruned like a page. Cleaning runs on a copy so it can be undone.
+    def cleaned_article(nodes, page_type)
       copies = nodes.map(&:dup)
-      Pruner.new(copies, :article).call
-      kept = copies.sum { |node| Dom.text(node).length }
-      return copies if kept >= MIN_ARTICLE_LENGTH || kept >= nodes.sum { |node| Dom.text(node).length } * 0.25
+      pruner = Pruner.new(copies, :article).call
+      if almost_nothing_kept?(copies, nodes)
+        Pruner.new(nodes, :page).call
+        return nodes
+      end
+      return copies if keep_conditional_cleaning?(pruner, page_type)
 
-      Pruner.new(nodes, :page).call
+      Pruner.new(nodes, :article, conditional: false).call
       nodes
+    end
+
+    # When what conditional cleaning removed from a declared article is mostly
+    # links, it was a grid of teasers for other stories, not the article. On
+    # listings and hubs the same teasers are the content.
+    def keep_conditional_cleaning?(pruner, page_type)
+      return true if pruner.conditional_share >= CONDITIONAL_SHARE
+
+      page_type == :article && pruner.removed_link_share > REMOVED_LINK_SHARE
+    end
+
+    def almost_nothing_kept?(copies, nodes)
+      kept = copies.sum { |node| Dom.text(node).length }
+      kept < MIN_ARTICLE_LENGTH && kept < nodes.sum { |node| Dom.text(node).length } * 0.25
     end
 
     # One H1 at the top: the page's own if the content has one, otherwise the
     # metadata title, replacing a near-duplicate heading right below it.
+    # Nothing found stays empty, so a script-rendered shell or a bot wall does
+    # not pass for a page; Result#title still has the title.
     def with_title(blocks, title)
+      return blocks if blocks.empty?
+
       first_h1 = blocks.find { |block| block.kind == :heading && block.level == 1 }
       return demote_h1s(blocks, first_h1) if first_h1
       return blocks if title.nil?

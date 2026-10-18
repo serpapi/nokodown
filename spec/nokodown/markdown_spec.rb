@@ -49,6 +49,65 @@ RSpec.describe "Markdown conversion" do
 
     it "strips click-tracking parameters" do
       convert('<p><a href="https://shop.example/p?id=7&utm_source=mail&gclid=abc">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
+      convert('<p><a href="https://shop.example/p?id=7&_ga=2.1.2-3&srsltid=AfmBOx">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
+    end
+
+    it "shortens Amazon links to the product or the search" do
+      product = "https://www.amazon.com/Trail-Boot/dp/B000O3LUEI/ref=sr_1_1?crid=2X&dib=eyJ2IjoiMSJ9.abc&qid=1&sr=8-1&tag=site-20&linkCode=ll1"
+      convert(%(<p><a href="#{product}">Boot</a></p>)).should == "[Boot](https://www.amazon.com/Trail-Boot/dp/B000O3LUEI?tag=site-20)"
+      search = "https://www.amazon.com/s/ref=nb_sb_noss?k=trail+boot&crid=2X&qid=1&ref=sr_pg_1"
+      convert(%(<p><a href="#{search}">Boots</a></p>)).should == "[Boots](https://www.amazon.com/s?k=trail+boot)"
+      convert('<p><a href="https://WWW.AMAZON.CO.UK/dp/B000O3LUEI?psc=1">Boot</a></p>').should == "[Boot](https://WWW.AMAZON.CO.UK/dp/B000O3LUEI)"
+      isbn = "https://www.amazon.com/dp/9781234567890/ref=sr_1_1?qid=1"
+      convert(%(<p><a href="#{isbn}">Book</a></p>)).should == "[Book](https://www.amazon.com/dp/9781234567890)"
+      ranking = "https://www.amazon.com/gp/bestsellers/ref=zg_bs_nav/books/123"
+      convert(%(<p><a href="#{ranking}">Books</a></p>)).should == "[Books](#{ranking})"
+      author = "https://www.amazon.com/Jane-Doe/e/B00HVQPIH6/ref=zg_bs_g_books_1/131-7552878-9432557"
+      convert(%(<p><a href="#{author}">Jane Doe</a></p>)).should == "[Jane Doe](https://www.amazon.com/Jane-Doe/e/B00HVQPIH6)"
+    end
+
+    it "keeps Amazon parameter names on other sites and other Amazon services" do
+      href = "https://go.microsoft.com/fwlink/?linkid=2300933"
+      convert(%(<p><a href="#{href}">Docs</a></p>)).should == "[Docs](#{href})"
+      aws = "https://docs.aws.amazon.com/ec2/ref=guide?sr=1&qid=2"
+      convert(%(<p><a href="#{aws}">EC2</a></p>)).should == "[EC2](#{aws})"
+    end
+
+    it "leaves a query without tracking parameters as written" do
+      href = "https://example.com/search?a=1&&b=2&"
+      convert(%(<p><a href="#{href}">Search</a></p>)).should == "[Search](#{href})"
+    end
+
+    it "unwraps known click redirectors" do
+      html = '<p><a href="https://www.google.com/url?q=https%3A%2F%2Fexample.org%2Fdoc%3Fid%3D3&sa=D&usg=AOv">Doc</a> ' \
+             '<a href="https://go.skimresources.com/?id=1X2&url=https%3A%2F%2Fshop.example%2Fkettle%3Futm_source%3Dskim">Kettle</a></p>'
+      convert(html).should == "[Doc](https://example.org/doc?id=3) [Kettle](https://shop.example/kettle)"
+      convert('<p><a href="https://WWW.GOOGLE.COM/url?q=https%3A%2F%2Fexample.org%2Fdoc">Doc</a></p>').should == "[Doc](https://example.org/doc)"
+    end
+
+    it "takes the redirect destination from the first parameter that holds a URL" do
+      href = "https://www.google.com/url?sa=t&q=&esrc=s&url=https%3A%2F%2Fexample.org%2Fdoc&usg=AOv"
+      convert(%(<p><a href="#{href}">Doc</a></p>)).should == "[Doc](https://example.org/doc)"
+    end
+
+    it "unwraps at most three nested redirects" do
+      href = "https://example.org/doc"
+      4.times { href = "https://www.google.com/url?q=#{URI.encode_www_form_component(href)}" }
+      convert(%(<p><a href="#{href}">Doc</a></p>)).should == "[Doc](https://www.google.com/url?q=https%3A%2F%2Fexample.org%2Fdoc)"
+    end
+
+    it "keeps redirects whose destination is not valid UTF-8" do
+      latin1 = "https://www.google.com/url?q=https%3A%2F%2Fexample.org%2Fcaf%E9&sa=D"
+      truncated = "https://l.facebook.com/l.php?u=https%3A%2F%2Fexample.org%2Fcaf%E2%80"
+      convert(%(<p><a href="#{latin1}">Cafe</a> <a href="#{truncated}">Menu</a></p>)).should == "[Cafe](#{latin1}) [Menu](#{truncated})"
+    end
+
+    it "recognises links back to the page when only tracking parameters differ" do
+      html = '<body><p>See <a href="https://example.com/post#comments">comments</a>.</p></body>'
+      Nokodown.to_markdown(html, url: "https://example.com/post?utm_source=feed", main_content: false, title: false).should == "See comments."
+      product = "https://www.amazon.com/Trail-Boot/dp/B000O3LUEI/ref=sr_1_1?qid=1&sr=8-1"
+      html = '<body><p>Read <a href="#customerReviews">reviews</a>.</p></body>'
+      Nokodown.to_markdown(html, url: product, main_content: false, title: false).should == "Read reviews."
     end
 
     it "keeps only the text of in-page anchors, scripts and phone links" do
@@ -103,6 +162,74 @@ RSpec.describe "Markdown conversion" do
              '<img src="/a-large.jpg" alt="Harbour at dawn"><figcaption>Credit</figcaption></figure>'
       convert(html).should == "![Harbour at dawn](https://example.com/a-small.jpg)\n\nCredit"
     end
+
+    it "drops image CDN size, quality and version parameters" do
+      convert('<img src="https://cdn.shop.example/files/kettle.jpg?v=1549149242&width=640&q=75&fm=webp" alt="Kettle">').should ==
+        "![Kettle](https://cdn.shop.example/files/kettle.jpg)"
+    end
+
+    it "keeps image parameters that name the picture or its required format" do
+      google = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQabc&usqp=CAU"
+      bing = "https://tse1.mm.bing.net/th?q=red+kettle&w=120&h=120&c=1"
+      twitter = "https://pbs.twimg.com/media/GabcXYZ?format=jpg&name=small"
+      convert(%(<p><img src="#{google}" alt="Kettle"> <img src="#{bing}" alt="Red kettle"> <img src="#{twitter}" alt="Photo"></p>)).should ==
+        "![Kettle](#{google}) ![Red kettle](https://tse1.mm.bing.net/th?q=red+kettle&c=1) ![Photo](#{twitter})"
+    end
+
+    it "drops tracking parameters from images" do
+      html = '<p><img src="https://cdn.example.org/a.jpg?utm_source=mail&id=3" alt="A"> ' \
+             '<img src="https://cdn.example.org/b.jpg?fbclid=IwAR0" alt="B"> ' \
+             '<img src="https://cdn.example.org/c.jpg?w=800&utm_source=mail" alt="C"></p>'
+      convert(html).should == "![A](https://cdn.example.org/a.jpg?id=3) ![B](https://cdn.example.org/b.jpg) ![C](https://cdn.example.org/c.jpg)"
+    end
+
+    it "uses the original image behind Next.js, fetch and Cloudflare proxies" do
+      html = '<p><img src="/_next/image?url=%2Fimages%2Fkettle.png&w=3840&q=75" alt="Kettle"> ' \
+             '<img src="https://res.cloudinary.com/demo/image/fetch/w_800,q_auto/https://cdn.example.org/mug.png" alt="Mug"> ' \
+             '<img src="https://cdn.example.net/image/fetch/w_36/https%3A%2F%2Fmedia.example.org%2Fcup.png" alt="Cup"> ' \
+             '<img src="/cdn-cgi/image/width=800,quality=75/uploads/pot.jpg" alt="Pot"></p>'
+      convert(html).should == "![Kettle](https://example.com/images/kettle.png) ![Mug](https://cdn.example.org/mug.png) " \
+                              "![Cup](https://media.example.org/cup.png) ![Pot](https://example.com/uploads/pot.jpg)"
+    end
+
+    it "keeps the query of a fetched original that is not encoded" do
+      src = "https://res.cloudinary.com/demo/image/fetch/w_800/https://cdn.example.org/render.php?id=7"
+      convert(%(<img src="#{src}" alt="Chart">)).should == "![Chart](https://cdn.example.org/render.php?id=7)"
+    end
+
+    it "keeps the query of a relative Cloudflare original" do
+      convert('<img src="/cdn-cgi/image/width=800/render.php?id=7" alt="Chart">').should == "![Chart](https://example.com/render.php?id=7)"
+    end
+
+    it "keeps the options of unknown proxies and of originals in private buckets" do
+      resize = "https://img.example.net/imaginary/resize?width=400&height=200&type=webp&url=https://example.org/chart.png"
+      bucket = "https://substackcdn.com/image/fetch/w_36/https%3A%2F%2Fbucketeer-e05b.s3.amazonaws.com%2Fpublic%2Fimages%2Fc3.jpeg"
+      convert(%(<p><img src="#{resize}" alt="Chart"> <img src="#{bucket}" alt="Author"></p>)).should == "![Chart](#{resize}) ![Author](#{bucket})"
+    end
+
+    it "keeps screenshot and archive URLs that embed a page URL" do
+      shot = "https://s.example.com/mshots/v1/https%3A%2F%2Fexample.org"
+      archive = "https://web.archive.org/web/2020im_/https://example.org/logo.png"
+      convert(%(<p><img src="#{shot}" alt="Site"> <img src="#{archive}" alt="Logo"></p>)).should == "![Site](#{shot}) ![Logo](#{archive})"
+    end
+
+    it "keeps image proxies whose original is not a web URL or is the proxy itself" do
+      data = "/_next/image?url=data%3Aimage%2Fgif%3Bbase64%2CR0lGOD&w=64&q=75"
+      script = "/_next/image?url=javascript%3Aalert(1)&w=64&q=75"
+      latin1 = "/_next/image?url=%2Fcaf%E9.png&w=64&q=75"
+      convert(%(<p><img src="#{data}" alt="Dot"> <img src="#{script}" alt="Icon"> <img src="#{latin1}" alt="Cafe"></p>)).should ==
+        "![Dot](https://example.com#{data}) ![Icon](https://example.com#{script}) ![Cafe](https://example.com#{latin1})"
+      convert('<img src="/_next/image?url=%23top&w=64" alt="Top">').should == "![Top](https://example.com/_next/image?url=%23top&w=64)"
+    end
+
+    it "keeps signed image URLs as they are" do
+      s3 = "https://bucket.s3.amazonaws.com/chart.png?w=800&X-Amz-Signature=0f3a9c"
+      imgix = "https://img.evbuc.com/https%3A%2F%2Fcdn.evbuc.com%2Fimages%2F1%2Foriginal.jpg?w=460&s=ccc672"
+      convert(%(<p><img src="#{s3}" alt="Chart"> <img src="#{imgix}" alt="Event"></p>)).should == "![Chart](#{s3}) ![Event](#{imgix})"
+      gcs = "https://storage.googleapis.com/b/map.png?X-Goog-Expires=900&X-Goog-Signature=0f3a9c&width=800"
+      akamai = "https://img.example.net/team.jpg?imwidth=800&__token__=exp%3D1~hmac%3D0f3a9c"
+      convert(%(<p><img src="#{gcs}" alt="Map"> <img src="#{akamai}" alt="Team"></p>)).should == "![Map](#{gcs}) ![Team](#{akamai})"
+    end
   end
 
   describe "lists" do
@@ -156,6 +283,28 @@ RSpec.describe "Markdown conversion" do
     it "wraps inline code containing backticks in a longer fence" do
       convert("<p>Use <code>`x`</code> here</p>").should == "Use `` `x` `` here"
     end
+
+    # Main-content cleaning sees highlighter markup, whose token classes and
+    # one-word tokens look like page furniture.
+    describe "in the main content" do
+      def code_block(code)
+        prose = "<p>#{'This example sends a request and prints the response. ' * 6}</p>"
+        Nokodown.to_markdown("<body><article>#{prose}<pre>#{code}</pre></article></body>", title: false)[/```.*/m]
+      end
+
+      it "keeps tokens classed as comments or tags" do
+        code_block(%(<span class="token comment">// Still "Taylor"!</span>\n<span class="token tag">&lt;div&gt;</span>)).should ==
+          %(```\n// Still "Taylor"!\n<div>\n```)
+      end
+
+      it "keeps tokens that read like share or print buttons" do
+        code_block('<span class="nb">print</span>(user.<span class="n">email</span>)').should == "```\nprint(user.email)\n```"
+      end
+
+      it "keeps tokens classed like page widgets" do
+        code_block('curl -u <span class="tooltip"><span>API_KEY</span></span>:').should == "```\ncurl -u API_KEY:\n```"
+      end
+    end
   end
 
   describe "tables" do
@@ -207,6 +356,13 @@ RSpec.describe "Markdown conversion" do
 
     it "drops a trailing heading left without content" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
+    end
+
+    it "keeps a trailing list of linked titles" do
+      html = '<h2>Candles</h2><p>3 products</p><h3><a href="/fig">Fig candle</a></h3>' \
+             '<h3><a href="/pear">Pear candle</a></h3><h3><a href="/sage">Sage candle</a></h3>'
+      convert(html).should == "## Candles\n\n3 products\n\n### [Fig candle](https://example.com/fig)\n\n" \
+                              "### [Pear candle](https://example.com/pear)\n\n### [Sage candle](https://example.com/sage)"
     end
   end
 end
