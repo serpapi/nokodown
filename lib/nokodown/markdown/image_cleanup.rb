@@ -10,11 +10,12 @@ module Nokodown
       # destination's parentheses are balanced or percent-encoded. One pattern
       # for every image keeps the cost linear on pages with thousands; the
       # rare URL with nested parentheses is not matched, so its image stays.
-      IMAGE = /!\[(?:\\.|[^\\\]\n]|\](?!\())*\]\((?:[^()\s]|\([^()\s]*\))*\)/.freeze
+      IMAGE = /!\[(?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*\]\((?:[^()\s]|\([^()\s]*\))*\)/.freeze
       DESTINATION = /\]\(((?:[^()\s]|\([^()\s]*\))*)\)/.freeze
       # A line with nothing but list or quote markers, nested lists included.
       BARE_LINE = /\A(?:\s|>|[-*+]|\d+\.)*\z/.freeze
       LIST_MARKER = /\A *(?:[-*+]|\d+\.) /.freeze
+      LIST_MARKERS = /\A *(?:(?:[-*+]|\d+\.) )+/.freeze
       # The indentation and markers before a line's text.
       LINE_PREFIX = /\A(?: |>|(?:[-*+]|\d+\.) )*/.freeze
       # Text never starts a line with ``` (Text.escape_line_starts), so this
@@ -83,7 +84,7 @@ module Nokodown
         removed = removed_images(line)
         return line if removed.empty?
 
-        kept = line.gsub(IMAGE) { |markup| removed.include?(markup) ? "" : markup }
+        kept = line.gsub(IMAGE) { |markup| removed.include?(markup) ? " " : markup }
         prefix = line[LINE_PREFIX]
         prefix + Text.escape_line_starts(kept[prefix.length..].strip.squeeze(" "))
       end
@@ -133,7 +134,7 @@ module Nokodown
           end
           next [kept, code] if kept.empty?
 
-          kept = marker + kept[marker.length..] if marker && continues_item?(kept, marker)
+          kept = with_marker(kept, marker) if marker
           marker = nil
           [kept, code]
         end
@@ -149,14 +150,16 @@ module Nokodown
       # The outermost item still waiting for its text: a bare line nested in
       # it, such as a list of thumbnails, does not take its place.
       def pending_marker(line, marker)
-        return marker if marker && line.start_with?(" " * marker.length)
+        return marker if marker && line.start_with?(" " * marker[LIST_MARKER].length)
 
-        line[LIST_MARKER] || marker
+        line[LIST_MARKERS] || marker
       end
 
-      # Indented to the item's text, not deeper.
-      def continues_item?(line, marker)
-        line.start_with?(" " * marker.length) && !line[marker.length..].match?(/\A\s/)
+      # The markers of the items the line is indented into, not deeper.
+      def with_marker(line, marker)
+        prefixes = marker.scan(/ *(?:[-*+]|\d+\.) /).each_with_object([]) { |piece, all| all << "#{all.last}#{piece}" }
+        prefix = prefixes.reverse.find { |candidate| line.start_with?(" " * candidate.length) && !line[candidate.length..].match?(/\A\s/) }
+        prefix ? prefix + line[prefix.length..] : line
       end
     end
   end

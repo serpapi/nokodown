@@ -322,6 +322,12 @@ RSpec.describe "Markdown conversion" do
                               "![Moderator](https://example.com/moderator.png)\n\nPost 2\n\n![Member](https://example.com/member.png)\n\nPost 3"
     end
 
+    it "keeps nested list markers when it drops a repeated image" do
+      html = '<p><img src="https://ex.com/avatar.png"> Forum</p><ol><li><p>First post</p></li>' \
+             '<li><ol><li><ul><li><img src="https://ex.com/avatar.png"><p>Reply</p></li></ul></li></ol></li></ol>'
+      convert(html).should == "![](https://ex.com/avatar.png) Forum\n\n1. First post\n\n   1. - Reply"
+    end
+
     it "does not remove repeated images from code blocks, nested ones included" do
       code = "<pre><code>![](https://example.com/logo.png)\n\n\nend</code></pre>"
       html = %(<p><img src="/logo.png" alt=""></p>#{code}<ul><li><img src="/logo.png" alt=""></li><li>Use this:#{code}</li></ul>)
@@ -417,6 +423,27 @@ RSpec.describe "Markdown conversion" do
         html = '<main><h1>Plans</h1><p>Pick the plan that fits your team.</p><p><img src="/spinner.gif" alt=""> Loading</p>' \
                '<div><img src="/medal.png" alt=""> # 1 rated by small teams</div><div><img src="/arrow.png" alt=""> &gt; Compare plans</div></main>'
         extract(html).should == "# Plans\n\nPick the plan that fits your team.\n\n\\# 1 rated by small teams\n\n\\> Compare plans"
+      end
+
+      it "keeps article figures marked presentational and large photos marked decorative" do
+        prose = "<p>#{'Memory grows each time the cache misses, so the graph below climbs steadily. ' * 4}</p>"
+        figure = '<figure><img src="/leak.png" alt="" role="presentation" width="700" height="400"><figcaption>Memory leak in action</figcaption></figure>'
+        extract("<article><h1>Leaks</h1>#{prose}#{figure}#{prose}</article>").should include("![](https://example.com/leak.png)\n\nMemory leak in action")
+        extract('<main><h1>Kettle</h1><p>A steel kettle.</p><div><img src="/kettle.jpg" alt="" width="2000" height="2000"></div></main>').should ==
+          "# Kettle\n\nA steel kettle.\n\n![](https://example.com/kettle.jpg)"
+      end
+
+      it "keeps the words around a decorative image apart" do
+        extract('<main><h1>Plans</h1><p>Pick the plan that fits.</p><p>Rated<img src="/star.png" role="presentation">4.5 by teams</p></main>').should ==
+          "# Plans\n\nPick the plan that fits.\n\nRated 4.5 by teams"
+      end
+
+      it "keeps an article photo whose descriptive alt only mentions a link label" do
+        prose = "<p>#{'Most learners compare a few tutoring services before they commit to one. ' * 4}</p>"
+        chart = '<figure><a href="https://learner.example/"><img src="/chart.png" alt="Price comparison chart of Learner and rivals"></a>' \
+                "<figcaption>Prices in 2026</figcaption></figure>"
+        html = "<article><h1>Tutors</h1>#{prose}#{chart}<p>We tried <a href=\"https://learner.example/\">Learner</a> first.</p>#{prose}</article>"
+        extract(html).should include("![Price comparison chart of Learner and rivals](https://example.com/chart.png)")
       end
 
       it "keeps the headings of sections that held only decorative images" do

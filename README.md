@@ -72,14 +72,15 @@ with `main_content: false`, `:none` for a document without a body.
   "Read more" links, code line numbers, and repeated responsive copies of the
   same image.
 - In the main content, images marked decorative (`role="presentation"` or
-  `role="none"`; outside an `:article`, also `alt=""` outside figures, image
-  links and text-free paragraphs and table cells), and card thumbnails while
-  the Markdown still has a text link to the same page. "Read more" or
+  `role="none"`, and outside an `:article` also `alt=""`) unless they sit in a
+  figure, an image link or a text-free paragraph or table cell, or declare a
+  width or height of 300 pixels or more; and card thumbnails while the
+  Markdown still has a text link to the same page. "Read more" or
   "3 comments" never names the page, and a label without letters ("$40") or
   with only a date ("Oct 1, 2026") names it only for an image without alt
   text. Any other text does, so in `:page` mode a thumbnail beside a
-  "Shop now" link goes too; in an `:article`, only one whose alt is a word or
-  two or repeats the link text.
+  "Shop now" link goes too; in an `:article`, only one outside a figure whose
+  alt is a word or two, or is mostly the link text.
 - Later copies of an image that stands alone on its line: always for an
   image without alt text, and for one with alt text only when nothing but
   images came since the last copy, as in a logo strip shown twice. A line

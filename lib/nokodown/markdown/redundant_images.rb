@@ -11,6 +11,8 @@ module Nokodown
                "aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
       # A squashed label that is only a date: "Oct 1, 2026", "1 October".
       DATE = /\A(?:\d+(?:#{MONTHS})\d*|(?:#{MONTHS})\d+)\z/.freeze
+      CONTENT_SIZE = 300
+      LABEL_SHARE = 0.3
 
       # Where a link destination points, ignoring the fragment and a trailing
       # slash. ImageCleanup reads the links left in the Markdown this way.
@@ -61,6 +63,7 @@ module Nokodown
       # a card.
       def thumbnails(anchor, labels)
         return [] if labels.nil? || image_link?(anchor)
+        return [] if @mode != :page && Dom.ancestors_named(anchor, "figure").any?
 
         anchor.css("img").select { |img| adds_nothing?(Dom.squish(img["alt"].to_s), labels) }
       end
@@ -81,7 +84,7 @@ module Nokodown
         return true if alt.split.size <= 2
 
         alt = squash(alt)
-        names.any? { |name| name.include?(alt) || alt.include?(name) }
+        names.any? { |name| name.include?(alt) || (alt.include?(name) && name.length >= alt.length * LABEL_SHARE) }
       end
 
       # The page a link opens, written as the Markdown link would be.
@@ -96,10 +99,14 @@ module Nokodown
       # other pages, where an image sits can still make it content. A
       # missing alt says nothing.
       def decorative?(img)
-        return true if %w[presentation none].include?(img["role"].to_s.strip.downcase)
-        return false unless @mode == :page && img.key?("alt") && Dom.squish(img["alt"]).empty?
+        presentation = %w[presentation none].include?(img["role"].to_s.strip.downcase)
+        return false unless presentation || (@mode == :page && img.key?("alt") && Dom.squish(img["alt"]).empty?)
 
-        !placed_as_content?(img)
+        !content_sized?(img) && !placed_as_content?(img)
+      end
+
+      def content_sized?(img)
+        [img["width"], img["height"]].any? { |value| Image.pixels(value).to_i >= CONTENT_SIZE }
       end
 
       # In a figure, linked to its full-size file, or in a paragraph or table
