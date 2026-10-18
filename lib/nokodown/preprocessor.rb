@@ -26,9 +26,6 @@ module Nokodown
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
-    # Collapsed regions that still hold content: accordions, tab panels, FAQs.
-    DISCLOSURE = /accordion|collaps|tab-?pane|tab-?panel|tab-?content|faq|answer|expand|disclosure/.freeze
-
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
 
     VIDEO_HOSTS = %r{//(?:www\.)?(?:(?:dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq|bilibili|live\.bilibili)\.com|(?:archive|upload\.wikimedia)\.org|player\.twitch\.tv|fast\.wistia\.(?:net|com)|play\.vidyard\.com|loom\.com/embed)}i.freeze
@@ -141,6 +138,7 @@ module Nokodown
 
     def remove_hidden
       total = Dom.char_count(@body.content)
+      @panel_ids = @body.css("[aria-controls]").flat_map { |control| control["aria-controls"].split }.to_set
       @body.css(HIDDEN_CANDIDATES).each do |node|
         next unless hidden?(node)
         # A hidden wrapper around most of the page is an anti-flicker snippet
@@ -153,7 +151,7 @@ module Nokodown
 
     def hidden?(node)
       return !disclosure?(node) if node.key?("hidden") && node["hidden"] != "until-found"
-      return !node["class"].to_s.include?("fallback-image") if node["aria-hidden"] == "true"
+      return !node["class"].to_s.include?("fallback-image") && !closed_panel?(node) if node["aria-hidden"] == "true"
       return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE)
 
       hidden_by_class?(node) && !disclosure?(node)
@@ -165,7 +163,14 @@ module Nokodown
     end
 
     def disclosure?(node)
-      node["role"] == "tabpanel" || Dom.signature(node).match?(DISCLOSURE)
+      node["role"] == "tabpanel" || Dom.signature(node).match?(Patterns::DISCLOSURE)
+    end
+
+    # Accordions and tabs mark closed panels aria-hidden, but icons and the
+    # full text behind "read more" are aria-hidden too, so a panel only counts
+    # when a control on the page opens it or a tab labels it.
+    def closed_panel?(node)
+      disclosure?(node) && (node.key?("aria-labelledby") || @panel_ids.include?(node["id"]))
     end
 
     def remove_form_controls

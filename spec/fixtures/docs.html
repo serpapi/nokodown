@@ -18,8 +18,10 @@
       <div class="highlight highlight-source-ruby"><pre>client = Courier.new(retries: 3)
 client.get("/status")</pre></div>
       <div class="admonition note"><p class="admonition-title">Note</p><p>Requests with a body are only retried when <code>retry_non_idempotent: true</code> is set.</p></div>
-      <h2 id="backoff">Backoff</h2>
+      <h2 id="backoff" class="group scroll-mt-20">Backoff</h2>
       <p>The delay between attempts grows exponentially: <em>base</em> × 2<sup>attempt</sup>, capped at <strong>30 seconds</strong>.</p>
+      <pre><code class="language-ruby"><span class="hljs-comment"># Never wait more than 10 seconds</span>
+client = Courier.new(max_delay: 10)</code></pre>
       <table>
         <tr><th>Option</th><th>Default</th><th>Description</th></tr>
         <tr><td><code>retries</code></td><td>2</td><td>Attempts after the first one</td></tr>

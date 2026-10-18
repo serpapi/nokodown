@@ -12,6 +12,7 @@ require_relative "nokodown/url_resolver"
 require_relative "nokodown/metadata"
 require_relative "nokodown/preprocessor"
 require_relative "nokodown/boilerplate"
+require_relative "nokodown/product_reviews"
 require_relative "nokodown/scorer"
 require_relative "nokodown/content_locator"
 require_relative "nokodown/container_check"
@@ -37,7 +38,8 @@ module Nokodown
   #   url:          page URL, used to resolve relative links and images
   #   main_content: true (default) keeps only the main content; false converts
   #                 the whole page, removing only invisible elements and scripts
-  #   title:        prepend the page title as an H1 when the content has none
+  #   title:        prepend the page title as an H1 when the content has none;
+  #                 a page with no content gives empty Markdown, not the title
   #   images:       include images
   #   links:        keep links; false renders link text only
   def self.extract(html, **options)
