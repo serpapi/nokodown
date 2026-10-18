@@ -27,6 +27,19 @@ RSpec.describe Nokodown do
       result.title.should == "Frames"
     end
 
+    it "returns empty markdown, but the title, when the page has no content" do
+      result = Nokodown.extract('<title>Dashboard</title><body><div id="app"></div><script src="/app.js"></script></body>')
+
+      result.markdown.should == ""
+      result.title.should == "Dashboard"
+    end
+
+    it "keeps the headline of a page that has nothing else" do
+      html = "<title>Harbour Town Community Forum</title><body><h1>Is the ferry running today?</h1></body>"
+
+      Nokodown.to_markdown(html).should == "# Is the ferry running today?"
+    end
+
     it "accepts nil" do
       Nokodown.extract(nil).markdown.should == ""
     end
@@ -202,6 +215,47 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "accordions and tabs" do
+    def article(widget)
+      Nokodown.to_markdown("<title>Trail stove</title><article><h1>Trail stove</h1><p>#{'It boils a litre in three minutes. ' * 6}</p>#{widget}</article>")
+    end
+
+    it "keeps a closed accordion panel that a button opens" do
+      html = '<button aria-controls="faq-1" aria-expanded="false">Do you ship abroad?</button>' \
+             '<div id="faq-1" class="accordion-panel" aria-hidden="true"><p>Yes, to most of Europe.</p></div>'
+
+      convert(html).should == "Do you ship abroad?\n\nYes, to most of Europe."
+    end
+
+    it "keeps a closed tab panel labelled by its tab" do
+      convert('<div role="tabpanel" aria-labelledby="tab-2" aria-hidden="true"><p>Weighs 85 g.</p></div>').should == "Weighs 85 g."
+    end
+
+    it "drops aria-hidden icons and the full copy behind a read-more link" do
+      html = '<p><span class="icon" aria-hidden="true">★</span> Used, with light wear on the ... ' \
+             '<span class="expandable-text" aria-hidden="true">Used, with light wear on the cover.</span></p>'
+
+      convert(html).should == "Used, with light wear on the ..."
+    end
+
+    it "drops a strip of tab labels" do
+      article('<ul role="tablist"><li role="tab">Specifications</li><li role="tab">Reviews</li></ul>').should_not include("Specifications")
+    end
+
+    it "keeps a tab list wrapped around its panels" do
+      markdown = article('<div role="tablist"><ul><li role="tab">Specifications</li></ul><div role="tabpanel"><p>Weighs 85 g.</p></div></div>')
+
+      markdown.should include("Weighs 85 g.")
+    end
+
+    it "keeps an FAQ marked up as a tab list" do
+      answer = "No. It only takes screw-on canisters of isobutane and propane, sold at most outdoor shops. " * 3
+      markdown = article("<div role='tablist'><h2>Can it burn white gas?</h2><p>#{answer}</p></div>")
+
+      markdown.should include("## Can it burn white gas?\n\nNo. It only takes")
+    end
+  end
+
   describe "title: false" do
     it "does not prepend the metadata title" do
       markdown = Nokodown.to_markdown(fixture("article.html"), title: false)
@@ -221,6 +275,34 @@ RSpec.describe Nokodown do
   describe "links: false" do
     it "keeps link text only" do
       convert('<p>Read <a href="/docs">the docs</a>.</p>', links: false).should == "Read the docs."
+    end
+  end
+
+  describe "conditional cleaning" do
+    def story(extra)
+      paragraphs = [
+        "Tidal lagoons hold water behind a wall at high tide, then release it through turbines once the sea has dropped, which lets operators time their output to demand.",
+        "Unlike a run-of-river dam, a lagoon can pump extra water in at high tide using surplus grid power, and recover it later, because the head is larger on the way out.",
+        "Bulb turbines in modern barrages generate on both the flood and the ebb tide, and reversing the blade pitch keeps the mechanical design simple and efficient.",
+        "Sihwa Lake in South Korea and La Rance in France are the largest schemes in operation, and both have run for decades with modest maintenance costs."
+      ]
+      html = "<title>Tides</title><body><article><h1>Tides</h1>#{paragraphs.map { |text| "<p>#{text}</p>" }.join}#{extra}</article></body>"
+      Nokodown.to_markdown(html, title: false)
+    end
+
+    ["rounded-xl overflow-hidden", "field field--label-hidden", "product__description quick-add-hidden"].each do |classes|
+      it "keeps prose in a container classed #{classes}" do
+        markdown = story(%(<div class="#{classes}"><p>Lagoon walls are built from rock and sand.</p><p>Sluice gates let the sea in.</p><p>Fish pass through slow turbines.</p></div>))
+
+        markdown.should include("Lagoon walls are built from rock and sand.\n\nSluice gates let the sea in.\n\nFish pass through slow turbines.")
+      end
+    end
+
+    it "still drops copies shown only at some screen sizes" do
+      markdown = story('<div class="hidden sm:block"><p>Wide screen copy of the intro.</p></div><div class="md:hidden"><p>Narrow screen copy of the intro.</p></div>')
+
+      markdown.should include("modest maintenance costs.")
+      markdown.should_not include("copy of the intro")
     end
   end
 
