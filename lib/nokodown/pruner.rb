@@ -16,6 +16,7 @@ module Nokodown
       (?:\A|[-_])(?:btn|btns|button|buttons|cta|ctas)\d*
       (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|sm|md|lg))?\z
     /x.freeze
+    BUTTON_WORD = /btn|button|cta/.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
     # Inside these a button is a title, a term or a footnote marker.
@@ -242,7 +243,6 @@ module Nokodown
     # controls, not content. Cards (an image, a heading, a list) are content.
     # All are judged before any is removed, so document order does not matter.
     def remove_calls_to_action(root)
-      @destinations = root.css("a[href]").filter_map { |link| destination(link) }.tally
       @running_text = {}
       root.css("a, span, div, p").select { |node| call_to_action?(node) }.each { |node| remove(node) }
     end
@@ -286,6 +286,7 @@ module Nokodown
 
     def button?(node)
       return true if node["role"] == "button"
+      return false unless "#{node["class"]} #{node["id"]}".downcase.match?(BUTTON_WORD)
 
       tokens = Dom.signature(node).split
       tokens.any? { |token| token.match?(BUTTON_CLASS) } && tokens.none? { |token| token.match?(LINK_STYLED_BUTTON) }
