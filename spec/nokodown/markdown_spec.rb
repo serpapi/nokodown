@@ -156,6 +156,28 @@ RSpec.describe "Markdown conversion" do
     it "wraps inline code containing backticks in a longer fence" do
       convert("<p>Use <code>`x`</code> here</p>").should == "Use `` `x` `` here"
     end
+
+    # Main-content cleaning sees highlighter markup, whose token classes and
+    # one-word tokens look like page furniture.
+    describe "in the main content" do
+      def code_block(code)
+        prose = "<p>#{'This example sends a request and prints the response. ' * 6}</p>"
+        Nokodown.to_markdown("<body><article>#{prose}<pre>#{code}</pre></article></body>", title: false)[/```.*/m]
+      end
+
+      it "keeps tokens classed as comments or tags" do
+        code_block(%(<span class="token comment">// Still "Taylor"!</span>\n<span class="token tag">&lt;div&gt;</span>)).should ==
+          %(```\n// Still "Taylor"!\n<div>\n```)
+      end
+
+      it "keeps tokens that read like share or print buttons" do
+        code_block('<span class="nb">print</span>(user.<span class="n">email</span>)').should == "```\nprint(user.email)\n```"
+      end
+
+      it "keeps tokens classed like page widgets" do
+        code_block('curl -u <span class="tooltip"><span>API_KEY</span></span>:').should == "```\ncurl -u API_KEY:\n```"
+      end
+    end
   end
 
   describe "tables" do
@@ -207,6 +229,13 @@ RSpec.describe "Markdown conversion" do
 
     it "drops a trailing heading left without content" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
+    end
+
+    it "keeps a trailing list of linked titles" do
+      html = '<h2>Candles</h2><p>3 products</p><h3><a href="/fig">Fig candle</a></h3>' \
+             '<h3><a href="/pear">Pear candle</a></h3><h3><a href="/sage">Sage candle</a></h3>'
+      convert(html).should == "## Candles\n\n3 products\n\n### [Fig candle](https://example.com/fig)\n\n" \
+                              "### [Pear candle](https://example.com/pear)\n\n### [Sage candle](https://example.com/sage)"
     end
   end
 end

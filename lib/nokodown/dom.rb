@@ -15,6 +15,8 @@ module Nokodown
     # Elements that stop Readability from treating a div as a paragraph.
     PARAGRAPH_BREAKERS = Set.new(%w[blockquote dl div img ol p pre table ul]).freeze
 
+    CODE = %w[pre code].freeze
+
     NBSP = "\u00A0"
     WHITESPACE = " \t\n\r\f\u00A0"
 
@@ -28,6 +30,11 @@ module Nokodown
 
     UUID = /\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/.freeze
 
+    # On a forum, the replies sit in containers named like a comment section.
+    # ContentLocator marks them and everything inside them, so the mark
+    # survives the copy that article cleaning works on.
+    THREAD = "data-nokodown-thread"
+
     module_function
 
     def assign_keys(root)
@@ -37,6 +44,19 @@ module Nokodown
 
     def key(node)
       node[KEY]
+    end
+
+    def mark_as_thread(node)
+      node[THREAD] = "1"
+      node.css("*").each { |descendant| descendant[THREAD] = "1" }
+    end
+
+    def thread?(node)
+      !node[THREAD].nil?
+    end
+
+    def thread_post?(node)
+      thread?(node) && signature(node).match?(Patterns::SECONDARY)
     end
 
     # Keys of the <p>s and of the divs Readability would rewrite into <p>
@@ -58,6 +78,12 @@ module Nokodown
     # ancestor, which dominated extraction time; compare tag names instead.
     def ancestors_named(node, *names)
       node.ancestors.select { |ancestor| ancestor.element? && names.include?(ancestor.name) }
+    end
+
+    # Syntax highlighters wrap tokens in spans whose class ("token comment",
+    # "tag") or whole text ("print", "email") reads like page furniture.
+    def in_code?(node)
+      CODE.include?(node.name) || ancestors_named(node, *CODE).any?
     end
 
     def block?(node)

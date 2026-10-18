@@ -56,7 +56,11 @@ module Nokodown
 
     # One H1 at the top: the page's own if the content has one, otherwise the
     # metadata title, replacing a near-duplicate heading right below it.
+    # Nothing found stays empty, so a script-rendered shell or a bot wall does
+    # not pass for a page; Result#title still has the title.
     def with_title(blocks, title)
+      return blocks if blocks.empty?
+
       first_h1 = blocks.find { |block| block.kind == :heading && block.level == 1 }
       return demote_h1s(blocks, first_h1) if first_h1
       return blocks if title.nil?
