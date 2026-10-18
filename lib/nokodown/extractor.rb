@@ -26,12 +26,25 @@ module Nokodown
       product_page = @main_content && ProductReviews.product_page?(doc, metadata[:page_type])
       Preprocessor.new(body).call
       nodes, mode = select_content(body, metadata[:page_type], product_page)
-      blocks = Markdown::Cleanup.call(Markdown::Renderer.new(urls, images: @images, links: @links).render(nodes))
+      blocks = render(nodes, mode, urls)
       blocks = with_title(blocks, metadata[:title]) if @title
       result(blocks, metadata, mode)
     end
 
     private
+
+    def render(nodes, mode, urls)
+      redundant = redundant_images(nodes, mode, urls)
+      renderer = Markdown::Renderer.new(urls, images: @images, links: @links, redundant_images: redundant)
+      Markdown::Cleanup.call(renderer.render(nodes), renderer.rendered_images)
+    end
+
+    # Converting the whole page keeps every visible image.
+    def redundant_images(nodes, mode, urls)
+      return {} if mode == :full || !@images
+
+      Markdown::RedundantImages.new(nodes, mode, urls).call
+    end
 
     def select_content(body, page_type, product_page)
       return [[body], :full] unless @main_content

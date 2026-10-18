@@ -2,6 +2,8 @@
 
 module Nokodown
   module Markdown
+    RenderedImage = Struct.new(:url, :redundant, :targets)
+
     # Renders a run of inline nodes (text, emphasis, code, links, images) to
     # one string. Line breaks from <br> are kept as "\n".
     class Inline
@@ -36,15 +38,32 @@ module Nokodown
       WORD_START = /\A[\p{L}\p{N}]/.freeze
       WORD_END = /[\p{L}\p{N}]\z/.freeze
 
-      def initialize(urls, images:, links:)
+      # Absolute URL worth linking to, or nil for in-page anchors, scripts and
+      # phone numbers.
+      def self.link_url(href, urls)
+        href = href.strip
+        return if href.empty? || href.start_with?("#") || href.match?(UNSAFE_SCHEME)
+
+        url = urls.resolve(href)
+        url unless url.nil? || urls.same_page?(url)
+      end
+
+      # redundant_images: RedundantImages#call.
+      def initialize(urls, images:, links:, redundant_images: {})
         @urls = urls
         @images = images
         @links = links
+        @redundant_images = redundant_images
+        @rendered_images = {}
         @emphasis = Hash.new(0)
         @in_heading = false
         @in_link = false
         @link_images = nil
       end
+
+      # Markup of every image written, for Cleanup to drop redundant images
+      # and repeats.
+      attr_reader :rendered_images
 
       def render(nodes, heading: false)
         outer = @in_heading
@@ -54,14 +73,8 @@ module Nokodown
         @in_heading = outer
       end
 
-      # Absolute URL worth linking to, or nil for in-page anchors, scripts and
-      # phone numbers.
       def link_url(href)
-        href = href.strip
-        return if href.empty? || href.start_with?("#") || href.match?(UNSAFE_SCHEME)
-
-        url = @urls.resolve(href)
-        url unless url.nil? || @urls.same_page?(url)
+        Inline.link_url(href, @urls)
       end
 
       private
@@ -169,10 +182,21 @@ module Nokodown
         return "" if src.nil? || Image.decorative?(node, src, alt)
 
         markup = "![#{Text.link_text(Text.escape(alt))}](#{Text.destination(src)})"
+        record(markup, src, node)
         return markup unless @link_images
 
         @link_images << markup
         ""
+      end
+
+      # An image is redundant only if every copy of it is. Targets are the
+      # pages whose text links make its thumbnail copies redundant.
+      def record(markup, src, node)
+        image = (@rendered_images[markup] ||= RenderedImage.new(src, true, Set.new))
+        key = Dom.key(node)
+        image.redundant &&= @redundant_images.key?(key)
+        target = @redundant_images[key]
+        image.targets << target if target
       end
 
       # Markdown has no superscript, and "2attempt" is wrong. Digits and signs

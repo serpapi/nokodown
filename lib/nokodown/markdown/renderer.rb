@@ -16,8 +16,8 @@ module Nokodown
       # and cons, ✓ and ✗), not only the glyphs that are stripped.
       LEADING_SYMBOLS = /\A[^\p{L}\p{N}\s]+(?=\s)/.freeze
 
-      def initialize(urls, images: true, links: true)
-        @inline = Inline.new(urls, images: images, links: links)
+      def initialize(urls, images: true, links: true, redundant_images: {})
+        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
         @links = links
         @depth = 0
         @contains_block = {}
@@ -56,6 +56,10 @@ module Nokodown
 
       def inline(nodes)
         @inline.render(nodes)
+      end
+
+      def rendered_images
+        @inline.rendered_images
       end
 
       def block_level?(node)
