@@ -11,6 +11,32 @@ module Nokodown
       CODE = Set.new(%w[code kbd samp tt]).freeze
       UNSAFE_SCHEME = /\A\s*(?:javascript|vbscript|data|tel|sms):/i.freeze
       FOOTNOTE_MARKER = /\A\s*(?:\[[^\]]{1,8}\]|[*†‡§]+)\s*\z/.freeze
+      # Exponents are often written with the minus sign "−", not "-".
+      SCRIPT_TEXT = /\A[0-9+\-−=()]+(?:,[0-9+\-−=()]+)*\z/.freeze
+      SCRIPT_SOURCE = "0123456789+−=()-"
+      SUPERSCRIPTS = "⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾⁻"
+      SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉₊₋₌₍₎₋"
+      # A point or a comma only between digits or letters: 10^(2.5), a_(i,j).
+      SCRIPT_WORD = %r{\A(?:[\p{L}\p{N}+\-−=/()]|(?<=[\p{L}\p{N}])[.,](?=[\p{L}\p{N}]))+\z}.freeze
+      SCRIPT_OPERATOR = %r{[+\-−=/]}.freeze
+      GROUPED = /\A(\((?:[^()]|\g<1>)*\))\z/.freeze
+      # These have characters of their own (1º, nº, Acme™); a raised o before
+      # C or F is a degree (30°C).
+      RAISED_LETTERS = { "o" => "º", "TM" => "™", "SM" => "℠" }.freeze
+      DEGREE_UNIT = /\A\s?[CF]\b/.freeze
+      # English and French endings: 21st, 1er, 2nde, XIXe.
+      ORDINAL_SUFFIX = /\A(?:st|nd|rd|th|er|ers|re|res|e|es|ème|eme|nde|a|as|os|ª|do|da|ra|ro|ta|to)\z/i.freeze
+      NUMBER_END = /(?:\d|\b[IVXLCDM]+)\z/.freeze
+      # French titles: Mme, Mlle, Mgr.
+      TITLE_SUFFIX = /\A(?:me|mes|lle|lles|gr)\z/.freeze
+      PRICE_END = /(?:\p{Sc}|\b[A-Z]{3})\s?\d[\d,.]*\z/.freeze
+      DOT_GROUPED = /\d\.\d{3}\z/.freeze
+      MATH_BASE = /(?:\d|(?<![\p{L}\p{N}])\p{L})\z/.freeze
+      PRICE_START = /\A\s?\p{Sc}/.freeze
+      CENTS = /\A\d\d\z/.freeze
+      ATTACHED = /[\p{L}\p{N})\]]\z/.freeze
+      WORD_START = /\A[\p{L}\p{N}]/.freeze
+      WORD_END = /[\p{L}\p{N}]\z/.freeze
 
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
@@ -173,13 +199,133 @@ module Nokodown
         image.targets << target if target
       end
 
-      # Markdown has no superscript, and "2attempt" is wrong; footnote markers
-      # such as [1] read fine without the tag.
+      # Markdown has no superscript, and "2attempt" is wrong. Digits and signs
+      # have Unicode forms (10⁶, H₂O); other raised and lowered words get a
+      # caret or an underscore (x^n, a_n). Footnote markers such as [1],
+      # symbols such as ® and small print read fine as plain text. The plain
+      # text decides, so 2<sup><i>p</i></sup> is 2^p like 2<sup>p</sup>.
       def script(node)
         text = render(node.children)
-        return text if text.strip.empty? || text.match?(FOOTNOTE_MARKER) || node.at_css("a")
+        core = Text.collapse(node.content).strip
+        return text if core.empty? || core.match?(FOOTNOTE_MARKER) || node.at_css("a, img, math")
 
-        "<#{node.name}>#{text.strip}</#{node.name}>"
+        before = text_before(node) + text[/\A\s*/]
+        after = text[/\s*\z/] + adjacent(node, :next_sibling)&.content.to_s
+        return nested_script(node, text, core, before, after) if node.at_css("sup, sub")
+
+        marked = node.name == "sup" ? superscript(core, before, after, text_before(node, skip_blank: true)) : subscript(node, core, before, after)
+        marked ? surround_like(text, marked) : unmarked(text, core, before, after)
+      end
+
+      def nested_script(node, text, core, before, after)
+        return unmarked(text, core, before, after) unless before.match?(MATH_BASE)
+
+        surround_like(text, "#{node.name == 'sup' ? '^' : subscript_mark(node, before)}(#{text.strip})")
+      end
+
+      # Glued on, a raised or lowered word would merge with the words around
+      # it: Smitha, b for Smith<sup>a, b</sup>, aNote for <sup>a</sup>Note.
+      def unmarked(text, core, before, after)
+        leading = before.match?(ATTACHED) && core.match?(WORD_START) ? " " : ""
+        trailing = core.match?(WORD_END) && after.match?(WORD_START) ? " " : ""
+        "#{leading}#{text}#{trailing}"
+      end
+
+      # Text of the node before, with the one before that when it is a bare
+      # amount (<sup>$</sup>549<sup>99</sup>).
+      def text_before(node, skip_blank: false)
+        previous = adjacent(node, :previous_sibling)
+        previous = filled(previous) if skip_blank
+        before = previous&.content.to_s
+        return before unless before.match?(/\A[\d,.]+\z/)
+
+        earlier = previous.previous_sibling
+        earlier = filled(earlier) if skip_blank
+        "#{earlier&.content}#{before}"
+      end
+
+      def filled(node)
+        node = node.previous_sibling while node&.text? && node.content.strip.empty? && node.previous_sibling
+        node
+      end
+
+      # The node right before or after this one, looking past inline wrappers
+      # that it opens or closes (21<span><sup>st</sup></span>).
+      def adjacent(node, direction)
+        node = node.parent while node.public_send(direction).nil? && inline_parent?(node)
+        node.public_send(direction)
+      end
+
+      def inline_parent?(node)
+        parent = node.parent
+        parent&.element? && !Dom::BLOCK.include?(parent.name)
+      end
+
+      # Cents and ordinals are raised only for looks: $549.99, 21st, XIXe. A
+      # badge after a space (Feature <sup>NEW</sup>) is not an exponent.
+      def superscript(core, before, after, amount)
+        return cents(core, amount) if core.match?(CENTS) && price?(amount, after)
+        return core.tr(SCRIPT_SOURCE, SUPERSCRIPTS) if core.match?(SCRIPT_TEXT)
+        return core if plain_suffix?(core, before)
+
+        raised_letter(core, after) || ("^#{grouped(core, after)}" if expression?(core) && math_base?(core, before))
+      end
+
+      def math_base?(core, before)
+        before.match?(MATH_BASE) || (before.match?(/\)\z/) && core.match?(/[\d+\-−=\/]/))
+      end
+
+      # A lowered word is an index only when it hangs off the word before it.
+      def subscript(node, core, before, after)
+        return core.tr(SCRIPT_SOURCE, SUBSCRIPTS) if core.match?(SCRIPT_TEXT)
+
+        return unless expression?(core) && before.match?(ATTACHED)
+
+        "#{subscript_mark(node, before)}#{grouped(core, after)}"
+      end
+
+      def subscript_mark(node, before)
+        previous = adjacent(node, :previous_sibling)
+        marked = previous&.element? && (EMPHASIS.key?(previous.name) || CODE.include?(previous.name))
+        before.match?(WORD_END) && !marked ? "_" : "\\_"
+      end
+
+      # $549<sup>99</sup>, <sup>$</sup>549<sup>99</sup> and 549<sup>99</sup> €.
+      def price?(before, after)
+        before.match?(PRICE_END) || (before.match?(/\d,?\z/) && after.match?(PRICE_START))
+      end
+
+      # €12,<sup>99</sup> has its decimal comma already.
+      def cents(core, before)
+        return core if before.end_with?(",")
+
+        before.match?(DOT_GROUPED) ? ",#{core}" : ".#{core}"
+      end
+
+      def plain_suffix?(core, before)
+        (core.match?(ORDINAL_SUFFIX) && before.match?(NUMBER_END)) || (core.match?(TITLE_SUFFIX) && before.match?(/\bM\z/))
+      end
+
+      def raised_letter(core, after)
+        return "°" if core == "o" && after.match?(DEGREE_UNIT)
+
+        RAISED_LETTERS[core] || RAISED_LETTERS[core.upcase]
+      end
+
+      # Spaces count only around operators (n - 1), so small print is not an
+      # expression.
+      def expression?(core)
+        compact = core.delete(" ")
+        compact.match?(SCRIPT_WORD) && (compact == core || compact.match?(SCRIPT_OPERATOR))
+      end
+
+      # 2^n-1 would read as 2^n minus 1, 2^2n as 2^2 times n, e^(a)(b) as
+      # e^(a) times (b), and x_iy_i as x with the index iy_i.
+      def grouped(core, after)
+        return core if core.match?(GROUPED)
+        return core if (core.length == 1 || core.match?(/\A\p{L}+\z/)) && !after.match?(WORD_START)
+
+        "(#{core})"
       end
 
       def math(node)

@@ -9,17 +9,18 @@ module Nokodown
     TEXTISH = "span, li, td, blockquote, dl, div, img, ol, p, pre, table, ul"
     AD_WORDS = /\A(?:ad(?:vertising|vertisement)?|pub(?:licité)?|werb(?:ung)?|广告|Реклама|Anuncio)\z/i.freeze
     LOADING_WORDS = /\A(?:(?:loading|正在加载|Загрузка|chargement|cargando)(?:…|\.\.\.)?)\z/i.freeze
+    POST_BODY_SHARE = 0.8
 
     def initialize(node, content_length, paragraph_keys)
       @node = node
       @text = Dom.text(node)
-      @weight = Scorer.class_weight(node)
+      @weight = Scorer.cleaning_weight(node)
       @content_length = content_length
       @paragraph_keys = paragraph_keys
     end
 
     def remove?
-      return false if majority? || data_table_involved? || Dom.ancestors_named(@node, "code", "pre").any?
+      return false if majority? || data_table_involved? || Dom.ancestors_named(@node, "code", "pre").any? || forum_post?
       return true if @weight.negative?
       return false if @text.count(",") >= 10 || video_embed?
       return true if @text.match?(AD_WORDS) || @text.match?(LOADING_WORDS)
@@ -39,6 +40,14 @@ module Nokodown
       return true if @node.name == "table" && Tables.data_table?(@node)
 
       (Dom.ancestors_named(@node, "table") + @node.css("table").to_a).any? { |table| Tables.data_table?(table) }
+    end
+
+    def forum_post?
+      return false unless Dom.thread?(@node)
+      return true if Dom.thread_post?(@node)
+
+      post = @node.ancestors.find { |ancestor| ancestor.element? && Dom.thread_post?(ancestor) }
+      !post.nil? && @text.length >= Dom.text(post).length * POST_BODY_SHARE
     end
 
     def video_embed?
