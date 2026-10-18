@@ -11,17 +11,25 @@ module Nokodown
     LOADING_WORDS = /\A(?:(?:loading|正在加载|Загрузка|chargement|cargando)(?:…|\.\.\.)?)\z/i.freeze
     POST_BODY_SHARE = 0.8
 
-    def initialize(node, content_length, paragraph_keys)
+    def initialize(node, content_length, paragraph_keys, memo = {})
       @node = node
       @text = Dom.text(node)
-      @weight = Scorer.cleaning_weight(node)
       @content_length = content_length
       @paragraph_keys = paragraph_keys
+      @memo = memo
+    end
+
+    def self.forget(memo, node)
+      memo.delete(:tables) if node.name == "table" || node.at_css("table") || Dom.ancestors_named(node, "table").any?
+      memo.delete(:posts) if Dom.thread?(node)
     end
 
     def remove?
-      return false if majority? || data_table_involved? || Dom.ancestors_named(@node, "code", "pre").any? || forum_post?
-      return true if @weight.negative?
+      return false if majority? || forum_post?
+
+      tables, code = Dom.ancestors_named(@node, "table", "code", "pre").partition { |ancestor| ancestor.name == "table" }
+      return false if code.any? || data_table_involved?(tables)
+      return true if weight.negative?
       return false if @text.count(",") >= 10 || video_embed?
       return true if @text.match?(AD_WORDS) || @text.match?(LOADING_WORDS)
 
@@ -36,10 +44,35 @@ module Nokodown
       @text.length > @content_length * 0.5
     end
 
-    def data_table_involved?
-      return true if @node.name == "table" && Tables.data_table?(@node)
+    def weight
+      @weight ||= Scorer.cleaning_weight(@node)
+    end
 
-      (Dom.ancestors_named(@node, "table") + @node.css("table").to_a).any? { |table| Tables.data_table?(table) }
+    def data_table_involved?(outer_tables)
+      return true if (@node.name == "table" && data_table?(@node)) || holders_of_data_tables.include?(Dom.key(@node))
+
+      outer_tables.any? { |table| data_table?(table) }
+    end
+
+    def holders_of_data_tables
+      tables = (@memo[:tables] ||= {})
+      tables[:holders] ||= @memo.fetch(:root, @node).css("table").each_with_object(Set.new) do |table, keys|
+        next unless data_table?(table)
+
+        keys << Dom.key(table)
+        table.ancestors.each { |ancestor| keys << Dom.key(ancestor) if ancestor.element? }
+      end
+    end
+
+    def data_table?(table)
+      verdicts = ((@memo[:tables] ||= {})[:verdicts] ||= {})
+      key = Dom.key(table)
+      verdicts.key?(key) ? verdicts[key] : (verdicts[key] = Tables.data_table?(table))
+    end
+
+    def post_length(post)
+      lengths = (@memo[:posts] ||= {})
+      lengths[Dom.key(post)] ||= Dom.text(post).length
     end
 
     def forum_post?
@@ -47,7 +80,7 @@ module Nokodown
       return true if Dom.thread_post?(@node)
 
       post = @node.ancestors.find { |ancestor| ancestor.element? && Dom.thread_post?(ancestor) }
-      !post.nil? && @text.length >= Dom.text(post).length * POST_BODY_SHARE
+      !post.nil? && @text.length >= post_length(post) * POST_BODY_SHARE
     end
 
     def video_embed?
@@ -79,7 +112,7 @@ module Nokodown
     end
 
     def too_linky?
-      (!list? && @weight < 25 && link_density > 0.2) || (@weight >= 25 && link_density > 0.5)
+      (!list? && weight < 25 && link_density > 0.2) || (weight >= 25 && link_density > 0.5)
     end
 
     def suspicious_embeds?

@@ -149,11 +149,13 @@ module Nokodown
     # Innermost containers first, so an outer one is judged on what is left.
     def remove_suspicious_containers(root, content_length)
       paragraph_keys = Dom.paragraph_keys(root)
+      memo = { root: root }
       ["form, fieldset", "table", "ul", "div"].each do |selector|
         root.css(selector).reverse_each do |node|
-          next if paragraph_keys.include?(Dom.key(node))
+          next if paragraph_keys.include?(Dom.key(node)) || !ContainerCheck.new(node, content_length, paragraph_keys, memo).remove?
 
-          remove(node) if ContainerCheck.new(node, content_length, paragraph_keys).remove?
+          ContainerCheck.forget(memo, node)
+          remove(node)
         end
       end
     end
