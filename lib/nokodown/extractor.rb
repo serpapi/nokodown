@@ -23,8 +23,9 @@ module Nokodown
       body = doc.at_css("body")
       return result([], metadata, :none) if body.nil?
 
+      product_page = @main_content && ProductReviews.product_page?(doc, metadata[:page_type])
       Preprocessor.new(body).call
-      nodes, mode = select_content(body, metadata[:page_type])
+      nodes, mode = select_content(body, metadata[:page_type], product_page)
       blocks = Markdown::Cleanup.call(Markdown::Renderer.new(urls, images: @images, links: @links).render(nodes))
       blocks = with_title(blocks, metadata[:title]) if @title
       result(blocks, metadata, mode)
@@ -32,10 +33,11 @@ module Nokodown
 
     private
 
-    def select_content(body, page_type)
+    def select_content(body, page_type, product_page)
       return [[body], :full] unless @main_content
 
       Boilerplate.new(body).call
+      ProductReviews.new(body).call if product_page
       selection = ContentLocator.new(body, page_type: page_type).call
       return [cleaned_article(selection.nodes, page_type), :article] if selection.mode == :article
 

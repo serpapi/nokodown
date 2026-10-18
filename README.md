@@ -61,6 +61,9 @@ with `main_content: false`, `:none` for a document without a body.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars, modals,
   chat widgets, "related", "recommended" and "most popular" boxes, and, next
   to an article, its comment thread.
+- On product pages, customer reviews and Q&A widgets, with their review
+  summaries and rating histograms. An inline rating badge ("212 reviews" next
+  to the price), testimonials and editorial reviews stay.
 - Invisible elements (`hidden`, `aria-hidden`, inline `display: none`,
   screen-reader-only and other hiding classes), keeping collapsed accordions,
   tab panels and FAQ answers.
