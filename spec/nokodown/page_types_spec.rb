@@ -70,6 +70,62 @@ RSpec.describe "Main content of different kinds of pages" do
     end
   end
 
+  describe "a category page with an intro above a card grid" do
+    let(:markdown) { extract("collection").markdown }
+
+    it "keeps the intro and every card with its link and price" do
+      markdown.should include("Trail running shoes grip loose gravel")
+      markdown.should include("### [Cirrus Trail 3](https://example.com/products/cirrus-trail-3)")
+      markdown.should include("$189.00 Only 2 left in your size")
+      markdown.should include("### [Sgurr Light](https://example.com/products/sgurr-light)")
+    end
+
+    it "drops the header and footer links" do
+      ["Men", "Sale", "Returns", "Privacy"].each { |noise| markdown.should_not include(noise) }
+    end
+
+    it "still drops the byline and the box of related links, as article cleaning does" do
+      ["Jo Pine", "Related reading", "How to choose"].each { |noise| markdown.should_not include(noise) }
+    end
+  end
+
+  describe "a short news story above a grid of headline teasers" do
+    let(:markdown) { extract("news_brief").markdown }
+
+    it "keeps the story" do
+      markdown.should include("Crews replaced six bearings")
+      markdown.should include("the temporary ferry service ends on Friday.")
+    end
+
+    it "drops the teasers for other stories" do
+      ["School board", "Fishing season", "Ferry company"].each { |noise| markdown.should_not include(noise) }
+    end
+  end
+
+  describe "a recipe index made only of small linky cards" do
+    let(:markdown) { extract("recipes").markdown }
+
+    it "keeps every recipe with its link, blurb and cooking time" do
+      markdown.should include("### [Charred leek and white bean soup](https://example.com/recipes/leek-and-bean-soup)")
+      markdown.should include("Pearl barley, root vegetables and shredded chicken in a clear broth.")
+      markdown.should include("45 min · Serves 4")
+    end
+  end
+
+  describe "a blog post with a long comment thread" do
+    let(:markdown) { extract("blog_post").markdown }
+
+    it "keeps the post" do
+      markdown.should include("The culprit turned out to be the flour.")
+    end
+
+    it "drops the comments and the box of links to older posts" do
+      ["8 comments", "Same thing happened to me", "Further reading", "Protein content"].each do |noise|
+        markdown.should_not include(noise)
+      end
+    end
+  end
+
   describe "a documentation page" do
     let(:markdown) { extract("docs").markdown }
 

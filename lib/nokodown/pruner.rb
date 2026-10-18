@@ -8,9 +8,13 @@ module Nokodown
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
 
-    def initialize(nodes, mode)
+    def initialize(nodes, mode, conditional: true)
       @nodes = nodes
       @mode = mode
+      @conditional = conditional
+      @conditional_seen = 0
+      @conditional_kept = 0
+      @conditional_removed_links = 0
     end
 
     def call
@@ -18,6 +22,18 @@ module Nokodown
         @mode == :article ? prune_article(root) : remove_link_clusters(root)
         remove_boilerplate_text(root)
       end
+      self
+    end
+
+    # Share of the text conditional cleaning was given that it kept.
+    def conditional_share
+      @conditional_seen.zero? ? 1.0 : @conditional_kept.fdiv(@conditional_seen)
+    end
+
+    # Share of the text conditional cleaning removed that was link text.
+    def removed_link_share
+      removed = @conditional_seen - @conditional_kept
+      removed.zero? ? 0.0 : @conditional_removed_links.fdiv(removed)
     end
 
     private
@@ -83,7 +99,11 @@ module Nokodown
       text_length = Dom.text(node).length
       return 0.0 if text_length.zero?
 
-      node.css("a[href]").sum { |link| Dom.text(link).length }.fdiv(text_length)
+      link_text_length(node).fdiv(text_length)
+    end
+
+    def link_text_length(node)
+      node.css("a[href]").sum { |link| Dom.text(link).length }
     end
 
     # Readability drops footers, asides and share widgets inside the article;
@@ -98,8 +118,20 @@ module Nokodown
       end
     end
 
-    # Innermost containers first, so an outer one is judged on what is left.
+    # Turned off, it still drops unlabeled navigation, as page pruning does.
     def clean_conditionally(root, content_length)
+      return remove_link_clusters(root) unless @conditional
+
+      text_before = Dom.text(root).length
+      links_before = link_text_length(root)
+      remove_suspicious_containers(root, content_length)
+      @conditional_seen += text_before
+      @conditional_kept += Dom.text(root).length
+      @conditional_removed_links += links_before - link_text_length(root)
+    end
+
+    # Innermost containers first, so an outer one is judged on what is left.
+    def remove_suspicious_containers(root, content_length)
       paragraph_keys = Dom.paragraph_keys(root)
       ["form, fieldset", "table", "ul", "div"].each do |selector|
         root.css(selector).reverse_each do |node|
