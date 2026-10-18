@@ -122,9 +122,9 @@ module Nokodown
     end
 
     def class_noise?(node)
-      return false if prose_part?(node)
+      return false if !@prose_blocks.empty? && prose_part?(node)
 
-      furniture_class?(node) && !card?(node)
+      furniture_class?(node) && (@card_bases.empty? || !card?(node))
     end
 
     def card?(node)
@@ -179,13 +179,19 @@ module Nokodown
     end
 
     def card_run?(classes, nodes, min_chars)
-      # Most class lists fail on size alone, before the slower checks below.
-      return false if nodes.size < MIN_CARD_RUN || nodes.sum { |node| @stats.chars(node) } < min_chars
+      # Most class lists fail on size or name alone, before the slower checks below.
+      return false if nodes.size < MIN_CARD_RUN || !(furniture_name?(classes) || nodes.any? { |node| node.key?("id") })
+      return false if nodes.sum { |node| @stats.chars(node) } < min_chars
 
       cards = nodes.select { |node| card_candidate?(node) }
       # Wrappers repeating their child's class would count its text twice.
       cards.reject! { |node| node.ancestors.any? { |ancestor| ancestor.element? && ancestor["class"] == classes } }
       cards.size >= MIN_CARD_RUN && cards.sum { |node| @stats.chars(node) } >= min_chars
+    end
+
+    def furniture_name?(classes)
+      signature = Dom.signature_of("#{classes} ")
+      @furniture[signature] || signature.match?(Patterns::HEADER) || signature.match?(Patterns::MENU)
     end
 
     # Menus repeat their items too, so a run named after a place is never
