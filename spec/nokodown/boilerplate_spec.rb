@@ -28,6 +28,10 @@ RSpec.describe Nokodown::Boilerplate do
       text.should include("7 kW unit")
     end
 
+    it "does not read ad into CSS module hashes" do
+      remaining('<table class="mdx-table_root__adKqa"><tr><td>Provisioner type</td></tr></table>').should == "Provisioner type"
+    end
+
     it "removes ad slots, including sized ones" do
       html = <<~HTML
         <p>Heat pumps move heat instead of making it.</p>
@@ -54,6 +58,15 @@ RSpec.describe Nokodown::Boilerplate do
       text.should include("Running cost is explained")
       text.should include("Noise is explained")
       text.should include("Grants is explained")
+    end
+
+    it "keeps the heading of a prose section named like a drawer" do
+      html = <<~HTML
+        #{article}
+        <div class="mntl-sc-block-accordion_drawer"><h2 class="mntl-sc-block-accordion_drawer__heading">Paying for it</h2>#{prose('Grants', 3)}</div>
+      HTML
+
+      remaining(html).should include("Paying for it")
     end
 
     it "still removes a table of contents, and prose in a sidebar or a newsletter drawer" do
@@ -84,6 +97,30 @@ RSpec.describe Nokodown::Boilerplate do
       text = remaining(html)
       text.should include("Heat pump story 0 headline")
       text.should include("Heat pump story 7 headline")
+    end
+
+    it "keeps cards that add a modifier to the run's classes" do
+      html = "<h1>Heat pumps</h1><div class=\"recirc-item recirc-item--lead\"><a href=\"/lead\">Lead heat pump story</a></div>" \
+             "#{cards('recirc-item', 7)}"
+
+      remaining(html).should include("Lead heat pump story")
+    end
+
+    it "removes a rail that shares the cards' class" do
+      rail = '<div class="recirc-module" id="right-rail-trending"><a href="/t">Trending elsewhere today</a></div>'
+      text = remaining("<h1>Heat pumps</h1>#{cards('recirc-module', 6)}#{rail}")
+
+      text.should include("Heat pump story 5 headline")
+      text.should_not include("Trending elsewhere")
+    end
+
+    it "removes cookie categories however many there are" do
+      categories = %w[Necessary Functional Analytics Advertising].map do |name|
+        "<div class=\"wt-cli-cookie-description\">#{name} cookies store how visitors use the site, only with their consent.</div>"
+      end
+      html = "<h1>Opening hours</h1><p>We are open Monday to Friday.</p><div>#{categories.join}</div>"
+
+      remaining(html).should_not include("cookies store")
     end
 
     it "removes a related rail beside an article" do

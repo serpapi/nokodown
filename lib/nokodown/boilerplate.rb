@@ -27,7 +27,9 @@ module Nokodown
       @shielded = shielded_keys
       # Card grids repeat the same class list hundreds of times.
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
+      @prose_blocks = Set.new
       @card_classes = card_classes
+      @card_bases = @card_classes.map { |classes| base_classes(classes) }
       walk(@body)
     end
 
@@ -120,7 +122,22 @@ module Nokodown
     end
 
     def class_noise?(node)
-      furniture_class?(node) && !@card_classes.include?(node["class"])
+      return false if prose_part?(node)
+
+      furniture_class?(node) && !card?(node)
+    end
+
+    def card?(node)
+      classes = base_classes(node["class"])
+      @card_bases.any? { |base| (base - classes).empty? } && card_candidate?(node)
+    end
+
+    def base_classes(classes)
+      classes.to_s.split.reject { |token| token.include?("--") }
+    end
+
+    def prose_part?(node)
+      node["class"].to_s.split.any? { |token| @prose_blocks.any? { |block| token.start_with?("#{block}_", "#{block}-") } }
     end
 
     def furniture_class?(node)
@@ -143,8 +160,10 @@ module Nokodown
     def prose_section?(node, signature)
       return false if @stats.text_chars(node) < 400 || @stats.link_density(node) >= 0.2
       return false if signature.match?(Patterns::PLACE) || signature.gsub(DRAWER, " ").match?(Patterns::NOISE)
+      return false if node.css("p").size < 2
 
-      node.css("p").size >= 2
+      @prose_blocks.merge(node["class"].to_s.split.select { |token| token.downcase.match?(Patterns::PAGE_FURNITURE) })
+      true
     end
 
     # A hub page often splits its content into modules named after their role
@@ -169,11 +188,13 @@ module Nokodown
       cards.size >= MIN_CARD_RUN && cards.sum { |node| @stats.chars(node) } >= min_chars
     end
 
-    # Menus repeat their items too, so a run named after a place is never content.
+    # Menus repeat their items too, so a run named after a place is never
+    # content, and neither is a run of cookie categories or dialogs.
     def card_candidate?(node)
       return false if @shielded.include?(Dom.key(node)) || !furniture_class?(node)
+      return false if Dom.signature(node).match?(Patterns::PLACE) || Dom.signature(node).match?(Patterns::OVERLAY)
 
-      !Dom.signature(node).match?(Patterns::PLACE) && !chrome_element?(node) && !chrome_role?(node)
+      !chrome_element?(node) && !chrome_role?(node)
     end
 
     # Per the HTML spec a header inside sectioning content belongs to that

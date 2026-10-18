@@ -29,6 +29,7 @@ module Nokodown
     KEY = "data-nokodown-key"
 
     UUID = /\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/.freeze
+    CSS_MODULE_HASH = /__(?=[\w-]{0,4}[A-Z\d])[\w-]{5}(?![\w-])/.freeze
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
@@ -114,6 +115,7 @@ module Nokodown
       value = "#{classes} #{id}"
       # Generated ids (Webflow "w-node-<uuid>") would otherwise read as words.
       value = value.gsub(UUID, " ") if value.match?(UUID)
+      value = value.gsub(CSS_MODULE_HASH, "") if value.include?("__")
       value = value.gsub(/([a-z\d])([A-Z])/, '\1-\2') if value.match?(/[a-z\d][A-Z]/)
       value.downcase
     end

@@ -53,6 +53,8 @@ module Nokodown
     # "skip-item"), but never after a place on the page.
     PLACE = /sidebar|rail|footer|nav|menu|masthead|breadcrumb|crumbs|pager|pagination|copyright|colophon|toolbar|top-?bar/.freeze
 
+    OVERLAY = /cookie|consent|gdpr|onetrust|didomi|cookiebot|usercentrics|modal|popup|pop-up|popover|dialog|flyout|off-?canvas|interstitial|snackbar|toast|tooltip/.freeze
+
     MENU = /#{WORD_START}(?:menu|menus|menu-?items?)#{WORD_END}/.freeze
 
     # Site headers only; "card-header" or "plan-header" hold content.
