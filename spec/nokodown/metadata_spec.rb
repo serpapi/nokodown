@@ -20,6 +20,38 @@ RSpec.describe Nokodown::Metadata do
     result[:page_type].should == :article
   end
 
+  it "reads a forum thread's opening post like an article but types the page as a forum" do
+    json = { "@type" => "DiscussionForumPosting", "headline" => "Starter smells like acetone", "author" => { "name" => "wren" } }
+    result = metadata(%(<title>Other</title><script type="application/ld+json">#{JSON.generate(json)}</script>))
+
+    result[:title].should == "Starter smells like acetone"
+    result[:byline].should == "wren"
+    result[:page_type].should == :forum
+  end
+
+  it "detects forums from nested JSON-LD, microdata or the forum software" do
+    nested = { "@type" => "WebPage", "mainEntity" => { "@type" => "DiscussionForumPosting", "headline" => "Thread" } }
+
+    metadata(%(<script type="application/ld+json">#{JSON.generate(nested)}</script>))[:page_type].should == :forum
+    metadata("", '<div itemscope itemtype="https://schema.org/DiscussionForumPosting"></div>')[:page_type].should == :forum
+    metadata('<meta name="generator" content="Discourse 3.4.0 - https://github.com/discourse/discourse">')[:page_type].should == :forum
+  end
+
+  it "keeps a news article whose reader comments are forum postings an article" do
+    json = { "@type" => "NewsArticle", "headline" => "Council votes", "comment" => [{ "@type" => "DiscussionForumPosting", "text" => "Shame" }] }
+    microdata = '<article itemscope itemtype="https://schema.org/NewsArticle"><div itemprop="comment" itemscope itemtype="https://schema.org/DiscussionForumPosting"></div></article>'
+
+    metadata(%(<script type="application/ld+json">#{JSON.generate(json)}</script>))[:page_type].should == :article
+    metadata('<meta property="og:type" content="article">', microdata)[:page_type].should == :article
+  end
+
+  it "detects Q&A pages" do
+    json = { "@type" => "QAPage", "mainEntity" => { "@type" => "Question", "name" => "Why is RAID not a backup?" } }
+
+    metadata(%(<script type="application/ld+json">#{JSON.generate(json)}</script>))[:page_type].should == :qa
+    metadata("", '<div itemscope itemtype="https://schema.org/QAPage"></div>')[:page_type].should == :qa
+  end
+
   it "ignores malformed JSON-LD" do
     metadata(%(<title>Plain title here</title><script type="application/ld+json">{oops</script>))[:title].should == "Plain title here"
   end

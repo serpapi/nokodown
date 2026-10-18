@@ -28,6 +28,11 @@ module Nokodown
     # cannot be hash keys. Elements get a numbered attribute to key on instead.
     KEY = "data-nokodown-key"
 
+    # On a forum, the replies sit in containers named like a comment section.
+    # ContentLocator marks them and everything inside them, so the mark
+    # survives the copy that article cleaning works on.
+    THREAD = "data-nokodown-thread"
+
     module_function
 
     def assign_keys(root)
@@ -37,6 +42,19 @@ module Nokodown
 
     def key(node)
       node[KEY]
+    end
+
+    def mark_as_thread(node)
+      node[THREAD] = "1"
+      node.css("*").each { |descendant| descendant[THREAD] = "1" }
+    end
+
+    def thread?(node)
+      !node[THREAD].nil?
+    end
+
+    def thread_post?(node)
+      thread?(node) && signature(node).match?(Patterns::SECONDARY)
     end
 
     # Keys of the <p>s and of the divs Readability would rewrite into <p>
