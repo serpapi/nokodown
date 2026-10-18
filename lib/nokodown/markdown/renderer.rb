@@ -166,8 +166,10 @@ module Nokodown
         items.reject!(&:empty?)
         return [] if items.empty?
 
+        nested_only = items.map { |blocks| blocks.size == 1 && bulleted_list?(blocks.first) }
         rendered = items.each_with_index.map do |blocks, index|
-          list_entry(start ? "#{start + index}. " : "- ", blocks)
+          previous = index.positive? && nested_only[index - 1]
+          list_entry(start ? "#{start + index}. " : "- ", blocks, nested_only[index] && !previous && !nested_only[index + 1])
         end
         loose = items.any? { |blocks| blocks.drop(1).any? { |block| block.kind != :list } }
         [Block.new(:list, rendered.join(loose ? "\n\n" : "\n"))]
@@ -177,7 +179,8 @@ module Nokodown
       # ● and ○ mean yes and no, or pros and cons with + and -; one glyph
       # throughout is the site's own bullet.
       def typed_bullet?(items)
-        items.filter_map { |blocks| leading_marker(blocks.first) }.uniq.size == 1
+        markers = items.filter_map { |blocks| leading_marker(blocks.first) }
+        markers.size > 1 && markers.uniq.size == 1
       end
 
       def leading_marker(block)
@@ -204,8 +207,8 @@ module Nokodown
       # marker ("- - a"), so the nested items stand in for it. An item with
       # more content stays one item, so product cards keep their boundaries,
       # and numbered lists keep their numbering.
-      def list_entry(marker, blocks)
-        return blocks.first.text if marker == "- " && blocks.size == 1 && bulleted_list?(blocks.first)
+      def list_entry(marker, blocks, hoist = false)
+        return blocks.first.text if hoist && marker == "- "
 
         indent_item(marker, join_item(blocks))
       end

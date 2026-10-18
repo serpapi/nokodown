@@ -38,7 +38,7 @@ RSpec.describe "Markdown conversion" do
     it "groups decimals, comma-separated indices, products and scripts followed by a letter" do
       html = "<p>10<sup>2.5</sup>, 10<sup>-0.5</sup>, O(n<sup>2.373</sup>), a<sub>i,j</sub>, Smith<sup>a,b</sup>, " \
              "e<sup>(x-1)(x+1)</sup>, e<sup>(n-1)</sup>, x<sub>i</sub>y<sub>i</sub></p>"
-      convert(html).should == "10^(2.5), 10^(-0.5), O(n^(2.373)), a_(i,j), Smith^(a,b), e^((x-1)(x+1)), e^(n-1), x_(i)y_i"
+      convert(html).should == "10^(2.5), 10^(-0.5), O(n^(2.373)), a_(i,j), Smith a,b, e^((x-1)(x+1)), e^(n-1), x_(i)y_i"
     end
 
     it "reads formatted scripts by their text" do
@@ -51,10 +51,32 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Smith a, b, studies 1–3, Feature NEW, Feature **NEW**\n\na Adjusted"
     end
 
+    it "writes footnote letters and badges after a word or a bracket as text, not as exponents" do
+      html = "<p>20.02 (6.16)<sup>b</sup>, Age (years)<sup>a</sup>, <a href='https://aur.example/p'>pacman-static</a><sup>AUR</sup>, Trade-In<sup>Δ</sup>, " \
+             "A<sup>H</sup>A, (x+1)<sup>n-1</sup></p>"
+      convert(html).should == "20.02 (6.16) b, Age (years) a, [pacman-static](https://aur.example/p) AUR, Trade-In Δ, A^(H)A, (x+1)^(n-1)"
+    end
+
+    it "groups nested scripts and escapes a subscript after emphasis" do
+      convert("<p>e<sup>-x<sup>2</sup></sup>, 2<sup>2<sup><i>n</i></sup></sup> + 1, x<sup>a<sub>i</sub></sup></p>").should ==
+        "e^(-x²), 2^(2^n) + 1, x^(a_i)"
+      convert("<p><i>x</i><sub><i>i</i></sub> + a<sub>n+1</sub></p>").should == "*x*\\_i + a_(n+1)"
+      convert("<p>^ <sup><i><b>a</b></i></sup> <sup><i><b>b</b></i></sup> Source</p>").should == "^ ***a*** ***b*** Source"
+    end
+
     it "writes raised cents after a price as decimals" do
       html = "<p>$549<sup>99</sup>, <span>$2,799</span><sup>00</sup>, <sup>$</sup>19<sup>95</sup>, the 10<sup>15</sup> scale, " \
              "€12,<sup>99</sup>, 549<sup>99</sup> €</p>"
       convert(html).should == "$549.99, $2,799.00, $19.95, the 10¹⁵ scale, €12,99, 549.99 €"
+    end
+
+    it "reads cents after European amounts, currency codes and spaced spans" do
+      html = "<p>1.299<sup>99</sup> €, € 1.299<sup>99</sup>, CHF 49<sup>90</sup>, <span>$</span>\n<span>549</span>\n<sup>99</sup></p>"
+      convert(html).should == "1.299,99 €, € 1.299,99, CHF 49.90, $ 549 .99"
+    end
+
+    it "keeps Spanish and Portuguese ordinals as text" do
+      convert("<p>1<sup>a</sup> edición, 2<sup>do</sup> lugar, 1<sup>ª</sup> vez</p>").should == "1a edición, 2do lugar, 1ª vez"
     end
 
     it "keeps French and wrapped ordinals and titles as text and uses the characters for raised o, degrees and TM" do
@@ -293,6 +315,12 @@ RSpec.describe "Markdown conversion" do
     it "drops bullets and repeated numbers typed into items" do
       html = "<ul><li>Zero</li><li>• One</li><li>•Two</li></ul><ol><li><span>1.</span> First</li><li>2. Second</li></ol>"
       convert(html).should == "- Zero\n- One\n- Two\n\n1. First\n2. Second"
+    end
+
+    it "keeps a typed dash that only one item has and separate groups of nested lists" do
+      convert("<ul><li>–5%</li><li>– 3%</li></ul>").should == "- –5%\n- – 3%"
+      convert("<ul><li><ul><li>Camera</li><li>Strap</li></ul></li><li><ul><li>Lens</li><li>Cap</li></ul></li></ul>").should ==
+        "- - Camera\n  - Strap\n- - Lens\n  - Cap"
     end
 
     it "keeps glyphs that differ between items and minus signs" do
