@@ -31,6 +31,7 @@ module Nokodown
       \Asteamcommunity\.com/linkfilter/?\z
     }xi.freeze
     DESTINATION_PARAM = /\A(?:url|u|murl|q)\z/.freeze
+    MAX_REDIRECTS = 3
     # Image CDN size, crop and format options; the default rendition shows the
     # same picture.
     PRESENTATION_PARAM = /\A(?:fit|crop|auto|dpr|fm|fmt|resize|resMode|op_usm|ixlib|impolicy)\z/.freeze
@@ -52,6 +53,8 @@ module Nokodown
     }ix.freeze
     EMBEDDED_URL = %r{/(https?(?::|%3A)(?:/|%2F){2}.+)\z}i.freeze
     CDN_CGI_IMAGE = %r{\A/cdn-cgi/image/[^/]+(/.+)\z}.freeze
+    PRIVATE_BUCKET = /\Abucketeer-/i.freeze
+    WEB_URL = %r{\Ahttps?://}i.freeze
     UNSAFE = %r{[^A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]}.freeze
 
     def initialize(url, base_href = nil)
@@ -109,9 +112,9 @@ module Nokodown
       string.gsub(UNSAFE) { |char| char.bytes.map { |byte| format("%%%02X", byte) }.join }
     end
 
-    def clean_link(uri)
-      target = redirect_target(uri)
-      return clean_link(target) if target
+    def clean_link(uri, redirects = 0)
+      target = redirect_target(uri) if redirects < MAX_REDIRECTS
+      return clean_link(target, redirects + 1) if target
       return clean_amazon(uri) if uri.host.to_s.match?(AMAZON)
 
       strip_tracking(uri)
@@ -144,7 +147,13 @@ module Nokodown
       return uri if signed_image?(uri)
 
       embedded = embedded_image(uri)
-      embedded ? original_image(uri, embedded) : strip_presentation(uri)
+      return original_image(uri, embedded) if embedded
+
+      proxy?(uri) ? strip_tracking(uri) : strip_presentation(uri)
+    end
+
+    def proxy?(uri)
+      uri.query.to_s.split("&").any? { |pair| decode(param(pair).last).to_s.match?(WEB_URL) }
     end
 
     # A proxy needs its options, so it stays whole when its original is unusable
@@ -152,7 +161,7 @@ module Nokodown
     # proxies can point at each other.
     def original_image(proxy, embedded)
       original = join(proxy, embedded) unless embedded.empty?
-      return strip_tracking(proxy) unless web?(original) && !same_resource?(original, proxy)
+      return strip_tracking(proxy) unless web?(original) && !same_resource?(original, proxy) && !original.host.match?(PRIVATE_BUCKET)
 
       signed_image?(original) ? original : strip_presentation(original)
     end
@@ -183,7 +192,8 @@ module Nokodown
       return param_values(uri, /\Aurl\z/).first.to_s if path.match?(NEXT_IMAGE)
       return fetched_image(uri) if "#{uri.host}#{path}".match?(FETCH_PROXY) && path.match?(EMBEDDED_URL)
 
-      path[CDN_CGI_IMAGE, 1]
+      original = path[CDN_CGI_IMAGE, 1]
+      original && uri.query ? "#{original}?#{uri.query}" : original
     end
 
     # An encoded original ends where the proxy's query starts. A plain one was

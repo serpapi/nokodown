@@ -90,6 +90,12 @@ RSpec.describe "Markdown conversion" do
       convert(%(<p><a href="#{href}">Doc</a></p>)).should == "[Doc](https://example.org/doc)"
     end
 
+    it "unwraps at most three nested redirects" do
+      href = "https://example.org/doc"
+      4.times { href = "https://www.google.com/url?q=#{URI.encode_www_form_component(href)}" }
+      convert(%(<p><a href="#{href}">Doc</a></p>)).should == "[Doc](https://www.google.com/url?q=https%3A%2F%2Fexample.org%2Fdoc)"
+    end
+
     it "keeps redirects whose destination is not valid UTF-8" do
       latin1 = "https://www.google.com/url?q=https%3A%2F%2Fexample.org%2Fcaf%E9&sa=D"
       truncated = "https://l.facebook.com/l.php?u=https%3A%2F%2Fexample.org%2Fcaf%E2%80"
@@ -189,6 +195,16 @@ RSpec.describe "Markdown conversion" do
     it "keeps the query of a fetched original that is not encoded" do
       src = "https://res.cloudinary.com/demo/image/fetch/w_800/https://cdn.example.org/render.php?id=7"
       convert(%(<img src="#{src}" alt="Chart">)).should == "![Chart](https://cdn.example.org/render.php?id=7)"
+    end
+
+    it "keeps the query of a relative Cloudflare original" do
+      convert('<img src="/cdn-cgi/image/width=800/render.php?id=7" alt="Chart">').should == "![Chart](https://example.com/render.php?id=7)"
+    end
+
+    it "keeps the options of unknown proxies and of originals in private buckets" do
+      resize = "https://img.example.net/imaginary/resize?width=400&height=200&type=webp&url=https://example.org/chart.png"
+      bucket = "https://substackcdn.com/image/fetch/w_36/https%3A%2F%2Fbucketeer-e05b.s3.amazonaws.com%2Fpublic%2Fimages%2Fc3.jpeg"
+      convert(%(<p><img src="#{resize}" alt="Chart"> <img src="#{bucket}" alt="Author"></p>)).should == "![Chart](#{resize}) ![Author](#{bucket})"
     end
 
     it "keeps screenshot and archive URLs that embed a page URL" do
