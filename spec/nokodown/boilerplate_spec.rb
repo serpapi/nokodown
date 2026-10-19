@@ -84,6 +84,36 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "noise names" do
+    it "removes a related block even when its classes also name content" do
+      html = "<article>#{prose('Sizing', 8)}</article><div class=\"related-posts entry-related\">#{prose('Another heat pump story', 2)}</div>"
+
+      remaining(html).should_not include("Another heat pump story")
+    end
+
+    it "removes forum signatures and the author panel beside each post, not the post" do
+      html = <<~HTML
+        <div class="message">
+          <div class="message-user"><h4>Ana</h4><dl class="pairs"><dt>Joined</dt><dd>Jan 2020</dd><dt>Messages</dt><dd>120</dd></dl></div>
+          <div class="message-userContent">#{prose('Bleeding the radiators', 2)}</div>
+          <aside class="message-signature">My rig: a 7 kW air source pump and twelve radiators.</aside>
+        </div>
+      HTML
+
+      text = remaining(html)
+      text.should include("Bleeding the radiators is explained")
+      text.should_not include("Joined")
+      text.should_not include("My rig")
+    end
+
+    it "keeps the largest guessed block when removing furniture would leave nothing" do
+      products = Array.new(6) { |index| "<a href=\"/mower-#{index}\">Robotic mower KR#{index}00 for lawns up to #{index + 1} acres</a>" }
+      html = "<header><a href='/'>Home</a></header><section class=\"related-product\">#{products.join}</section><footer>Contact us</footer>"
+
+      remaining(html).should include("Robotic mower KR500")
+    end
+  end
+
   describe "repeated modules" do
     def cards(classes, count)
       Array.new(count) do |index|

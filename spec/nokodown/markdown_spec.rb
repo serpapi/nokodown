@@ -647,6 +647,27 @@ RSpec.describe "Markdown conversion" do
       convert("<p>Area #{math}</p>").should == "Area $x^2$"
     end
 
+    it "drops a quote that repeats an earlier post" do
+      post = "The stove boils a litre in three minutes on a full canister, a bit slower in the cold."
+      convert("<p>#{post}</p><blockquote><p>#{post}</p></blockquote><p>Same here.</p>").should == "#{post}\n\nSame here."
+    end
+
+    it "keeps a quote of text that is not on the page" do
+      quote = "The tide is the most predictable renewable resource we have, more than wind or sun."
+      convert("<p>Engineers agree.</p><blockquote><p>#{quote}</p></blockquote>").should == "Engineers agree.\n\n> #{quote}"
+    end
+
+    it "drops a section rendered a second time, but keeps a single repeated paragraph" do
+      first = "The stove boils a litre in three minutes on a full canister, and a little slower in cold mountain weather."
+      second = "It weighs 85 grams and folds into its own pot, so it takes almost no room at all in a pack or a bike bag."
+      convert("<div><p>#{first}</p><p>#{second}</p></div><div><p>#{first}</p><p>#{second}</p></div>").should == "#{first}\n\n#{second}"
+      convert("<p>#{first}</p><p>Day two.</p><p>#{first}</p>").should == "#{first}\n\nDay two.\n\n#{first}"
+    end
+
+    it "drops the placeholder a script-loaded widget leaves, and its heading" do
+      convert("<p>Fits a 1 litre pot.</p><h2>Questions &amp; Answers</h2><div>Loading Questions...</div>").should == "Fits a 1 litre pot."
+    end
+
     it "drops a trailing heading left without content" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
     end

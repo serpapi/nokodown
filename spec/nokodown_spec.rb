@@ -243,6 +243,13 @@ RSpec.describe Nokodown do
       convert(html).should == "Do you ship abroad?\n\nYes, to most of Europe."
     end
 
+    it "keeps a closed accordion panel hidden by style that its header controls" do
+      html = '<h3 id="ship-q"><button aria-controls="ship-a" aria-expanded="false">Do you ship abroad?</button></h3>' \
+             '<div id="ship-a" role="region" aria-labelledby="ship-q" style="display:none"><p>Yes, to most of Europe.</p></div>'
+
+      convert(html).should == "### Do you ship abroad?\n\nYes, to most of Europe."
+    end
+
     it "keeps a closed tab panel labelled by its tab" do
       convert('<div role="tabpanel" aria-labelledby="tab-2" aria-hidden="true"><p>Weighs 85 g.</p></div>').should == "Weighs 85 g."
     end
@@ -269,6 +276,27 @@ RSpec.describe Nokodown do
       markdown = article("<div role='tablist'><h2>Can it burn white gas?</h2><p>#{answer}</p></div>")
 
       markdown.should include("## Can it burn white gas?\n\nNo. It only takes")
+    end
+  end
+
+  describe "hidden content" do
+    it "places React streamed segments where their templates are, without the loading fallback" do
+      html = '<div><h2>Index funds</h2><!--$?--><template id="B:0"></template><div>Loading paragraph...</div><!--/$-->' \
+             '<p>Fees matter.</p></div><div hidden id="S:0"><p>An index fund tracks a market index.</p></div>'
+
+      convert(html).should == "## Index funds\n\nAn index fund tracks a market index.\n\nFees matter."
+    end
+
+    it "drops elements Webflow hides when their condition fails" do
+      convert('<p>Open daily.</p><div class="w-condition-invisible"><p>Closed for the holidays.</p></div>').should == "Open daily."
+    end
+
+    it "drops a large hidden block beside the visible title, but not an anti-flicker wrapper around the page" do
+      article = "<h1>Trail stoves</h1><p>#{'A trail stove boils a litre in three minutes. ' * 14}</p>"
+      copy = "<pre hidden>#{'# Trail stoves raw markdown copy of the article. ' * 8}</pre>"
+
+      convert(article + copy).should_not include("raw markdown copy")
+      convert("<div style='visibility:hidden'>#{article}</div>").should include("boils a litre")
     end
   end
 
@@ -319,6 +347,33 @@ RSpec.describe Nokodown do
 
       markdown.should include("modest maintenance costs.")
       markdown.should_not include("copy of the intro")
+    end
+  end
+
+  describe "articles split into blocks" do
+    def block(heading, topic, count)
+      paragraphs = Array.new(count) { |index| "<p>#{topic} matters for a working parent, and part #{index + 1} explains why, with an example or two.</p>" }
+      "<div class='block html'><div class='block-content'><div class='text-block'><div class='html-content'>#{heading}#{paragraphs.join}</div></div></div></div>"
+    end
+
+    it "keeps every block of the body, not only the longest" do
+      body = block("", "Balance", 10) + "<div class='block image'><img src='/desk.jpg' alt=''></div>" +
+             block("<h2>Release perfection</h2>", "Letting go", 4) + block("<h2>Stop multitasking</h2>", "Focus", 4)
+      html = "<head><title>Balance</title><meta property='og:type' content='article'></head>" \
+             "<body><main><article><h1>Balance</h1><div class='row'><div class='col'>#{body}</div></div></article></main></body>"
+
+      markdown = Nokodown.to_markdown(html)
+      markdown.should include("Balance matters for a working parent")
+      markdown.should include("## Release perfection")
+      markdown.should include("Focus matters for a working parent")
+    end
+
+    it "drops a disclaimer at the end of the body" do
+      paragraphs = Array.new(5) { |index| "<p>Index funds track a market index at low cost, and part #{index + 1} explains how.</p>" }
+      disclaimer = "<div class='cmp-richtext--disclaimer'><p>Rates are subject to change and are not an offer of credit.</p></div>"
+      html = "<title>Index funds</title><body><article><h1>Index funds</h1>#{paragraphs.join}#{disclaimer}</article></body>"
+
+      Nokodown.to_markdown(html).should_not include("subject to change")
     end
   end
 
