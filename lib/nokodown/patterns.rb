@@ -114,7 +114,7 @@ module Nokodown
         skip\sto\s(?:main\s)?(?:content|navigation)|jump\sto\s(?:main\s)?content|
         share(?:\sthis)?(?:\s(?:article|story|post|page))?|share\son\s\w+|tweet(?:\sthis)?|pin\sit|
         email(?:\sthis)?|print(?:\sthis)?(?:\s(?:article|page))?|
-        loading|back\sto\stop|scroll\sto\stop|copy\slink|link\scopied|copied|
+        loading|loading(?:\s[\p{L}]+){1,2}(?=\s*(?:…|\.{3}))|back\sto\stop|scroll\sto\stop|copy\slink|link\scopied|copied|
         (?:read|view|see|show|load)\s(?:more|less)|continue\sreading|click\sto\sexpand|
         (?:hide|show|toggle)\scaption|enlarge\sthis\simage|
         (?:image|photo|picture|slide)\s\d+\s(?:of|\/)\s\d+|\d*\s?comments?|
