@@ -59,14 +59,18 @@ with `main_content: false`, `:none` for a document without a body.
   tables of contents, found through HTML semantics (`nav`, page-level `header`
   and `footer`, ARIA roles, schema.org types) and class/id names.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars, modals,
-  chat widgets, "related", "recommended" and "most popular" boxes, and, next
-  to an article, its comment thread.
+  chat widgets, "related", "recommended" and "most popular" boxes, legal
+  disclaimers and disclosures, and, next to an article, its comment thread.
+- On forums, the member panel and signature repeated beside every post, and
+  quoted replies that repeat a post already in the output.
 - On product pages, customer reviews and Q&A widgets, with their review
   summaries and rating histograms. An inline rating badge ("212 reviews" next
   to the price), testimonials and editorial reviews stay.
 - Invisible elements (`hidden`, `aria-hidden`, inline `display: none`,
   screen-reader-only and other hiding classes), keeping collapsed accordions,
-  tab panels and FAQ answers.
+  tab panels and FAQ answers. Content that React streams into hidden
+  containers at the end of the page is put back where the page shows it.
+- Sections rendered twice, such as a desktop and a mobile copy.
 - Tracking pixels, spacers, icons, placeholders, README badges, click-tracking
   URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,
   "Read more" links, code line numbers, and repeated responsive copies of the
