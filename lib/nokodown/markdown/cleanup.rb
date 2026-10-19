@@ -22,7 +22,7 @@ module Nokodown
         blocks = blocks.reject { |block| noise?(block) }
         blocks = dedupe(blocks)
         blocks = drop_repeated_runs(blocks)
-        blocks = drop_repeated_quotes(blocks) if blocks.any? { |block| block.kind == :quote }
+        blocks = drop_repeated_quotes(blocks)
         blocks = trim_rules(blocks)
         blocks = drop_empty_sections(blocks)
         images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
@@ -51,6 +51,8 @@ module Nokodown
       def drop_repeated_runs(blocks)
         seen = Set.new
         repeated = blocks.map { |block| repeatable?(block) && !seen.add?(block.text) }
+        return blocks unless repeated.include?(true)
+
         runs = blocks.each_index.chunk_while { |a, b| repeated[a] && repeated[b] }
         dropped = runs.select { |run| run.size >= REPEATED_RUN_MIN }.flatten.to_set
         blocks.reject.with_index { |_, index| dropped.include?(index) }
@@ -61,18 +63,21 @@ module Nokodown
       end
 
       def drop_repeated_quotes(blocks)
+        last_quote = blocks.rindex { |block| block.kind == :quote }
+        return blocks unless last_quote
+
         seen = Set.new
-        blocks.reject do |block|
+        checked = blocks.first(last_quote + 1).reject do |block|
           grams = word_grams(block.text)
           repeated = block.kind == :quote && !grams.empty? && grams.count { |gram| seen.include?(gram) } >= grams.size * REPEATED_QUOTE_SHARE
           seen.merge(grams)
           repeated
         end
+        checked + blocks.drop(last_quote + 1)
       end
 
       def word_grams(text)
-        words = Text.plain(text).downcase.scan(/[[:word:]]+/)
-        (0..words.size - QUOTE_GRAM).map { |index| words[index, QUOTE_GRAM].join(" ") }
+        Text.plain(text).downcase.scan(/[[:word:]]+/).each_cons(QUOTE_GRAM).map(&:hash)
       end
 
       def same_section(blocks)
