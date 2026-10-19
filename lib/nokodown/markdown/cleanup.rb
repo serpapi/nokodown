@@ -10,6 +10,8 @@ module Nokodown
       IMAGE_ONLY = /\A!\[([^\]]*)\]\([^)]*\)\z/.freeze
       LINKED_HEADING = /\A#+ \[.*\]\(.*\)\z/.freeze
       TITLE_LIST_MIN = 3
+      QUOTE_GRAM = 6
+      REPEATED_QUOTE_SHARE = 0.5
 
       module_function
 
@@ -17,6 +19,7 @@ module Nokodown
       def call(blocks, images = {})
         blocks = blocks.reject { |block| noise?(block) }
         blocks = dedupe(blocks)
+        blocks = drop_repeated_quotes(blocks) if blocks.any? { |block| block.kind == :quote }
         blocks = trim_rules(blocks)
         blocks = drop_empty_sections(blocks)
         images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
@@ -40,6 +43,21 @@ module Nokodown
           window = block.text.match?(IMAGE_ONLY) ? same_section(kept.last(DEDUPE_WINDOW)) : kept.last(1)
           kept << block unless window.any? { |previous| identity(previous) == identity(block) }
         end
+      end
+
+      def drop_repeated_quotes(blocks)
+        seen = Set.new
+        blocks.reject do |block|
+          grams = word_grams(block.text)
+          repeated = block.kind == :quote && !grams.empty? && grams.count { |gram| seen.include?(gram) } >= grams.size * REPEATED_QUOTE_SHARE
+          seen.merge(grams)
+          repeated
+        end
+      end
+
+      def word_grams(text)
+        words = Text.plain(text).downcase.scan(/[[:word:]]+/)
+        (0..words.size - QUOTE_GRAM).map { |index| words[index, QUOTE_GRAM].join(" ") }
       end
 
       def same_section(blocks)
