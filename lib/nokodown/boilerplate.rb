@@ -16,6 +16,7 @@ module Nokodown
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     MIN_CARD_RUN = 3
+    MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
 
     def initialize(body)
@@ -31,7 +32,10 @@ module Nokodown
       @prose_blocks = Set.new
       @card_classes = card_classes
       @card_bases = @card_classes.map { |classes| base_classes(classes) }
-      walk(@body)
+      removals = []
+      walk(@body, removals)
+      removals.delete(content_guess(removals)) if almost_empty_without?(removals)
+      removals.each { |node, _| node.remove }
     end
 
     private
@@ -44,29 +48,38 @@ module Nokodown
     end
 
     # Code is never furniture, whatever classes its highlighter gives tokens.
-    def walk(node)
+    def walk(node, removals)
       node.element_children.each do |child|
         next if Dom::CODE.include?(child.name)
 
-        if remove?(child)
-          child.remove
-        else
-          walk(child)
-        end
+        kind = removal(child)
+        kind ? removals << [child, kind] : walk(child, removals)
       end
+    end
+
+    def almost_empty_without?(removals)
+      @stats.chars(@body) - removals.sum { |node, _| @stats.chars(node) } < MIN_LEFT
+    end
+
+    def content_guess(removals)
+      guess = removals.select { |_, kind| kind == :guess }.max_by { |node, _| @stats.chars(node) }
+      return unless guess && @stats.chars(guess.first) >= MIN_LEFT
+
+      signature = Dom.signature(guess.first)
+      guess unless signature.match?(Patterns::PLACE) || signature.match?(Patterns::OVERLAY)
     end
 
     # Semantic chrome (nav, a page-level footer) goes even when it outweighs
     # the content, as legal footnotes often do; class-name guesses do not.
-    def remove?(node)
-      return false if @shielded.include?(Dom.key(node))
+    def removal(node)
+      return if @shielded.include?(Dom.key(node))
       # Side notes inside an article are content whatever their class says.
-      return false if node.name == "aside" && !aside_noise?(node)
-      return true if chrome_element?(node) || chrome_role?(node)
-      return false if dominant?(node)
-      return false unless advertising?(node) || chrome_label?(node) || class_noise?(node)
+      return if node.name == "aside" && !aside_noise?(node)
+      return :chrome if chrome_element?(node) || chrome_role?(node)
+      return if dominant?(node)
+      return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
 
-      !inside_sentence?(node)
+      :guess unless inside_sentence?(node)
     end
 
     # A link or span in the middle of running text is part of that text,
