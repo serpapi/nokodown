@@ -42,6 +42,7 @@ module Nokodown
     SECONDARY = /
       comment(?!s?[-_]?(?:open|closed|enabled|disabled))|disqus|#{WORD_START}(?:respond|replies|reply)#{WORD_END}|
       popular|trending|most-?read|most-?viewed|author-?bio|about-?the-?author|#{WORD_START}rss#{WORD_END}|
+      #{WORD_START}(?<!category-|tag-)(?:disclaimers?|disclosures)#{WORD_END}|
       (?<![\w-])(?:post-|entry-|article-)?tags?(?:-?(?:cloud|list|links))?(?![\w-])
     /x.freeze
 
