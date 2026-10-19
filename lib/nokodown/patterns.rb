@@ -32,6 +32,7 @@ module Nokodown
       popup|pop-up|#{WORD_START}modal#{WORD_END}|interstitial|offcanvas|off-canvas|flyout|snackbar|tooltip|popover|
       #{WORD_START}toast#{WORD_END}|#{WORD_START}drawer#{WORD_END}|
       editsection|#{WORD_START}feedback#{WORD_END}|was-?this-?helpful|intercom|livechat|chat-?widget|
+      #{WORD_START}signature(?![\w-])|
       related|recommend|recirc|read-?next|more-?stories|you-?may-?like|also-?like|
       #{WORD_START}(?:search-?form|search-?box|search-?bar)#{WORD_END}
     /x.freeze
