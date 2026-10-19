@@ -11,6 +11,8 @@ module Nokodown
       LINKED_HEADING = /\A#+ \[.*\]\(.*\)\z/.freeze
       TITLE_LIST_MIN = 3
       QUOTE_GRAM = 6
+      REPEATED_BLOCK_MIN = 100
+      REPEATED_RUN_MIN = 2
       REPEATED_QUOTE_SHARE = 0.5
 
       module_function
@@ -19,6 +21,7 @@ module Nokodown
       def call(blocks, images = {})
         blocks = blocks.reject { |block| noise?(block) }
         blocks = dedupe(blocks)
+        blocks = drop_repeated_runs(blocks)
         blocks = drop_repeated_quotes(blocks) if blocks.any? { |block| block.kind == :quote }
         blocks = trim_rules(blocks)
         blocks = drop_empty_sections(blocks)
@@ -43,6 +46,18 @@ module Nokodown
           window = block.text.match?(IMAGE_ONLY) ? same_section(kept.last(DEDUPE_WINDOW)) : kept.last(1)
           kept << block unless window.any? { |previous| identity(previous) == identity(block) }
         end
+      end
+
+      def drop_repeated_runs(blocks)
+        seen = Set.new
+        repeated = blocks.map { |block| repeatable?(block) && !seen.add?(block.text) }
+        runs = blocks.each_index.chunk_while { |a, b| repeated[a] && repeated[b] }
+        dropped = runs.select { |run| run.size >= REPEATED_RUN_MIN }.flatten.to_set
+        blocks.reject.with_index { |_, index| dropped.include?(index) }
+      end
+
+      def repeatable?(block)
+        block.text.length >= REPEATED_BLOCK_MIN && block.kind != :heading && block.kind != :code
       end
 
       def drop_repeated_quotes(blocks)
