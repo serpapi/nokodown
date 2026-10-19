@@ -179,10 +179,14 @@ module Nokodown
         next unless hidden?(node)
         # A hidden wrapper around most of the page is an anti-flicker snippet
         # or an open modal in the snapshot, not something readers cannot see.
-        next if total > 500 && Dom.char_count(node.content) > total * 0.3
+        next if total > 500 && Dom.char_count(node.content) > total * 0.3 && page_like?(node)
 
         node.remove
       end
+    end
+
+    def page_like?(node)
+      node.css("h1").size == @body.css("h1").size
     end
 
     def hidden?(node)
