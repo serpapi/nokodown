@@ -199,7 +199,11 @@ module Nokodown
     end
 
     def disclosure?(node)
-      node["role"] == "tabpanel" || Dom.signature(node).match?(Patterns::DISCLOSURE)
+      node["role"] == "tabpanel" || Dom.signature(node).match?(Patterns::DISCLOSURE) || accordion_panel?(node)
+    end
+
+    def accordion_panel?(node)
+      @panel_ids.include?(node["id"]) && (node.key?("aria-labelledby") || node["role"] == "region")
     end
 
     # Accordions and tabs mark closed panels aria-hidden, but icons and the
