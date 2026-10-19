@@ -43,6 +43,7 @@ module Nokodown
     end
 
     def call
+      place_streamed_segments
       @body.xpath(".//comment()").each(&:remove)
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
@@ -56,6 +57,28 @@ module Nokodown
     end
 
     private
+
+    def place_streamed_segments
+      @body.css("div[hidden][id^='S:']").each do |segment|
+        number = segment["id"].delete_prefix("S:")
+        slot = @body.at_css("template[id='B:#{number}'], template[id='P:#{number}']")
+        next unless slot
+
+        remove_fallback(slot) if slot["id"].start_with?("B:")
+        slot.replace(segment.children)
+        segment.remove
+      end
+    end
+
+    def remove_fallback(slot)
+      fallback = []
+      node = slot.next_sibling
+      until node.nil? || (node.comment? && node.content == "/$")
+        fallback << node
+        node = node.next_sibling
+      end
+      fallback.each(&:remove) if node
+    end
 
     # Lexbor keeps <noscript> content as text. Lazy loaders put the real <img>
     # there, and some apps (Discourse) put the whole page there for crawlers.
