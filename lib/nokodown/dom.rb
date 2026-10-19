@@ -112,7 +112,10 @@ module Nokodown
       id = node["id"]
       return "" if classes.nil? && id.nil?
 
-      value = "#{classes} #{id}"
+      signature_of("#{classes} #{id}")
+    end
+
+    def signature_of(value)
       # Generated ids (Webflow "w-node-<uuid>") would otherwise read as words.
       value = value.gsub(UUID, " ") if value.match?(UUID)
       value = value.gsub(CSS_MODULE_HASH, "") if value.include?("__")
