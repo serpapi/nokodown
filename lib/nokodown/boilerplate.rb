@@ -14,6 +14,7 @@ module Nokodown
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
+    TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     MIN_CARD_RUN = 3
     CARD_RUN_SHARE = 0.2
 
@@ -149,6 +150,7 @@ module Nokodown
       return @stats.link_density(node) > 0.5 if !chrome && signature.match?(Patterns::MENU)
       return false unless chrome
       return false if prose_section?(node, signature)
+      return true if signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE)
 
       !(signature.match?(Patterns::POSITIVE) && @stats.text_chars(node) >= 200)
     end
