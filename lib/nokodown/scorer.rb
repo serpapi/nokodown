@@ -9,6 +9,8 @@ module Nokodown
 
     SCORED = Set.new(%w[p td pre section h2 h3 h4 h5 h6]).freeze
     PARAGRAPH_MIN = 25
+    SECTIONS_SHARE = 0.75
+    SECTION_LINK_DENSITY = 0.25
     TOP_CANDIDATES = 5
     COMMAS = /[,\u060C\uFE50\uFE10\uFE11\u2E41\u2E34\u2E32\uFF0C]/.freeze
 
@@ -211,9 +213,27 @@ module Nokodown
 
       top_score = score(top) || 0.0
       threshold = [10, top_score * 0.2].max
-      top.parent.element_children.select do |sibling|
-        sibling == top || related_sibling?(sibling, top, top_score, threshold)
+      siblings = top.parent.element_children.to_a
+      merged = siblings.select { |sibling| sibling == top || related_sibling?(sibling, top, top_score, threshold) }
+      sections = siblings.select { |sibling| !merged.include?(sibling) && section?(sibling, top, threshold) }
+      return merged if sections.sum { |section| @stats.text_chars(section) } < @stats.text_chars(top) * SECTIONS_SHARE
+
+      siblings.select { |sibling| merged.include?(sibling) || sections.include?(sibling) }
+    end
+
+    def section?(sibling, top, threshold)
+      return false if @stats.link_density(sibling) >= SECTION_LINK_DENSITY
+
+      (!top["class"].to_s.empty? && sibling["class"] == top["class"]) || best_score_within(sibling) >= threshold
+    end
+
+    def best_score_within(node)
+      best = -Float::INFINITY
+      node.traverse do |descendant|
+        value = descendant.element? && score(descendant)
+        best = value if value && value > best
       end
+      best
     end
 
     def related_sibling?(sibling, top, top_score, threshold)
