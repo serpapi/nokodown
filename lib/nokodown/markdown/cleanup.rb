@@ -14,6 +14,9 @@ module Nokodown
       REPEATED_BLOCK_MIN = 100
       REPEATED_RUN_MIN = 2
       REPEATED_QUOTE_SHARE = 0.5
+      QUOTE_OPENING = 12
+      # Not before a lowercase word or a number, as after "e.g." or "v.".
+      SENTENCE_END = /[.!?…]+["'”’)\]*_]*(?=\s+[^\p{Ll}\p{N}]|\s*\z)/.freeze
 
       module_function
 
@@ -22,7 +25,7 @@ module Nokodown
         blocks = blocks.reject { |block| noise?(block) }
         blocks = dedupe(blocks)
         blocks = drop_repeated_runs(blocks)
-        blocks = drop_repeated_quotes(blocks)
+        blocks = shorten_repeated_quotes(blocks)
         blocks = trim_rules(blocks)
         blocks = drop_empty_sections(blocks)
         images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
@@ -62,22 +65,85 @@ module Nokodown
         block.text.length >= REPEATED_BLOCK_MIN && block.kind != :heading && block.kind != :code
       end
 
-      def drop_repeated_quotes(blocks)
+      # A reply that quotes a post shown earlier keeps the quote's opening, so
+      # the reader still sees which point it answers. Only posts count as the
+      # source: a quote like an earlier quote is the page's own repetition.
+      def shorten_repeated_quotes(blocks)
         last_quote = blocks.rindex { |block| block.kind == :quote }
         return blocks unless last_quote
 
         seen = Set.new
-        checked = blocks.first(last_quote + 1).reject do |block|
+        checked = blocks.first(last_quote + 1).map do |block|
           grams = word_grams(block.text)
-          repeated = block.kind == :quote && !grams.empty? && grams.count { |gram| seen.include?(gram) } >= grams.size * REPEATED_QUOTE_SHARE
+          next(repeated?(grams, seen) ? quote_opening(block) : block) if block.kind == :quote
+
           seen.merge(grams)
-          repeated
+          block
         end
         checked + blocks.drop(last_quote + 1)
       end
 
+      def repeated?(grams, seen)
+        !grams.empty? && grams.count { |gram| seen.include?(gram) } >= grams.size * REPEATED_QUOTE_SHARE
+      end
+
+      # A quote with fewer than QUOTE_OPENING words beyond its opening is cheap
+      # context and stays whole. The opening drops links and images: the post
+      # above has them.
+      def quote_opening(block)
+        lines = block.text.split("\n").map { |line| line.sub(/\A> ?/, "") }
+        own = lines.reject { |line| line.start_with?(">") }.take_while { |line| !line.start_with?("```", "~~~") }
+        opening = squeeze_blank(opening_lines(own.map { |line| Text.unlink(line).strip }))
+        return block if opening.empty? || words(block.text).size - words(opening.join(" ")).size < QUOTE_OPENING
+
+        opening[-1] += " …"
+        Block.new(:quote, opening.map { |line| line.empty? ? ">" : "> #{line}" }.join("\n"))
+      end
+
+      # The quoter's own lines up to the sentence that reaches QUOTE_OPENING
+      # words, or to the end of a paragraph that brings it to half of that.
+      # Lead-in lines ("Sam said:") do not count.
+      def opening_lines(lines)
+        count = 0
+        lines.each_with_object([]) do |line, opening|
+          sentence = line.match?(SENTENCE_END)
+          next opening << line if line.end_with?(":") && !sentence
+
+          size = words(line).size
+          break opening << sentence_head(line, QUOTE_OPENING - count) if count + size >= QUOTE_OPENING
+          break opening << line if sentence && count + size >= QUOTE_OPENING / 2
+
+          opening << line
+          count += size
+        end
+      end
+
+      def squeeze_blank(lines)
+        lines = lines.chunk_while { |a, b| a.empty? && b.empty? }.map(&:first)
+        lines.shift while lines.first&.empty?
+        lines.pop while lines.last&.empty?
+        lines
+      end
+
+      # The line up to the first sentence end after `needed` words, never
+      # inside brackets or code, closing bold it cuts; the whole line when
+      # there is none.
+      def sentence_head(line, needed)
+        line.to_enum(:scan, SENTENCE_END).each do
+          head = line[0, Regexp.last_match.end(0)]
+          next if words(head).size < needed || head.count("[") != head.count("]") || head.count("`").odd?
+
+          return head.scan("**").size.odd? ? "#{head}**" : head
+        end
+        line
+      end
+
       def word_grams(text)
-        Text.plain(text).downcase.scan(/[[:word:]]+/).each_cons(QUOTE_GRAM).map(&:hash)
+        words(text.downcase).each_cons(QUOTE_GRAM).map(&:hash)
+      end
+
+      def words(text)
+        Text.plain(text).scan(/[[:word:]]+/)
       end
 
       def same_section(blocks)

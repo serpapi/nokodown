@@ -64,11 +64,12 @@ module Nokodown
       # Markdown back to readable text: no images, link targets, emphasis or
       # escapes.
       def plain(markdown)
-        markdown.gsub(/!\[[^\]]*\]\([^)]*\)/, "")
-                .gsub(/\[([^\]]*)\]\([^)]*\)/, '\1')
-                .gsub(/\\([\\`*_\[\]<>#|])/, '\1')
-                .gsub(/\*\*|\*|~~|`/, "")
-                .strip
+        unlink(markdown).gsub(/\\([\\`*_\[\]<>#|])/, '\1').gsub(/\*\*|\*|~~|`/, "").strip
+      end
+
+      # Markdown without images and link targets; link text stays.
+      def unlink(markdown)
+        markdown.gsub(/!\[[^\]]*\]\([^)]*\)/, "").gsub(/\[([^\]]*)\]\([^)]*\)/, '\1')
       end
 
       def table_cell(text)
