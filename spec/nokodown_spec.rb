@@ -320,6 +320,13 @@ RSpec.describe Nokodown do
       markdown.should include("## Media coverage of tidal lagoons")
     end
 
+    it "still drops comments whose heading carries a permalink" do
+      markdown = story('<section id="comments"><h2>Comments<a href="#comments">¶</a></h2><p>Jane wrote: the turbine part was the clearest.</p></section>')
+
+      markdown.should_not include("Comments")
+      markdown.should_not include("Jane wrote")
+    end
+
     it "still drops copies shown only at some screen sizes" do
       markdown = story('<div class="hidden sm:block"><p>Wide screen copy of the intro.</p></div><div class="md:hidden"><p>Narrow screen copy of the intro.</p></div>')
 

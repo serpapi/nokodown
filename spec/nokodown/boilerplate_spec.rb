@@ -106,12 +106,13 @@ RSpec.describe Nokodown::Boilerplate do
         #{article}
         <h2 id="related-posts">Related posts</h2>
         <section id="share-this-article"><h3>Share this article</h3><a href="/share">Copy link</a></section>
+        <section id="related-articles"><h2>Related articles<a href="#related-articles">¶</a></h2><a href="/older">Older story</a></section>
         <h3 id="social-links">Follow our journey</h3>
         <h2 class="social-title" id="h-social-media-tips">Social media tips</h2>
       HTML
 
       text = remaining(html)
-      %w[Related Share Follow tips].each { |word| text.should_not include(word) }
+      %w[Related Share Older Follow tips].each { |word| text.should_not include(word) }
     end
   end
 

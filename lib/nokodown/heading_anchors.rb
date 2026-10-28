@@ -8,12 +8,14 @@ module Nokodown
   # section it is: "social" in it does not make a share bar. Marked once, so
   # every class/id rule can leave it out.
   module HeadingAnchors
-    PREFIX = /\A[a-z][-_]/.freeze
+    PREFIX = /\A[a-z][-_]/i.freeze
     COUNTER = /[-_]\d+\z/.freeze
 
     # Headings that are nothing but the name of a widget: "Feedback", "Table
-    # of contents", "Customer reviews".
-    WIDGET_NAME = /\A(?:#{Patterns::PAGE_FURNITURE}|#{Patterns::SECONDARY}|#{Patterns::REVIEWS})\z/.freeze
+    # of contents". Reviews are only removed from product pages, where a
+    # section headed by them is the reviews widget, so naming them anywhere
+    # will do: "Ratings and reviews".
+    WIDGET_NAME = /\A(?:#{Patterns::PAGE_FURNITURE}|#{Patterns::SECONDARY})\z|#{Patterns::REVIEWS}/.freeze
 
     module_function
 
@@ -30,11 +32,15 @@ module Nokodown
     end
 
     # A junk label's anchor names the widget under it, which goes too; keeping
-    # the heading would leave it without a section.
+    # the heading would leave it without a section. Only its words count: the
+    # permalink the anchor markup adds ("¶", "#", a zero-width space) would
+    # keep the anchored patterns from matching.
     def junk?(label)
-      return true if label.match?(Patterns::NOISE_HEADING) || label.match?(Patterns::BOILERPLATE_TEXT)
+      words = label.downcase.scan(/[\p{L}\p{N}]+/)
+      phrase = words.join(" ")
+      return true if phrase.match?(Patterns::NOISE_HEADING) || phrase.match?(Patterns::BOILERPLATE_TEXT)
 
-      label.downcase.scan(/[\p{L}\p{N}]+/).join("-").match?(WIDGET_NAME)
+      words.join("-").match?(WIDGET_NAME)
     end
 
     # The heading itself, a wiki's headline span inside it, or the heading
