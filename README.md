@@ -109,7 +109,8 @@ region, or most of the page's text, is never removed because of its class name.
    article. There, each post's author and date, read from its header before
    boilerplate removal, become one line above the post's body
    (`**JGD** · April 2, 2024`) in place of the header, the panel around the
-   name and repeated copies of the date.
+   name and repeated copies of the date. A post "by" Advertisement is an ad
+   slot and goes.
 6. **Pruner**: in articles, Readability's conditional cleaning plus removal of
    bylines, datelines and inline boxes of links to other stories; on other
    pages, removal of leftover link clusters, unless they hold most of the text

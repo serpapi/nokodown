@@ -22,6 +22,15 @@ module Nokodown
       (?<![a-z])(?:author|author-?name|poster|poster-?name|creator)(?![\w-])
     /x.freeze
     BY = /\A(?:by|von|par|por)\s+|\A@/i.freeze
+    AD = /\A(?:advertisement|advert|ads?|sponsored(?:\scontent)?|anzeige|werbung|publicit[eé]|publicidad)\z/i.freeze
+    # Dates in the member panel beside a post date the member, not the post.
+    MEMBER_DATE = /
+      (?:joined|join\sdate|member\ssince|registered|last\s(?:seen|active)|
+      mitglied\sseit|registriert(?:\sseit)?|membre\sdepuis|inscrit(?:\sle)?|miembro\sdesde|registrado)\W*\z
+    /xi.freeze
+    # A sibling that ends a post: what the climb passed over before it was
+    # the body.
+    CLOSING = /(?<![a-z])(?:signature|footer)(?![a-z])/.freeze
     YEAR = /(?<!\d)(?:19|20)\d\d(?!\d)/.freeze
     ISO_DATE = /\A\d{4}-\d\d-\d\d/.freeze
     LETTER = /\p{L}/.freeze
@@ -34,7 +43,9 @@ module Nokodown
     MAX_LABELS = 40
     MAX_PANEL = 200
     MIN_BODY = 25
-    BODY_PARTS = "p, blockquote, pre, table, [itemprop~=text], [itemprop~=articleBody]"
+    BODY_TAGS = %w[p blockquote pre table].freeze
+    BODY_PROPS = %w[text articleBody].freeze
+    BODY_PARTS = (BODY_TAGS + BODY_PROPS.map { |prop| "[itemprop~=#{prop}]" }).join(", ").freeze
     # "message-content", "post-body", "ipsType_richText"; not "text-right".
     BODY_CLASS = /(?<![a-z])(?:body|content|text)(?![\w-])/.freeze
     AUTHOR = "data-nokodown-author"
@@ -46,8 +57,13 @@ module Nokodown
     end
 
     def call
+      @authors = author_holders
       posts = dated_posts.filter_map { |node, date| attributed(node, date) }
-      posts.each { |post| mark(post) } if dated_above?(posts)
+      ads, posts = posts.partition { |post| post.author.nil? }
+      return self unless dated_above?(posts)
+
+      posts.each { |post| mark(post) }
+      ads.each { |ad| ad.node[REPLACED] = "" }
       self
     end
 
@@ -72,15 +88,45 @@ module Nokodown
       Dom.ancestors_named(node, "blockquote").any?
     end
 
-    # Each post with the first date in it.
+    # Each post with the first date in it. A date wrapped in another is read
+    # from the inner one, which holds the machine-readable date.
     def dated_posts
-      dates = @body.css(DATES).reject { |node| quoted?(node) }
+      dates = @body.css(DATES).reject { |node| quoted?(node) || node.at_css(DATES) || member_date?(node) }
       holders = dates.flat_map { |date| date.ancestors.select(&:element?) }.map { |node| Dom.key(node) }.compact.to_set
       posts = dates.each_with_object({}) do |date, found|
         post = post_of(date, holders)
         found[Dom.key(post)] ||= [post, date] if post
       end
-      posts.values
+      posts = posts.values
+      opening = opening_post(dates, posts)
+      opening ? [opening] + posts : posts
+    end
+
+    # The opening post may stand apart from the replies (Rick Steves:
+    # article.topic before section#replies, Vanilla), so it repeats nothing.
+    # Keys follow document order.
+    def opening_post(dates, posts)
+      return if posts.empty?
+
+      first = Dom.key(posts.first[0]).to_i
+      replies = posts.flat_map { |post, _| [post] + post.ancestors.select(&:element?) }.map { |node| Dom.key(node) }.to_set
+      dates.take_while { |date| Dom.key(date).to_i < first }.each do |date|
+        post = opening_of(date, replies)
+        return [post, date] if post
+      end
+      nil
+    end
+
+    # The lowest ancestor of the date that names an author and is followed
+    # by the replies.
+    def opening_of(date, replies)
+      date.ancestors.each do |ancestor|
+        return if !ancestor.element? || replies.include?(Dom.key(ancestor))
+
+        following = ancestor.next_element
+        return ancestor if following && replies.include?(Dom.key(following)) && @authors.include?(Dom.key(ancestor))
+      end
+      nil
     end
 
     # Posts repeat: a date's post is its lowest ancestor that has a sibling of
@@ -88,9 +134,28 @@ module Nokodown
     def post_of(date, holders)
       date.ancestors.each do |ancestor|
         return if !ancestor.element? || ancestor.name == "body"
-        return ancestor if repeated?(ancestor, holders) && author_inside?(ancestor)
+        return ancestor if repeated?(ancestor, holders) && @authors.include?(Dom.key(ancestor))
       end
       nil
+    end
+
+    # "Joined <time>": the label right before the date, or before the
+    # element that holds only the date (<dt>Joined</dt><dd><time></dd>).
+    def member_date?(date)
+      text = Dom.text(date)
+      node = date
+      node = node.parent while node.parent.element? && Dom.text(node.parent) == text
+      label_before(node).match?(MEMBER_DATE)
+    end
+
+    def label_before(node)
+      label = +""
+      sibling = node.previous_sibling
+      while sibling && label.length < MAX_LABELS
+        label.prepend(sibling.content)
+        sibling = sibling.previous_sibling
+      end
+      Dom.squish(label)
     end
 
     def repeated?(node, holders)
@@ -106,8 +171,13 @@ module Nokodown
       node["class"].to_s.split.first || node.name
     end
 
-    def author_inside?(node)
-      author?(node) || node.css("[itemprop~=author], [rel~=author], [class]").any? { |candidate| author?(candidate) }
+    # Keys of the elements that are or hold an author, found in one pass
+    # rather than by searching each ancestor on every climb.
+    def author_holders
+      authors = @body.css("[itemprop~=author], [rel~=author], [class]").select { |node| author?(node) }
+      authors.each_with_object(Set.new) do |author, keys|
+        ([author] + author.ancestors.to_a).each { |node| break unless node.element? && keys.add?(Dom.key(node)) }
+      end
     end
 
     def author?(node)
@@ -116,9 +186,18 @@ module Nokodown
     end
 
     def attributed(node, date)
-      author = author_before(node, date)
+      authors = authors_before(node, date)
+      return Post.new(node, date) if ad?(authors.first)
+
+      author = authors.find { |candidate| name(candidate) }
       placement = author && placement(date, node)
       Post.new(node, date, author, placement) if placement
+    end
+
+    # An ad slot dressed as a post (Invision) is "posted" by "Advertisement":
+    # it goes with the headers the lines replace.
+    def ad?(author)
+      !author.nil? && Dom.text(author).match?(AD)
     end
 
     # Threads date each post above its body. Q&A sites, and some forum
@@ -153,19 +232,25 @@ module Nokodown
       [header, author_panel(post.author, post.date, placement.body), *copies(post.node, post.date)].compact
     end
 
-    # The name nearest before the date: a thread's header reads "name, date".
-    # Names in quotes belong to the quoted post.
-    def author_before(post, date)
+    # The names before the date, nearest first: a thread's header reads
+    # "name, date". Names in quotes belong to the quoted post.
+    def authors_before(post, date)
       date_key = Dom.key(date)
       before = post.css("*").take_while { |node| Dom.key(node) != date_key }
-      before.reverse.find { |node| author?(node) && !quoted?(node) && name(node) }
+      before.reverse.select { |node| author?(node) && !quoted?(node) }
     end
 
     def name(author)
       source = author.at_css("[itemprop~=name]") if author["itemprop"].to_s.split.include?("author")
       source ||= author.css("a[href]").find { |link| !Dom.text(link).empty? }
       text = Dom.text(source || author).sub(BY, "")
-      text unless text.empty? || text.length > MAX_NAME
+      text unless text.empty? || text.length > MAX_NAME || label?(text)
+    end
+
+    # The Pruner would strip a label ("Loading", "Share") from the line,
+    # leaving only its date.
+    def label?(text)
+      text.match?(Patterns::BOILERPLATE_TEXT)
     end
 
     # Climbs from the date to the first sibling that holds content: the
@@ -198,8 +283,10 @@ module Nokodown
     end
 
     def following_body(node, tail)
+      start = tail.size
       sibling = node.next_sibling
       while sibling
+        return short_reply(tail, start) if sibling.element? && closing?(sibling)
         return sibling if sibling.element? && body?(sibling)
 
         tail << sibling
@@ -208,11 +295,29 @@ module Nokodown
       nil
     end
 
+    def closing?(node)
+      node.name == "footer" || Dom.signature(node).match?(CLOSING)
+    end
+
+    # A reply too short to pass for a body ("Agreed.") is the first element
+    # beside the signature or footer, before it, with words of its own.
+    def short_reply(tail, start)
+      index = (start...tail.size).find { |position| tail[position].element? && unlinked_text(tail[position]).match?(LETTER) }
+      tail.slice!(index..).first if index
+    end
+
     # A one-word reply ("Agreed.") is found by its class, before the footer
     # or signature after it.
     def body?(node)
-      Dom.text(node).length >= MIN_BODY || Dom.signature(node).match?(BODY_CLASS) ||
-        node.matches?(BODY_PARTS) || !node.at_css(BODY_PARTS).nil?
+      Dom.text(node).length >= MIN_BODY || Dom.signature(node).match?(BODY_CLASS) || prose?(node)
+    end
+
+    # Is or holds a paragraph, quote, code or table. Nokolexbor answers
+    # matches? by searching the whole document, so the node itself is
+    # checked by its name.
+    def prose?(node)
+      BODY_TAGS.include?(node.name) || node["itemprop"].to_s.split.any? { |prop| BODY_PROPS.include?(prop) } ||
+        !node.at_css(BODY_PARTS).nil?
     end
 
     # The header goes when the line says all it said: besides the name and
@@ -235,7 +340,7 @@ module Nokodown
 
       panel = author
       panel = panel.parent until taken.include?(Dom.key(panel.parent))
-      panel if Dom.text(panel).length <= MAX_PANEL && !panel.matches?(BODY_PARTS) && panel.at_css(BODY_PARTS).nil?
+      panel if Dom.text(panel).length <= MAX_PANEL && !prose?(panel)
     end
 
     def inside?(node, container)

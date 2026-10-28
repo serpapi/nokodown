@@ -63,6 +63,18 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.scan("May 3, 2024").size.should == 2
   end
 
+  it "writes a line for an opening post outside the list of replies" do
+    entry = lambda do |kind, name, body|
+      "<article class='#{kind}'><header>Posted by <span class='author'><a href='/u/#{name}'>#{name}</a></span> " \
+        "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></header><div class='content'><p>#{body}</p></div></article>"
+    end
+    replies = [entry.call("reply", "basil", answer), entry.call("reply", "sage", "Feed it twice a day for three days and it will smell sweet.")]
+    markdown = thread([entry.call("topic", "wren", question), "<section class='replies'>#{replies.join}</section>"])
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+  end
+
   it "keeps the line when the header is removed as an aside" do
     posts = [["wren", question], ["basil", answer]].map do |name, body|
       "<article class='entry'><aside class='entry-header'><h3><a class='username' href='/u/#{name}'>#{name}</a></h3> " \
@@ -93,6 +105,55 @@ RSpec.describe Nokodown::PostAttribution do
     ])
 
     markdown.should include("**basil** · May 3, 2024\n\nAgreed.")
+  end
+
+  it "keeps a short reply without a body class after the line, not its signature" do
+    posts = [["wren", question], ["basil", "Agreed."]].map do |name, body|
+      "<div class='post'><div class='post-head'><a class='username' href='/u/#{name}'>#{name}</a> " \
+        "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></div><div>#{body}</div>" \
+        "<div class='signature'>Baking rye and spelt loaves since 1998, mostly by hand.</div></div>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("**basil** · May 3, 2024\n\nAgreed.")
+  end
+
+  it "dates a post by its own date, not the member's join date" do
+    posts = [["wren", question], ["basil", answer]].map do |name, body|
+      "<div class='post'><div class='post-user'><a class='username' href='/u/#{name}'>#{name}</a> " \
+        "<span>Joined <time datetime='2016-01-04'>Jan 4, 2016</time></span></div>" \
+        "<div class='post-main'><div class='post-date'><time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></div>" \
+        "<div class='post-text'>#{body}</div></div></div>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+  end
+
+  it "reads a date wrapped in another one from the inner date" do
+    time = "<time class='date' title='Reply: 1'><time datetime='2024-07-03T15:30:35Z'>07/03/24 03:30 PM</time></time>"
+    markdown = thread([post("wren", time, question), post("basil", time.sub("15:30", "16:10"), answer)])
+
+    markdown.should include("**wren** · 2024-07-03\n\n#{question}")
+  end
+
+  it "drops an ad slot posted by an ad label, with no line for it" do
+    time = "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time>"
+    ad = "<p>Shop this season's best sourdough starter kits at our partner store.</p>"
+    markdown = thread([post("wren", time, question), post("Advertisement", time, ad), post("basil", time, answer)])
+
+    markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+    markdown.should_not include("starter kits")
+    markdown.should_not match(/^\s*· /)
+  end
+
+  it "writes no line for a name the cleanup would remove" do
+    time = "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time>"
+    markdown = thread([post("wren", time, question), post("Loading", time, answer)])
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should_not match(/^\s*· /)
   end
 
   it "leaves answers signed below their body alone" do
