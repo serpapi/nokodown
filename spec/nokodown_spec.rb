@@ -40,6 +40,23 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should == "# Is the ferry running today?"
     end
 
+    it "puts the title above a section H1 that follows the opening paragraphs" do
+      intro = "<p>#{'Vertical mice and trackballs spare the wrist in different ways, and we tested both kinds. ' * 3}</p>"
+      section = "<p>#{'The first pick suits most hands and works on any desk surface we tried. ' * 3}</p>"
+      html = "<title>The Best Ergonomic Mice</title><body><article>#{intro}<h1>Deeper Dive: Our Picks</h1>#{section}</article></body>"
+
+      Nokodown.to_markdown(html).should start_with("# The Best Ergonomic Mice\n\nVertical mice")
+      Nokodown.to_markdown(html).should include("\n\n## Deeper Dive: Our Picks\n\n")
+    end
+
+    it "keeps the page's own headline below a photo caption" do
+      body = "<p>#{'Yamada earned its first star this year, and twelve more places joined the list. ' * 3}</p>"
+      html = "<title>Michelin Restaurants in New York on Resy</title><body><article>" \
+             "<p>Photo by Ben Hon for Resy</p><h1>The Resy Guide to the Michelin Winners</h1>#{body}</article></body>"
+
+      Nokodown.to_markdown(html).should start_with("Photo by Ben Hon for Resy\n\n# The Resy Guide to the Michelin Winners")
+    end
+
     it "accepts nil" do
       Nokodown.extract(nil).markdown.should == ""
     end
