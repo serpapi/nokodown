@@ -5,7 +5,8 @@ module Nokodown
   # push score up to their ancestors, the best ancestor wins, and siblings that
   # look like part of the same article are merged back in.
   class Scorer
-    Result = Struct.new(:top, :nodes, :score)
+    # core is what Readability merges; nodes adds the sibling sections.
+    Result = Struct.new(:top, :nodes, :score, :core)
 
     SCORED = Set.new(%w[p td pre section h2 h3 h4 h5 h6]).freeze
     PARAGRAPH_MIN = 25
@@ -56,7 +57,8 @@ module Nokodown
       @scores.each_key { |key| @scores[key] *= 1 - @stats.link_density(@nodes[key]) }
       ranked = @scores.keys.max_by(TOP_CANDIDATES) { |key| @scores[key] }.map { |key| @nodes[key] }
       top = climb(shared_ancestor(ranked) || ranked.first)
-      Result.new(top, merge_siblings(top), score(top) || 0.0)
+      core = merge_siblings(top)
+      Result.new(top, with_sections(top, core), score(top) || 0.0, core)
     end
 
     private
@@ -209,12 +211,28 @@ module Nokodown
     end
 
     def merge_siblings(top)
-      return [top] if Dom.key(top) == @root_key || top.parent.nil?
+      return [top] if standalone?(top)
 
       top_score = score(top) || 0.0
-      threshold = [10, top_score * 0.2].max
+      threshold = sibling_threshold(top_score)
+      top.parent.element_children.select do |sibling|
+        sibling == top || related_sibling?(sibling, top, top_score, threshold)
+      end
+    end
+
+    def standalone?(top)
+      Dom.key(top) == @root_key || top.parent.nil?
+    end
+
+    def sibling_threshold(top_score)
+      [10, top_score * 0.2].max
+    end
+
+    def with_sections(top, merged)
+      return merged if standalone?(top)
+
+      threshold = sibling_threshold(score(top) || 0.0)
       siblings = top.parent.element_children.to_a
-      merged = siblings.select { |sibling| sibling == top || related_sibling?(sibling, top, top_score, threshold) }
       sections = siblings.select { |sibling| !merged.include?(sibling) && section?(sibling, top, threshold) }
       return merged if sections.sum { |section| @stats.text_chars(section) } < @stats.text_chars(top) * SECTIONS_SHARE
 

@@ -368,6 +368,31 @@ RSpec.describe Nokodown do
       markdown.should include("Focus matters for a working parent")
     end
 
+    def band(topic)
+      cards = Array.new(3) do |index|
+        "<div class='card'><h3>#{topic} #{index + 1}</h3><p>#{topic} shows each campaign on one screen, " \
+          "so a falling conversion rate is caught on Monday, not at month end.</p></div>"
+      end
+      "<div class='band'><div class='container'><div class='row'><h2>#{topic}</h2>#{cards.join}</div></div></div>"
+    end
+
+    it "keeps a landing page's other bands when only its sibling sections would make it an article" do
+      answers = Array.new(4) do |index|
+        "<h3>Question #{index + 1}?</h3><p>Answer #{index + 1} covers search, paid media and email, " \
+          "so budgets follow what works and every plan starts with an audit.</p>"
+      end
+      html = "<title>Harbor Analytics</title><body>" \
+             "<div class='hero'><h1>Harbor Analytics</h1><p>We turn the data your campaigns already collect " \
+             "into clear weekly decisions that your whole team can act on.</p></div>#{band("Dashboards")}" \
+             "<div class='claim'><h2>Teams that measure every channel improve their targeting within a quarter.</h2>" \
+             "<p><a href='/cases'>How we do it</a></p></div>#{band("Reports")}" \
+             "<div class='faq'><div class='container'><div class='row'>#{answers.join}</div></div></div></body>"
+
+      markdown = Nokodown.to_markdown(html)
+      markdown.should include("We turn the data your campaigns already collect")
+      markdown.should include("[How we do it](/cases)")
+    end
+
     it "drops a disclaimer at the end of the body" do
       paragraphs = Array.new(5) { |index| "<p>Index funds track a market index at low cost, and part #{index + 1} explains how.</p>" }
       disclaimer = "<div class='cmp-richtext--disclaimer'><p>Rates are subject to change and are not an offer of credit.</p></div>"
