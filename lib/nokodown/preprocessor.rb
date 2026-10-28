@@ -24,6 +24,8 @@ module Nokodown
     # Utility classes that make a "hidden" element visible again at some breakpoint.
     RESPONSIVE_SHOW = /\A(?:(?:sm|md|lg|xl|2xl):(?:block|flex|grid|inline|inline-block|inline-flex|table|contents)|d-(?:sm|md|lg|xl|xxl)-(?:block|flex|grid|inline|inline-block|inline-flex|table))\z/.freeze
 
+    STREAMED_LINK_SHARE = 0.5
+
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
@@ -62,12 +64,21 @@ module Nokodown
       @body.css("div[hidden][id^='S:']").each do |segment|
         number = segment["id"].delete_prefix("S:")
         slot = @body.at_css("template[id='B:#{number}'], template[id='P:#{number}']")
-        next unless slot
+        next if slot.nil? || link_list?(segment)
 
         remove_fallback(slot) if slot["id"].start_with?("B:")
         slot.replace(segment.children)
         segment.remove
       end
+    end
+
+    # What a page streams last waits on another service, and on shops and
+    # news sites that is mostly carousels of recommended products and stories.
+    # Made of links, such a segment stays hidden, as it is without scripts.
+    def link_list?(segment)
+      text = visible_char_count(segment)
+      links = segment.css("a[href]").sum { |link| Dom.char_count(link.content) }
+      text.positive? && links >= text * STREAMED_LINK_SHARE
     end
 
     def remove_fallback(slot)
@@ -99,9 +110,9 @@ module Nokodown
       @empty_without_noscript
     end
 
-    def visible_char_count
-      invisible = @body.css("script, style, noscript, template").sum { |node| Dom.char_count(node.content) }
-      Dom.char_count(@body.content) - invisible
+    def visible_char_count(root = @body)
+      invisible = root.css("script, style, noscript, template").sum { |node| Dom.char_count(node.content) }
+      Dom.char_count(root.content) - invisible
     end
 
     # The lazy copy sits just before the <noscript>, or just after it when it

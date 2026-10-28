@@ -69,7 +69,8 @@ with `main_content: false`, `:none` for a document without a body.
 - Invisible elements (`hidden`, `aria-hidden`, inline `display: none`,
   screen-reader-only and other hiding classes), keeping collapsed accordions,
   tab panels and FAQ answers. Content that React streams into hidden
-  containers at the end of the page is put back where the page shows it.
+  containers at the end of the page is put back where the page shows it,
+  unless it is mostly links, as carousels of recommended products are.
 - Sections rendered twice, such as a desktop and a mobile copy.
 - Tracking pixels, spacers, icons, placeholders, README badges, click-tracking
   URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,

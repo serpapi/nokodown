@@ -287,6 +287,17 @@ RSpec.describe Nokodown do
       convert(html).should == "## Index funds\n\nAn index fund tracks a market index.\n\nFees matter."
     end
 
+    it "leaves a streamed segment made of links hidden, as it is without scripts" do
+      cards = [["Camp kettle", "19.99"], ["Titanium pot set", "39.99"], ["Folding windscreen", "12.50"]].map do |name, price|
+        "<div><a href=\"/p/#{name.downcase.tr(' ', '-')}\"><h3>Trailhead #{name}</h3></a><span>€#{price}</span></div>"
+      end
+      html = '<h1>Trail stove</h1><template id="P:0"></template><template id="P:1"></template>' \
+             '<div hidden id="S:0"><p>Boils a litre in three minutes on <a href="/fuel">isobutane</a>.</p></div>' \
+             "<div hidden id=\"S:1\"><h2>More from Trailhead</h2>#{cards.join}</div>"
+
+      convert(html).should == "# Trail stove\n\nBoils a litre in three minutes on [isobutane](https://example.com/fuel)."
+    end
+
     it "drops elements Webflow hides when their condition fails" do
       convert('<p>Open daily.</p><div class="w-condition-invisible"><p>Closed for the holidays.</p></div>').should == "Open daily."
     end
