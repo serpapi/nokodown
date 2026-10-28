@@ -148,6 +148,14 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should_not match(/^\s*· /)
   end
 
+  it "keeps the posts of a member named Ad" do
+    time = "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time>"
+    markdown = thread([post("wren", time, question), post("Ad", time, answer)])
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include(answer)
+  end
+
   it "writes no line for a name the cleanup would remove" do
     time = "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time>"
     markdown = thread([post("wren", time, question), post("Loading", time, answer)])

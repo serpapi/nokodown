@@ -22,7 +22,7 @@ module Nokodown
       (?<![a-z])(?:author|author-?name|poster|poster-?name|creator)(?![\w-])
     /x.freeze
     BY = /\A(?:by|von|par|por)\s+|\A@/i.freeze
-    AD = /\A(?:advertisement|advert|ads?|sponsored(?:\scontent)?|anzeige|werbung|publicit[eé]|publicidad)\z/i.freeze
+    AD = /\A#{Patterns::AD_LABEL}\z/.freeze
     # Dates in the member panel beside a post date the member, not the post.
     MEMBER_DATE = /
       (?:joined|join\sdate|member\ssince|registered|last\s(?:seen|active)|
