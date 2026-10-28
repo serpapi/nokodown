@@ -37,6 +37,9 @@ module Nokodown
     # survives the copy that article cleaning works on.
     THREAD = "data-nokodown-thread"
 
+    # Set by HeadingAnchors on elements whose id is made from their heading.
+    ANCHOR = "data-nokodown-anchor"
+
     module_function
 
     def assign_keys(root)
@@ -110,10 +113,15 @@ module Nokodown
 
     def signature(node)
       classes = node["class"]
-      id = node["id"]
+      id = name_id(node)
       return "" if classes.nil? && id.nil?
 
       signature_of("#{classes} #{id}")
+    end
+
+    # The id as a name for the element; a heading anchor only repeats the heading.
+    def name_id(node)
+      node.key?(ANCHOR) ? nil : node["id"]
     end
 
     def signature_of(value)
