@@ -21,6 +21,8 @@ module Nokodown
     # A note continues the prose only after a sentence or more of it, not after a line of links.
     NOTE_PROSE = 80
     FOOTNOTE_MARK = /\A[*†‡§]+/.freeze
+    # The word goes with its separators: "footer__disclaimer" without it is "footer", not "footer__".
+    DISCLAIMER_WORD = /[-_]*#{Patterns::DISCLAIMER.source}[-_]*/.freeze
 
     def initialize(body)
       @body = body
@@ -182,7 +184,7 @@ module Nokodown
     # Only a signature that is furniture for its disclaimer name alone can be
     # a note; "ad-disclaimer" or "footer__disclaimer" stays furniture.
     def disclaimer_only?(signature)
-      signature.match?(Patterns::DISCLAIMER) && !signature.gsub(Patterns::DISCLAIMER, " ").match?(Patterns::PAGE_FURNITURE)
+      signature.match?(Patterns::DISCLAIMER) && !signature.gsub(DISCLAIMER_WORD, " ").match?(Patterns::PAGE_FURNITURE)
     end
 
     def card?(node)

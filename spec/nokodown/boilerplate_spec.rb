@@ -165,6 +165,14 @@ RSpec.describe Nokodown::Boilerplate do
       text.should_not include("not been evaluated")
     end
 
+    it "removes a footer disclaimer right after the prose" do
+      %w[footer__disclaimer footer_disclaimer site-footer-disclaimer disclaimer-footer].each do |name|
+        html = "#{prose('Choosing an index fund', 3)}<p class=\"#{name}\">All content on this website is for information only.</p>"
+
+        remaining(html).should_not include("for information only")
+      end
+    end
+
     it "keeps a block whose modifier says it has a disclaimer" do
       html = "#{prose('Choosing a smart lock', 2)}<div class=\"chart hasDisclaimer\"><p>Smart locks open with a code, a phone or a key.</p></div>"
 
