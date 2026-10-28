@@ -60,7 +60,9 @@ with `main_content: false`, `:none` for a document without a body.
   and `footer`, ARIA roles, schema.org types) and class/id names.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars, modals,
   chat widgets, "related", "recommended" and "most popular" boxes, legal
-  disclaimers and disclosures, and, next to an article, its comment thread.
+  disclaimers and disclosures (but not a note continuing the paragraph before
+  it, or the footnote to a mark just above), and, next to an article, its
+  comment thread.
 - On forums, the member panel and signature repeated beside every post, and
   quoted replies that repeat a post already in the output.
 - On product pages, customer reviews and Q&A widgets, with their review

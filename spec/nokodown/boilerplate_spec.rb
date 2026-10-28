@@ -126,6 +126,50 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "disclaimers" do
+    it "removes fine print about the site and its offers" do
+      html = <<~HTML
+        <div class="disclaimer">We may earn money when you click on our links.</div>
+        #{prose('Choosing a mover', 3)}
+        <figure><img src="/truck.jpg" alt=""></figure>
+        <div class="disclaimer"><div class="disclaimer__text"><p>*Offer valid for new bookings only.</p></div></div>
+      HTML
+
+      text = remaining(html)
+      text.should include("Choosing a mover is explained")
+      text.should_not include("earn money")
+      text.should_not include("Offer valid")
+    end
+
+    it "keeps the footnote to a mark in the table right before it" do
+      table = "<table><tr><th>Mover</th><th>Coverage</th></tr><tr><td>Atlas Vans</td><td>40-46 states*</td></tr></table>"
+      note = "<div class=\"disclaimer\"><div class=\"disclaimer__text\"><p>*Atlas serves 40 states for pickup and 46 for delivery.</p></div></div>"
+
+      remaining("#{prose('Choosing a mover', 3)}#{table}#{note}").should include("*Atlas serves 40 states")
+    end
+
+    it "keeps a note that continues the prose, but not one after a line of links" do
+      html = <<~HTML
+        #{prose('Choosing hemp gummies', 2)}
+        <h2>Is it legal in your state?</h2>
+        <p>Hemp gummies with less than 0.3% THC by dry weight are legal under federal law across the country.</p>
+        <p class="gray-disclaimer">Note: state laws vary, so check yours before you buy.</p>
+        <p><a href="/terms">Terms</a> <a href="/privacy">Privacy</a></p>
+        <p class="gray-disclaimer">Statements here have not been evaluated by the FDA.</p>
+      HTML
+
+      text = remaining(html)
+      text.should include("Note: state laws vary")
+      text.should_not include("not been evaluated")
+    end
+
+    it "keeps a block whose modifier says it has a disclaimer" do
+      html = "#{prose('Choosing a smart lock', 2)}<div class=\"chart hasDisclaimer\"><p>Smart locks open with a code, a phone or a key.</p></div>"
+
+      remaining(html).should include("Smart locks open")
+    end
+  end
+
   describe "repeated modules" do
     def cards(classes, count)
       Array.new(count) do |index|

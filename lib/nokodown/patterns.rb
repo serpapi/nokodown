@@ -18,6 +18,10 @@ module Nokodown
       (?<![\w-])(?:(?:site|global|main|page|app|l|c|o|g)-?)?footer(?:-(?:wrapper|container|inner|main|top|bottom|links|nav|menu))?(?![\w-])
     /x.freeze
 
+    # Fine print. WordPress puts category-* and tag-* terms on the post, and a
+    # modifier ("hasDisclaimer") names the block that has one, not the note.
+    DISCLAIMER = /#{WORD_START}(?<!category-|tag-|has-)(?:disclaimers?|disclosures)#{WORD_END}/.freeze
+
     # Overlays, ads, prompts and widgets that are never part of the content.
     # "ad" may carry a size ("ad300x250") but must not touch other digits:
     # generated hashes such as "elementor-element-38ad5ea" contain it.
@@ -32,7 +36,7 @@ module Nokodown
       popup|pop-up|#{WORD_START}modal#{WORD_END}|interstitial|offcanvas|off-canvas|flyout|snackbar|tooltip|popover|
       #{WORD_START}toast#{WORD_END}|#{WORD_START}drawer#{WORD_END}|
       editsection|#{WORD_START}feedback#{WORD_END}|was-?this-?helpful|intercom|livechat|chat-?widget|
-      #{WORD_START}signature(?![\w-])|#{WORD_START}(?<!category-|tag-)(?:disclaimers?|disclosures)#{WORD_END}|
+      #{WORD_START}signature(?![\w-])|#{DISCLAIMER.source}|
       #{WORD_START}(?:postprofile|poster-?info|author-?pane|message-user|user-?(?:info|details|extras|stats))(?![\w-])|
       related|recommend|recirc|read-?next|more-?stories|you-?may-?like|also-?like|
       #{WORD_START}(?:search-?form|search-?box|search-?bar)#{WORD_END}

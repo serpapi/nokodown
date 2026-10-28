@@ -18,6 +18,9 @@ module Nokodown
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
+    # A note continues the prose only after a sentence or more of it, not after a line of links.
+    NOTE_PROSE = 80
+    FOOTNOTE_MARK = /\A[*†‡§]+/.freeze
 
     def initialize(body)
       @body = body
@@ -29,6 +32,8 @@ module Nokodown
       @shielded = shielded_keys
       # Card grids repeat the same class list hundreds of times.
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
+      @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
+      @notes = Set.new
       @prose_blocks = Set.new
       @card_classes = card_classes
       @card_bases = @card_classes.map { |classes| base_classes(classes) }
@@ -138,7 +143,43 @@ module Nokodown
     def class_noise?(node)
       return false if !@prose_blocks.empty? && prose_part?(node)
 
-      furniture_class?(node) && (@card_bases.empty? || !card?(node))
+      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node))
+    end
+
+    # Fine print about the site is furniture, but a note on the content right
+    # before it belongs to that content: a paragraph continuing the prose, or
+    # the footnote to a mark in it ("40-46 states*"). Widgets nest the note's
+    # text in an element named like the note.
+    def content_note?(node)
+      return false unless @disclaimer_only[Dom.signature(node)]
+
+      note = @notes.include?(Dom.key(node.parent)) || annotates_previous?(node)
+      @notes << Dom.key(node) if note
+      note
+    end
+
+    def annotates_previous?(node)
+      previous = node.previous_element
+      return false unless previous
+
+      prose_note?(node, previous) || footnote_to?(node, previous)
+    end
+
+    def prose_note?(node, previous)
+      return false unless node.name == "p" && previous.name == "p"
+
+      @stats.text_chars(previous) >= NOTE_PROSE && !@furniture[Dom.signature(previous)]
+    end
+
+    def footnote_to?(node, previous)
+      marks = [node, *node.css("p, li")].map { |line| Dom.text(line)[FOOTNOTE_MARK] }.compact.uniq
+      marks.any? { |mark| previous.content.match?(/[[:alnum:]]#{Regexp.escape(mark)}/) }
+    end
+
+    # Only a signature that is furniture for its disclaimer name alone can be
+    # a note; "ad-disclaimer" or "footer__disclaimer" stays furniture.
+    def disclaimer_only?(signature)
+      signature.match?(Patterns::DISCLAIMER) && !signature.gsub(Patterns::DISCLAIMER, " ").match?(Patterns::PAGE_FURNITURE)
     end
 
     def card?(node)
