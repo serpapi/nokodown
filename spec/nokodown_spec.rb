@@ -314,6 +314,12 @@ RSpec.describe Nokodown do
       end
     end
 
+    it "keeps a heading whose anchor holds a negative class word" do
+      markdown = story('<h2 id="h-media-coverage-of-tidal-lagoons">Media coverage of tidal lagoons</h2><p>Newspapers mostly covered the cost.</p>')
+
+      markdown.should include("## Media coverage of tidal lagoons")
+    end
+
     it "still drops copies shown only at some screen sizes" do
       markdown = story('<div class="hidden sm:block"><p>Wide screen copy of the intro.</p></div><div class="md:hidden"><p>Narrow screen copy of the intro.</p></div>')
 
