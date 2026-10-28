@@ -50,9 +50,11 @@ module Nokodown
     def select_content(body, page_type, product_page)
       return [[body], :full] unless @main_content
 
+      attribution = PostAttribution.new(body).call if ContentLocator::DISCUSSIONS.include?(page_type)
       Boilerplate.new(body).call
       ProductReviews.new(body).call if product_page
       selection = ContentLocator.new(body, page_type: page_type).call
+      attribution&.write(selection.nodes)
       return [cleaned_article(selection.nodes, page_type), :article] if selection.mode == :article
 
       Pruner.new(selection.nodes, :page).call
