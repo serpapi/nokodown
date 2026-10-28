@@ -43,6 +43,18 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "Tailwind class names" do
+    it "does not read names into arbitrary values, but still reads the utility name" do
+      html = <<~HTML
+        <p>Heat pumps move heat instead of making it.</p>
+        <div class="lg:h-[calc(100vh-var(--nav-height))]">They keep working at minus twenty degrees.</div>
+        <div class="data-[state=open]:sidebar-shown">Find an installer near you.</div>
+      HTML
+
+      remaining(html).should == "Heat pumps move heat instead of making it. They keep working at minus twenty degrees."
+    end
+  end
+
   describe "sections named like furniture" do
     let(:article) { "<h1>Choosing a heat pump</h1>#{prose('Sizing', 6)}" }
 
