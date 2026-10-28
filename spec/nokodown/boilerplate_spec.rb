@@ -1,12 +1,16 @@
 # frozen_string_literal: true
 
 RSpec.describe Nokodown::Boilerplate do
-  # Text left by boilerplate removal alone, before the content is located.
-  def remaining(html)
+  def cleaned(html)
     body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
     Nokodown::Preprocessor.new(body).call
     Nokodown::Boilerplate.new(body).call
-    Nokodown::Dom.text(body)
+    body
+  end
+
+  # Text left by boilerplate removal alone, before the content is located.
+  def remaining(html)
+    Nokodown::Dom.text(cleaned(html))
   end
 
   def prose(topic, count)
@@ -103,10 +107,9 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should_not include("Another heat pump story")
     end
 
-    it "removes forum signatures and the author panel beside each post, not the post" do
+    it "removes forum signatures, not the post" do
       html = <<~HTML
         <div class="message">
-          <div class="message-user"><h4>Ana</h4><dl class="pairs"><dt>Joined</dt><dd>Jan 2020</dd><dt>Messages</dt><dd>120</dd></dl></div>
           <div class="message-userContent">#{prose('Bleeding the radiators', 2)}</div>
           <aside class="message-signature">My rig: a 7 kW air source pump and twelve radiators.</aside>
         </div>
@@ -114,7 +117,6 @@ RSpec.describe Nokodown::Boilerplate do
 
       text = remaining(html)
       text.should include("Bleeding the radiators is explained")
-      text.should_not include("Joined")
       text.should_not include("My rig")
     end
 
@@ -167,6 +169,69 @@ RSpec.describe Nokodown::Boilerplate do
       html = "#{prose('Choosing a smart lock', 2)}<div class=\"chart hasDisclaimer\"><p>Smart locks open with a code, a phone or a key.</p></div>"
 
       remaining(html).should include("Smart locks open")
+    end
+  end
+
+  describe "member panels" do
+    def post(panel)
+      "<div class=\"message\">#{panel}<div class=\"message-userContent\">#{prose('Bleeding the radiators', 2)}</div></div>"
+    end
+
+    # The line the panel beside the post was reduced to.
+    def line(panel)
+      line = cleaned(post(panel)).at_css(".message > p")
+      line && Nokodown::Dom.text(line)
+    end
+
+    it "reduces the panel beside a post to the poster's name" do
+      panel = <<~HTML
+        <div class="message-user">
+          <div class="message-avatar"><a href="/members/ana.12/"><img src="/avatars/12.jpg" alt="Ana"></a></div>
+          <h4 class="message-name"><a href="/members/ana.12/" class="username">Ana Ruiz</a></h4>
+          <h5 class="userTitle">Well-known member</h5>
+          <dl class="pairs"><dt>Joined</dt><dd>Jan 2020</dd><dt>Messages</dt><dd>120</dd></dl>
+        </div>
+      HTML
+
+      line(panel).should == "Ana Ruiz"
+      remaining(post(panel)).should_not include("member")
+      remaining(post(panel)).should_not include("Joined")
+    end
+
+    it "takes the name from the profile link a panel opens with" do
+      panel = '<dl class="postprofile"><dt><a href="/u/7"><img src="/a/7.png" alt="avatar"></a> <a href="/u/7">Ana</a></dt>' \
+              "<dd>Senator</dd><dd><strong>Posts:</strong> 4032</dd></dl>"
+
+      line(panel).should == "Ana"
+      remaining(post(panel)).should_not include("Posts")
+    end
+
+    it "leaves no line when the post opens with a by-line naming the poster" do
+      html = '<div class="post"><dl class="postprofile"><dt><a href="/u/7" class="username">Ana</a></dt><dd>Posts: 12</dd></dl>' \
+             '<div class="postbody"><p class="author">by <strong><a href="/u/7">Ana</a></strong> » Mon Jan 8, 2024</p>' \
+             "#{prose('Bleeding the radiators', 2)}</div></div>"
+
+      remaining(html).scan("Ana").size.should == 1
+    end
+
+    it "removes a panel of member details that names no one" do
+      panel = '<div class="message-userExtras"><dl><dt>Joined</dt><dd>Jan 2020</dd><dt>Location</dt>' \
+              '<dd><a href="/location?q=Leeds">Leeds</a></dd></dl></div>'
+
+      line(panel).should be_nil
+      remaining(post(panel)).should_not include("Leeds")
+    end
+
+    it "keeps the post's date that a panel holds, not the member's" do
+      panel = <<~HTML
+        <div class="user-info">
+          <div class="member-since">Member since <time datetime="2019-03-01">Mar 2019</time></div>
+          <div class="user-action-time">answered <span class="relativetime">Jan 4, 2024</span></div>
+          <div class="user-details" itemprop="author"><a href="/users/7/ana">Ana</a> <span class="reputation">2,301</span></div>
+        </div>
+      HTML
+
+      line(panel).should == "Ana · answered Jan 4, 2024"
     end
   end
 

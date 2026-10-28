@@ -40,7 +40,9 @@ module Nokodown
       removals = []
       walk(@body, removals)
       removals.delete(content_guess(removals)) if almost_empty_without?(removals)
-      removals.each { |node, _| node.remove }
+      removals.each { |node, kind| kind == :panel ? MemberPanel.reduce(node) : node.remove }
+      # The lines panels leave are new elements, and later passes measure by key.
+      Dom.assign_keys(@body) if removals.any? { |_, kind| kind == :panel }
     end
 
     private
@@ -83,8 +85,9 @@ module Nokodown
       return :chrome if chrome_element?(node) || chrome_role?(node)
       return if dominant?(node)
       return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
+      return if inside_sentence?(node)
 
-      :guess unless inside_sentence?(node)
+      MemberPanel.panel?(node) ? :panel : :guess
     end
 
     # A link or span in the middle of running text is part of that text,

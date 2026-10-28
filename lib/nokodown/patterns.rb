@@ -22,6 +22,12 @@ module Nokodown
     # modifier ("hasDisclaimer") names the block that has one, not the note.
     DISCLAIMER = /#{WORD_START}(?<!category-|tag-|has-)(?:disclaimers?|disclosures)#{WORD_END}/.freeze
 
+    # The panel of member details beside each forum post: XenForo
+    # message-user, phpBB postprofile, Invision cAuthorPane, vBulletin
+    # userinfo. The token must end there, so XenForo's post body,
+    # message-userContent, is not one. MemberPanel reduces it to the name.
+    MEMBER_PANEL = /#{WORD_START}(?:postprofile|poster-?info|author-?pane|message-user|user-?(?:info|details|extras|stats))(?![\w-])/.freeze
+
     # Overlays, ads, prompts and widgets that are never part of the content.
     # "ad" may carry a size ("ad300x250") but must not touch other digits:
     # generated hashes such as "elementor-element-38ad5ea" contain it.
@@ -37,7 +43,7 @@ module Nokodown
       #{WORD_START}toast#{WORD_END}|#{WORD_START}drawer#{WORD_END}|
       editsection|#{WORD_START}feedback#{WORD_END}|was-?this-?helpful|intercom|livechat|chat-?widget|
       #{WORD_START}signature(?![\w-])|#{DISCLAIMER.source}|
-      #{WORD_START}(?:postprofile|poster-?info|author-?pane|message-user|user-?(?:info|details|extras|stats))(?![\w-])|
+      #{MEMBER_PANEL.source}|
       related|recommend|recirc|read-?next|more-?stories|you-?may-?like|also-?like|
       #{WORD_START}(?:search-?form|search-?box|search-?bar)#{WORD_END}
     /x.freeze
