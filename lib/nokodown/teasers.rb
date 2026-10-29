@@ -73,6 +73,8 @@ module Nokodown
     DIGITS = /\A\d+\z/.freeze
     # A post's title: "andrea-jeremiah-latest-photos", "kak_sdelat_ramku.html".
     SLUG = /\A[\p{L}\p{N}%]+(?:[-_][\p{L}\p{N}%]+){2,}(?:\.[a-z]+)?\z/i.freeze
+    EXTENSION = /\.[a-z]+\z/i.freeze
+    DIGIT = /\d/.freeze
     # The root, a language's root ("/en/", "/pt-br/") or its index file.
     HOME = %r{\A/*(?:[a-z]{2}(?:[-_][a-z]{2})?/*)?(?:index\.\w+)?\z}i.freeze
     FILE = /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|docx?|xlsx?|pptx?|mp[34])\z/i.freeze
@@ -643,7 +645,23 @@ module Nokodown
       return unless page.size == 1 && other.size == 1
       return :sibling if skeleton(page.first) == skeleton(other.first)
 
-      :named if page.first.match?(SLUG) && other.first.match?(SLUG)
+      :named if page.first.match?(SLUG) && other.first.match?(SLUG) && same_code?(page.first, other.first)
+    end
+
+    # A shop codes its kinds of page in the last part of their names: a
+    # category's "-g8893.html" or "_c890317" beside a product's "-37209.html"
+    # or "_p9367731".
+    def same_code?(page, other)
+      codes = [page, other].map { |name| decode(name).sub(EXTENSION, "").split(/[-_]/).last.to_s }
+      return true unless codes.all? { |code| code.match?(DIGIT) }
+
+      codes.map { |code| code.gsub(/\d+/, "0") }.uniq.size == 1
+    end
+
+    def decode(segment)
+      URI.decode_www_form_component(segment).scrub("")
+    rescue ArgumentError
+      segment
     end
 
     def folder_kinship(page, other)

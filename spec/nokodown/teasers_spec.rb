@@ -475,4 +475,14 @@ RSpec.describe Nokodown::Teasers do
 
     blocks(html, "https://news.example.com/harbor-bridge-news/", :article).should be_empty
   end
+
+  it "keeps a category's products whose names end in a code of another kind" do
+    products = stories.each_with_index.map do |title, index|
+      "<div class='card'><img src='/img/#{index}.jpg' alt=''><h3><a href='/usb-hub-model-#{37_209 + index}.html'>" \
+        "#{title}</a></h3><span>319 kr</span></div>"
+    end
+    html = "<h1>USB hubs for laptops</h1>#{story(1)}<h3>Popular picks</h3><div class='grid'>#{products.join}</div>"
+
+    blocks(html, "https://shop.example.com/usb-a-hubs-for-laptops-g8893.html", nil).should be_empty
+  end
 end
