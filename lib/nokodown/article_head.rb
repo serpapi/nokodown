@@ -6,8 +6,8 @@ module Nokodown
   # an event's date and place, a product's price. None of it is prose, so
   # none of it scores. When that stretch is short and not a list of links,
   # such as a slider or a menu, the article becomes the element holding the
-  # headline and the body, cut to run from the one to the other: what comes
-  # before the headline or after the body is no more part of it than before.
+  # headline and the body, cut to run from the one to the other, so nothing
+  # before the headline or after the body comes in with it.
   class ArticleHead
     MAX_CHARS = 600
     MAX_LINK_DENSITY = 0.5
@@ -23,9 +23,11 @@ module Nokodown
 
       body = @nodes.first
       headline = @root.css("h1").select { |h1| Dom.key(h1).to_i < Dom.key(body).to_i }.last
-      return @nodes unless headline && short?(between(headline, body))
+      return @nodes unless headline
 
       holder = shared_ancestor(headline, body)
+      return @nodes unless short?(between(headline, body, holder))
+
       cut(holder, headline)
       [holder]
     end
@@ -40,9 +42,9 @@ module Nokodown
     # The elements from `first` up to `last` in document order, each taken
     # whole where it can be: up from `first` to the branch the two share,
     # across it, then down to `last`.
-    def between(first, last)
-      down = path_to(last, shared_ancestor(first, last))
-      up = path_to(first, shared_ancestor(first, last))
+    def between(first, last, holder)
+      down = path_to(last, holder)
+      up = path_to(first, holder)
       head = [first]
       up[0...-1].each { |node| head.concat(following(node)) }
       head.concat(following(up.last).take_while { |node| Dom.key(node) != Dom.key(down.last) })

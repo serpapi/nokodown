@@ -203,7 +203,11 @@ module Nokodown
     # a menu, however short the title: in Chinese or Japanese it fits in a
     # dozen characters. Menus of linked headings have several.
     def teaser_header?(node)
-      node.css("a[href]").count { |link| Dom.ancestors_named(link, *Dom::HEADINGS).any? || link.at_css(HEADINGS) } == 1
+      node.css("a[href]").count { |link| headline?(link) } == 1
+    end
+
+    def headline?(link)
+      Dom.ancestors_named(link, *Dom::HEADINGS).any? || !link.at_css(HEADINGS).nil?
     end
 
     # On an index page (an A-Z list, a category grid) the clusters are the
