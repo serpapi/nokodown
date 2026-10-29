@@ -472,6 +472,12 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, "https://news.example.com/harbor-bridge-news/", :article).should be_empty
   end
 
+  it "does not take a longer title that uses the address's words for the page's name" do
+    box = "<section><h2>Refresh your digital marketing skills</h2><div class='grid'>#{cards(stories, '/courses/')}</div></section>"
+
+    blocks("<h1>What is digital marketing</h1>#{story(3)}#{box}", "https://example.org/what-is-digital-marketing/").should_not be_empty
+  end
+
   it "keeps a category's products whose names end in a code of another kind" do
     products = stories.each_with_index.map do |title, index|
       "<div class='card'><img src='/img/#{index}.jpg' alt=''><h3><a href='/usb-hub-model-#{37_209 + index}.html'>" \

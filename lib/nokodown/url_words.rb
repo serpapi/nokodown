@@ -25,6 +25,14 @@ module Nokodown
       coverage(text) >= COVERAGE
     end
 
+    # Whether the text is the URL's name, not a longer phrase that uses its
+    # words ("Refresh Your Digital Marketing Skills" at "/digital-marketing").
+    def same_name?(text)
+      words = fold(text).scan(WORD)
+      own = @words.to_set
+      names?(text) && words.sum { |word| own.include?(word) ? word.length : 0 } >= words.sum(&:length) * COVERAGE
+    end
+
     # Whether the URL names the text, and clearly more than the other one.
     def prefers?(text, other)
       coverage = coverage(text)

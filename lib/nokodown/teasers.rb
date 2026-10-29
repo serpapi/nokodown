@@ -197,7 +197,7 @@ module Nokodown
     # Bowen").
     def own_list?(block)
       title = block.title
-      title.nil? || title.name == "h1" || !title.at_css("h1").nil? || @url_words.names?(Dom.text(title))
+      title.nil? || title.name == "h1" || !title.at_css("h1").nil? || @url_words.same_name?(Dom.text(title))
     end
 
     # Links to pages below this one are its own sections, and attachments are
