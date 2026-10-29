@@ -478,6 +478,12 @@ RSpec.describe Nokodown::Teasers do
     blocks("<h1>What is digital marketing</h1>#{story(3)}#{box}", "https://example.org/what-is-digital-marketing/").should_not be_empty
   end
 
+  it "does not take a title that leaves out some of the address's words for the page's name" do
+    box = "<section><h2>Digital marketing strategy</h2><div class='grid'>#{cards(stories, '/news/')}</div></section>"
+
+    blocks("<h1>What is digital marketing</h1>#{story(3)}#{box}", "https://example.org/what-is-digital-marketing/").should_not be_empty
+  end
+
   it "keeps a hub's lists of the latest and more posts" do
     lists = ["Latest news", "More headphone posts"].map do |title|
       "<section class='#{title.split.first.downcase}'><h2>#{title}</h2>#{cards(stories.map { |story| "#{title}: #{story}" }, '/articles/')}</section>"

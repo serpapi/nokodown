@@ -13,6 +13,7 @@ module Nokodown
     MIN_WORDS = 3
     MIN_NAMES = 2
     COVERAGE = 0.6
+    SAME_NAME = 0.8
     MARGIN = 0.25
 
     def initialize(url)
@@ -25,12 +26,14 @@ module Nokodown
       coverage(text) >= COVERAGE
     end
 
-    # Whether the text is the URL's name, not a longer phrase that uses its
-    # words ("Refresh Your Digital Marketing Skills" at "/digital-marketing").
+    # Whether the text is the URL's name: it has nearly all of the URL's
+    # words, and they make most of it. "Digital Marketing Strategy" at
+    # "/what-is-digital-marketing/" is another topic that uses its words.
     def same_name?(text)
       words = fold(text).scan(WORD)
       own = @words.to_set
-      names?(text) && words.sum { |word| own.include?(word) ? word.length : 0 } >= words.sum(&:length) * COVERAGE
+      shared = words.sum { |word| own.include?(word) ? word.length : 0 }
+      coverage(text) >= SAME_NAME && shared >= words.sum(&:length) * COVERAGE
     end
 
     # Whether the URL names the text, and clearly more than the other one.
