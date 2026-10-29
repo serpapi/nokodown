@@ -259,9 +259,9 @@ module Nokodown
       end
       # Old sites lay their footer out in a table and set it in font tags.
       root.css(LAYOUT_CELLS).each do |node|
-        next if Dom.char_count(node.content) > MAX_NOTICE || in_data_table?(node)
+        next if Dom.char_count(node.content) > MAX_NOTICE
 
-        notices << node if copyright?(node, Dom.text(node))
+        notices << node if copyright?(node, Dom.text(node)) && !in_data_table?(node)
       end
       remove_notices(notices)
     end
