@@ -35,7 +35,8 @@ module Nokodown
       end
 
       def image_page?(blocks)
-        blocks.sum { |block| Text.plain(block.text).scan(/[\p{L}\p{N}]+/).size } < IMAGE_PAGE_WORDS
+        words = 0
+        blocks.none? { |block| (words += Text.plain(block.text).scan(/[\p{L}\p{N}]+/).size) >= IMAGE_PAGE_WORDS }
       end
 
       def noise?(block)
