@@ -34,7 +34,7 @@ module Nokodown
       blocks = render(nodes, mode, urls)
       blocks = with_title(blocks, metadata) if @title
       blocks = Markdown::Orphans.call(Markdown::Repeats.call(blocks))
-      result(blocks, metadata, mode)
+      result(Markdown::Lists.single_items(blocks), metadata, mode)
     end
 
     private

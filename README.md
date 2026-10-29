@@ -131,7 +131,9 @@ with `main_content: false`, `:none` for a document without a body.
   between links and at line ends, lines of only punctuation, icon-font
   glyphs, code-language labels and copy buttons, and escapes that cannot
   change the rendering. Emoji, arrows and separators around a heading's
-  text go ("📱 Benefits", "- Forum"), and a heading of only signs goes. A card's repeated links to its own page keep their
+  text go ("📱 Benefits", "- Forum"), and a heading of only signs goes.
+  A list of one item is a line of text, and lists of one item side by side
+  are one list. A card's repeated links to its own page keep their
   text without the URL (its title keeps the link), and a button such as
   "Read more", a text the page uses once for each of several pages, goes when
   it ends its line (judged across all cards, in any language); texts that take turns from card to card ("Sold",

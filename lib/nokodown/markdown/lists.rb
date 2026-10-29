@@ -65,6 +65,31 @@ module Nokodown
         last = previous.text.scan(NUMBER).last
         !last.nil? && block.text[FIRST_NUMBER, 1].to_i == last.first.to_i + 1
       end
+
+      # Sites wrap a date or a tag in a list of its own, and each entry of a
+      # directory in one. A blank line between items of one groups nothing,
+      # so side by side they are one list, and alone, beside no other list,
+      # the item is a line of text. Runs last, once the cards CardLinks
+      # reads are settled.
+      def single_items(blocks)
+        runs = blocks.each_index.chunk_while { |a, b| single_item?(blocks[a]) && single_item?(blocks[b]) }
+        runs.flat_map do |run|
+          first = blocks[run.first]
+          next blocks.values_at(*run) unless single_item?(first)
+          next [Block.new(:list, run.map { |index| blocks[index].text }.join("\n"))] if run.size > 1
+          next [first] if beside_list?(blocks, run.first)
+
+          [Block.new(:paragraph, first.text.delete_prefix("- "))]
+        end
+      end
+
+      def single_item?(block)
+        block.kind == :list && block.text.start_with?("- ") && !block.text.include?("\n")
+      end
+
+      def beside_list?(blocks, index)
+        [index.positive? ? blocks[index - 1] : nil, blocks[index + 1]].any? { |block| block&.kind == :list }
+      end
     end
   end
 end

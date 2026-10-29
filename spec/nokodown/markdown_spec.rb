@@ -66,10 +66,10 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "writes a label and its value, or a number and its unit, on one line" do
-      html = "<p>Type:</p><p>Condo</p><p>Built:</p><p>1988</p><p>27<br>Nov</p><ul><li><p>Time:</p><p>17:00 - 19:00</p></li></ul>" \
+      html = "<p>Type:</p><p>Condo</p><p>Built:</p><p>1988</p><p>27<br>Nov</p><ul><li><p>Time:</p><p>17:00 - 19:00</p></li><li>Free</li></ul>" \
              "<p>Ingredients:</p><p>Mix the flour and the eggs, then let the dough rest for an hour before baking.</p>" \
              "<p>Check all that apply:</p><p>Furniture</p><p>Junk</p><p>Tyres</p>"
-      convert(html).should == "Type: Condo\n\nBuilt: 1988\n\n27 Nov\n\n- Time: 17:00 - 19:00\n\nIngredients:\n\n" \
+      convert(html).should == "Type: Condo\n\nBuilt: 1988\n\n27 Nov\n\n- Time: 17:00 - 19:00\n- Free\n\nIngredients:\n\n" \
                               "Mix the flour and the eggs, then let the dough rest for an hour before baking.\n\n" \
                               "Check all that apply:\n\nFurniture\n\nJunk\n\nTyres"
     end
@@ -100,7 +100,7 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops lines of only punctuation and operators" do
-      convert("<p>a<br>|<br>~<br>- -&gt;<br>👍<br>b</p><ul><li>|</li><li>c</li></ul>").should == "a\n👍\nb\n\n- c"
+      convert("<p>a<br>|<br>~<br>- -&gt;<br>👍<br>b</p><ul><li>|</li><li>c</li><li>d</li></ul>").should == "a\n👍\nb\n\n- c\n- d"
     end
 
     it "keeps emoticons on lines of their own" do
@@ -206,9 +206,9 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops emphasis around a whole list item, table cell, heading or link text" do
-      html = "<ul><li><b>Bold item</b></li></ul><table><tr><th><b>Key</b></th><th>Value</th></tr><tr><td><b>a</b></td><td><i>1</i></td></tr></table>" \
+      html = "<ul><li><b>Bold item</b></li><li><i>Italic item</i></li></ul><table><tr><th><b>Key</b></th><th>Value</th></tr><tr><td><b>a</b></td><td><i>1</i></td></tr></table>" \
              '<h2><i>Title</i></h2><p>See <b><a href="/a">this</a></b> and <a href="/b"><i>that</i></a>.</p>'
-      convert(html).should == "- Bold item\n\n| Key | Value |\n| --- | --- |\n| a | 1 |\n\n## Title\n\n" \
+      convert(html).should == "- Bold item\n- Italic item\n\n| Key | Value |\n| --- | --- |\n| a | 1 |\n\n## Title\n\n" \
                               "See [this](https://example.com/a) and [that](https://example.com/b)."
     end
 
@@ -952,8 +952,18 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "joins numbered lists whose numbering runs on" do
-      convert('<ul><li>a</li></ul><ul><li>b</li></ul><ol><li>one</li></ol><ol start="2"><li>two</li></ol><ol><li>again</li></ol>').should ==
-        "- a\n\n- b\n\n1. one\n2. two\n\n1. again"
+      convert('<ul><li>a</li><li>b</li></ul><ul><li>c</li><li>d</li></ul><ol><li>one</li></ol><ol start="2"><li>two</li></ol><ol><li>again</li></ol>').should ==
+        "- a\n- b\n\n- c\n- d\n\n1. one\n2. two\n\n1. again"
+    end
+
+    it "joins one-item lists side by side into one list" do
+      convert("<ul><li>Ann Lee 12 Oak St</li></ul><ul><li>Bo Ray 4 Elm St</li></ul><ul><li>Cy Dunn 9 Ash Rd</li></ul>").should ==
+        "- Ann Lee 12 Oak St\n- Bo Ray 4 Elm St\n- Cy Dunn 9 Ash Rd"
+    end
+
+    it "writes a one-item list as a line unless a list is beside it" do
+      convert("<h3>Abigél</h3><ul><li>12-14</li></ul><p>Regény</p><ul><li>Categories</li></ul><ul><li>News</li><li>Sport</li></ul>").should ==
+        "### Abigél\n\n12-14\n\nRegény\n\n- Categories\n\n- News\n- Sport"
     end
 
     it "renders definition lists as term and definition pairs" do
