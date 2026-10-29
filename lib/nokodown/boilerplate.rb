@@ -85,7 +85,7 @@ module Nokodown
       # Side notes inside an article are content whatever their class says.
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if chrome_element?(node) || chrome_role?(node)
-      return if dominant?(node)
+      return if dominant?(node) && !header_above_title?(node)
       return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
@@ -268,10 +268,20 @@ module Nokodown
     # section; outside, one holding the page title (h1, few links, no
     # navigation) is still content.
     def site_header?(node)
-      return false if inside_sectioning?(node) || dominant?(node)
+      return false if inside_sectioning?(node) || (dominant?(node) && !header_above_title?(node))
 
       title_block = node.at_css("h1") && @stats.link_density(node) < 0.5 && !node.at_css("nav, [role=navigation], [role=search]")
       !title_block
+    end
+
+    # A mega menu or a banner of notices can outweigh the content, but the
+    # site header holding it still sits above the page's title.
+    def header_above_title?(node)
+      return false unless node.name == "header" || Dom.signature(node).match?(Patterns::HEADER)
+      return false if node.at_css("h1")
+
+      last = node.css("*").last || node
+      @body.css("h1").any? { |h1| Dom.key(h1).to_i > Dom.key(last).to_i }
     end
 
     def aside_noise?(node)

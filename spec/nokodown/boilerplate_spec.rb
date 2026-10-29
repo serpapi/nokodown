@@ -180,6 +180,15 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "site headers" do
+    it "removes a header above the page's title however much it holds" do
+      notices = Array.new(12) { |index| "<li>Service centre #{index + 1}: 600 Friendship Road, open 8:30 to 18:30 by appointment</li>" }
+      html = "<div class=\"header\"><ul>#{notices.join}</ul></div><h1>Repairing a chronograph</h1>#{prose('Servicing a watch', 1)}"
+
+      remaining(html).should_not include("Service centre")
+    end
+  end
+
   describe "member panels" do
     def post(panel)
       "<div class=\"message\">#{panel}<div class=\"message-userContent\">#{prose('Bleeding the radiators', 2)}</div></div>"
