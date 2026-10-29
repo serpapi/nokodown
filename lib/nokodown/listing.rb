@@ -17,6 +17,7 @@ module Nokodown
     # one of which can be the article itself, have more headings.
     MAX_HEADINGS = 2
     RECORD_PARTS = "table, pre, code"
+    SCRIPT_LINK = /\Ajavascript:/i.freeze
 
     module_function
 
@@ -61,7 +62,7 @@ module Nokodown
     end
 
     # A teaser links to a page of its own, and a title it has is that link.
-    # Documentation sections link their headings to themselves, and its
+    # Documentation sections link their headings to themselves, and reference
     # entries hold signatures, parameter tables and code.
     def teaser?(item)
       headings = item.css(Dom::HEADING_SELECTOR)
@@ -78,7 +79,7 @@ module Nokodown
 
     def page_link?(link)
       href = link["href"].to_s.strip
-      !href.empty? && !href.start_with?("#") && !href.match?(/\Ajavascript:/i)
+      !href.empty? && !href.start_with?("#") && !href.match?(SCRIPT_LINK)
     end
   end
 end
