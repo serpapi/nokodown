@@ -5,9 +5,11 @@ module Nokodown
     # A label and its value, or a number and its unit, that a page sets on
     # lines or in blocks of their own ("Type:" over "Condo", "27" over
     # "Nov") read as one line. A label over three or more short lines
-    # introduces a list ("Check all that apply:") and stays on its own. A
-    # number after a name ("Stories" over "1.5") is that name's value, and
-    # the name after it is the next value's, not its unit.
+    # introduces a list ("Check all that apply:") and stays on its own. In a
+    # run of numbers and names that take turns, the first decides how they
+    # pair: numbers first are counts or badges of the names after them;
+    # names first take the numbers after them as values ("Loft" over "440"
+    # over "Stories" over "1.5").
     module Labels
       LABEL = /\A[^\s#>|`\-\d!][^\n]{0,38}[:：]\**\z/.freeze
       NUMBER = /\A\d[\d.,]{0,7}\z/.freeze
@@ -30,30 +32,12 @@ module Nokodown
       end
 
       # The blocks of sibling elements, one group each. Only a group of one
-      # block takes the next group's first block onto its line: blocks of
+      # block takes the next group's one block onto its line: blocks of
       # elements apart on the page ("Tags:" with no tags, then a button in
       # the next box) stay apart.
       def siblings(groups)
-        kept = []
-        taken = false
-        groups.each_with_index do |group, index|
-          previous = groups[index - 1] if index.positive?
-          taken = !taken && previous&.size == 1 && !group.empty? && sibling_join?(groups, index)
-          if taken
-            kept[-1] = join(kept[-1], group.first)
-            kept.concat(group.drop(1))
-          else
-            kept.concat(group)
-          end
-        end
-        kept
-      end
-
-      def sibling_join?(groups, index)
-        before = index > 1 ? groups[index - 2].last : nil
-        rest = groups[index, 3].flatten(1).drop(1).first(2)
-        texts = [before, groups[index - 1].first, groups[index].first, *rest].map { |block| block && text(block) }
-        joins(texts).include?(1)
+        joins = joins(groups.map { |group| text(group.first) if group.size == 1 })
+        joined(groups, joins) { |first, second| [join(first.first, second.first)] }.flatten(1)
       end
 
       def text(block)
@@ -76,20 +60,31 @@ module Nokodown
 
       # Indexes of the texts that take the next one onto their line.
       def joins(texts)
+        starts = []
         texts.each_index.select do |index|
+          starts[index] = run_start(texts, index, starts)
           first, second, *rest = texts[index, 4]
           next false if first.nil? || second.nil?
 
-          unit?(texts, index) || (first.match?(LABEL) && second.match?(VALUE) && !list?(rest))
+          unit?(texts, index, starts) || (first.match?(LABEL) && second.match?(VALUE) && !list?(rest))
         end.to_set
       end
 
-      def unit?(texts, index)
-        first, second, third = texts[index, 3]
-        return false unless first.match?(NUMBER) && second.match?(UNIT) && !third&.match?(NUMBER)
+      def unit?(texts, index, starts)
+        return false unless texts[index].match?(NUMBER) && texts[index + 1].match?(UNIT)
 
-        before = texts[index - 1] if index.positive?
-        before.nil? || before.match?(NUMBER) || !before.match?(NAME)
+        start = starts[index]
+        !(start.positive? && name?(texts[start - 1]))
+      end
+
+      # Where the run of numbers and names that a number ends begins.
+      def run_start(texts, index, starts)
+        number = index >= 2 && texts[index]&.match?(NUMBER) && texts[index - 2]&.match?(NUMBER)
+        number && name?(texts[index - 1]) ? starts[index - 2] : index
+      end
+
+      def name?(text)
+        !text.nil? && !text.match?(NUMBER) && text.match?(NAME)
       end
 
       def list?(rest)
