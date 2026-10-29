@@ -867,6 +867,14 @@ RSpec.describe "Markdown conversion" do
       convert("<h1>Title</h1><h2>-</h2><p>a</p><h3>✦ ♡ ★</h3><p>b</p>").should == "# Title\n\na\n\nb"
     end
 
+    it "reads a heading of a long run of dashes or arrows in linear time" do
+      arrows = "#{'↖' * 60}Arrows#{'↗' * 60}"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert("<h1>Title</h1><h2>#{'-' * 100}</h2><p>a</p><h3>#{arrows}</h3><p>b</p>")
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      markdown.should == "# Title\n\na\n\n### #{arrows}\n\nb"
+    end
+
     it "keeps a rating set as a heading or after its text" do
       convert("<h3>★★★★☆</h3><p>Great</p><h2>Value for Money – 22/25 ⭐️⭐️⭐️</h2><p>b</p>").should ==
         "★★★★☆\n\nGreat\n\n## Value for Money – 22/25 ⭐️⭐️⭐️\n\nb"

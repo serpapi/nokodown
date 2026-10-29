@@ -14,12 +14,14 @@ module Nokodown
       # closes the text as a frame ("— Blog —"); a run of them decorates.
       SIGN = "[-+–—]{2,}|[-+](?!\\s+[\\p{Ll}\\p{N}(\\[])"
       DECORATION = "#{Text::PICTOGRAPH}|[|·•;,/~=]"
-      # Two stars or more are a rating.
-      LEADING = /\A(?:(?!#{STAR}\uFE0F?#{STAR})(?:#{DECORATION}|[:»›]|#{SIGN}|\\[*_])+\s+)+/.freeze
+      # Two stars or more are a rating. Each run is atomic: a run of dashes
+      # splits into signs in exponentially many ways, and giving one back can
+      # never let the space after it match.
+      LEADING = /\A(?:(?!#{STAR}\uFE0F?#{STAR})(?>(?:#{DECORATION}|[:»›]|#{SIGN}|\\[*_])+)\s+)+/.freeze
       # Matched on the reversed text. A colon stays, as French sets one apart,
       # and so does a closing guillemet when an opening one pairs with it.
-      TRAILING = /\A(?:(?!\uFE0F?#{STAR}\uFE0F?#{STAR})(?:#{DECORATION}|[-–—+]|[*_]\\)+\s+)+/.freeze
-      UNQUOTED_TRAILING = /\A(?:(?!\uFE0F?#{STAR}\uFE0F?#{STAR})(?:#{DECORATION}|[-–—+»›]|[*_]\\)+\s+)+/.freeze
+      TRAILING = /\A(?:(?!\uFE0F?#{STAR}\uFE0F?#{STAR})(?>(?:#{DECORATION}|[-–—+]|[*_]\\)+)\s+)+/.freeze
+      UNQUOTED_TRAILING = /\A(?:(?!\uFE0F?#{STAR}\uFE0F?#{STAR})(?>(?:#{DECORATION}|[-–—+»›]|[*_]\\)+)\s+)+/.freeze
       OPENING_DASH = /\A[–—]\s+/.freeze
       OPENING_GUILLEMET = /[«‹]/.freeze
       CONTENT = /[\p{L}\p{N}]|#{STAR}\uFE0F?#{STAR}/.freeze
