@@ -1066,10 +1066,6 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "- 1. Read it aloud.\n\nThen\n\n- - Breathe\n\nDone\n\n- [x] Ship"
     end
 
-    it "keeps a one-item list beside text that opens a list" do
-      convert("<p>Factors</p><p>1. Costs rose.</p><ul><li>Rules changed.</li></ul>").should == "Factors\n\n1. Costs rose.\n\n- Rules changed."
-    end
-
     it "joins one-item lists side by side into one list" do
       convert("<ul><li>Ann Lee 12 Oak St</li></ul><ul><li>Bo Ray 4 Elm St</li></ul><ul><li>Cy Dunn 9 Ash Rd</li></ul>").should ==
         "- Ann Lee 12 Oak St\n- Bo Ray 4 Elm St\n- Cy Dunn 9 Ash Rd"

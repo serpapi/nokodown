@@ -22,11 +22,8 @@ module Nokodown
       # A cross or a no-entry sign says what a line is not.
       NEGATIVE = /[❌❎✕✖✗✘🚫⛔]/.freeze
       LABEL = /[:：]\z/.freeze
-      MARKER = "\\d{1,9}[.)]|[-+*]"
-      # Text that opens a list item at a line's start.
-      LIST_ITEM = /\A(?:#{MARKER})(?:\s|\z)/.freeze
       # An item's text that would open a list of its own, or a task.
-      MARKED_TEXT = /\A- (?:#{MARKER}|\[[ xX]\])(?:\s|\z)/.freeze
+      MARKED_TEXT = /\A- (?:\d{1,9}[.)]|[-+*]|\[[ xX]\])(?:\s|\z)/.freeze
 
       module_function
 
@@ -137,10 +134,10 @@ module Nokodown
 
       # Sites wrap a date or a tag in a list of its own, and each entry of a
       # directory in one. A blank line between items of one groups nothing,
-      # so side by side they are one list, and alone, beside no other list
-      # or text that opens one, the item is a line of text, unless its text
-      # would read as a list item or a task there ("1. Read it aloud.").
-      # Runs last, once the cards CardLinks reads are settled.
+      # so side by side they are one list, and alone, beside no other list,
+      # the item is a line of text, unless its text would read as a list
+      # item or a task there ("1. Read it aloud."). Runs last, once the
+      # cards CardLinks reads are settled.
       def single_items(blocks)
         runs = blocks.each_index.chunk_while { |a, b| single_item?(blocks[a]) && single_item?(blocks[b]) }
         runs.flat_map do |run|
@@ -158,9 +155,7 @@ module Nokodown
       end
 
       def beside_list?(blocks, index)
-        [index.positive? ? blocks[index - 1] : nil, blocks[index + 1]].compact.any? do |block|
-          block.kind == :list || (block.kind == :paragraph && block.text.match?(LIST_ITEM))
-        end
+        [index.positive? ? blocks[index - 1] : nil, blocks[index + 1]].any? { |block| block&.kind == :list }
       end
     end
   end
