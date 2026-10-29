@@ -71,14 +71,11 @@ module Nokodown
     # Chinese and Japanese are written without spaces, so each Han or kana
     # character counts as a word.
     WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[[\p{L}\p{N}]&&[^\p{Han}\p{Hiragana}\p{Katakana}]]+/.freeze
-    # Query values that differ between pages of one kind are ids; "lvl=categ_see"
-    # and "lvl=notice_display" are two kinds of page.
-    ID_VALUE = /\d/.freeze
+    DIGIT = /\d/.freeze
     DIGITS = /\A\d+\z/.freeze
     # A post's title: "andrea-jeremiah-latest-photos", "kak_sdelat_ramku.html".
     SLUG = /\A[\p{L}\p{N}%]+(?:[-_][\p{L}\p{N}%]+){2,}(?:\.[a-z]+)?\z/i.freeze
     EXTENSION = /\.[a-z]+\z/i.freeze
-    DIGIT = /\d/.freeze
     # The root, a language's root ("/en/", "/pt-br/") or its index file.
     HOME = %r{\A/*(?:[a-z]{2}(?:[-_][a-z]{2})?/*)?(?:index\.\w+)?\z}i.freeze
     FILE = /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|docx?|xlsx?|pptx?|mp[34])\z/i.freeze
@@ -691,16 +688,10 @@ module Nokodown
     # category's "-g8893.html" or "_c890317" beside a product's "-37209.html"
     # or "_p9367731".
     def same_code?(page, other)
-      codes = [page, other].map { |name| decode(name).sub(EXTENSION, "").split(/[-_]/).last.to_s }
+      codes = [page, other].map { |name| UrlWords.decode(name).sub(EXTENSION, "").split(/[-_]/).last.to_s }
       return true unless codes.all? { |code| code.match?(DIGIT) }
 
       codes.map { |code| code.gsub(/\d+/, "0") }.uniq.size == 1
-    end
-
-    def decode(segment)
-      URI.decode_www_form_component(segment).scrub("")
-    rescue ArgumentError
-      segment
     end
 
     # Dated permalinks differ in their date folders ("/2023/4/30/news/").
@@ -714,9 +705,11 @@ module Nokodown
       !other.empty? && other.all? { |key, value| value == own[key] || (id?(value) && id?(own[key])) }
     end
 
-    # "%20" in "key=Hardware%20--%20Catalogs" is no id.
+    # Query values that differ between pages of one kind are ids; "lvl=categ_see"
+    # and "lvl=notice_display" are two kinds of page, and the "%20" in
+    # "key=Hardware%20--%20Catalogs" is no id.
     def id?(value)
-      decode(value.to_s).match?(ID_VALUE)
+      UrlWords.decode(value.to_s).match?(DIGIT)
     end
 
     def segments(uri)

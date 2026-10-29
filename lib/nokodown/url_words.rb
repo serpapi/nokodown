@@ -16,9 +16,15 @@ module Nokodown
     SAME_NAME = 0.8
     MARGIN = 0.25
 
+    def self.decode(segment)
+      URI.decode_www_form_component(segment).scrub("")
+    rescue ArgumentError
+      segment
+    end
+
     def initialize(url)
       segment = url.to_s[SiteName::URL, 2].to_s.split("/").reject(&:empty?).last.to_s.sub(EXTENSION, "")
-      words = fold(decode(segment)).scan(WORD)
+      words = fold(UrlWords.decode(segment)).scan(WORD)
       @words = words.size >= MIN_WORDS && words.count { |word| word.match?(/\p{L}{3}/) } >= MIN_NAMES ? words : []
     end
 
@@ -51,12 +57,6 @@ module Nokodown
     end
 
     private
-
-    def decode(segment)
-      URI.decode_www_form_component(segment).scrub("")
-    rescue ArgumentError
-      segment
-    end
 
     def fold(text)
       text.unicode_normalize(:nfkd).gsub(/\p{Mn}/, "").downcase
