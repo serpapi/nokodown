@@ -1025,6 +1025,11 @@ RSpec.describe "Markdown conversion" do
       Nokodown::Markdown::Lists.call(blocks).map(&:text).should == ["", "1. a\n2. b"]
     end
 
+    it "writes a label over a number alone on one line, and apart from numbers that count up" do
+      convert("<p>Datum:</p><p>10. Oktober 2023</p><p>Steps:</p><p>1. Mix</p><p>2. Bake</p>").should ==
+        "Datum: 10. Oktober 2023\n\nSteps:\n\n1. Mix\n2. Bake"
+    end
+
     it "writes paragraphs that count up as a numbered list" do
       convert("<p>Standards:</p><p>1、GB12002</p><p>2、GB320</p><p>Steps</p><p>1) Mix<br>2) Bake</p><p>Notes</p><p>3. Third</p><p>5. Fifth</p>").should ==
         "Standards:\n\n1. GB12002\n2. GB320\n\nSteps\n\n1. Mix\n2. Bake\n\nNotes\n\n3. Third\n\n5. Fifth"

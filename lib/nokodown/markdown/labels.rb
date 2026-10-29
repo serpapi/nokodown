@@ -66,14 +66,18 @@ module Nokodown
           first, second, *rest = texts[index, 4]
           next false if first.nil? || second.nil?
 
-          unit?(texts, index, starts) || (first.match?(LABEL) && value?(second) && !list?(rest))
+          unit?(texts, index, starts) || (first.match?(LABEL) && value?(second, rest.first) && !list?(rest))
         end.to_set
       end
 
-      # A line typed with a bullet or a number is an item of a list the
-      # label introduces.
-      def value?(text)
-        text.match?(VALUE) && !text.match?(Lists::GLYPH) && !text.match?(Lists::TYPED_NUMBER)
+      # A line typed with a bullet, or with a number the next line counts on
+      # from, is an item of a list the label introduces; a number alone is
+      # the value ("Datum:" over "10. Oktober 2023").
+      def value?(text, following)
+        return false unless text.match?(VALUE) && !text.match?(Lists::GLYPH)
+
+        number = text[Lists::TYPED_NUMBER, 1]
+        number.nil? || following.to_s[Lists::TYPED_NUMBER, 1].to_i != number.to_i + 1
       end
 
       def unit?(texts, index, starts)
