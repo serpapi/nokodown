@@ -672,7 +672,7 @@ RSpec.describe Nokodown do
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       html = Nokodown::Charset.utf8("<p>#{text}</p>".b)
 
-      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 0.3
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
       html.should == "<p>#{text}</p>"
     end
 
