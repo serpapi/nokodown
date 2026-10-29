@@ -49,7 +49,7 @@ module Nokodown
 
       bounds = [0] + separators.flat_map { |separator| [separator.begin(0), separator.end(0)] } + [title.length]
       parts = bounds.each_slice(2).map { |from, to| title[from...to] }
-      last = (tail_start(title, bounds, parts.size) || parts.size) - 1
+      last = (tail_start(parts) || parts.size) - 1
       first = 0
       first += 1 while first < last && name?(parts[first])
       first += last_crumb(separators[(first - 1)...last]) if first.positive?
@@ -72,26 +72,59 @@ module Nokodown
 
     # The longest end that names the site, or else the shortest that
     # mentions its domain: "iPhone 15 | Shop | Apple" keeps "iPhone 15 |
-    # Shop", not just what comes before the first mention.
-    def tail_start(title, bounds, count)
-      tails = (1...count).map { |index| [index, title[bounds[2 * index]..]] }
-      tails.find { |_, tail| site_tail?(tail) }&.first || tails.reverse.find { |_, tail| mentions_domain?(tail) }&.first
+    # Shop", not just what comes before the first mention. The page sets
+    # its title, however long, so no end is read twice: separators hold no
+    # word characters, so an end's key is its parts' keys joined, and no
+    # name is longer than the longest name.
+    def tail_start(parts)
+      named_tail(parts.map { |part| key(part) }) || mentioning_tail(parts.map { |part| part.scan(WORD) })
+    end
+
+    def named_tail(keys)
+      longest = (@names + @domains).map(&:length).max.to_i
+      tail = +""
+      found = nil
+      (keys.size - 1).downto(1) do |index|
+        tail.prepend(keys[index])
+        break if tail.length > longest
+
+        found = index if site_tail_key?(tail)
+      end
+      found
+    end
+
+    def mentioning_tail(words)
+      following = []
+      (words.size - 1).downto(1) do |index|
+        return index if domain_from?(words[index] + following, words[index].size)
+
+        following = (words[index] + following).first(MAX_DOMAIN_WORDS - 1)
+      end
+      nil
     end
 
     # A declared name may go on with a slogan the title leaves out ("Giełda
     # odpadów" for "Giełda odpadów → Dziennik Gospodarki").
     def site_tail?(text)
-      key = key(text)
-      !key.empty? && (name?(text) || (key.length >= MIN_PREFIX && @names.any? { |name| name.start_with?(key) }))
+      site_tail_key?(key(text))
+    end
+
+    def site_tail_key?(key)
+      !key.empty? && (@domains.include?(key) || @names.include?(key) ||
+        (key.length >= MIN_PREFIX && @names.any? { |name| name.start_with?(key) }))
+    end
+
+    def mentions_domain?(text)
+      words = text.scan(WORD)
+      domain_from?(words, words.size)
     end
 
     # A label of a few letters alone is most often a word of the title
     # ("in" for in.gov, "nu" for nu.nl), unless the title writes it with
     # capitals after its first letter, as it does acronyms ("AXA", "iA").
-    def mentions_domain?(text)
-      words = text.scan(WORD)
+    def domain_from?(words, starts)
       brand, spelled = @domains
-      words.each_index.any? do |start|
+      (0...starts).any? do |start|
         (1..MAX_DOMAIN_WORDS).any? do |count|
           key = key(words[start, count].join)
           key == spelled || (key == brand && (count > 1 || brand_word?(words[start])))
