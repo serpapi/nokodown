@@ -64,4 +64,17 @@ RSpec.describe Nokodown::RepeatedLinks do
     root.css("iframe, img").size.should == 2
     Nokodown::Dom.text(root).should_not include("Leer más")
   end
+
+  it "keeps links a colon or a breadcrumb leads into and links to another part of the page" do
+    html = card("The harbor bridge reopens", "<p>Filed under: <a href='/posts/25'>Bridge</a></p><p><a href='/'>Home</a> › <a href='/posts/25'>Bridge</a></p>") +
+           "<article><h2><a href='/guide#setup'>Setting up the stove</a></h2><p><a href='/guide#use'>Use</a></p></article>"
+    text_after(html).should end_with("Filed under: BridgeHome › BridgeSetting up the stoveUse")
+  end
+
+  it "keeps download links, menu items over a submenu and the cells of a data table" do
+    html = "<article><h2><a href='/report.pdf'>Annual report for the year</a></h2><p><a href='/report.pdf'>Open</a></p></article>" \
+           "<nav><h2><a href='/shop'>Shop everything we sell</a></h2><ul><li><a href='/shop'>Shop</a><ul><li><a href='/s/1'>Stoves</a></li></ul></li></ul></nav>" \
+           "<table><tr><th>Stove</th><th>Shop</th></tr><tr><td><b><a href='/s/1'>Trail Stove Two Burner</a></b></td><td><a href='/s/1'>Buy</a></td></tr></table>"
+    text_after(html).should == "Annual report for the yearOpenShop everything we sellShopStovesStoveShopTrail Stove Two BurnerBuy"
+  end
 end
