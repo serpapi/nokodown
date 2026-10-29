@@ -8,19 +8,24 @@ module Nokodown
     # paragraphs; block elements are rendered by tag.
     class Renderer
       MAX_DEPTH = 400
-      SEPARATOR_LINE = /\A\s*([-=_*~])\1{2,}\s*\z/.freeze
       GLYPHS = "•·▪◦‣►▶▸➤→■●○"
       # A run of glyphs (●●●○○) is a rating, not a bullet.
       BULLET_GLYPH = /\A(?:[#{GLYPHS}](?![#{GLYPHS}])|[-–—](?=\s))\s*/.freeze
       # Any symbols before a space can be an item's marker (+ and - in pros
       # and cons, ✓ and ✗), not only the glyphs that are stripped.
       LEADING_SYMBOLS = /\A[^\p{L}\p{N}\s]+(?=\s)/.freeze
+      SIGN_LENGTH = 3
+      # Heading-anchor markup puts a permalink before or after the text.
+      # A sign before a number is the heading's own: "§ 1 Geltungsbereich".
+      PERMALINK = /\A[#¶§🔗]\s+(?!\d)|\s+[#¶§🔗]\z/.freeze
 
-      def initialize(urls, images: true, links: true, redundant_images: {})
-        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
+      def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
+        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images,
+                                   main_content: main_content)
         @links = links
         @depth = 0
         @contains_block = {}
+        @in_cell = false
       end
 
       def render(nodes)
@@ -46,12 +51,29 @@ module Nokodown
         nodes.empty? ? [] : text_paragraphs(@inline.render(nodes))
       end
 
+      # A data table's cell holds values, where a line of only a sign ("+",
+      # "×", "—") is one; a longer one ("_____") still separates.
+      def cell_blocks(cell)
+        outer = @in_cell
+        @in_cell = true
+        @inline.in_cell(cell) { children_blocks(cell) }
+      ensure
+        @in_cell = outer
+      end
+
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          chunk = Text.tidy(chunk).lines.reject { |line| line.match?(SEPARATOR_LINE) }.join.strip
-          Block.new(:paragraph, Text.escape_line_starts(chunk)) unless chunk.empty?
+          lines = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) || (line if sign?(line)) }
+          chunk = Labels.lines(lines.join("\n").strip)
+          next if chunk.empty?
+
+          Block.new(:paragraph, Text.escape_line_starts(Text.unescape_lone(Emphasis.paragraph(chunk))))
         end
+      end
+
+      def sign?(line)
+        @in_cell && line.length <= SIGN_LENGTH
       end
 
       def inline(nodes)
@@ -102,7 +124,7 @@ module Nokodown
         when "code" then CodeBlock.render(node, node.content)
         when "table" then Table.new(self, node).blocks
         when "dl" then definition_list(node)
-        when "hr" then [Block.new(:rule, "---")]
+        when "hr" then []
         when "iframe" then embed(node)
         when "summary" then summary(node)
         when "a" then linked_blocks(node)
@@ -112,7 +134,8 @@ module Nokodown
 
       # Text that long is a paragraph some site wrapped in a heading tag.
       def heading(node)
-        text = Text.single_line(@inline.render(node.children, heading: true))
+        text = Emphasis.unwrap(Text.single_line(@inline.render(node.children, heading: true)))
+        text = Text.unescape_lone(text.gsub(PERMALINK, ""))
         return [] if text.empty?
         return [Block.new(:paragraph, text)] if text.length > 300
 
@@ -173,10 +196,31 @@ module Nokodown
         nested_only = items.map { |blocks| blocks.size == 1 && bulleted_list?(blocks.first) }
         rendered = items.each_with_index.map do |blocks, index|
           previous = index.positive? && nested_only[index - 1]
-          list_entry(start ? "#{start + index}. " : "- ", blocks, nested_only[index] && !previous && !nested_only[index + 1])
+          list_entry(start ? "#{start + index}. " : "- ", item_blocks(blocks), nested_only[index] && !previous && !nested_only[index + 1])
         end
-        loose = items.any? { |blocks| blocks.drop(1).any? { |block| block.kind != :list } }
-        [Block.new(:list, rendered.join(loose ? "\n\n" : "\n"))]
+        [Block.new(:list, rendered.join("\n"))]
+      end
+
+      # Card grids put each title in a heading and a badge in a list of its
+      # own ("- - Popular"); in a list item the marker already sets them
+      # apart, as it does an item set in bold throughout.
+      def item_blocks(blocks)
+        first = blocks.first
+        return [item_paragraph(Emphasis.unwrap(first.text))] if blocks.size == 1 && first.kind == :paragraph
+
+        blocks.each_with_index.map do |block, index|
+          if block.kind == :heading
+            item_paragraph(block.text.sub(/\A#+ /, ""))
+          elsif index.zero? && blocks.size > 1 && bulleted_list?(block) && !block.text.include?("\n")
+            item_paragraph(block.text.delete_prefix("- "))
+          else
+            block
+          end
+        end
+      end
+
+      def item_paragraph(text)
+        Block.new(:paragraph, Text.escape_line_starts(text))
       end
 
       # Markers that differ between items carry meaning, as in legends where
@@ -227,13 +271,10 @@ module Nokodown
         ([marker + first.to_s] + rest.map { |line| line.empty? ? "" : indent + line }).join("\n")
       end
 
-      # A nested list hugs the line above it; other blocks are separated.
+      # Blank lines inside or between items cost tokens and change nothing
+      # for a reader: the indentation keeps an item's blocks together.
       def join_item(blocks)
-        blocks.each_with_index.map { |block, index| (index.zero? ? "" : separator(block)) + block.text }.join
-      end
-
-      def separator(block)
-        block.kind == :list ? "\n" : "\n\n"
+        Labels.blocks(blocks).map(&:text).join("\n")
       end
 
       def quote(node)
@@ -250,10 +291,7 @@ module Nokodown
         entries = definition_groups(node).map do |term, definitions|
           compact?(definitions) ? definition_line(term, definitions) : list_entry("- ", definition_item(term, definitions))
         end
-        return [] if entries.empty?
-
-        runs = entries.slice_when { |a, b| a.include?("\n") || b.include?("\n") }
-        [Block.new(:list, runs.map { |run| run.join("\n") }.join("\n\n"))]
+        entries.empty? ? [] : [Block.new(:list, entries.join("\n"))]
       end
 
       # [term, [blocks of each <dd>]] pairs; a term may be nil or have no <dd>.
