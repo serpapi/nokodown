@@ -583,6 +583,14 @@ RSpec.describe Nokodown do
       end
     end
 
+    it "reads accented pairs inside words as Western, not as Han" do
+      html = "<p>Anota\xE7\xF5es e informa\xE7\xF5es da legisla\xE7\xE3o: administra\xE7\xE3o, cat\xE1logo, in\xEDcio, " \
+             "respons\xE1vel, situa\xE7\xE3o, publica\xE7\xF5es, altera\xE7\xF5es, revoga\xE7\xE3o</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Anotações e informações da legislação: administração, catálogo, " \
+                                                          "início, responsável, situação, publicações, alterações, revogação"
+    end
+
     it "reads stray bytes in UTF-8 as Windows-1252" do
       html = "<meta charset=utf-8><p>Ünïcödé text, Reykjav\xEDk \xA9 2020</p>".b
 

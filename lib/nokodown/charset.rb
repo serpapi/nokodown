@@ -145,18 +145,28 @@ module Nokodown
       nil
     end
 
-    # Western text has its accented letters one at a time between ASCII
-    # letters ("café"), or two ("lisää") where a double-byte encoding would
-    # read them as Han. Other scripts write whole words in high bytes, which
-    # double-byte encodings interleave with ASCII trail bytes.
+    # Western text has its accented letters one at a time ("café") or two
+    # inside a word ("Anotações"), which a double-byte encoding would read
+    # as Han. Other scripts write whole words in high bytes, which
+    # double-byte encodings interleave with ASCII trail bytes. Two at the
+    # end of a word ("lisää") are Western when no script fits.
     def detected(bytes)
-      runs = bytes.scan(DOUBLE_BYTE_RUN)
+      runs = []
+      bytes.scan(DOUBLE_BYTE_RUN) { runs << Regexp.last_match.offset(0) }
       return if runs.empty?
-      return Encoding::Windows_1252 if runs.count { |run| run.bytesize == 1 } > runs.size * WESTERN_SHARE
+      return Encoding::Windows_1252 if runs.count { |from, to| western_run?(bytes, from, to) } > runs.size * WESTERN_SHARE
 
       sample = bytes.byteslice(0, SAMPLE)
       found = CANDIDATES.find { |encoding, script, share| reads_as?(sample, encoding, script, share) }&.first
-      found || (Encoding::Windows_1252 if runs.count { |run| run.bytesize <= 2 } > runs.size * WESTERN_SHARE)
+      found || (Encoding::Windows_1252 if runs.count { |from, to| to - from <= 2 } > runs.size * WESTERN_SHARE)
+    end
+
+    def western_run?(bytes, from, to)
+      to - from == 1 || (to - from == 2 && from.positive? && letter?(bytes.getbyte(from - 1)) && letter?(bytes.getbyte(to)))
+    end
+
+    def letter?(byte)
+      !byte.nil? && (byte | 0x20).between?(0x61, 0x7A)
     end
 
     # Text in a legacy encoding reads as UTF-8 here and there by chance, so
