@@ -31,6 +31,12 @@ RSpec.describe Nokodown::Markdown::Orphans do
     convert("<p>Write to us.</p><h2>Contact us</h2><p>Your name:</p><p>E-mail:</p>").should == "Write to us."
   end
 
+  it "keeps a lone midnight slot and a row of departures" do
+    departures = (0...24).map { |i| format("%<hour>d:%<minute>02d", hour: i / 4, minute: (i % 4) * 15) }.join(" ")
+    convert("<p>00:00</p><p>Night news.</p><p>#{departures} (no service on holidays)</p>").should ==
+      "00:00\n\nNight news.\n\n#{departures} (no service on holidays)"
+  end
+
   it "keeps a label before its value, a heading or a list" do
     html = "<p>Price:</p><p>$40</p><p>Reviewed article:</p><h2>Weaving in ancient Greece</h2><p>Sizes:</p><ul><li>S</li><li>M</li></ul>"
     convert(html).should == "Price:\n\n$40\n\nReviewed article:\n\n## Weaving in ancient Greece\n\nSizes:\n\n- S\n- M"

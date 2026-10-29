@@ -7,8 +7,13 @@ module Nokodown
     module Orphans
       NUMBERS = /\A\d{1,3}(?:\s+\d{1,3})?\z/.freeze
       SEQUENCE = /\A[01](?:\s+\d{1,2})+\z/.freeze
-      PLAYER_TIME = %r{\A(?:\s*/?\s*(?:\d{1,2}:)?\d{1,2}:\d{2})+\z}.freeze
+      TIME = /(?:\d{1,2}:)?\d{1,2}:\d{2}/.freeze
+      # A player shows the elapsed time and the duration, run together
+      # ("0:000:00") or apart ("0:00 / 3:45"); a lone "00:00" is a slot in a
+      # schedule.
+      PLAYER_TIME = %r{\A\s*#{TIME}(?:\s*(?:/\s*)?#{TIME})+\s*\z}.freeze
       PLAYER_START = /(?<![\d:])0?0:00/.freeze
+      PLAYER_LENGTH = 30
       LABEL_LENGTH = 40
       LABEL_END = /[\p{L}:：?)]\z/.freeze
       EMPTY_LABEL_LENGTH = 30
@@ -65,7 +70,7 @@ module Nokodown
       end
 
       def player_time?(text)
-        text.match?(PLAYER_TIME) && text.match?(PLAYER_START)
+        text.length <= PLAYER_LENGTH && text.match?(PLAYER_START) && text.match?(PLAYER_TIME)
       end
 
       def slide_numbers?(text)
