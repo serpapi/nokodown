@@ -222,6 +222,15 @@ module Nokodown
       shown = date_text(post.date)
       body[DATE] = shown if shown
       replaced(post).each { |node| node[REPLACED] = "" }
+      remove_member_panels(post.node, body)
+    end
+
+    # Boilerplate removal would reduce each to a line naming the poster
+    # again.
+    def remove_member_panels(post, body)
+      post.css("[class]").each do |node|
+        node.remove if MemberPanel.panel?(node) && !inside?(body, node)
+      end
     end
 
     # The line stands in for the header it was read from: the date line, the
