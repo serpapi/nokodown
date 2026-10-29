@@ -31,6 +31,8 @@ module Nokodown
     UTILITY_FORM_TEXT = 300
     FORM_TITLE = 120
     TITLE_HOLDERS = %w[body main article].freeze
+    MAIN_REGIONS = %w[main article].freeze
+    FORM_PAGE_TEXT = 100
     BEYOND_FORM_TITLE = "a[href], img, picture, video, iframe, table, ul, ol, dl"
     FORM_TITLE_PIECES = 3
     TEXT_PIECES = ".//text()[normalize-space()]"
@@ -290,10 +292,30 @@ module Nokodown
     def remove_message_forms(forms)
       forms.each do |form|
         next if form.ancestors.none? { |ancestor| ancestor.name == "body" }
-        next if Dom.char_count(form.content) >= UTILITY_FORM_TEXT
+        next if Dom.char_count(form.content) >= UTILITY_FORM_TEXT || page_form?(form)
 
         titled_form(form).remove
       end
+    end
+
+    # On an application or sign-up page the form is what the main region
+    # holds besides its headings, and what it asks for says what the page is
+    # for. A comment form is never that.
+    def page_form?(form)
+      holder = form
+      holder = holder.parent while holder&.element? && !main_region?(holder) && !comment_area?(holder)
+      return false unless holder&.element? && main_region?(holder)
+
+      headings = holder.css(Dom::HEADING_SELECTOR).sum { |heading| Dom.char_count(heading.content) }
+      Dom.char_count(holder.content) - Dom.char_count(form.content) - headings < FORM_PAGE_TEXT
+    end
+
+    def main_region?(node)
+      MAIN_REGIONS.include?(node.name) || node["role"] == "main"
+    end
+
+    def comment_area?(node)
+      Dom.signature(node).match?(Patterns::SECONDARY)
     end
 
     # The form with the wrappers that add only a short title or note to it.

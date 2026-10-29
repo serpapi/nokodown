@@ -552,10 +552,18 @@ RSpec.describe Nokodown do
 
     it "keeps a page wrapped in one form, and the page's title above a message form" do
       page = "<form><h2>Opening hours</h2><p>#{'We open at nine and close at six, also on public holidays. ' * 8}</p><textarea></textarea></form>"
-      post = "<article><h1>Lake trip</h1><p>We went.</p><form><textarea></textarea><p>Your email stays private.</p></form></article>"
+      post = '<article><h1>Lake trip</h1><p>We went.</p><div id="respond"><form><textarea></textarea>' \
+             "<p>Your email address will not be published.</p></form></div></article>"
 
       convert(page).should include("We open at nine")
       convert(post).should == "# Lake trip\n\nWe went."
+    end
+
+    it "keeps the form that an application page holds" do
+      html = "<main><h1>Apply for the March course</h1><form><p>Fields in bold must be filled in, in Latin letters.</p>" \
+             "<label>Name</label><input name=\"name\"><textarea name=\"note\"></textarea></form></main>"
+
+      convert(html).should include("Fields in bold must be filled in")
     end
 
     it "drops the messages Webflow shows only once a form is sent" do
