@@ -14,7 +14,9 @@ module Nokodown
     # Labels under a country code that are not the site's name (example.co.uk).
     SECOND_LEVEL = %w[ac co com edu go gob gouv gov ne net nic or org].freeze
     WORD = /[\p{L}\p{N}]+/.freeze
+    CAPITAL = /\p{Lu}/.freeze
     MIN_PREFIX = 3
+    MIN_BRAND = 4
     MAX_DOMAIN_WORDS = 3
 
     def initialize(url, names)
@@ -80,11 +82,22 @@ module Nokodown
       !key.empty? && (name?(text) || (key.length >= MIN_PREFIX && @names.any? { |name| name.start_with?(key) }))
     end
 
+    # A label of a few letters alone is most often a word of the title
+    # ("in" for in.gov, "nu" for nu.nl), unless the title writes it with
+    # capitals after its first letter, as it does acronyms ("AXA", "iA").
     def mentions_domain?(text)
-      words = text.downcase.scan(WORD)
+      words = text.scan(WORD)
+      brand, spelled = @domains
       words.each_index.any? do |start|
-        (1..MAX_DOMAIN_WORDS).any? { |count| @domains.include?(words[start, count].join) }
+        (1..MAX_DOMAIN_WORDS).any? do |count|
+          key = key(words[start, count].join)
+          key == spelled || (key == brand && (count > 1 || brand_word?(words[start])))
+        end
       end
+    end
+
+    def brand_word?(word)
+      word.length >= MIN_BRAND || word[1..].match?(CAPITAL)
     end
 
     # The label before the public suffix names the site; with the suffix it

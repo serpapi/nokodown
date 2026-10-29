@@ -183,6 +183,19 @@ RSpec.describe Nokodown::Metadata do
       .should == "Hotels in Coclé"
   end
 
+  it "keeps title words that are a short domain's name by chance" do
+    metadata_at("https://www.in.gov/dor/tax-forms/", '<meta property="og:title" content="Tax Forms for Businesses in Indiana">', "<h1>Tax Forms</h1>")[:title]
+      .should == "Tax Forms for Businesses in Indiana"
+    metadata_at("https://www.nu.nl/binnenland/6312/storm.html", '<meta property="og:title" content="Storm raast over het land - wat je nu moet weten">')[:title]
+      .should == "Storm raast over het land - wat je nu moet weten"
+  end
+
+  it "drops a last part that names a short domain as an acronym" do
+    metadata_at("https://www.jec.com.br/noticias/ingressos", "<title>Ingressos à venda | JEC - Joinville Esporte Clube</title>")[:title]
+      .should == "Ingressos à venda"
+    metadata_at("https://ia.ca/savings-plans", "<title>Our Savings Plans | iA Financial Group</title>")[:title].should == "Our Savings Plans"
+  end
+
   it "drops the start of a declared site name that goes on with a slogan" do
     head = '<meta property="og:title" content="Rachmaninov MK2 RCA Cable - Sound Glory - Hi-Fi Store">' \
            '<meta property="og:site_name" content="Sound Glory - Hi-Fi Store - Serving music lovers since 1986">'
