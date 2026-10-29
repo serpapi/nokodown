@@ -80,9 +80,15 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Thanks for watching\n\nDate: 2026. 08. 10.\n\nTags:\n\n[Add to list](https://example.com/list)"
     end
 
-    it "takes a number after a name for that name's value, not the next name's" do
-      html = "<div><p>Main Floor</p><p>1045</p><p>Second Floor</p><p>Loft</p><p>440</p><p>Stories</p><p>1.5</p><p>Basement</p></div>"
-      convert(html).should == "Main Floor\n\n1045\n\nSecond Floor\n\nLoft\n\n440\n\nStories\n\n1.5\n\nBasement"
+    it "pairs numbers and names that take turns by which of them comes first" do
+      html = "<div><p>Main Floor</p><p>1045</p><p>Second Floor</p><p>Loft</p><p>440</p><p>Stories</p><p>1.5</p><p>Basement</p></div>" \
+             "<h2>Steps</h2><div><p>1</p><p>Pick a size</p><p>2</p><p>Pay online</p></div>"
+      convert(html).should == "Main Floor\n\n1045\n\nSecond Floor\n\nLoft\n\n440\n\nStories\n\n1.5\n\nBasement\n\n## Steps\n\n" \
+                              "1 Pick a size\n\n2 Pay online"
+    end
+
+    it "joins a label and its value in rows of a layout table" do
+      convert("<table><tr><td>Calculations:</td></tr><tr><td>PIS 21 Revati</td></tr></table>").should == "Calculations: PIS 21 Revati"
     end
 
     it "drops decorative separator lines" do
