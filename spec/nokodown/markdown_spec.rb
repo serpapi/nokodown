@@ -258,6 +258,12 @@ RSpec.describe "Markdown conversion" do
                               "[Voir](https://example.com/v) [«Rycari 2017»](https://example.com/q)"
     end
 
+    it "trims long runs of separators in linear time" do
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      convert("<p>a #{'•' * 20_000} b</p><p><a href=\"/x\">x#{'•' * 20_000}</a></p>").should start_with("a •")
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+    end
+
     it "keeps a card's link on its title and drops the buttons that repeat it" do
       card = '<li><a href="/p/1">2 options</a><h3><a href="/p/1">Trail boot</a></h3><p>Leather for rocky ground <a href="/p/1">…</a> ' \
              '<a href="/p/1/">Weiterlesen</a></p><p>Try <a href="/p/1">this one</a> today.</p></li>' \
