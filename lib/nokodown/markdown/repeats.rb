@@ -99,13 +99,14 @@ module Nokodown
       end
 
       # A line that runs on into the next, like the first line of a poem
-      # that gives the poem its name, is part of the text.
+      # that gives the poem its name, is part of the text. An address, such
+      # as an embedded video's, starts lowercase but does not run on.
       def runs_on?(blocks, index)
         return false unless blocks[index].kind == :paragraph
 
         following = blocks[index + 1]
         plain(blocks[index].text).match?(/[,;:–—-]\z/) ||
-          (following&.kind == :paragraph && plain(following.text).match?(/\A\p{Ll}/))
+          (following&.kind == :paragraph && plain(following.text).match?(/\A(?!https?:\/\/)\p{Ll}/))
       end
 
       # A paragraph that is all a section below the title holds ("### Tag",
