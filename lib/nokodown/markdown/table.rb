@@ -48,16 +48,23 @@ module Nokodown
         text.empty? ? [] : [Block.new(:paragraph, text)]
       end
 
-      # Drops empty rows and columns and pads short rows; and whether each
-      # row is one cell across the table.
+      # Drops empty rows, empty and separator columns and pads short rows;
+      # and whether each row is one cell across the table.
       def trimmed_grid
         grid, spanning = cell_grid
         kept = grid.each_index.reject { |index| grid[index].all?(&:empty?) }
         grid = grid.values_at(*kept)
         width = grid.map(&:size).max.to_i
         grid.each { |row| row.fill("", row.size...width) }
-        columns = (0...width).select { |column| grid.any? { |row| !row[column].empty? } }
+        columns = (0...width).select { |column| grid.any? { |row| !row[column].empty? } && !separator?(grid, column) }
         [grid.map { |row| row.values_at(*columns) }, spanning.values_at(*kept)]
+      end
+
+      # A column of one sign in every row, its header too (":" between a label
+      # and its value, "-" between two teams), only parts its neighbours.
+      def separator?(grid, column)
+        values = grid.map { |row| row[column] }.reject(&:empty?).uniq
+        values.size == 1 && values.first.match?(Separators::SYMBOL_LINE)
       end
 
       # One value per row and column: a rowspan repeats its value in the rows

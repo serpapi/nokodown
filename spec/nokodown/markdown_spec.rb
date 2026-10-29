@@ -941,6 +941,12 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "| Author | Post |\n| --- | --- |\n| Sam | Great collars. Sam's shop |"
     end
 
+    it "drops a column that holds one sign in every row" do
+      html = "<table><tr><th>Home</th><th>-</th><th>Away</th></tr><tr><td>Schalke</td><td>-</td><td>Hannover</td></tr>" \
+             "<tr><td>Bremen</td><td>-</td><td>Schalke</td></tr></table>"
+      convert(html).should == "| Home | Away |\n| --- | --- |\n| Schalke | Hannover |\n| Bremen | Schalke |"
+    end
+
     it "keeps the caption" do
       convert("<table><caption>Results</caption><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>").should ==
         "Results\n\n| A | B |\n| --- | --- |\n| 1 | 2 |"
