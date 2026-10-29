@@ -179,15 +179,26 @@ module Nokodown
         [Block.new(:list, rendered.join("\n"))]
       end
 
-      # Card grids put each title in a heading; in a list item the marker
-      # already sets it apart, as it does an item set in bold throughout.
+      # Card grids put each title in a heading and a badge in a list of its
+      # own ("- - Popular"); in a list item the marker already sets them
+      # apart, as it does an item set in bold throughout.
       def unheaded(blocks)
         first = blocks.first
-        return [Block.new(:paragraph, Text.escape_line_starts(Emphasis.unwrap(first.text)))] if blocks.size == 1 && first.kind == :paragraph
+        return [item_paragraph(Emphasis.unwrap(first.text))] if blocks.size == 1 && first.kind == :paragraph
 
-        blocks.map do |block|
-          block.kind == :heading ? Block.new(:paragraph, Text.escape_line_starts(block.text.sub(/\A#+ /, ""))) : block
+        blocks.each_with_index.map do |block, index|
+          if block.kind == :heading
+            item_paragraph(block.text.sub(/\A#+ /, ""))
+          elsif index.zero? && blocks.size > 1 && bulleted_list?(block) && !block.text.include?("\n")
+            item_paragraph(block.text.delete_prefix("- "))
+          else
+            block
+          end
         end
+      end
+
+      def item_paragraph(text)
+        Block.new(:paragraph, Text.escape_line_starts(text))
       end
 
       # Markers that differ between items carry meaning, as in legends where

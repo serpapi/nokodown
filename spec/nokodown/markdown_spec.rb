@@ -573,7 +573,12 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "renders task list checkboxes" do
-      convert('<ul><li><input type="checkbox" checked> Done</li><li><input type="checkbox"> Todo</li></ul>').should == "- [x] Done\n- [ ] Todo"
+      convert('<ul><li><input type="checkbox" disabled checked> Done</li><li><input type="checkbox" disabled> Todo</li></ul>').should == "- [x] Done\n- [ ] Todo"
+    end
+
+    it "drops the checkboxes of product options and filters" do
+      convert('<ul><li><input type="checkbox"> Pipe rolling +1,00 ₽</li><li><input type="checkbox" checked> Red</li></ul>').should ==
+        "- Pipe rolling +1,00 ₽\n- Red"
     end
 
     it "drops bullets and repeated numbers typed into items" do
@@ -621,9 +626,9 @@ RSpec.describe "Markdown conversion" do
       convert("<ul><li>Mouse<ul><li>Quiet</li></ul></li><li><ul><li>Heavy</li></ul></li></ul>").should == "- Mouse\n  - Quiet\n- Heavy"
     end
 
-    it "keeps an item together when content follows its nested list" do
+    it "writes a one-item list that opens an item as the item's first line" do
       convert("<ul><li><ul><li>Photo</li></ul>Boot $5</li><li><ul><li>Photo</li></ul>Sock $6</li></ul>").should ==
-        "- - Photo\n  Boot $5\n- - Photo\n  Sock $6"
+        "- Photo\n  Boot $5\n- Photo\n  Sock $6"
     end
 
     it "keeps a numbered list nested at the start of an item under its own number" do

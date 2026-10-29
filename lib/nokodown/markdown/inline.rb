@@ -161,7 +161,7 @@ module Nokodown
         when "q" then "\"#{render(node.children)}\""
         when "math" then math(node)
         when "sup", "sub" then script(node)
-        when "input" then node.key?("checked") ? "[x] " : "[ ] "
+        when "input" then checkbox(node)
         else
           text = render(node.children)
           Dom::BLOCK.include?(name) ? " #{text} " : text
@@ -270,6 +270,14 @@ module Nokodown
         image.redundant &&= @redundant_images.key?(key)
         target = @redundant_images[key]
         image.targets << target if target
+      end
+
+      # Task lists render disabled checkboxes; an enabled one is a product
+      # option or a filter.
+      def checkbox(node)
+        return "" unless node.key?("disabled") || node["class"].to_s.include?("task-list")
+
+        node.key?("checked") ? "[x] " : "[ ] "
       end
 
       # Markdown has no superscript, and "2attempt" is wrong. Digits and signs
