@@ -119,8 +119,8 @@ module Nokodown
     # Titled blocks built alike, one after another, are the sections of a
     # hub ("Audio", "Cameras", "Laptops"), not boxes beside its content.
     def sections(blocks)
-      titled = blocks.select(&:title).group_by { |block| shape_of(block.nodes.first) }
-      titled.values.select { |group| group.size >= MIN_SECTIONS }.flatten.map { |block| Dom.key(block.nodes.first) }.to_set
+      groups = blocks.select(&:title).group_by { |block| shape_of(block.nodes.first) }.values
+      groups.select { |group| group.size >= MIN_SECTIONS }.flatten.map { |block| Dom.key(block.nodes.first) }.to_set
     end
 
     # A listing's own list outweighs the titled boxes beside it.
@@ -137,7 +137,7 @@ module Nokodown
     # Links to pages below this one are its own sections.
     def removable?(block, own_text, body, total)
       return false if block.children || block.nodes.any? { |node| node.at_css(PROTECTED) }
-      return block.title.nil? && block.siblings && after_text?(block) && own_text >= MIN_SIBLINGS_BODY if own_list?(block)
+      return false if own_list?(block) && !(block.title.nil? && block.siblings && after_text?(block))
       return own_text >= MIN_SIBLINGS_BODY if block.siblings
 
       @declared && body && block.chars < total * DOMINANT_SHARE
@@ -173,7 +173,8 @@ module Nokodown
     def shapes(children)
       named = children.map { |child| [child, shape_of(child)] }
       counts = named.map(&:last).tally
-      named.group_by { |child, shape| counts[shape] > 1 ? shape : "#{child.name}." }.transform_values { |pairs| pairs.map(&:first) }
+      groups = named.group_by { |child, shape| counts[shape] > 1 ? shape : "#{child.name}." }
+      groups.transform_values { |pairs| pairs.map(&:first) }
     end
 
     def shape_of(node)
@@ -222,7 +223,8 @@ module Nokodown
     end
 
     def title_link?(link, headings)
-      link.at_css(HEADING) || headings.any? { |heading| heading.css("a[href]").any? { |inner| Dom.key(inner) == Dom.key(link) } }
+      key = Dom.key(link)
+      link.at_css(HEADING) || headings.any? { |heading| heading.css("a[href]").any? { |inner| Dom.key(inner) == key } }
     end
 
     # A teaser shows a thumbnail or a date, or is a card: its title is a
@@ -277,7 +279,8 @@ module Nokodown
       node = run.parent
       loop do
         up = node.parent
-        break if up.nil? || !up.element? || up.name == "body" || holds_more?(up, run, MAX_HEADING) || up.at_css(PROTECTED)
+        break if up.nil? || !up.element? || up.name == "body"
+        break if holds_more?(up, run, MAX_HEADING) || up.at_css(PROTECTED)
 
         up_title = title || title_in(up, run)
         break if holds_more?(up, run, length(up_title))
@@ -326,7 +329,8 @@ module Nokodown
       return false if @stats.chars(node).zero? || @stats.chars(node) > MAX_HEADING
 
       text = Dom.text(node)
-      return false if text.match?(/\d/) || !text.match?(/\p{L}/) || node.name == "a" || Dom.ancestors_named(node, "a").any?
+      return false if text.match?(/\d/) || !text.match?(/\p{L}/)
+      return false if node.name == "a" || Dom.ancestors_named(node, "a").any?
 
       (heading?(node) ? text.length <= MAX_HEADING : label?(node, text)) && !in_data_table?(node)
     end

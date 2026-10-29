@@ -14,8 +14,8 @@ RSpec.describe Nokodown::Teasers do
   end
 
   def story(count)
-    sentence = "The harbor bridge reopened on Tuesday after crews replaced the cracked bearings, three weeks after the closure. "
-    Array.new(count) { |index| "<p>#{sentence * 2}Part #{index + 1}.</p>" }.join
+    sentence = "The harbor bridge reopened on Tuesday after crews replaced the cracked bearings. "
+    Array.new(count) { |index| "<p>#{sentence * 3}Part #{index + 1}.</p>" }.join
   end
 
   # A product page whose details and description share the text, so it is
@@ -23,9 +23,9 @@ RSpec.describe Nokodown::Teasers do
   def product(extra)
     rows = { "Weight" => "280 g", "Drop" => "6 mm", "Upper" => "Recycled mesh that drains fast" }
     table = rows.map { |name, value| "<tr><td>#{name}</td><td>#{value}</td></tr>" }.join
-    "<div class='info'><h1>Cirrus trail shoe</h1><table>#{table}</table></div>" \
-      "<div class='description'><p>A light trail shoe with a rock plate and a wide toe box, made for long days on " \
-      "rough ground. It keeps its grip on wet rock and roots, and the foam stays soft on long descents.</p></div>#{extra}"
+    "<div class='info'><h1>Cirrus trail shoe</h1><table>#{table}</table></div><div class='description'>" \
+      "<p>A light trail shoe with a rock plate and a wide toe box, made for long days on rough ground. It keeps " \
+      "its grip on wet rock and roots, and the foam stays soft on long descents.</p></div>#{extra}"
   end
 
   def cards(titles, path, excerpt = "")
@@ -41,14 +41,18 @@ RSpec.describe Nokodown::Teasers do
      "Library extends its opening hours on weekends"]
   end
 
-  let(:box) { "<section><h2>Leia também</h2><div class='grid'>#{cards(stories, '/blog/')}</div></section>" }
+  let(:article) do
+    "<h1>Bridge reopens</h1>#{story(3)}" \
+      "<section><h2>Leia também</h2><div class='grid'>#{cards(stories, '/blog/')}</div></section>"
+  end
+  let(:article_url) { "https://news.example.com/2026/05/bridge-reopens" }
 
   it "finds a titled block of teasers beside the content of an article, whatever the title's language" do
-    blocks("<h1>Bridge reopens</h1>#{story(3)}#{box}", "https://news.example.com/2026/05/bridge-reopens").should_not be_empty
+    blocks(article, article_url).should_not be_empty
   end
 
   it "keeps titled teasers on a page that declares no article or product" do
-    blocks("<h1>Bridge reopens</h1>#{story(3)}#{box}", "https://news.example.com/2026/05/bridge-reopens", nil).should be_empty
+    blocks(article, article_url, nil).should be_empty
   end
 
   it "keeps teasers for pages below this one" do
@@ -71,16 +75,19 @@ RSpec.describe Nokodown::Teasers do
 
   it "removes pages like this one listed under its text in the same container" do
     items = stories.each_with_index.map do |title, index|
-      "<div class='row'><img src='/img/#{index}.jpg' alt=''><b>12.08.2026</b> <a href='/?n=#{index + 21}&amp;p=1'>#{title}</a> " \
-        "<span>A short summary.</span></div>"
+      "<div class='row'><img src='/img/#{index}.jpg' alt=''><b>12.08.2026</b> " \
+        "<a href='/?n=#{index + 21}&amp;p=1'>#{title}</a> <span>A short summary.</span></div>"
     end.join
-    rows = { "Date" => "28 August", "Place" => "North pier", "Contact" => "Harbor office, north building, second floor",
-             "Hours" => "Every day from six in the morning to ten at night", "Tickets" => "Sold at the pier and on board" }
+    rows = {
+      "Date" => "28 August", "Place" => "North pier", "Contact" => "Harbor office, north building, second floor",
+      "Hours" => "Every day from six in the morning to ten at night", "Tickets" => "Sold at the pier and on board"
+    }
     table = rows.map { |name, value| "<tr><td>#{name}</td><td>#{value}</td></tr>" }.join
     html = "<div class='info'><h1>Port reopens</h1><table>#{table}</table></div>" \
-           "<div class='news'><p>The north pier reopened to ferries on Thursday after the repairs to its mooring posts. " \
-           "Crews worked through the night to finish two days early, and the first ferry left on time at six. The harbor " \
-           "office expects the south pier to follow next month, once its new fenders arrive.</p>#{items}</div>"
+           "<div class='news'><p>The north pier reopened to ferries on Thursday after the repairs to its mooring " \
+           "posts. Crews worked through the night to finish two days early, and the first ferry left on time at " \
+           "six. The harbor office expects the south pier to follow next month, once its new fenders arrive.</p>" \
+           "#{items}</div>"
 
     text = markdown(html, "https://news.example.com/?n=20&p=1")
     text.should include("north pier reopened")
@@ -90,8 +97,8 @@ RSpec.describe Nokodown::Teasers do
   it "keeps a listing's own list and removes the titled box beside it" do
     popular = ["Snow closes the pass", "Port strike ends", "Ferry fares rise"]
     posts = cards(stories + ["Ferry adds a night crossing"], "/2026/04/", "<p>What changes, and for whom.</p>")
-    html = "<h1>Tag: harbor</h1><div class='posts'>#{posts}</div>" \
-           "<div class='box'><div class='box-title'>Mest läst</div><div class='grid'>#{cards(popular, '/2026/03/')}</div></div>"
+    html = "<h1>Tag: harbor</h1><div class='posts'>#{posts}</div><div class='box'>" \
+           "<div class='box-title'>Mest läst</div><div class='grid'>#{cards(popular, '/2026/03/')}</div></div>"
 
     text = markdown(html, "https://news.example.com/tag/harbor", type: "article")
     text.should include("School board")
@@ -102,7 +109,8 @@ RSpec.describe Nokodown::Teasers do
 
   it "keeps the titled sections of a hub, however long its intro" do
     sections = %w[Audio Cameras Laptops].map do |name|
-      "<section class='shelf'><h2>#{name}</h2><div class='grid'>#{cards(stories.map { |title| "#{name} #{title}" }, '/reviews/')}</div></section>"
+      grid = cards(stories.map { |title| "#{name} #{title}" }, "/reviews/")
+      "<section class='shelf'><h2>#{name}</h2><div class='grid'>#{grid}</div></section>"
     end.join
 
     blocks("<h1>Electronics</h1>#{story(4)}#{sections}", "https://reviews.example.com/electronics").should be_empty
@@ -116,8 +124,8 @@ RSpec.describe Nokodown::Teasers do
 
   it "keeps the teasers when the page would be left with a heading and a line" do
     products = Array.new(4) do |index|
-      "<div class='tile'><a href='/en-us/mower-#{index}'><img src='/img/#{index}.jpg' alt=''><h3>Robotic mower #{index}</h3></a>" \
-        "<p>Cuts up to #{index + 1} acres a day</p></div>"
+      "<div class='tile'><a href='/en-us/mower-#{index}'><img src='/img/#{index}.jpg' alt=''>" \
+        "<h3>Robotic mower #{index}</h3></a><p>Cuts up to #{index + 1} acres a day</p></div>"
     end.join
     html = "<h1>Robotic lawn mowers</h1><p>Quiet mowers for any lawn, without a boundary wire.</p>" \
            "<section><h2>Models</h2><div class='tiles'>#{products}</div></section>"
@@ -126,16 +134,13 @@ RSpec.describe Nokodown::Teasers do
   end
 
   it "keeps a list of links in the prose" do
-    items = stories.map { |title| "<li><a href='/docs/#{title.length}'>#{title}</a> explains the next step in detail.</li>" }
-    html = product("<h2>What's next</h2><ul>#{items.join}</ul>")
+    items = stories.map { |title| "<li><a href='/docs/#{title.length}'>#{title}</a> explains the next step.</li>" }
 
-    markdown(html, "https://shop.example.com/shoes/cirrus", type: "product").should include("School board")
+    blocks("<h1>Getting started</h1>#{story(4)}<h2>What's next</h2><ul>#{items.join}</ul>", article_url).should be_empty
   end
 
   it "finds no teaser blocks on a site's home page" do
-    html = "<h1>Harbor News</h1>#{story(4)}<section><h2>Latest</h2><div class='grid'>#{cards(stories, '/2026/04/')}</div></section>"
-
-    blocks(html, "https://news.example.com/2026/05/bridge-reopens").should_not be_empty
-    blocks(html, "https://news.example.com/en/").should be_empty
+    blocks(article, article_url).should_not be_empty
+    blocks(article, "https://news.example.com/en/").should be_empty
   end
 end
