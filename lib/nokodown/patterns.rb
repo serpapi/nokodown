@@ -175,14 +175,18 @@ module Nokodown
     /xi.freeze
 
     # Copyright lines in the major web languages, and the licence numbers
-    # Chinese sites must print in their footer.
+    # Chinese sites must print in their footer. Each takes the footer's form,
+    # since the same words run through text about copyright: "(c)" also
+    # numbers a clause, a 版权所有者 is a copyright owner, and an ICP备案 is
+    # the filing a licence number comes from.
     COPYRIGHT_TEXT = /
-      \A[\s|·•-]*(?:copyright\s*)?(?:©|ⓒ|\(c\)|&copy;)|\Acopyright\s+\d{4}|
+      \A[\s|·•-]*(?:copyright\s*)?(?:©|ⓒ|&copy;|\(c\)(?=.*\d{4}))|\A[\s|·•-]*copyright\s+\d{4}|
       all\srights\sreserved|alle\srechte\svorbehalten|tous\sdroits\sréservés|todos\slos\sderechos\sreservados|
       tutti\si\sdiritti\sriservati|todos\sos\sdireitos\sreservados|alle\srechten\svoorbehouden|
       все\sправа\sзащищены|wszelkie\sprawa\szastrzeżone|tüm\shakları\ssaklıdır|hak\scipta\sdilindungi|
-      bản\squyền\sthuộc\svề|جميع\sالحقوق\sمحفوظة|版权所有|版權所有|無断転載|무단\s?전재|
-      ICP[备證证]|公网安备
+      bản\squyền\sthuộc\svề|جميع\sالحقوق\sمحفوظة|版[权權]所有(?![者人权權])|
+      無断(?:転載|複製|転用|使用)[^。]{0,12}(?:禁|ご遠慮|お断り)|무단\s?전재[^.]{0,30}금지|
+      ICP[备證证][\s:：]*\d|公[网網]安[备備][\s:：]*\d
     /xi.freeze
 
     NOISE_HEADING = /

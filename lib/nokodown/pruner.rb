@@ -6,6 +6,9 @@ module Nokodown
     CLUSTER_CONTAINERS = "ul, ol, menu, dl, div, section, p, td, li, span, table, header, footer"
     TEXT_BLOCKS = "p, div, span, li, h1, h2, h3, h4, h5, h6, small, section, aside, figcaption, b, strong, em, i"
     LAYOUT_CELLS = "td, center, font"
+    NOTICE_BLOCKS = "#{TEXT_BLOCKS}, #{LAYOUT_CELLS}"
+    MAX_NOTICE = 200
+    ONLY_MARKS = /\A[\p{P}\p{S}\s]*\z/.freeze
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
     # A class names a button when that is its last word, before a modifier,
@@ -242,19 +245,49 @@ module Nokodown
     end
 
     def remove_boilerplate_text(root)
+      notices = []
       root.css(TEXT_BLOCKS).each do |node|
         text = Dom.text(node)
-        next if text.empty? || text.length > 200
+        next if text.empty? || text.length > MAX_NOTICE
 
-        boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
-        remove(node) if boilerplate || copyright?(node, text)
+        if text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
+          remove(node)
+        elsif copyright?(node, text)
+          notices << node
+        end
       end
       # Old sites lay their footer out in a table and set it in font tags.
-      root.css(LAYOUT_CELLS).each { |node| remove(node) if copyright?(node, Dom.text(node)) && !in_data_table?(node) }
+      root.css(LAYOUT_CELLS).each do |node|
+        next if Dom.char_count(node.content) > MAX_NOTICE || in_data_table?(node)
+
+        notices << node if copyright?(node, Dom.text(node))
+      end
+      remove_notices(notices)
     end
 
     def copyright?(node, text)
-      text.length <= 200 && text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
+      text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
+    end
+
+    # The smallest block carries the notice. The block around it goes too
+    # when the rest of it is links ("Privacy | Terms"), but not when it also
+    # holds a product's name and price.
+    def remove_notices(notices)
+      keys = notices.map { |node| Dom.key(node) }.to_set
+      carriers = notices.reject { |node| node.css(NOTICE_BLOCKS).any? { |child| keys.include?(Dom.key(child)) } }
+      carrier_keys = carriers.map { |node| Dom.key(node) }.to_set
+      notices.each do |node|
+        remove(node) if carrier_keys.include?(Dom.key(node)) || Dom.squish(text_outside(node, carrier_keys)).match?(ONLY_MARKS)
+      end
+    end
+
+    def text_outside(node, skipped)
+      node.children.sum("") do |child|
+        next " #{child.content}" if child.text?
+        next "" if !child.element? || child.name == "a" || skipped.include?(Dom.key(child))
+
+        text_outside(child, skipped)
+      end
     end
 
     # Links and boxes styled as buttons ("Add to cart", "Book a demo") are
