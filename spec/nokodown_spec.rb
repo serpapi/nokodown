@@ -172,6 +172,16 @@ RSpec.describe Nokodown do
       markdown.should_not include("other types")
     end
 
+    it "drops the heading over a box of links that a rule parts from the next section" do
+      skills = %w[PHP Java Ruby Python Swift Kotlin]
+      links = skills.map { |skill| "<li><a href=\"/jobs/#{skill.downcase}\">#{skill}</a></li>" }.join
+      boxes = "<div><h2>Find jobs by type</h2><ul>#{links}</ul><hr><h2>Find jobs by skill</h2><ul>#{links}</ul></div>"
+
+      markdown = extract("<main><h1>Game planner</h1>#{prose}#{boxes}</main>")
+
+      markdown.should_not include("by type")
+    end
+
     it "drops the few menu links left in a content area that holds almost nothing else" do
       html = '<main><a href="#content">Skip to content</a><div><a href="/shop">Shop all products</a> ' \
              '<a href="/help">Help and contact</a> <a href="/account">Your account</a></div><p>Sold out.</p></main>'

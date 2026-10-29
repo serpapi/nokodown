@@ -27,6 +27,7 @@ module Nokodown
     MIN_PROSE_COLUMN = 100
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
     SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
+    SEPARATORS = %w[hr br].freeze
     LETTER = /\p{L}/.freeze
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
@@ -331,7 +332,9 @@ module Nokodown
     end
 
     def section_end?(node)
-      node.next_element.nil? || section_label?(node.next_element)
+      following = node.next_element
+      following = following.next_element while following && SEPARATORS.include?(following.name)
+      following.nil? || section_label?(following)
     end
 
     # A heading below the page title, or a wrapper holding only one. A linked
