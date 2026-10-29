@@ -24,6 +24,7 @@ module Nokodown
     # A domain names a story's source and a format a dataset's file, facts
     # about the item like a badge: "vice.com", "CSV".
     FACT = /\A(?:[\p{L}\d-]+(?:\.[\p{L}\d-]+)+|pdf|csv|json|xml|rdf|kml|geojson|txt|zip|docx?|xlsx?|pptx?|odt|ods|epub|html?)\z/i.freeze
+    DATE_OR_TIME = %r{\d{1,2}:\d{2}|\d{1,4}[./-]\d{1,2}[./-]\d{1,4}}.freeze
     # An excerpt the label follows ends like a sentence or with "[…]".
     EXCERPT_END = /[.…!?。！？\])]\z/.freeze
 
@@ -134,11 +135,10 @@ module Nokodown
     end
 
     # A link in words can name its page. A term of a definition list is
-    # written without its link, so it does not, and neither does a
-    # thumbnail, whose text is the badges over its image, nor a date.
+    # written without its link, so it does not, and neither does a date,
+    # which can be longer than an event's name.
     def namer?(link)
-      link.text.match?(/\p{L}/) && !link.text.match?(/\d/) && !link.node.at_css(MEDIA_SELECTOR) &&
-        Dom.ancestors_named(link.node, "dt").empty?
+      link.text.match?(/\p{L}/) && !link.text.match?(DATE_OR_TIME) && Dom.ancestors_named(link.node, "dt").empty?
     end
 
     # Controls follow what they act on, so the nearest longer links before
@@ -147,8 +147,17 @@ module Nokodown
     def named_in_card?(label, holder, namers)
       count = namers.bsearch_index { |link| link.position >= label.position } || namers.size
       before = namers[[0, count - NEAREST_SCAN].max...count]
-      longer = before.reverse.select { |link| link.text.length > label.text.length }.first(NEAREST)
+      longer = before.reverse.select { |link| link.text.length > label.text.length && !thumbnail?(link, label) }.first(NEAREST)
       longer.any? { |link| same_card?(holder, label.node, link.node) }
+    end
+
+    # The text of a thumbnail is often the counts and badges over its image
+    # ("Episode 54 added", "720p"), and its alt the name the label gives.
+    def thumbnail?(link, label)
+      media = link.node.css(MEDIA_SELECTOR)
+      return false if media.empty?
+
+      link.text.match?(/\d/) || media.any? { |node| Dom.squish(node["alt"].to_s).casecmp?(label.text) }
     end
 
     # Both links in one card, but not side by side like the items of a list,

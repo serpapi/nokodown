@@ -43,8 +43,14 @@ RSpec.describe Nokodown::RepeatedLinks do
 
   it "keeps an item's name when the longer link to its page is a thumbnail or a date" do
     html = "<li><a href='/vod/1'><img src='/1.jpg'><span>Episode 54 added</span></a><div><a href='/vod/1'>Pokémon</a></div></li>" \
-           "<div><a href='/game/2'><div>15 September, 19:00</div></a><div><a href='/game/2'>Bunker</a></div></div>"
-    text_after(html).should == "Episode 54 addedPokémon15 September, 19:00Bunker"
+           "<li><a href='/hats/2'><img src='/2.jpg' alt='Wool hat'><span>Free shipping</span></a><div><a href='/hats/2'>Wool hat</a></div></li>" \
+           "<div><a href='/game/3'><div>15 September, 19:00</div></a><div><a href='/game/3'>Bunker</a></div></div>"
+    text_after(html).should == "Episode 54 addedPokémonFree shippingWool hat15 September, 19:00Bunker"
+  end
+
+  it "removes a label after a title inside the thumbnail's link" do
+    html = "<article><a href='/posts/7'><img src='/7.jpg' alt=''><h3>The harbor bridge reopens</h3></a><p><a href='/posts/7'>Read more</a></p></article>"
+    text_after(html).should == "The harbor bridge reopens"
   end
 
   it "keeps a source's domain and a dataset's format after the title" do
