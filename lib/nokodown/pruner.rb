@@ -66,10 +66,15 @@ module Nokodown
 
     private
 
+    # A page whose side columns made it look like an index is judged again
+    # without them, but no page becomes an index by losing them.
     def prune_page(root)
       clusters = link_clusters(root)
       index = index?(root, clusters)
-      clusters = link_clusters(root) if remove_rail_columns(root, index)
+      if remove_rail_columns(root, index)
+        clusters = link_clusters(root)
+        index &&= index?(root, clusters)
+      end
       remove_link_clusters(root, clusters, index)
     end
 

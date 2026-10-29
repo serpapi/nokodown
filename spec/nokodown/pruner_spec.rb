@@ -45,6 +45,14 @@ RSpec.describe Nokodown::Pruner do
 
   describe "page pruning" do
     let(:urls) { Nokodown::UrlResolver.new("https://example.com/page") }
+    let(:rail) do
+      places = %w[
+        Bagienice Barczewko Barczewo Barkweda Bartag Bartazek Bartolty Bezled Biskupiec Bisztynek Blanki Boguchwaly
+        Bredynki Brzeznica Bukwald Butryny Cerkiewnik Czarny Dadaj Dobre Dorotowo Dywity Gady Gietrzwald Gradki
+        Jeziorany Jonkowo Kaplityny Klebark Kolno Lamkowo Lelkowo Lidzbark Lukta Majdy Mragowo Naterki Olsztynek
+      ]
+      places.map { |place| "<a href='/places/#{place.downcase}'>#{place}</a><br>" }.join
+    end
 
     it "keeps a line of names that links to the page itself among names without links" do
       authors = "<p>By <a href='/page'>Ana Ruiz</a>, Ben Ode, <a href='/people/cole'>Cy Cole</a>, Dee Fox and " \
@@ -81,17 +89,21 @@ RSpec.describe Nokodown::Pruner do
     end
 
     it "drops a column declared narrower than the prose beside it, even when its links hold most of the text" do
-      places = %w[
-        Bagienice Barczewko Barczewo Barkweda Bartag Bartazek Bartolty Bezled Biskupiec Bisztynek Blanki Boguchwaly
-        Bredynki Brzeznica Bukwald Butryny Cerkiewnik Czarny Dadaj Dobre Dorotowo Dywity Gady Gietrzwald
-      ]
-      rail = places.map { |place| "<a href='/places/#{place.downcase}'>#{place}</a><br>" }.join
       root = content("<table><tr><td width='190'>#{rail}</td><td width='560'>#{story}</td></tr></table>")
 
       described_class.new([root], :page, urls: urls).call
 
       Nokodown::Dom.text(root).should include("The harbor bridge reopened")
       Nokodown::Dom.text(root).should_not include("Bisztynek")
+    end
+
+    it "judges a page whose side column made it look like an index again without that column" do
+      menu = %w[Home About Contact].map { |name| "<li><a href='/#{name.downcase}'>#{name}</a></li>" }.join
+      root = content("<table><tr><td width='190'>#{rail}</td><td width='560'><ul>#{menu}</ul>#{story}</td></tr></table>")
+
+      described_class.new([root], :page, urls: urls).call
+
+      Nokodown::Dom.text(root).should_not include("Contact")
     end
   end
 
