@@ -348,6 +348,10 @@ RSpec.describe Nokodown do
 
       markdown.should start_with("Tidal lagoons hold water")
     end
+
+    it "keeps the article's own headline" do
+      Nokodown.to_markdown(fixture("article.html"), title: false).should start_with("# How Tidal Power Plants Store Energy\n\nTidal lagoons")
+    end
   end
 
   describe "images: false" do
@@ -519,6 +523,15 @@ RSpec.describe Nokodown do
              "<div class='description'>#{prose}</div>Posted by Ana | 3 comments</div></main>"
 
       Nokodown.to_markdown(html).should_not include("Posted by Ana")
+    end
+
+    it "does not reach up to a headline over a long stretch of other content" do
+      features = Array.new(20) { |index| "<li>Feature #{index + 1} of this flat: a quiet detail of the place</li>" }
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 30
+      html = "<main><div class='listing'><div class='intro'><h1>Flat for sale</h1><ul>#{features.join}</ul></div>" \
+             "<div class='description'>#{prose}</div><div class='agent'><p>Call Ana on weekdays.</p></div></div></main>"
+
+      Nokodown.to_markdown(html).should_not include("Feature 1 of this flat")
     end
 
     it "keeps the whole table of results when one row outscores the others" do
