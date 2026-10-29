@@ -61,6 +61,10 @@ RSpec.describe "Markdown conversion" do
                               "Check all that apply:\n\nFurniture\n\nJunk\n\nTyres"
     end
 
+    it "does not take a label or a sentence for a number's unit" do
+      convert("<h3>Rooms</h3><p>3</p><p>Baths:</p><p>2</p><p>Pick a page.</p>").should == "### Rooms\n\n3\n\nBaths: 2\n\nPick a page."
+    end
+
     it "drops decorative separator lines" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
     end

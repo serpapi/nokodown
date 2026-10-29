@@ -10,7 +10,9 @@ module Nokodown
       LABEL = /\A[^\s#>|`\-\d!][^\n]{0,38}[:：]\**\z/.freeze
       NUMBER = /\A\d[\d.,]{0,7}\z/.freeze
       VALUE = /\A(?!!\[)[^\s#>|`\-](?![^\n]*[:：]\**\z)[^\n]{0,59}\z/.freeze
-      UNIT = /\A\p{L}[^\n]{0,29}\z/.freeze
+      # A unit, not a label of its own or a sentence: "3" over "Baths:" or
+      # over "Pick a page." is a number beside them, not their count.
+      UNIT = /\A\p{L}[^\n]{0,29}(?<![.!?。！？:：*])\z/.freeze
 
       module_function
 

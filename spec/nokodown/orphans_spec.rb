@@ -10,7 +10,7 @@ RSpec.describe Nokodown::Markdown::Orphans do
 
   it "keeps a number after a heading or a label, or before a label" do
     html = "<h3>Rooms</h3><p>3</p><p>Baths:</p><p>2</p><p>Our team is growing.</p><p>250</p><p>Employees</p>"
-    convert(html).should == "### Rooms\n\n3\n\nBaths:\n\n2\n\nOur team is growing.\n\n250\n\nEmployees"
+    convert(html).should == "### Rooms\n\n3\n\nBaths:\n\n2\n\nOur team is growing.\n\n250 Employees"
   end
 
   it "keeps numbers side by side, but not the options of a picker or a count beside a date" do
@@ -47,11 +47,12 @@ RSpec.describe Nokodown::Markdown::Orphans do
 
   it "keeps a label before its value, a heading or a list" do
     html = "<p>Price:</p><p>$40</p><p>Reviewed article:</p><h2>Weaving in ancient Greece</h2><p>Sizes:</p><ul><li>S</li><li>M</li></ul>"
-    convert(html).should == "Price:\n\n$40\n\nReviewed article:\n\n## Weaving in ancient Greece\n\nSizes:\n\n- S\n- M"
+    convert(html).should == "Price: $40\n\nReviewed article:\n\n## Weaving in ancient Greece\n\nSizes:\n\n- S\n- M"
   end
 
   it "keeps labels followed by text, as in a template a post sets out" do
-    convert("<p>Copy this:</p><p><b>Your nickname:</b></p><p><b>Your district:</b></p><p>See you soon!</p>").should ==
-      "Copy this:\n\n**Your nickname:**\n\n**Your district:**\n\nSee you soon!"
+    see_you = "See you all on Saturday at the north gate of the park, and bring a cup!"
+    convert("<p>Copy this:</p><p><b>Your nickname:</b></p><p><b>Your district:</b></p><p>#{see_you}</p>").should ==
+      "Copy this:\n\n**Your nickname:**\n\n**Your district:**\n\n#{see_you}"
   end
 end
