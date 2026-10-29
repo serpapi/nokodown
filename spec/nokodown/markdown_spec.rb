@@ -1086,12 +1086,6 @@ RSpec.describe "Markdown conversion" do
       convert("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "a\n\nb"
     end
 
-    it "keeps a sentence set in a heading's type at the end of the content" do
-      sentence = "With no cap on its tax credit and a deepening talent pool, the state is more than a location. " \
-                 "It is a production strategy."
-      convert("<p>Spending rose.</p><h5>#{sentence}</h5><h2>Sign up</h2>").should == "Spending rose.\n\n##### #{sentence}"
-    end
-
     it "renders details with a bold summary" do
       convert("<details><summary>More info</summary><p>Hidden detail</p></details>").should == "**More info**\n\nHidden detail"
     end

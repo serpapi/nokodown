@@ -18,8 +18,6 @@ module Nokodown
       REPEATED_RUN_MIN = 2
       REPEATED_QUOTE_SHARE = 0.5
       QUOTE_OPENING = 12
-      PROSE_HEADING = 100
-      PROSE_END = /[.!?。！？]["'”’)]*\z/.freeze
       # Not before a lowercase word or a number, as after "e.g." or "v.".
       SENTENCE_END = /[.!?…]+["'”’)\]*_]*(?=\s+[^\p{Ll}\p{N}]|\s*\z)/.freeze
 
@@ -171,10 +169,9 @@ module Nokodown
 
       # A heading followed by nothing, or by a heading at the same or a higher
       # level, lost its section during extraction. Title lists are content in
-      # their own right, a sentence set in a heading's type after a paragraph
-      # goes on with the text, and a page that is only its headline keeps it.
+      # their own right, and a page that is only its headline keeps it.
       def drop_empty_sections(blocks)
-        titles = title_list_indexes(blocks) | card_titles(blocks) | prose_headings(blocks)
+        titles = title_list_indexes(blocks) | card_titles(blocks)
         kept = blocks.each_index.reject { |index| !titles.include?(index) && empty_section?(blocks, index) }
         kept.pop while kept.any? && blocks[kept.last].kind == :heading && !titles.include?(kept.last)
         return blocks.values_at(*kept) if kept.any?
@@ -206,15 +203,6 @@ module Nokodown
         return false unless following.kind == :heading && following.level <= block.level
 
         heading_text(block).match?(Patterns::NOISE_HEADING)
-      end
-
-      def prose_headings(blocks)
-        blocks.each_index.select do |index|
-          next false unless blocks[index].kind == :heading && index.positive? && blocks[index - 1].kind == :paragraph
-
-          text = heading_text(blocks[index])
-          text.length > PROSE_HEADING && text.match?(PROSE_END)
-        end.to_set
       end
 
       # Same-level headings in a row, mostly links, are the titles of cards
