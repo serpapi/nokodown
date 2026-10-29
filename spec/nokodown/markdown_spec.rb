@@ -728,6 +728,11 @@ RSpec.describe "Markdown conversion" do
         "Left column\n\nRight column"
     end
 
+    it "writes a title row spanning the table above it" do
+      html = '<table><tr><th colspan="2">Specs</th></tr><tr><th>Key</th><th>Value</th></tr><tr><td>Weight</td><td>3 kg</td></tr></table>'
+      convert(html).should == "Specs\n\n| Key | Value |\n| --- | --- |\n| Weight | 3 kg |"
+    end
+
     it "keeps the caption" do
       convert("<table><caption>Results</caption><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>").should ==
         "Results\n\n| A | B |\n| --- | --- |\n| 1 | 2 |"

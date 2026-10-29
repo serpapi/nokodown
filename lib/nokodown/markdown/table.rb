@@ -17,9 +17,10 @@ module Nokodown
         return layout_blocks unless Tables.data_table?(@node)
 
         grid = trimmed_grid
+        titles = title_rows(grid)
         return layout_blocks if grid.size < 2 || grid.first.size < 2
 
-        caption + [Block.new(:table, gfm(grid))]
+        caption + titles + [Block.new(:table, gfm(grid))]
       end
 
       private
@@ -28,6 +29,16 @@ module Nokodown
         lines = grid.map { |row| "| #{row.join(' | ')} |" }
         lines.insert(1, "| #{Array.new(grid.first.size, '---').join(' | ')} |")
         lines.join("\n")
+      end
+
+      # A first row with a single cell spanning the table titles it ("| Specs |
+      # | |"); the next row holds the column names.
+      def title_rows(grid)
+        titles = []
+        while grid.size > 2 && grid.first.count { |cell| !cell.empty? } == 1 && grid.first.first != ""
+          titles << Block.new(:paragraph, Text.escape_line_starts(grid.shift.first.gsub("\\|", "|")))
+        end
+        titles
       end
 
       def caption
