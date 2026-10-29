@@ -57,12 +57,17 @@ with `main_content: false`, `:none` for a document without a body.
 
 - Site navigation, headers, footers, sidebars, breadcrumbs, pagination and
   tables of contents, found through HTML semantics (`nav`, page-level `header`
-  and `footer`, ARIA roles, schema.org types) and class/id names.
-- Cookie banners, ads, newsletter and sign-in prompts, share bars, modals,
-  chat widgets, "related", "recommended" and "most popular" boxes, legal
-  disclaimers and disclosures (but not a note continuing the paragraph before
-  it, or the footnote to a mark just above), and, next to an article, its
-  comment thread.
+  and `footer`, ARIA roles, schema.org types) and class/id names. Structure
+  finds the rest: a site header above the page's title however much it
+  holds, a footer by any name that ends a page (not one inside `main` or an
+  article), a breadcrumb trail by its shape in any language (a link to the
+  home page, then links down the site with separators), and copyright and
+  licence lines in the major web languages.
+- Cookie banners, ads, newsletter and sign-in prompts, share bars and share
+  links by where they point, modals, chat widgets, "related", "recommended"
+  and "most popular" boxes, legal disclaimers and disclosures (but not a note
+  continuing the paragraph before it, or the footnote to a mark just above),
+  and, next to an article, its comment thread.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
@@ -71,10 +76,12 @@ with `main_content: false`, `:none` for a document without a body.
   summaries and rating histograms. An inline rating badge ("212 reviews" next
   to the price), testimonials and editorial reviews stay.
 - Invisible elements (`hidden`, `aria-hidden`, inline `display: none`,
-  screen-reader-only and other hiding classes), keeping collapsed accordions,
-  tab panels and FAQ answers. Content that React streams into hidden
-  containers at the end of the page is put back where the page shows it,
-  unless it is mostly links, as carousels of recommended products are.
+  screen-reader-only and other hiding classes, and elements placed far off
+  screen or in a one-pixel strip, where hacked sites hide link spam), keeping
+  collapsed accordions, tab panels and FAQ answers. Content that React streams
+  into hidden containers at the end of the page is put back where the page
+  shows it, unless it is mostly links, as carousels of recommended products
+  are.
 - Sections rendered twice, such as a desktop and a mobile copy.
 - Tracking pixels, spacers, icons, placeholders, README badges, click-tracking
   URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,
