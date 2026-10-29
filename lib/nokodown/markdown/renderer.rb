@@ -51,7 +51,8 @@ module Nokodown
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          chunk = Labels.lines(Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) }.join("\n").strip)
+          lines = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) }
+          chunk = Labels.lines(lines.join("\n").strip)
           next if chunk.empty?
 
           Block.new(:paragraph, Text.escape_line_starts(Text.unescape_lone(Emphasis.paragraph(chunk))))
@@ -178,7 +179,7 @@ module Nokodown
         nested_only = items.map { |blocks| blocks.size == 1 && bulleted_list?(blocks.first) }
         rendered = items.each_with_index.map do |blocks, index|
           previous = index.positive? && nested_only[index - 1]
-          list_entry(start ? "#{start + index}. " : "- ", unheaded(blocks), nested_only[index] && !previous && !nested_only[index + 1])
+          list_entry(start ? "#{start + index}. " : "- ", item_blocks(blocks), nested_only[index] && !previous && !nested_only[index + 1])
         end
         [Block.new(:list, rendered.join("\n"))]
       end
@@ -186,7 +187,7 @@ module Nokodown
       # Card grids put each title in a heading and a badge in a list of its
       # own ("- - Popular"); in a list item the marker already sets them
       # apart, as it does an item set in bold throughout.
-      def unheaded(blocks)
+      def item_blocks(blocks)
         first = blocks.first
         return [item_paragraph(Emphasis.unwrap(first.text))] if blocks.size == 1 && first.kind == :paragraph
 

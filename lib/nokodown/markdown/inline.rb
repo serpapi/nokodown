@@ -51,6 +51,7 @@ module Nokodown
         [/#{CASED.source}\z/, /\A\p{Nd}/],
         [/\p{Nd}\z/, /\A#{CASED.source}{2}/]
       ].freeze
+      # Material icon fonts draw a glyph from a ligature word ("arrow_forward").
       ICON_FONT = /(?<![\w-])material-(?:icons|symbols)/.freeze
       # Some CMSs write the caption's markup into the alt attribute.
       TAG = %r{</?[a-z][^<>]*>}i.freeze
@@ -61,8 +62,7 @@ module Nokodown
       # Link text that shows a whole address, not a shortened one.
       URL_TEXT = %r{\A(?:https?://|www\.)[^\s…]+\z}i.freeze
 
-      # Absolute URL worth linking to, or nil for in-page anchors, scripts and
-      # phone numbers.
+      # The first byte is the key the others are XORed with.
       def self.cloudflare_email(hex)
         bytes = [hex].pack("H*").bytes
         key = bytes.shift
@@ -70,6 +70,8 @@ module Nokodown
         email if email.valid_encoding? && email.match?(/\A[^@\s]+@[^@\s]+\z/)
       end
 
+      # Absolute URL worth linking to, or nil for in-page anchors, scripts and
+      # phone numbers.
       def self.link_url(href, urls)
         href = href.strip
         return if href.empty? || href.start_with?("#") || href.match?(UNSAFE_SCHEME)
