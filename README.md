@@ -67,9 +67,9 @@ with `main_content: false`, `:none` for a document without a body.
   inside `main` or an article, nor the footer of a section, a card or a
   quote), a breadcrumb trail by its shape in any language (a link to the
   home page, then links down the site with separators), a line of links to
-  the site's tag, category or label archives ("Tags: a, b", a category above
-  the title) with at most a short label ending in a colon, unless the page
-  repeats it (a card's category, a product's facts) or is such an archive, and
+  the site's tag or label archives ("Tags: a, b") with at most a short label
+  ending in a colon and a category kicker above the title, unless the page
+  repeats the line (a card's tags) or is such an archive, and
   copyright and licence lines in the major web languages.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
