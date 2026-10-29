@@ -43,6 +43,56 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "footers by any name" do
+    let(:report) do
+      "#{story}<p>The city will repaint the railings next spring, when river traffic is light and scaffolding can hang over the water.</p>"
+    end
+
+    def pruned(html)
+      root = content(html)
+      described_class.new([root], :page).call
+      Nokodown::Dom.text(root)
+    end
+
+    it "removes a footer-named block that ends the content" do
+      %w[mFooter b-footer__row foot_section agriFooterWrapper].each do |name|
+        pruned("#{report}<div class=\"#{name}\"><p>26 Park Road, Tel 031-730-3500</p></div>").should_not include("Park Road")
+      end
+    end
+
+    it "keeps a footer-named block that more of the content follows" do
+      pruned("<div class=\"box\"><p>Heat pumps</p><div class=\"meta-footer\">Installed by Ana Ruiz</div></div>#{report}").should include("Ana Ruiz")
+    end
+
+    it "keeps a block whose name says it is not a footer" do
+      pruned("#{report}<div class=\"wsite-not-footer\"><p>Photos from the spring concert</p></div>").should include("spring concert")
+    end
+
+    it "keeps footers on a page with almost no text" do
+      pruned("<p>Spring concert</p><div class=\"footer-wrap\"><img src=\"/concert.jpg\" alt=\"\"><p>Hall B</p></div>").should include("Hall B")
+    end
+
+    it "keeps the footer of the post that ends the content" do
+      pruned("<div class=\"post\">#{report}<div class=\"post-footer\">Posted by Ana Ruiz at 12:32</div></div>").should include("Ana Ruiz")
+    end
+
+    it "looks inside a footer-named block that holds most of the content for the site's footer" do
+      html = "<div class=\"footer_guideWrap\">#{report}<ul class=\"footer_guide_small\"><li>TEL 03-5817-0558</li></ul></div>"
+      text = pruned(html)
+
+      text.should include("harbor bridge")
+      text.should_not include("5817")
+    end
+
+    it "keeps the notes that end the main landmark" do
+      root = Nokolexbor::HTML("<body><main>#{report}<div id=\"section-footer\"><p>1. Tested to IEC 60529.</p></div></main></body>").at_css("main")
+      Nokodown::Dom.assign_keys(root)
+      described_class.new([root], :page).call
+
+      Nokodown::Dom.text(root).should include("IEC 60529")
+    end
+  end
+
   describe "article pruning with conditional cleaning off" do
     let(:html) do
       "<p class='byline'>By Jo Pine</p>#{story}#{cards}" \

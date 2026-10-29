@@ -22,6 +22,15 @@ module Nokodown
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
+    # What may follow a site footer: a copyright line, a back-to-top link.
+    TAIL_SHARE = 0.1
+    TAIL_CHARS = 100
+    # On a page with little text, such as a gallery of images, where a
+    # footer sits tells nothing.
+    MIN_TAIL_TEXT = 200
+    # A footer holding most of the content is the content.
+    MAX_TAIL_SHARE = 0.5
+    CONTENT_LANDMARKS = %w[main article].freeze
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
     def initialize(nodes, mode, conditional: true)
@@ -39,6 +48,9 @@ module Nokodown
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
       end
+      # Article cleaning works on copies cut from the page, which cannot tell
+      # whether the main landmark holds a footer.
+      remove_tail_footers if @mode == :page
       self
     end
 
@@ -327,6 +339,71 @@ module Nokodown
       return 0 if !child.element? || Dom.block?(child) || button?(child)
 
       Dom.text(child).length
+    end
+
+    # Site footers go by many names ("mFooter", "b-footer", "foot_section",
+    # "agriFooterWrapper"), and a card or a post has a footer too. One that
+    # almost nothing of the content follows is the site's, unless the main
+    # landmark or an article holds it: there it ends that content, with its
+    # notes or sources.
+    def remove_tail_footers
+      total = @nodes.sum { |root| Dom.char_count(root.content) }
+      return if total < MIN_TAIL_TEXT
+
+      @tail_limit = [total * TAIL_SHARE, TAIL_CHARS].max
+      @footer_budget = total * MAX_TAIL_SHARE
+      @footers = []
+      after = 0
+      @nodes.reverse_each { |root| after += walk_back(root, after) }
+      @footers.each { |node| remove(node) }
+    end
+
+    # Visits the content from its end and returns the characters in node, so
+    # after is always what follows the node being visited.
+    def walk_back(node, after)
+      inside = 0
+      node.children.reverse_each do |child|
+        break if after + inside > @tail_limit
+
+        inside += chars_back(child, after + inside)
+      end
+      inside
+    end
+
+    # A footer holding most of the content is the content, though the site's
+    # footer can still end it.
+    def chars_back(node, after)
+      return Dom.char_count(node.content) if node.text? || (node.element? && Dom::CODE.include?(node.name))
+      return 0 unless node.element?
+
+      if site_footer?(node)
+        chars = Dom.char_count(node.content)
+        return take_footer(node, chars) if chars <= @footer_budget
+      end
+      walk_back(node, after)
+    end
+
+    def take_footer(node, chars)
+      @footers << node
+      @footer_budget -= chars
+      chars
+    end
+
+    def site_footer?(node)
+      return false unless footer_named?(node) && node.at_css("h1").nil?
+
+      node.ancestors.none? { |ancestor| ancestor.element? && content_landmark?(ancestor) }
+    end
+
+    def content_landmark?(node)
+      CONTENT_LANDMARKS.include?(node.name) || node["role"] == "main"
+    end
+
+    def footer_named?(node)
+      return true if node.name == "footer"
+
+      signature = Dom.signature(node)
+      signature.match?(Patterns::FOOTER_NAME) && !signature.match?(Patterns::UNIT_FOOTER)
     end
 
     # Every rule removes through here: nothing inside code is furniture.

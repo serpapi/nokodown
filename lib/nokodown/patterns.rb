@@ -18,6 +18,13 @@ module Nokodown
       (?<![\w-])(?:(?:site|global|main|page|app|l|c|o|g)-?)?footer(?:-(?:wrapper|container|inner|main|top|bottom|links|nav|menu))?(?![\w-])
     /x.freeze
 
+    # Any footer by name; Pruner tells the site's by where it sits. The
+    # footer of a post, a card or a product is part of that unit, and a
+    # modifier names what is not one: Weebly marks its content area
+    # "wsite-not-footer".
+    FOOTER_NAME = /#{WORD_START}(?<!not-|no-|non-|has-|with-|without-)foot(?:er)?#{WORD_END}/.freeze
+    UNIT_FOOTER = /(?:post|entry|article|comment|card|product|item|story|review|event|news|blog|media|teaser|tile)s?[-_]*foot/.freeze
+
     # Fine print. WordPress puts category-* and tag-* terms on the post, and a
     # modifier ("hasDisclaimer") names the block that has one, not the note.
     DISCLAIMER = /#{WORD_START}(?<!category-|tag-|has-)(?:disclaimers?|disclosures)#{WORD_END}/.freeze
