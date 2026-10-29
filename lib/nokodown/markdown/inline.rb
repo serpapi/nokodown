@@ -37,6 +37,7 @@ module Nokodown
       ATTACHED = /[\p{L}\p{N})\]]\z/.freeze
       WORD_START = /\A[\p{L}\p{N}]/.freeze
       WORD_END = /[\p{L}\p{N}]\z/.freeze
+      TAIL_BYTES = 1600
       LINK_ONLY = /\A!?\[(?:\\.|[^\\\]])*\]\([^\s]*\)\z/.freeze
       # Markup around the first and last visible characters of a piece.
       TRAILING_MARKUP = /(?:[*~`]|\]\([^()\s]*(?:\([^()\s]*\)[^()\s]*)*\))+\z/.freeze
@@ -102,7 +103,14 @@ module Nokodown
       def render(nodes, heading: false)
         outer = @in_heading
         @in_heading ||= heading
-        nodes.each_with_object(+"") { |node, out| append(out, node_text(node), node) }
+        previous = ""
+        nodes.each_with_object(+"") do |node, out|
+          piece = node_text(node)
+          append(out, piece, previous, node)
+          previous = piece unless piece.empty?
+          # <wbr> marks where a word may break, not where two words meet.
+          previous = "" if node.element? && node.name == "wbr"
+        end
       ensure
         @in_heading = outer
       end
@@ -116,8 +124,8 @@ module Nokodown
       # Sites set tags, labels and dates in elements of their own and space
       # them with CSS, so their words would run together. Raised and lowered
       # text decides its own spacing.
-      def append(out, piece, node)
-        out << " " if glued?(out, piece) && !script?(node)
+      def append(out, piece, previous, node)
+        out << " " if glued?(previous, piece) && !script?(node)
         out << piece
       end
 
@@ -132,9 +140,15 @@ module Nokodown
       def glued?(left, right)
         return false if left.empty? || right.empty?
 
-        last = (left.length > 400 ? left[-400..] : left).sub(TRAILING_MARKUP, "")
+        last = tail(left).sub(TRAILING_MARKUP, "")
         first = right[0, 200].sub(LEADING_MARKUP, "")
         GLUED.any? { |before, after| last.match?(before) && first.match?(after) }
+      end
+
+      # A character offset into non-ASCII text costs as much as the text; a
+      # byte offset does not.
+      def tail(text)
+        text.bytesize > TAIL_BYTES ? text.byteslice(-TAIL_BYTES, TAIL_BYTES).scrub("") : text
       end
 
       def node_text(node)

@@ -35,6 +35,10 @@ RSpec.describe "Markdown conversion" do
                               "[admin](https://example.com/u/admin) 24/04/2022\n\n**20h30 vendredi**, i**NP**ut, j**ährlich**, 2024年, Model 3"
     end
 
+    it "keeps a word broken by <wbr> whole" do
+      convert("<h3>add<wbr>Listener</h3><p>report<wbr>2024.pdf</p>").should == "### addListener\n\nreport2024.pdf"
+    end
+
     it "drops joiners outside words and emoji" do
       convert("<p>\u200D<b>Rights</b></p><p>\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 \u{1F468 200D 1F469}</p>").should ==
         "**Rights**\n\n\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 \u{1F468 200D 1F469}"
