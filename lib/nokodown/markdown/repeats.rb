@@ -6,7 +6,7 @@ module Nokodown
     # they repeat, tab strips listing the headings below, and the same block
     # twice in a row once images between them are gone. Runs once the title
     # is in place.
-    module Repeats
+    class Repeats
       # Blocks around the title where a part of it ("Site" in "Page - Site")
       # is still the title.
       TITLE_HEAD = 8
@@ -21,7 +21,15 @@ module Nokodown
       WORD = /[^[:^word:]_]+/.freeze
       NOT_WORD = /[[:^word:]_]+/.freeze
 
-      module_function
+      def self.call(blocks)
+        new.call(blocks)
+      end
+
+      # Each pass reads the same blocks, so their plain text is kept.
+      def initialize
+        @plain = {}
+        @squashed = {}
+      end
 
       def call(blocks)
         blocks = drop_title_copies(blocks)
@@ -29,6 +37,8 @@ module Nokodown
         blocks = drop_heading_lists(blocks)
         drop_adjacent_copies(blocks)
       end
+
+      private
 
       # Headings and paragraphs that say only what the H1 says, wherever
       # they are; near the H1 also the parts of a "Page - Site" title.
@@ -81,11 +91,11 @@ module Nokodown
         blocks.reject.with_index do |block, index|
           next false unless block.kind == :paragraph && !block.text.include?("![")
 
-          text = Text.plain(block.text)
+          text = plain(block.text)
           next true if repeats_heading_below?(blocks, index, text)
 
           !block.text.include?("](") && !section_content?(blocks, index) && !runs_on?(blocks, index) &&
-            repeats_heading_above?(blocks, index, squash(text))
+            repeats_heading_above?(blocks, index, text)
         end
       end
 
@@ -95,8 +105,8 @@ module Nokodown
         return false unless blocks[index].kind == :paragraph
 
         following = blocks[index + 1]
-        Text.plain(blocks[index].text).match?(/[,;:–—-]\z/) ||
-          (following&.kind == :paragraph && Text.plain(following.text).match?(/\A\p{Ll}/))
+        plain(blocks[index].text).match?(/[,;:–—-]\z/) ||
+          (following&.kind == :paragraph && plain(following.text).match?(/\A\p{Ll}/))
       end
 
       # A paragraph that is all a section below the title holds ("### Tag",
@@ -134,11 +144,10 @@ module Nokodown
       end
 
       def repeats_heading_above?(blocks, index, text)
-        return false if text.empty?
+        headings = blocks[[0, index - ECHO_WINDOW].max...index].select { |block| block.kind == :heading }
+        return false if headings.empty? || squash(text).empty?
 
-        blocks[[0, index - ECHO_WINDOW].max...index].any? do |block|
-          block.kind == :heading && squash(Cleanup.heading_text(block)) == text
-        end
+        headings.any? { |heading| squash(Cleanup.heading_text(heading)) == squash(text) }
       end
 
       # A list whose every item is a heading of the page is a table of
@@ -164,12 +173,16 @@ module Nokodown
         end
       end
 
+      def plain(text)
+        @plain[text] ||= Text.plain(text)
+      end
+
       def squash(text)
-        Text.plain(text).downcase.gsub(NOT_WORD, "")
+        @squashed[text] ||= plain(text).downcase.gsub(NOT_WORD, "")
       end
 
       def words(text)
-        Text.plain(text).downcase.scan(WORD)
+        plain(text).downcase.scan(WORD)
       end
 
       def contains_words?(haystack, needle)
