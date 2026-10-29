@@ -50,7 +50,7 @@ module Nokodown
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          chunk = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) }.join("\n").strip
+          chunk = Labels.lines(Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) }.join("\n").strip)
           Block.new(:paragraph, Text.escape_line_starts(Text.unescape_lone(Emphasis.paragraph(chunk)))) unless chunk.empty?
         end
       end
@@ -252,7 +252,7 @@ module Nokodown
       # Blank lines inside or between items cost tokens and change nothing
       # for a reader: the indentation keeps an item's blocks together.
       def join_item(blocks)
-        blocks.map(&:text).join("\n")
+        Labels.blocks(blocks).map(&:text).join("\n")
       end
 
       def quote(node)
