@@ -83,12 +83,12 @@ with `main_content: false`, `:none` for a document without a body.
   Posts (Atom)") by where they point, unless a sentence, a heading, the
   page's title, a date, a table or a picture sits with them or they are
   items of a larger menu, and comment, review and contact forms (a visible
-  text box, a name or e-mail field and little text) with the title and
-  notes above them in any language. A form stays when it wraps the page
-  (ASP.NET), holds its title or main region, holds an e-mail address or a
-  phone number, asks how many (an order with a note), or is all an
-  application or sign-up page's main region holds, and neither kind goes
-  when it is all the content holds.
+  text box, a name or e-mail field and little text) with the title above
+  them, and a note under that title, in any language. A form stays when it
+  wraps the page (ASP.NET), holds its title or main region, holds an e-mail
+  address or a phone number, asks how many (an order with a note), or is
+  all an application or sign-up page's main region holds, and neither kind
+  goes when it is all the content holds.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
@@ -206,7 +206,8 @@ opening hours and contact details are lines, not prose.
    title does not.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
    `<noscript>` copies), drop scripts, invisible elements and form controls,
-   and mark the forms that ask for a message while their controls are there.
+   and mark the forms that ask for a message, with their titles, while their
+   controls are there.
 4. **Boilerplate**: remove page chrome and noise widgets across the whole page.
 5. **ContentLocator**: score paragraphs with Readability's algorithm. When one
    candidate holds most of the page's prose the content is narrowed to it
@@ -249,8 +250,8 @@ opening hours and contact details are lines, not prose.
    of the text) and a featured post beside them, since it would judge each
    item on its own. A teaser's linked title with its date and author links
    is not a link cluster, however short. Then **MessageForms** and
-   **ServiceLinks** remove the marked forms and the sign-in, cart and feed
-   lines left in the content.
+   **ServiceLinks** remove what is left in the content of the marked forms
+   and titles and of the sign-in, cart and feed lines.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data

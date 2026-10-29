@@ -21,6 +21,17 @@ RSpec.describe Nokodown::MessageForms do
     forms.each { |form| markdown("<div class=\"post\">#{story}#{form}</div>").should end_with("by the reeds.") }
   end
 
+  it "removes a longer note under the form's title, and a title set in a span named for it" do
+    form = '<form><input type="text" name="author"><textarea></textarea></form>'
+    boxes = [
+      "<div class=\"box\"><h3>Kontakta oss</h3><p>Write your details below and we will call you back within a day.</p>" \
+      "#{form}</div>",
+      "<div class=\"box\"><span class=\"comment-reply-title\">Be the first to review “Trail kettle, two litres”</span>" \
+      "#{form}</div>"
+    ]
+    boxes.each { |box| markdown("<div class=\"post\">#{story}#{box}</div>").should end_with("by the reeds.") }
+  end
+
   it "keeps the reply that a reply form follows" do
     reply = '<div class="answer"><p>Mine reopened on Monday, once the floods had gone down.</p>' \
             '<form><p>Your email address will not be published.</p><input type="text" name="author">' \

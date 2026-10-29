@@ -3,8 +3,9 @@
 module Nokodown
   # Comment, review and contact forms, with the title and notes above them
   # ("Leave a Reply", "Be the first to review", "留言框") in any language.
-  # Preprocessor marks them while their controls still say what they ask;
-  # they go once the content is chosen, so they never sway that choice.
+  # Preprocessor marks them and the wrappers that add only their title while
+  # their controls still say what they ask; what is left of them in the
+  # content goes once it is chosen, so they never sway that choice.
   module MessageForms
     MARK = "data-nokodown-message-form"
     # An e-mail address, or a phone number of seven digits or more.
@@ -12,42 +13,48 @@ module Nokodown
     TITLE = 120
     TITLE_PIECES = 3
     TITLE_ELEMENTS = 30
-    # Outside a heading, a line as short as "Leave a Reply" or "留言框".
+    # Outside a heading, a line as short as "Leave a Reply" or "留言框"; a
+    # longer note only under a heading. Themes set the title in a span named
+    # for it ("comment-reply-title").
     TITLE_LINE = 40
+    TITLE_NAME = /(?<![a-z])(?:title|heading)(?![a-z])/.freeze
     BEYOND_TITLE = Set.new(%w[img picture video iframe table ul ol dl h1]).freeze
 
     module_function
 
-    # Each marked form in the content with the wrappers that add only a short
-    # title or note to it.
+    # The outermost marked blocks inside the content.
     def blocks(roots)
-      tops = roots.map { |root| Dom.key(root) }.to_set
-      roots.flat_map { |root| root.css("form[#{MARK}]").to_a }.map { |form| titled(form, tops) }
+      marked = roots.flat_map { |root| root.css("[#{MARK}]").to_a }
+      keys = marked.map { |node| Dom.key(node) }.to_set
+      marked.reject { |node| node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) } }
     end
 
-    # A heading and a few short lines, without links, pictures, tables,
-    # lists, an address or a phone number. The details beside a contact form,
-    # the other tabs beside a review form, or the post a reply form follows,
-    # are more. Only what the climb adds is read, so a thread of reply forms
-    # is read once.
-    def titled(form, tops)
-      note = { chars: 0, pieces: 0, headings: 0, elements: 0 }
+    # The wrappers that add only a heading and a few short lines to the form,
+    # without links, pictures, tables, lists, an address or a phone number.
+    # The details beside a contact form, the other tabs beside a review
+    # form, or the post a reply form follows, are more. Only what the climb
+    # adds is read, so a thread of reply forms is read once.
+    def title_wrappers(form)
+      note = { chars: 0, pieces: 0, headings: 0, elements: 0, long: 0 }
+      wrappers = []
       node = form
-      node = node.parent while wrapper?(node.parent, tops) && note_beside?(node, note)
-      node
+      wrappers << (node = node.parent) while wrapper?(node.parent) && note_beside?(node, note)
+      wrappers
     end
 
-    def wrapper?(node, tops)
-      node&.element? && !tops.include?(Dom.key(node)) && node.name != "body" &&
-        !Boilerplate::CONTENT_ANCESTORS.include?(node.name) && node["role"] != "main"
+    def wrapper?(node)
+      return false unless node&.element? && node.name != "body"
+
+      !Boilerplate::CONTENT_ANCESTORS.include?(node.name) && node["role"] != "main"
     end
 
     def note_beside?(node, note)
-      %i[previous_sibling next_sibling].all? do |direction|
+      beside = %i[previous_sibling next_sibling].all? do |direction|
         sibling = node.public_send(direction)
         sibling = sibling.public_send(direction) while sibling && note?(sibling, note)
         sibling.nil?
       end
+      beside && (note[:long].zero? || note[:headings].positive?)
     end
 
     def note?(node, note, headed = false)
@@ -57,7 +64,12 @@ module Nokodown
       return false if (note[:elements] += 1) > TITLE_ELEMENTS
       return false if Dom.heading?(node) && (note[:headings] += 1) > 1
 
-      node.children.all? { |child| note?(child, note, headed || Dom.heading?(node)) }
+      headed ||= title?(node)
+      node.children.all? { |child| note?(child, note, headed) }
+    end
+
+    def title?(node)
+      Dom.heading?(node) || node["role"] == "heading" || Dom.signature(node).match?(TITLE_NAME)
     end
 
     def note_text?(text, note, headed)
@@ -66,9 +78,8 @@ module Nokodown
       chars = Dom.char_count(text)
       note[:chars] += chars
       note[:pieces] += 1
-      return false if note[:chars] > TITLE || note[:pieces] > TITLE_PIECES || text.match?(CONTACT_DETAIL)
-
-      headed || chars <= TITLE_LINE
+      note[:long] += 1 unless headed || chars <= TITLE_LINE
+      note[:chars] <= TITLE && note[:pieces] <= TITLE_PIECES && !text.match?(CONTACT_DETAIL)
     end
   end
 end

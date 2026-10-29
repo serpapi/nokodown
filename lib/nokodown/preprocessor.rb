@@ -78,7 +78,7 @@ module Nokodown
       @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
-      keep_message_marks
+      mark_titled_forms
       remove_form_controls
       HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
@@ -280,18 +280,12 @@ module Nokodown
       disclosure?(node) && (node.key?("aria-labelledby") || @panel_ids.include?(node["id"]))
     end
 
-    # A message form that goes stays as an empty mark for MessageForms, which
-    # takes the title above it once the content is chosen.
     def remove_form_controls
-      @body.css("form").each { |form| drop_form(form) if utility_form?(form) }
+      @body.css("form").each { |form| form.remove if utility_form?(form) }
       @body.css("input").each { |input| input.remove unless task_checkbox?(input) }
       @body.css("button").each { |button| disclosure_button?(button) ? button.replace(button.children) : button.remove }
       @body.css("label").each { |label| label.remove if label["for"] || Dom.ancestors_named(label, "form").any? }
-      @body.css("form").each { |form| drop_form(form) if leftover_form?(form) }
-    end
-
-    def drop_form(form)
-      form.key?(MessageForms::MARK) ? form.children.each(&:remove) : form.remove
+      @body.css("form").each { |form| form.remove if leftover_form?(form) }
     end
 
     # Text boxes go with the junk, so the forms that ask for a message in a
@@ -314,10 +308,17 @@ module Nokodown
       true
     end
 
-    # Comment, review and contact forms ask who writes as well as what.
-    def keep_message_marks
+    # Comment, review and contact forms ask who writes as well as what. The
+    # wrappers that add only their title are marked too, as the form itself
+    # may go before the content is chosen, and the content may start inside
+    # them.
+    def mark_titled_forms
       @body.css("form[#{MessageForms::MARK}]").each do |form|
-        form.remove_attribute(MessageForms::MARK) unless message_form?(form)
+        if message_form?(form)
+          MessageForms.title_wrappers(form).each { |wrapper| wrapper[MessageForms::MARK] = "" }
+        else
+          form.remove_attribute(MessageForms::MARK)
+        end
       end
     end
 
