@@ -58,7 +58,8 @@ module Nokodown
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
     HEADING = "h1, h2, h3, h4, h5, h6, [role=heading]"
     MEDIA = "img, picture, time"
-    PLAYERS = "video, iframe"
+    # Preprocessing keeps only the embeds of video sites.
+    PLAYERS = "iframe"
     KEPT = "h1, img, picture, video, audio, iframe, object, embed, table, pre, math"
     STRUCTURE = "ul, ol, dl, table, li, p + p"
     DATE = %r{\d{1,4}[./-]\d{1,2}[./-]\d{1,4}}.freeze
