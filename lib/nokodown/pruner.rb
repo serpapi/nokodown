@@ -699,7 +699,7 @@ module Nokodown
       links = node.css("a[href]")
       return false unless links.size == 2
 
-      post, home = links.map { |link| web_address(link["href"]) }
+      post, home = links.map { |link| UrlResolver.web_address(link["href"]) }
       return false unless post && home && post.host == home.host && home?(home) && !home?(post)
       return false unless names_page?(Dom.text(links.first), node.document)
 
@@ -721,13 +721,6 @@ module Nokodown
 
     def text_after(text, part)
       text[(text.rindex(part) || 0) + part.length..].to_s
-    end
-
-    def web_address(href)
-      uri = URI.parse(UrlResolver.encode(href.to_s.strip))
-      uri if uri.is_a?(URI::HTTP) && uri.host
-    rescue URI::Error
-      nil
     end
 
     def remove_boilerplate_text(root)

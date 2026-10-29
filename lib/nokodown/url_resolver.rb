@@ -69,6 +69,13 @@ module Nokodown
       string.gsub(UNSAFE) { |char| char.bytes.map { |byte| format("%%%02X", byte) }.join }
     end
 
+    def self.web_address(url)
+      uri = URI.parse(encode(url.to_s.strip))
+      uri if uri.is_a?(URI::HTTP) && uri.host
+    rescue URI::Error, ArgumentError
+      nil
+    end
+
     def initialize(url, base_href = nil)
       @url = parse(url)
       @base = @url
