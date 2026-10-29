@@ -321,8 +321,10 @@ RSpec.describe "Markdown conversion" do
         .should == "# Harbour\n\nPosted May 3."
     end
 
-    it "keeps only the text of in-page anchors, scripts and phone links" do
-      convert('<p><a href="#top">Top</a> <a href="javascript:void(0)">Open</a> <a href="tel:+1555">Call</a></p>').should == "Top Open Call"
+    it "keeps only the text of in-page anchors, scripts, phone links and links to the author's files" do
+      html = '<p><a href="#top">Top</a> <a href="javascript:void(0)">Open</a> <a href="tel:+1555">Call</a> ' \
+             '<a href="file:///C:/Users/Tony/Draft%20final.docx#_ftn1">[1]</a></p>'
+      convert(html).should == "Top Open Call [1]"
     end
 
     it "drops permalink symbols and read-more links" do
