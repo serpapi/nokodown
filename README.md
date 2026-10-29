@@ -76,10 +76,10 @@ with `main_content: false`, `:none` for a document without a body.
   containers at the end of the page is put back where the page shows it,
   unless it is mostly links, as carousels of recommended products are.
 - Sections rendered twice, such as a desktop and a mobile copy.
-- Tracking pixels, spacers, icons, placeholders (`no-image.png`,
-  `img_load.gif`), README badges, click-tracking URL parameters (`utm_*`,
-  `gclid`, `fbclid`, ...), permalink anchors, "Read more" links, code line
-  numbers, and repeated responsive copies of the same image.
+- Tracking pixels, spacers, icons, placeholders and loading spinners
+  (`no-image.png`, `img_load.gif`), README badges, click-tracking URL
+  parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors, "Read more"
+  links, code line numbers, and repeated responsive copies of the same image.
 - Markdown that costs tokens without meaning: horizontal rules, blank lines
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators
@@ -90,16 +90,18 @@ with `main_content: false`, `:none` for a document without a body.
   "Read more", a text the page uses once for each of several pages, goes when
   it ends its line; texts that take turns from card to card ("Sold",
   "Available") are values and stay.
-- In the main content, images whose alt text does not say what they show: no
-  alt text, a file or camera name ("IMG_6175.JPG"), a hash, or a word for
-  "image" ("photo", "foto", "画像"); icons, logos and avatars, told by their
+- In the main content, images whose alt text does not say what they show, at
+  any size and in any wrapper (a figure keeps its caption): no alt text, a
+  file or camera name ("IMG_6175.JPG"), a hash, or a word for "image" or
+  "loading" ("photo", "foto", "画像"); icons, logos and avatars, told by their
   file name ("QDLogoBlue.gif"), folder (`/icons/`), class or alt text. An image
-  alone in a cell of a data table, such as a tick in a comparison table, stays,
-  and so do all images of a page with fewer than 20 words besides them. Images
-  marked decorative (`role="presentation"` or `role="none"`) go unless they sit
-  in a figure, an image link or a text-free paragraph or table cell, or declare
-  a width or height of 300 pixels or more; and card thumbnails go while the
-  Markdown still has a text link to the same page. "Read more" or
+  alone in a text-free cell of a data table, such as a tick in a comparison
+  table, stays, and so do all images of a page with fewer than 20 words
+  besides them. An image with alt text that is marked decorative
+  (`role="presentation"` or `role="none"`) goes unless it sits in a figure, an
+  image link or a text-free paragraph or table cell, or declares a width or
+  height of 300 pixels or more; and card thumbnails go while the Markdown
+  still has a text link to the same page. "Read more" or
   "3 comments" never names the page, and a label without letters ("$40") or
   with only a date ("Oct 1, 2026") names it only for an image without alt
   text. Any other text does, so in `:page` mode a thumbnail beside a

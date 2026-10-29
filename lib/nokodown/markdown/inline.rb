@@ -94,6 +94,7 @@ module Nokodown
         @in_heading = false
         @in_link = false
         @link_images = nil
+        @tick_cell = false
       end
 
       # Markup of every image written, for Cleanup to drop redundant images
@@ -117,6 +118,15 @@ module Nokodown
 
       def link_url(href)
         Inline.link_url(href, @urls)
+      end
+
+      # Renders a cell of a data table, where an image alone is a tick.
+      def in_cell(cell)
+        outer = @tick_cell
+        @tick_cell = !cell.at_css("img").nil? && Dom.text(cell).empty?
+        yield
+      ensure
+        @tick_cell = outer
       end
 
       private
@@ -273,7 +283,7 @@ module Nokodown
         return "" if src.nil? || Image.decorative?(node, src, alt)
 
         markup = "![#{Text.link_text(Text.escape(alt))}](#{Text.destination(src)})"
-        record(markup, src, node, @main_content && !Image.content?(node, src, alt))
+        record(markup, src, node, @main_content && !Image.content?(node, src, alt, @tick_cell))
         return markup unless @link_images
 
         @link_images << markup

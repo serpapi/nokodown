@@ -54,7 +54,7 @@ module Nokodown
       def cell_blocks(cell)
         outer = @in_cell
         @in_cell = true
-        children_blocks(cell)
+        @inline.in_cell(cell) { children_blocks(cell) }
       ensure
         @in_cell = outer
       end

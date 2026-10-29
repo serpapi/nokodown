@@ -395,6 +395,13 @@ RSpec.describe "Markdown conversion" do
       convert('<p><img src="/img_load.gif" alt="Rose"><img src="/no-image.png" alt="Rose"><img src="/placeholder100.png"></p><p>Rose</p>').should == "Rose"
     end
 
+    it "keeps images whose file name holds a placeholder or loading word inside another word" do
+      html = '<p><img src="/grand-piano-image.jpg" alt="Steinway grand piano"><img src="/server-load-chart.png" alt="Server load">' \
+             '<img src="/loading-dock.jpg" alt="Dock"><img src="/tribe-loading.gif" alt="Loading Events"><img src="/ajax-loader.png"></p>'
+      convert(html).should == "![Steinway grand piano](https://example.com/grand-piano-image.jpg)![Server load](https://example.com/server-load-chart.png)" \
+                              "![Dock](https://example.com/loading-dock.jpg)"
+    end
+
     it "drops tracking pixels, icons, placeholders and badges" do
       html = '<img src="/pixel.gif" width="1" height="1"><img src="/icon.png" width="16" height="16">' \
              '<img src="/assets/grey-placeholder.png"><img src="https://img.shields.io/badge/ci-passing-green" alt="CI">' \
@@ -623,11 +630,30 @@ RSpec.describe "Markdown conversion" do
       end
 
       it "drops images whose alt text names nothing" do
-        alts = ["IMG_6175.JPG", "DSC_0264", "image", "Foto 2", "描述", "صورة", "9f86d081884c7d65"]
+        alts = ["IMG_6175.JPG", "DSC_0264", "image", "Foto 2", "描述", "صورة", "9f86d081884c7d65", "Cargando..."]
         images = alts.map.with_index { |alt, index| %(<img src="/#{index}.jpg" alt="#{alt}">) }.join
         text = "We sailed along the rocky coast for a whole week, stopping at small harbours, fish markets and quiet beaches on the way."
         extract("<main><h1>Trip</h1><p>#{text}</p><p>#{images}<img src=\"/sea.jpg\" alt=\"Boats in the harbour\"></p></main>").should ==
           "# Trip\n\n#{text}\n\n![Boats in the harbour](https://example.com/sea.jpg)"
+      end
+
+      it "keeps images whose class, id, alt or file name only resembles an icon's" do
+        text = "We sailed along the rocky coast for a whole week, stopping at small harbours, fish markets and quiet beaches on the way."
+        images = '<img src="/1.jpg" class="img-catalogo" alt="Red running shoe"><img src="/2.jpg" id="silicon-wafer" alt="Wafer of pure silicon">' \
+                 '<img src="/3.jpg" alt="Photo 2023 keynote on stage"><img src="/4.jpg" alt="Trucks loading containers">' \
+                 '<img src="/kitchen-counter.jpg" alt="Granite kitchen counter with oak cabinets">'
+        extract("<main><h1>Trip</h1><p>#{text}</p><p>#{images}</p></main>").should ==
+          "# Trip\n\n#{text}\n\n![Red running shoe](https://example.com/1.jpg)![Wafer of pure silicon](https://example.com/2.jpg)" \
+          "![Photo 2023 keynote on stage](https://example.com/3.jpg)![Trucks loading containers](https://example.com/4.jpg)" \
+          "![Granite kitchen counter with oak cabinets](https://example.com/kitchen-counter.jpg)"
+      end
+
+      it "keeps the ticks of a long data table in linear time" do
+        rows = (1..400).map { |i| %(<tr><td>Plan #{i}</td><td><img src="/yes.png"></td><td><img src="/no.png"></td></tr>) }.join
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        markdown = extract("<main><h1>Plans</h1><table>#{rows}</table></main>")
+        (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 2
+        markdown.should include("| Plan 400 | ![](https://example.com/yes.png) | ![](https://example.com/no.png) |")
       end
 
       it "drops an image that names nothing although its alt text holds an escape" do
