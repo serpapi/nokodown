@@ -29,6 +29,7 @@ require_relative "nokodown/markdown/table"
 require_relative "nokodown/markdown/renderer"
 require_relative "nokodown/markdown/cleanup"
 require_relative "nokodown/markdown/image_cleanup"
+require_relative "nokodown/markdown/repeats"
 require_relative "nokodown/result"
 require_relative "nokodown/extractor"
 
