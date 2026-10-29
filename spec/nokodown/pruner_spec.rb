@@ -141,13 +141,18 @@ RSpec.describe Nokodown::Pruner do
       Nokodown::Dom.text(root).should_not include("Bisztynek")
     end
 
-    it "keeps a narrow grid column with little link text, and a rail beside a wide column without the title" do
+    it "keeps a narrow grid column with little link text, and one beside a wide column without the title or prose" do
       price = "<div class='col-md-4'><p>Price: 129 EUR, in stock, ships in two days.</p><a href='/cart'>Add to cart</a></div>"
       root = content("<div class='row'><div class='col-md-8'><h1>Trail shoe</h1>#{story}</div>#{price}</div>")
       described_class.new([root], :page, urls: urls).call
       Nokodown::Dom.text(root).should include("Price: 129 EUR")
 
       root = content("<div class='row'><div class='span8'>#{story}</div><div class='span4'><h1>Places</h1>#{rail}</div></div>")
+      described_class.new([root], :page, urls: urls).call
+      Nokodown::Dom.text(root).should include("Bisztynek")
+
+      guides = %w[Moving Separating Retiring].map { |name| "<li><a href='/guides/#{name.downcase}'>#{name}: what to do</a></li>" }.join
+      root = content("<div class='row'><div class='col-md-8'><ul>#{guides}</ul></div><div class='col-md-4'>#{rail}</div></div>")
       described_class.new([root], :page, urls: urls).call
       Nokodown::Dom.text(root).should include("Bisztynek")
     end

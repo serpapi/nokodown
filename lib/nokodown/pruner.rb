@@ -153,8 +153,8 @@ module Nokodown
 
     # Grid frameworks give columns their width in twelfths ("col-md-4" beside
     # "col-md-8", "td-pb-span4"), and old portals name their side cells. A
-    # side column of links goes beside the widest column when that one holds
-    # the title, or no column does; one with little link text, such as a price box or
+    # side column of links goes beside the widest column; one with little
+    # link text, such as a price box or
     # an event's date and place, stays. Beside side-named cells, the other
     # cell is the main one.
     def grid_rails(root)
@@ -171,9 +171,17 @@ module Nokodown
       return [] if widths.include?(nil)
 
       main = widths.index(widths.max)
-      return [] unless widths[main] >= MIN_MAIN_WIDTH && (columns[main].at_css("h1") || columns.none? { |column| column.at_css("h1") })
+      return [] unless widths[main] >= MIN_MAIN_WIDTH && main_column?(columns[main], columns)
 
       columns.each_index.select { |index| index != main && rail?(columns[index], widths[index]) }.map { |index| columns[index] }
+    end
+
+    # The title's column, or else a column of prose: beside a hub's main
+    # list of links, the narrow lists are more of the hub.
+    def main_column?(column, columns)
+      return !column.at_css("h1").nil? if columns.any? { |other| other.at_css("h1") }
+
+      link_density(column) < RAIL_LINK_SHARE
     end
 
     def rail?(column, width)
