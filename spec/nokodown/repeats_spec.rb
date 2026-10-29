@@ -31,6 +31,10 @@ RSpec.describe Nokodown::Markdown::Repeats do
       convert(html).should end_with("### [Green olives, 1 kg jar](https://example.com/olives-2)\n\nIn brine.")
     end
 
+    it "keeps a heading that differs from the title by a vowel sign" do
+      convert("<h1>किताबें</h1>#{intro}<h2>किताब</h2><p>एक किताब के बारे में।</p>").should include("## किताब")
+    end
+
     it "keeps a paragraph that repeats the title as a link to another page" do
       html = "<h1>Stove review</h1>#{intro}<iframe src='https://www.youtube.com/embed/dQw4w9WgXcQ' title='Stove review'></iframe>"
       convert(html).should end_with("[Stove review](https://www.youtube.com/watch?v=dQw4w9WgXcQ)")

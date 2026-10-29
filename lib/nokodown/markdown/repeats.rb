@@ -16,6 +16,10 @@ module Nokodown
       ECHO_WINDOW = 4
       LIST_ITEM = /\A\s*(?:[-*+]|\d+\.)\s+(.*)\z/.freeze
       LINK_TARGET = /\]\(([^)\s]*)/.freeze
+      # Vowel signs and tone marks are part of a word in Devanagari or Thai,
+      # and [[:word:]] keeps them.
+      WORD = /[^[:^word:]_]+/.freeze
+      NOT_WORD = /[[:^word:]_]+/.freeze
 
       module_function
 
@@ -151,11 +155,11 @@ module Nokodown
       end
 
       def squash(text)
-        Text.plain(text).downcase.gsub(/[^\p{L}\p{N}]+/, "")
+        Text.plain(text).downcase.gsub(NOT_WORD, "")
       end
 
       def words(text)
-        Text.plain(text).downcase.scan(/[\p{L}\p{N}]+/)
+        Text.plain(text).downcase.scan(WORD)
       end
 
       def contains_words?(haystack, needle)
