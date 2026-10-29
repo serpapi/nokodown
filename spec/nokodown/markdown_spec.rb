@@ -656,6 +656,11 @@ RSpec.describe "Markdown conversion" do
         "- Fast\n- Safe\n\nAlso:\n\n- Free shipping\n- Returns\n\nVerdict\n\n✓ Light\n\n✗ Loud"
     end
 
+    it "joins numbered lists whose numbering runs on" do
+      convert('<ul><li>a</li></ul><ul><li>b</li></ul><ol><li>one</li></ol><ol start="2"><li>two</li></ol><ol><li>again</li></ol>').should ==
+        "- a\n\n- b\n\n1. one\n2. two\n\n1. again"
+    end
+
     it "renders definition lists as term and definition pairs" do
       convert("<dl><dt>Weight</dt><dd>540 g</dd><dt>Colors</dt><dd>Brown</dd><dd>Black</dd></dl>").should ==
         "- **Weight**: 540 g\n- **Colors**: Brown; Black"
