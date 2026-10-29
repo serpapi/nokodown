@@ -20,6 +20,17 @@ module Nokodown
     UTF8_BOM = "\xEF\xBB\xBF".b.freeze
     BOM_OR_REPLACEMENT = /\xEF(?:\xBB\xBF|\xBF\xBD)/n.freeze
     UTF16_BOMS = { "\xFF\xFE".b => Encoding::UTF_16LE, "\xFE\xFF".b => Encoding::UTF_16BE }.freeze
+    # A PDF, an image, a font, an archive, a program or a media file served
+    # as a page.
+    BINARY_SIGNATURE = /
+      \A\s{0,16}(?:%PDF-|%!PS-Adobe)|
+      \A(?:\x89PNG\r\n\x1A\n|GIF8[79]a|\xFF\xD8\xFF|PK\x03\x04|\x1F\x8B\x08|BZh[1-9]1AY&SY|\xFD7zXZ\x00|7z\xBC\xAF\x27\x1C|
+      Rar!\x1A\x07|\x7FELF|\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1|RIFF.{4}(?:WEBP|WAVE|AVI\x20)|OggS\x00|wOF[F2]|\x00\x00\x00.ftyp)
+    /mnx.freeze
+    # ESC is left out: ISO-2022-JP text shifts with it.
+    CONTROL_BYTES = "\x00-\x08\x0E-\x1A\x1C-\x1F"
+    BINARY_SAMPLE = 4096
+    BINARY_SHARE = 0.03
 
     # Browsers read these labels as the superset encoding, as the WHATWG
     # Encoding Standard says: pages declared Latin-1 use Windows-1252 quotes,
@@ -91,6 +102,22 @@ module Nokodown
     WESTERN = /\A[\u00A0-\u024F\u0370-\u04FF\u1E00-\u1EFF\u2000-\u27BF\uFEFF\uFFFD\u{1F000}-\u{1FAFF}]+\z/.freeze
 
     module_function
+
+    # Pages hold next to no control bytes. UTF-16 without a byte order mark
+    # holds a NUL beside each ASCII character, all on even or all on odd
+    # bytes.
+    def binary?(html)
+      bytes = html.b
+      return true if bytes.byteslice(0, BINARY_SAMPLE).match?(BINARY_SIGNATURE)
+
+      bytes.count(CONTROL_BYTES) > bytes.bytesize * BINARY_SHARE && !utf16?(bytes.byteslice(0, BINARY_SAMPLE))
+    end
+
+    def utf16?(sample)
+      even = (0...sample.bytesize).step(2).count { |index| sample.getbyte(index).zero? }
+      odd = sample.count("\x00") - even
+      [even, odd].max > sample.bytesize * 0.4 && [even, odd].min < sample.bytesize * 0.05
+    end
 
     def utf8(html)
       html = decode(html.b) if html.encoding == Encoding::BINARY
