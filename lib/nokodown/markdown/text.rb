@@ -14,6 +14,9 @@ module Nokodown
       # Characters that could open or close emphasis. An underscore inside a
       # word cannot.
       DELIMITERS = { "*" => /\*/, "_" => /(?<![\p{L}\p{N}\p{M}])_|_(?![\p{L}\p{N}\p{M}])/ }.freeze
+      ESCAPED_RUNS = { "*" => /(?:\\\*)+/, "_" => /(?:\\_)+/ }.freeze
+      # A text holds one run, so a run that opens a line is that run.
+      LINE_START_RUNS = { "*" => /^(?:\\\*)+(?:\s|$)/, "_" => /^(?:\\_)+(?:\s|$)/ }.freeze
       # Link and image markup as Inline writes it: "](" in the text is escaped,
       # and the destination's parentheses are balanced or percent-encoded.
       LINK_TEXT = /(?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*/.freeze
@@ -45,11 +48,11 @@ module Nokodown
         return string if string.include?("![")
 
         DELIMITERS.reduce(string) do |text, (char, delimiter)|
-          runs = text.scan(/(?:\\#{Regexp.escape(char)})+/)
+          runs = text.scan(ESCAPED_RUNS[char])
           next text unless runs.size == 1 && text.scan(delimiter).size == runs.first.length / 2
 
           run = runs.first
-          text.match?(/^#{Regexp.escape(run)}(?:\s|$)/) ? text : text.sub(run, char * (run.length / 2))
+          text.match?(LINE_START_RUNS[char]) ? text : text.sub(run, char * (run.length / 2))
         end
       end
 
