@@ -19,11 +19,17 @@ module Nokodown
     /x.freeze
 
     # Any footer by name; Pruner tells the site's by where it sits. The
-    # footer of a post, a card or a product is part of that unit, and a
-    # modifier names what is not one: Weebly marks its content area
-    # "wsite-not-footer".
-    FOOTER_NAME = /#{WORD_START}(?<!not-|no-|non-|has-|with-|without-)foot(?:er)?#{WORD_END}/.freeze
-    UNIT_FOOTER = /(?:post|entry|article|comment|card|product|item|story|review|event|news|blog|media|teaser|tile)s?[-_]*foot/.freeze
+    # footer of a post, a card or a product is part of that unit, a modifier
+    # names what is not one (Weebly marks its content area "wsite-not-footer"),
+    # and "FootNote" splits into "foot-note".
+    FOOTER_NAME = /#{WORD_START}(?<!not-|no-|non-|has-|with-|without-)(?:footer|foot(?![-_]*notes?#{WORD_END}))#{WORD_END}/.freeze
+    UNIT_FOOTER = /
+      (?:post|entry|article|comment|card|product|item|story|review|event|news|blog|media|teaser|tile|book|testimonial|quote|
+      feed|panel|modal|#{WORD_START}(?:table|section))s?[-_]*foot
+    /x.freeze
+    # WordPress and WooCommerce name a post's terms in its classes: a shop's
+    # foot-care category is "product_cat-foot-care" on every product.
+    TAXONOMY_TERM = /(?<![\w-])(?:product_)?(?:cat|tag|category|term)-[\w-]+/.freeze
 
     # Fine print. WordPress puts category-* and tag-* terms on the post, and a
     # modifier ("hasDisclaimer") names the block that has one, not the note.

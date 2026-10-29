@@ -84,12 +84,35 @@ RSpec.describe Nokodown::Pruner do
       text.should_not include("5817")
     end
 
-    it "keeps the notes that end the main landmark" do
-      root = Nokolexbor::HTML("<body><main>#{report}<div id=\"section-footer\"><p>1. Tested to IEC 60529.</p></div></main></body>").at_css("main")
-      Nokodown::Dom.assign_keys(root)
-      described_class.new([root], :page).call
+    it "keeps the notes that end the main landmark or an article" do
+      ["<main>", "<div role=\"main\">", "<article>", "<div itemprop=\"articleBody\">"].each do |landmark|
+        root = content("<div>#{landmark}#{report}<div class=\"foot\"><p>1. Tested to IEC 60529.</p></div></div></div>")
+        described_class.new([root], :page).call
 
-      Nokodown::Dom.text(root).should include("IEC 60529")
+        Nokodown::Dom.text(root).should include("IEC 60529")
+      end
+    end
+
+    it "keeps the footer of a unit, a quote or a section, and a footnote" do
+      ends = [
+        "<div class=\"table-footer\">Prices include VAT.</div>",
+        "<section><div class=\"card\"><p>Bulk orders</p><footer class=\"card-footer\">Call sales on 555-0100.</footer></div></section>",
+        "<section><blockquote><p>The best kettle I own.</p><footer>Jane Doe, mountain guide</footer></blockquote></section>",
+        "<section><h2>Opening hours</h2><footer>Closed on public holidays.</footer></section>",
+        "<div class=\"FootNote\"><p>* Prices exclude shipping to the islands.</p></div>"
+      ]
+      ends.each { |tail| pruned(report + tail).should end_with(Nokodown::Dom.text(content(tail).children.last)) }
+    end
+
+    it "removes a footer element when its section wraps the page" do
+      pruned("<section>#{report}<footer><p>26 Park Road, Tel 031-730-3500</p></footer></section>").should_not include("Park Road")
+    end
+
+    it "does not read a shop category's name as a footer" do
+      products = %w[Insoles Separators Splint Socks].map do |name|
+        "<li class=\"product type-product product_cat-foot-care\"><h2>#{name}</h2><p>Soft support for tired feet, $19.00</p></li>"
+      end
+      pruned("#{report}<ul class=\"products\">#{products.join}</ul>").should include("Socks")
     end
   end
 

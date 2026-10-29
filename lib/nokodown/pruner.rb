@@ -34,7 +34,8 @@ module Nokodown
     MIN_TAIL_TEXT = 200
     # A footer holding most of the content is the content.
     MAX_TAIL_SHARE = 0.5
-    CONTENT_LANDMARKS = %w[main article].freeze
+    QUOTES = %w[blockquote figure].freeze
+    SECTIONS = %w[section aside nav].freeze
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
     def initialize(nodes, mode, conditional: true)
@@ -386,19 +387,20 @@ module Nokodown
     # landmark or an article holds it: there it ends that content, with its
     # notes or sources.
     def remove_tail_footers
-      total = @nodes.sum { |root| Dom.char_count(root.content) }
-      return if total < MIN_TAIL_TEXT
+      @tail_total = @nodes.sum { |root| Dom.char_count(root.content) }
+      return if @tail_total < MIN_TAIL_TEXT
 
-      @tail_limit = [total * TAIL_SHARE, TAIL_CHARS].max
-      @footer_budget = total * MAX_TAIL_SHARE
+      @tail_limit = [@tail_total * TAIL_SHARE, TAIL_CHARS].max
+      @footer_budget = @tail_total * MAX_TAIL_SHARE
       @footers = []
       after = 0
       @nodes.reverse_each { |root| after += walk_back(root, after) }
       @footers.each { |node| remove(node) }
     end
 
-    # Visits the content from its end and returns the characters in node, so
-    # after is always what follows the node being visited.
+    # Visits the content from its end and returns the characters it visited,
+    # so after is always what follows the node being visited. It stops at the
+    # limit, and so does every walk above it.
     def walk_back(node, after)
       inside = 0
       node.children.reverse_each do |child|
@@ -435,14 +437,24 @@ module Nokodown
     end
 
     def content_landmark?(node)
-      CONTENT_LANDMARKS.include?(node.name) || node["role"] == "main"
+      Boilerplate::CONTENT_ANCESTORS.include?(node.name) || node["role"] == "main" || node["itemprop"].to_s.include?("articleBody")
     end
 
     def footer_named?(node)
-      return true if node.name == "footer"
+      signature = Dom.signature(node).gsub(Patterns::TAXONOMY_TERM, " ")
+      return false if signature.match?(Patterns::UNIT_FOOTER)
+      return page_footer?(node) if node.name == "footer"
 
-      signature = Dom.signature(node)
-      signature.match?(Patterns::FOOTER_NAME) && !signature.match?(Patterns::UNIT_FOOTER)
+      signature.match?(Patterns::FOOTER_NAME)
+    end
+
+    # A footer element belongs to its quote or its section, and ends the page
+    # only when that section wraps most of it.
+    def page_footer?(node)
+      return false if QUOTES.include?(node.parent&.name)
+
+      section = node.ancestors.find { |ancestor| ancestor.element? && SECTIONS.include?(ancestor.name) }
+      section.nil? || Dom.char_count(section.content) >= @tail_total * MAX_TAIL_SHARE
     end
 
     # Every rule removes through here: nothing inside code is furniture.
