@@ -872,6 +872,11 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "| Module | Status | Note |\n| --- | --- | --- |\n| mod_access | + | - |\n| mod_dbm | ? | × |"
     end
 
+    it "drops separators between links in a table cell" do
+      html = '<table><tr><th>Team</th><th>Links</th></tr><tr><td>Cougars</td><td><a href="/r">Roster</a> | <a href="/s">Stats</a></td></tr></table>'
+      convert(html).should == "| Team | Links |\n| --- | --- |\n| Cougars | [Roster](https://example.com/r) [Stats](https://example.com/s) |"
+    end
+
     it "keeps the caption" do
       convert("<table><caption>Results</caption><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>").should ==
         "Results\n\n| A | B |\n| --- | --- |\n| 1 | 2 |"

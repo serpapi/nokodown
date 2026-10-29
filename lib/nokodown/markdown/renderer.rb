@@ -62,8 +62,7 @@ module Nokodown
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          lines = Text.tidy(chunk).split("\n")
-          lines = lines.filter_map { |line| Separators.line(line) } unless @in_cell
+          lines = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) || (line if @in_cell) }
           chunk = Labels.lines(lines.join("\n").strip)
           next if chunk.empty?
 
