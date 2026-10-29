@@ -458,5 +458,13 @@ RSpec.describe Nokodown::Boilerplate do
 
       remaining("<h1>Courses</h1><div class='grid'>#{cards.join}</div>").should include("Eisklettern course, two daysEisklettern")
     end
+
+    it "keeps a product's facts linked to the filters of its category" do
+      facts = { "Roof" => "gable", "Garage" => "double", "Floors" => "two" }.map do |name, value|
+        "<div class='feature'><span>#{name}</span> <a href='/category/houses/#{value}/'>#{value}</a></div>"
+      end
+
+      remaining("<h1>House plan 12</h1>#{prose('The plan', 2)}<div class='features'>#{facts.join}</div>").should include("Roof gable")
+    end
   end
 end
