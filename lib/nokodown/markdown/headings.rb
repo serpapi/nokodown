@@ -10,11 +10,19 @@ module Nokodown
       # Pictographs, dingbats, arrows and shapes, but not the signs that are
       # part of a name or a value (©, №, °, ℃).
       SYMBOL = "[\\p{So}\u2190-\u21FF\u25B7\u25C1\u27F0-\u27FF\u2900-\u297F\uFE0F\u200D&&[^\u00A9\u00AE\u2122\u2120\u2117\u00B0\u2100-\u214F]]"
-      SEPARATOR = "[-–—|·•:;,/+»›~=]|\\\\[*_]"
-      LEADING = /\A(?:(?:#{SYMBOL}|#{SEPARATOR})+\s+)+/.freeze
-      # Matched on the reversed text: Ruby would retry a pattern anchored at
-      # the end from every start. A colon stays, as French sets one apart.
-      TRAILING = /\A(?:(?:#{SYMBOL}|[-–—|·•;,\/+»›~=]|[*_]\\)+\s+)+/.freeze
+      # A sign before a number, a lowercase word or a bracket belongs to it
+      # ("+ de 300 modèles", "- (subtraction)"). A dash before the text marks
+      # a quote in Nordic news ("– Problemene er løst"), unless another
+      # closes the text as a frame ("— Blog —").
+      SIGN = "[-+](?!\\s+[\\p{Ll}\\p{N}(\\[])"
+      DECORATION = "#{SYMBOL}|[|·•;,/~=]"
+      LEADING = /\A(?:(?:#{DECORATION}|[:»›]|#{SIGN}|\\[*_])+\s+)+/.freeze
+      # Matched on the reversed text. A colon stays, as French sets one apart,
+      # and so does a closing guillemet when an opening one pairs with it.
+      TRAILING = /\A(?:(?:#{DECORATION}|[-–—+]|[*_]\\)+\s+)+/.freeze
+      UNQUOTED_TRAILING = /\A(?:(?:#{DECORATION}|[-–—+»›]|[*_]\\)+\s+)+/.freeze
+      OPENING_DASH = /\A[–—]\s+/.freeze
+      OPENING_GUILLEMET = /[«‹]/.freeze
       SENTENCE_END = /(?<![.…])[.!。！]\z/.freeze
       # Taglines a landing page sets over its sections are shorter.
       SENTENCE_WORDS = 16
@@ -27,9 +35,9 @@ module Nokodown
       module_function
 
       def undecorated(text)
+        text = text.sub(OPENING_DASH, "") if text.end_with?(" –", " —")
         text = text.sub(LEADING, "")
-        tail = text.reverse[TRAILING]
-        tail ? text.delete_suffix(tail.reverse) : text
+        Separators.trim_end(text, text.match?(OPENING_GUILLEMET) ? TRAILING : UNQUOTED_TRAILING)
       end
 
       # A page's headline may be anything; below it, text without letters (a

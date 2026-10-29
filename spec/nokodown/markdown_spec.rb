@@ -842,6 +842,20 @@ RSpec.describe "Markdown conversion" do
         "## № 5 Chanel\n\na\n\n## © Acme\n\nb\n\n## « Ainsi » :\n\nc\n\n## Contact :\n\nd"
     end
 
+    it "keeps a closing guillemet that an opening one pairs with" do
+      convert("<h2>Le « Fétiche »</h2><p>a</p><h2>Lire la suite »</h2><p>b</p>").should == "## Le « Fétiche »\n\na\n\n## Lire la suite\n\nb"
+    end
+
+    it "keeps a dash that opens a quote, unless another closes the heading" do
+      convert("<h2>– Problemene med hurtiglading er løst</h2><p>a</p><h2>— Blog —</h2><p>b</p>").should ==
+        "## – Problemene med hurtiglading er løst\n\na\n\n## Blog\n\nb"
+    end
+
+    it "keeps a sign before a number, a lowercase word or a bracket" do
+      convert("<h2>+ de 300 modèles</h2><p>a</p><h3>- (subtraction)</h3><p>b</p><h3>+ 5 kg</h3><p>c</p><h3>+ How to embed</h3><p>d</p>").should ==
+        "## + de 300 modèles\n\na\n\n### - (subtraction)\n\nb\n\n### + 5 kg\n\nc\n\n### How to embed\n\nd"
+    end
+
     it "drops a heading with neither letters nor digits" do
       convert("<h1>Title</h1><h2>-</h2><p>a</p><h3>★★★</h3><p>b</p>").should == "# Title\n\na\n\nb"
     end
