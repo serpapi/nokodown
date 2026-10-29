@@ -88,7 +88,7 @@ module Nokodown
       return :chrome if chrome_element?(node) || chrome_role?(node)
       return if dominant?(node) && !header_above_title?(node)
       return :guess if @trails.include?(Dom.key(node))
-      return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
+      return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
       MemberPanel.panel?(node) ? :panel : :guess
@@ -139,6 +139,12 @@ module Nokodown
       return true if node["id"].to_s.start_with?("div-gpt-ad", "google_ads")
 
       AD_ATTRIBUTES.any? { |name| node.key?(name) }
+    end
+
+    # A link that asks a network to share the page is a share button in any
+    # language, whatever its label ("シェア", "Partager sur LinkedIn").
+    def share_intent?(node)
+      node.name == "a" && node["href"].to_s.strip.match?(Patterns::SHARE_INTENT)
     end
 
     def chrome_label?(node)

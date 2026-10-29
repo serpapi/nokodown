@@ -64,6 +64,15 @@ module Nokodown
       (?<![\w-])(?:post-|entry-|article-)?tags?(?:-?(?:cloud|list|links))?(?![\w-])
     /x.freeze
 
+    # Share links of social networks, and mail links with no recipient.
+    SHARE_INTENT = %r{
+      (?:\A|//|\.)(?:facebook\.com/(?:sharer|share\.php|dialog/share)|(?:twitter|x)\.com/(?:share|intent/(?:tweet|post))|
+      linkedin\.com/(?:shareArticle|sharing|cws/share)|pinterest\.[a-z.]+/pin/create|reddit\.com/submit|digg\.com/submit|
+      vk\.com/share\.php|t\.me/share|tumblr\.com/(?:share|widgets/share)|getpocket\.com/(?:save|edit)|
+      line\.me/R/msg|service\.weibo\.com/share|connect\.ok\.ru/offer|(?:api\.whatsapp\.com/send/?|wa\.me/)\?text=)|
+      \Amailto:\?
+    }xi.freeze
+
     # Customer reviews, ratings and Q&A on a product page, by name or by the
     # class prefixes of review widget vendors. Modifiers ("has-reviews",
     # "reviews-enabled") and WordPress terms ("category-reviews") sit on the
