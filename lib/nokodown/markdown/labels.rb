@@ -70,9 +70,10 @@ module Nokodown
         end.to_set
       end
 
-      # A line typed with a bullet is an item of a list the label introduces.
+      # A line typed with a bullet or a number is an item of a list the
+      # label introduces.
       def value?(text)
-        text.match?(VALUE) && !text.match?(Lists::GLYPH)
+        text.match?(VALUE) && !text.match?(Lists::GLYPH) && !text.match?(Lists::TYPED_NUMBER)
       end
 
       def unit?(texts, index, starts)

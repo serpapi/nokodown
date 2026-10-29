@@ -970,6 +970,16 @@ RSpec.describe "Markdown conversion" do
         "- \u7EAF\u6A61\u80F6\u5BC6\u5C01\u6761\n- \u7845\u80F6\u5BC6\u5C01\u6761\n\n\u203B\u8A73\u3057\u304F\u306F\n\n\u203B\u3054\u5165\u529B\n\n\u2605\u2605\u2605\u2605\u26054.4\n\n\u2605\u2605\u2605\u2605\u26063.2"
     end
 
+    it "writes paragraphs that count up as a numbered list" do
+      convert("<p>Standards:</p><p>1、GB12002</p><p>2、GB320</p><p>Steps</p><p>1) Mix<br>2) Bake</p><p>Notes</p><p>3. Third</p><p>5. Fifth</p>").should ==
+        "Standards:\n\n1. GB12002\n2. GB320\n\nSteps\n\n1. Mix\n2. Bake\n\nNotes\n\n3. Third\n\n5. Fifth"
+    end
+
+    it "writes a list under a label marked with another glyph, without the label's glyph" do
+      convert("<p>■ Types:</p><p>·纯橡胶密封条</p><p>·硅胶密封条</p><p>■ Features:</p><p>· Light</p><p>· Durable</p>").should ==
+        "Types:\n\n- 纯橡胶密封条\n- 硅胶密封条\n\nFeatures:\n\n- Light\n- Durable"
+    end
+
     it "keeps the line that introduces glyph lines in one paragraph apart from the list" do
       convert("<p><b>Safety notes:</b><br>\u2022 Do not drop.<br>\u2022 Keep dry.</p><p>Targeting:<br>🔹 Age<br>🔹 Location</p>").should ==
         "**Safety notes:**\n\n- Do not drop.\n- Keep dry.\n\nTargeting:\n\n- Age\n- Location"

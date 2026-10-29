@@ -16,27 +16,42 @@ module Nokodown
       /x.freeze
       NUMBER = /^(\d+)\. /.freeze
       FIRST_NUMBER = /\A(\d+)\. /.freeze
+      # "1.", "1)" and the "1、" of Chinese and Japanese pages.
+      TYPED_NUMBER = /\A(\d{1,3})(?:[.)．]\s+|、\s*)/.freeze
+      LABEL = /[:：]\z/.freeze
 
       module_function
 
       def call(blocks)
-        joined(typed(blocks))
+        joined(numbered(typed(blocks)))
       end
 
       # Paragraphs whose lines all open with the same glyph become one list,
       # unless paragraphs with another glyph sit beside them, as cons marked
-      # ✗ after pros marked ✓.
+      # ✗ after pros marked ✓. A label marked with another glyph ("■
+      # Features:") introduces the list.
       def typed(blocks)
         blocks = blocks.flat_map { |block| introduced(block) }
         runs = blocks.slice_when { |a, b| glyph(a).nil? || glyph(a) != glyph(b) }.to_a
         runs.each_with_index.flat_map do |run, index|
           neighbours = [index.positive? ? runs[index - 1].last : nil, runs[index + 1]&.first].compact
-          typed_list?(run, neighbours) ? [list(run)] : run
+          typed_list?(run, neighbours) ? [list(run)] : run.map { |block| bare_label(block) }
         end
       end
 
+      # A glyph before a label ("■ Features:") only decorates it.
+      def bare_label(block)
+        return block unless glyph(block) && label?(block)
+
+        Block.new(:paragraph, Text.escape_line_starts(block.text.sub(GLYPH, "")))
+      end
+
+      def label?(block)
+        block.text.match?(LABEL) && !block.text.include?("\n")
+      end
+
       def typed_list?(run, neighbours)
-        return false if glyph(run.first).nil? || neighbours.any? { |block| glyph(block) }
+        return false if glyph(run.first).nil? || neighbours.any? { |block| glyph(block) && !label?(block) }
 
         run.sum { |block| block.text.count("\n") + 1 } > 1
       end
@@ -56,6 +71,30 @@ module Nokodown
 
         items = Block.new(:paragraph, rest)
         glyph(items) ? [Block.new(:paragraph, first), items] : [block]
+      end
+
+      # Paragraphs whose lines count up ("1、", "2、") are a numbered list.
+      def numbered(blocks)
+        counts = blocks.map { |block| counts(block) }
+        runs = blocks.each_index.slice_when { |a, b| !counts[a] || !counts[b] || counts[b].first != counts[a].last + 1 }
+        runs.flat_map do |run|
+          lines = run.flat_map { |index| blocks[index].text.split("\n") }
+          counts[run.first] && lines.size > 1 ? [numbered_list(lines)] : blocks.values_at(*run)
+        end
+      end
+
+      def counts(block)
+        return unless block.kind == :paragraph
+
+        numbers = block.text.split("\n").map { |line| line[TYPED_NUMBER, 1]&.to_i }
+        numbers if numbers.all? && numbers.each_cons(2).all? { |a, b| b == a + 1 }
+      end
+
+      def numbered_list(lines)
+        items = lines.map do |line|
+          "#{line[TYPED_NUMBER, 1].to_i}. #{Text.escape_line_starts(line.sub(TYPED_NUMBER, ''))}"
+        end
+        Block.new(:list, items.join("\n"))
       end
 
       # The glyph that opens every line of a paragraph, or nil.

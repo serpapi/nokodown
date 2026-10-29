@@ -246,7 +246,8 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    price, a phone number, but not a year) or holding a long sentence, unless
    it is a card's title, is a paragraph. Lines typed with a bullet, a
    pictograph, an asterisk or a dash ("• Fast", "🔹 Age", "・送料無料") are a
-   list, below the line that introduces them. An embedded video links to its
+   list, below the line that introduces them (without a glyph of its own),
+   and paragraphs that count up ("1、", "2、") are a numbered list. An embedded video links to its
    page under its title, or is its bare address when the title is only the
    player's ("YouTube video player"). Text is escaped only where it would
    otherwise change meaning.
