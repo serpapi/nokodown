@@ -319,6 +319,19 @@ RSpec.describe Nokodown do
       convert('<p>Open daily.</p><div class="w-condition-invisible"><p>Closed for the holidays.</p></div>').should == "Open daily."
     end
 
+    it "drops link spam placed far off screen or in a strip one pixel high" do
+      html = '<p>Open daily.</p><div style="position: absolute; left: -7786px;"><a href="https://spam.example">casino bonus</a></div>' \
+             '<div style="overflow:hidden;height:1px;"><a href="https://spam.example">no kyc casino</a></div>'
+
+      convert(html).should == "Open daily."
+    end
+
+    it "keeps screen-reader text in a one-pixel box, which can be the only copy of a price" do
+      html = '<p>Camp kettle</p><span style="position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden">Price: 30 euro</span>'
+
+      convert(html).should == "Camp kettle\n\nPrice: 30 euro"
+    end
+
     it "drops a large hidden block beside the visible title, but not an anti-flicker wrapper around the page" do
       article = "<h1>Trail stoves</h1><p>#{'A trail stove boils a litre in three minutes. ' * 14}</p>"
       copy = "<pre hidden>#{'# Trail stoves raw markdown copy of the article. ' * 8}</pre>"

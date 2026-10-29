@@ -28,6 +28,16 @@ module Nokodown
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
+    # Injected link spam and honeypot fields are placed far off screen or in
+    # a strip one pixel high. Sliders move their tracks by a few screen widths
+    # at most, and collapsed panels have no height. A box one pixel wide as
+    # well is screen-reader text, which can be the only copy of a price.
+    POSITIONED_STYLE = /(?:\A|;)\s*position\s*:\s*(?:absolute|fixed)/i.freeze
+    OFFSCREEN_STYLE = /(?:\A|;)\s*(?:left|top)\s*:\s*-(?:\d{4,}(?:\.\d+)?px|999px|\d{3,}(?:\.\d+)?r?em)/i.freeze
+    PIXEL_STRIP_STYLE = /(?:\A|;)\s*height\s*:\s*1px/i.freeze
+    PIXEL_WIDE_STYLE = /(?:\A|;)\s*width\s*:\s*1px/i.freeze
+    OVERFLOW_HIDDEN = /(?:\A|;)\s*overflow\s*:\s*hidden/i.freeze
+
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
 
     VIDEO_HOSTS = %r{//(?:www\.)?(?:(?:dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq|bilibili|live\.bilibili)\.com|(?:archive|upload\.wikimedia)\.org|player\.twitch\.tv|fast\.wistia\.(?:net|com)|play\.vidyard\.com|loom\.com/embed)}i.freeze
@@ -204,9 +214,15 @@ module Nokodown
     def hidden?(node)
       return !disclosure?(node) if node.key?("hidden") && node["hidden"] != "until-found"
       return !node["class"].to_s.include?("fallback-image") && !closed_panel?(node) if node["aria-hidden"] == "true"
-      return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE)
+      return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE) || out_of_sight?(node["style"].to_s)
 
       hidden_by_class?(node) && !disclosure?(node)
+    end
+
+    def out_of_sight?(style)
+      return true if style.match?(OFFSCREEN_STYLE) && style.match?(POSITIONED_STYLE)
+
+      style.match?(PIXEL_STRIP_STYLE) && style.match?(OVERFLOW_HIDDEN) && !style.match?(PIXEL_WIDE_STYLE)
     end
 
     def hidden_by_class?(node)
