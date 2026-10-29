@@ -21,8 +21,9 @@ module Nokodown
   # once it is cleaned, so they weigh in pruning as before.
   class Teasers
     Run = Struct.new(:parent, :items, :targets, :chars)
-    # alike: the items are pages like this one; below: pages under it.
-    Block = Struct.new(:nodes, :title, :alike, :below, :chars)
+    # alike: the items are pages like this one; named: posts under the root
+    # named by their titles, as this one is; below: pages under it.
+    Block = Struct.new(:nodes, :title, :alike, :named, :below, :chars)
     # An item with its headings and the keys of the links in them.
     Card = Struct.new(:node, :headings, :title_links)
 
@@ -64,6 +65,8 @@ module Nokodown
     # and "lvl=notice_display" are two kinds of page.
     ID_VALUE = /\d/.freeze
     DIGITS = /\A\d+\z/.freeze
+    # A post's title: "andrea-jeremiah-latest-photos", "kak_sdelat_ramku.html".
+    SLUG = /\A[\p{L}\p{N}%]+(?:[-_][\p{L}\p{N}%]+){2,}(?:\.[a-z]+)?\z/i.freeze
     # The root, a language's root ("/en/", "/pt-br/") or its index file.
     HOME = %r{\A/*(?:[a-z]{2}(?:[-_][a-z]{2})?/*)?(?:index\.\w+)?\z}i.freeze
     FILE = /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|docx?|xlsx?|pptx?|mp[34])\z/i.freeze
@@ -148,7 +151,8 @@ module Nokodown
       found = runs.map { |run| block(run) }.group_by { |block| block.nodes.map { |node| Dom.key(node) } }
       found.values.map do |same|
         first = same.first
-        Block.new(first.nodes, first.title, same.all?(&:alike), same.any?(&:below), same.sum(&:chars))
+        Block.new(first.nodes, first.title, same.all?(&:alike), same.all?(&:named), same.any?(&:below),
+                  same.sum(&:chars))
       end
     end
 
@@ -183,8 +187,18 @@ module Nokodown
       return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
       return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
       return text_before(block) >= MIN_TEXT_BEFORE if block.alike
+      return true if block.named && named_beside?(block)
 
       @declared && !dominant?(block) && (listing || body_beside?(block))
+    end
+
+    # Posts are named by their titles under the root of many sites, and so
+    # are a shop's pages of products and of categories. A box of them stands
+    # beside a post under a heading of its own, or below a body of text on a
+    # page that declares itself an article, a product or a thread.
+    def named_beside?(block)
+      before = text_before(block)
+      (heading?(block.title) && before >= MIN_TEXT_BEFORE) || (@declared && before >= MIN_BODY)
     end
 
     # Not matches?, which Nokolexbor runs over the whole document.
@@ -445,7 +459,11 @@ module Nokodown
       title = title_in(run.parent, run) unless holds_more?(run.parent, run, MAX_HEADING)
       nodes, title = holds_more?(run.parent, run, length(title)) ? [run.items, nil] : widen(run, title)
       title ||= title_before(nodes.first)
-      Block.new(nodes, title, share?(run) { |uri| sibling?(uri) }, share?(run) { |uri| child?(uri) }, run.chars)
+      size = run.items.size
+      kinds = kinds(run.targets)
+      alike = alike?(kinds, size)
+      below = run.targets.compact.count { |uri| child?(uri) } >= size * SIBLING_SHARE
+      Block.new(nodes, title, alike, !alike && named?(kinds, size), below, run.chars)
     end
 
     # Looking for a title only where even the longest one would leave no
@@ -537,8 +555,19 @@ module Nokodown
       node.css(HEADING).any? { |heading| Dom.text(heading) == Dom.text(node) }
     end
 
-    def share?(run, &test)
-      run.targets.compact.count(&test) >= run.items.size * SIBLING_SHARE
+    def kinds(targets)
+      targets.compact.map { |uri| kinship(uri) }
+    end
+
+    # Pages like this one, a few of which may sit a folder deeper beside the
+    # others ("l-27-12/2" beside "l-20d-11").
+    def alike?(kinds, size)
+      near = kinds.count(:sibling)
+      near >= size * SIBLING_SHARE || (near * 3 >= size && near + kinds.count(:deeper) >= size * SIBLING_SHARE)
+    end
+
+    def named?(kinds, size)
+      kinds.count { |kind| %i[sibling named].include?(kind) } >= size * SIBLING_SHARE
     end
 
     def child?(uri)
@@ -547,17 +576,28 @@ module Nokodown
       other.size > page.size && other.first(page.size) == page
     end
 
-    # A page like this one: the same script with other ids for the same
-    # query keys, or the same path but for the last segment and the same
-    # query keys. "viewforum.php?f=2" lists the threads at "viewtopic.php?t=7".
-    def sibling?(uri)
+    # A page like this one: the same script with other ids for its query keys,
+    # or the same path but for the last segment and the same query keys.
+    # "viewforum.php?f=2" lists the threads at "viewtopic.php?t=7", and a
+    # page that pages through its list of others ("detail?p=8&id=105") links
+    # to them without the page number ("detail?id=17").
+    def kinship(uri)
       page = segments(@page)
       other = segments(uri)
-      return false unless page.size == other.size && query_keys(uri) == query_keys(@page)
-      return same_kind?(uri) if page == other
-      return folders(page) == folders(other) if page.size > 1
+      return (:sibling if same_kind?(uri)) if page == other
+      return unless query_keys(uri) == query_keys(@page)
+      return folder_kinship(page, other) if page.size > 1
+      return unless page.size == 1 && other.size == 1
+      return :sibling if skeleton(page.first) == skeleton(other.first)
 
-      page.size == 1 && skeleton(page.first) == skeleton(other.first)
+      :named if page.first.match?(SLUG) && other.first.match?(SLUG)
+    end
+
+    def folder_kinship(page, other)
+      return :sibling if other.size == page.size && folders(page) == folders(other)
+
+      deeper = other.size == page.size + 1 && other[page.size - 1] != page.last
+      :deeper if deeper && folders(page) == folders(other.first(page.size))
     end
 
     # Dated permalinks differ in their date folders ("/2023/4/30/news/").

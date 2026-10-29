@@ -366,4 +366,50 @@ RSpec.describe Nokodown::Teasers do
 
     blocks(html, article_url).size.should == 6
   end
+
+  it "takes pages listed without this page's page number for pages like this one" do
+    items = stories.each_with_index.map do |title, index|
+      "<div class='item'><a href='video-detail?id=#{17 + index}'><img src='/img/#{index}.jpg' alt=''></a>" \
+        "<h6><a href='video-detail?id=#{17 + index}'>#{title}</a></h6></div>"
+    end
+    html = "<h1>The minister speaks at the twelfth wind energy congress in the capital city</h1>" \
+           "<h4>Other videos</h4><div class='row'>#{items.join}</div>"
+
+    blocks(html, "https://gov.example.org/video-detail?p=8&id=105", nil).should_not be_empty
+  end
+
+  it "takes products a folder deeper beside their siblings for pages like this one" do
+    products = %w[l-20d-11 l-12d-12 l-27-12/2 l-28-15/2 l-16d-12 l-25-11/2].map do |name|
+      "<li class='item'><a href='/zhbi/lotki/#{name}'><img src='/img/#{name.tr('/', '-')}.jpg' alt=''>" \
+        "<h3>Tray #{name}</h3><span>Price on request</span></a></li>"
+    end
+    html = product("<div class='also'><h2>Похожие товары</h2><ul class='items'>#{products.join}</ul></div>")
+
+    markdown(html, "https://shop.example.com/zhbi/lotki/l-22d-3").should_not include("Tray l-27-12/2")
+  end
+
+  it "keeps a category's products that sit in a folder of their own" do
+    products = Array.new(4) do |index|
+      "<li class='item'><a href='/fr-fr/gate-feeders/gfh0#{index}'><img src='/img/#{index}.jpg' alt=''>" \
+        "<h3>Hay feeder GFH0#{index}</h3><span>Item number GFH0#{index}</span></a></li>"
+    end
+    html = "<h1>Calf hay feeders</h1><p>Feeders that keep hay off the ground and dry for calves.</p>" \
+           "<div class='sort'>Sort by:</div><ul class='items'>#{products.join}</ul>"
+
+    blocks(html, "https://store.example.com/fr-fr/calf-hay-feeders/", nil).should be_empty
+  end
+
+  it "takes posts named by their titles under the root for pages like this one under a heading" do
+    html = "<h1>Bridge reopens</h1>#{story(1)}<section><h2>You may also like</h2>" \
+           "<div class='grid'>#{cards(stories, '/')}</div></section>"
+
+    blocks(html, "https://blog.example.com/bridge-reopens-after-repairs/", nil).should_not be_empty
+  end
+
+  it "keeps a shop's products named by their titles under a label of the page's own" do
+    html = "<h1>Olive oil tin cans</h1><p>Tin cans for olive oil.</p><div class='name'>All olive oil cans</div>" \
+           "<div class='grid'>#{cards(stories, '/')}</div>"
+
+    blocks(html, "https://cans.example.com/supplier-4760341-olive-oil-tin-cans", :product).should be_empty
+  end
 end
