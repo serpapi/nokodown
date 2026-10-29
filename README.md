@@ -201,8 +201,10 @@ region, or most of the page's text, is never removed because of its class name.
    both modes, short links and boxes styled as buttons ("Add to cart", "Book
    a demo") are removed, except for disclosure toggles, buttons inside a
    sentence and titles or labels styled as buttons. If article cleaning
-   removes almost everything, it is undone and light cleaning, which treats
-   link clusters and menus as page pruning does, is used instead.
+   keeps less than half of what it was given (unless what it removed from a
+   declared article was mostly links), it is undone and light cleaning,
+   which treats link clusters and menus as page pruning does, is used
+   instead; if it leaves almost nothing, the content is pruned as a page.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data
