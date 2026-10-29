@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
 RSpec.describe Nokodown::Boilerplate do
-  def cleaned(html)
+  def cleaned(html, url: nil)
     body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
     Nokodown::Preprocessor.new(body).call
-    Nokodown::Boilerplate.new(body).call
+    Nokodown::Boilerplate.new(body, url: url).call
     body
   end
 
   # Text left by boilerplate removal alone, before the content is located.
-  def remaining(html)
-    Nokodown::Dom.text(cleaned(html))
+  def remaining(html, url: nil)
+    Nokodown::Dom.text(cleaned(html, url: url))
   end
 
   def prose(topic, count)
@@ -348,13 +348,24 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should_not include("Sakura Clinic")
     end
 
-    it "removes a cookie banner that holds most of a page's text, but not a cookie policy" do
+    it "removes a cookie banner that holds most of a page's text, named for what it is or laid over the page" do
       notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
-      banner = "<h1>Lake at dawn</h1><img src=\"/lake.jpg\"><div id=\"dlgcookies\">#{notice}</div>"
-      policy = "<h1>Privacy</h1><div class=\"cookie-policy\"><h2>Cookies we use</h2>#{notice}<h2>Refusing them</h2>#{notice}</div>"
+      banners = ["<div id=\"dlgcookies\">#{notice}</div>", "<div class=\"widget-cookie-banner\"><h2>Cookie Policy</h2>#{notice}</div>",
+                 "<div class=\"cookies\" style=\"position: fixed; bottom: 0\">#{notice}</div>"]
+      banners.each do |banner|
+        remaining("<h1>Lake at dawn</h1><img src=\"/lake.jpg\">#{banner}").should_not include("Google Analytics")
+      end
+    end
 
-      remaining(banner).should_not include("Google Analytics")
+    it "keeps a cookie policy, the body of a page about cookies and a form named for them" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+      policy = "<h1>Privacy</h1><div class=\"cookie-policy\"><h2>Cookies we use</h2>#{notice}<h2>Refusing them</h2>#{notice}</div>"
+      page = "<h1>Cookies</h1><div class=\"cookies-banner\"><p>We use cookies.</p></div><section class=\"cookies-page__body\">#{notice}</section>"
+      form = "<h1>Create an account</h1><div class=\"user-info-from-cookie\">#{notice}</div>"
+
       remaining(policy).should include("Refusing them")
+      remaining(page, url: "https://wordsforlife.org.uk/cookies/").should include("Google Analytics")
+      remaining(form).should include("Google Analytics")
     end
   end
 

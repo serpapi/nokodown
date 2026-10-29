@@ -16,6 +16,13 @@ module Nokodown
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     SIDE_FURNITURE = /sidebar|#{Patterns::WORD_START}footer#{Patterns::WORD_END}/.freeze
     TITLED_TEXT = 20
+    # A banner, bar or dialog named for the cookies, or a consent manager.
+    CONSENT_PROMPT = /
+      consent|gdpr|ccpa|onetrust|didomi|cookiebot|usercentrics|
+      banner|bar|notice|notification|popup|pop-up|popin|modal|dialog|dlg|overlay|alert|layer|box|prompt|wall
+    /x.freeze
+    OVERLAY_ROLES = %w[dialog alertdialog].freeze
+    OVERLAY_STYLE = /(?:\A|;)\s*position\s*:\s*(?:fixed|sticky)/i.freeze
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     # What a wrapper has, lacks or allows does not name it: "has-sidebar",
     # "o_wsale_has_sidebar", "with-navigation", "content-and-menu",
@@ -55,6 +62,7 @@ module Nokodown
       @taxonomy = Taxonomy.blocks(@body, @url)
       @title = h1s.last
       @last_h1 = @title ? Dom.key(@title).to_i : 0
+      @consent_page = @url.to_s.sub(Taxonomy::ADDRESS, "").split("?").first.to_s.downcase.match?(Patterns::CONSENT)
       @prose_lines = {}
       # Card grids repeat the same class list hundreds of times.
       @names = Hash.new { |cache, signature| cache[signature] = signature.gsub(MODIFIER, " ") }
@@ -372,9 +380,15 @@ module Nokodown
       nil
     end
 
-    # A cookie policy has headings; the banner that links to it has none.
+    # A cookie banner is named for what it is as well as for the cookies, or
+    # is laid over the page. On a page about cookies, what is named for them
+    # is the page.
     def consent_banner?(node)
-      @names[Dom.signature(node)].match?(Patterns::CONSENT) && node.at_css(Dom::HEADING_SELECTOR).nil?
+      name = @names[Dom.signature(node)]
+      return false if @consent_page || !name.match?(Patterns::CONSENT)
+
+      name.match?(CONSENT_PROMPT) || OVERLAY_ROLES.include?(node["role"]) || node["aria-modal"] == "true" ||
+        node["style"].to_s.match?(OVERLAY_STYLE)
     end
 
     # A mega menu gives its entries blurbs, so in a header only a paragraph

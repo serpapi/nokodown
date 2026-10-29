@@ -187,10 +187,11 @@ holds the page's only `<h1>`, unless that links to the home page, and a fair
 share of its text is the content.
 Three kinds of named furniture go however much of a short page they hold: a
 site header above the title, a sidebar or footer without prose beside a title
-that has text of its own, and a cookie banner without headings (a cookie
-policy has them). Prose here is two sentences' worth of lines of 80
-characters or more in any block, not counting link text or what an
-`<address>` holds: opening hours and contact details are lines, not prose.
+that has text of its own, and a cookie banner named for what it is (a banner,
+a bar, a dialog, a consent manager) or laid over the page, unless the page is
+about cookies. Prose here is two sentences' worth of lines of 80 characters or
+more in any block, not counting link text or what an `<address>` holds:
+opening hours and contact details are lines, not prose.
 
 ## How it works
 
