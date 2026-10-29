@@ -51,6 +51,7 @@ module Nokodown
         [/#{CASED.source}\z/, /\A\p{Nd}/],
         [/\p{Nd}\z/, /\A#{CASED.source}{2}/]
       ].freeze
+      ICON_FONT = /(?<![\w-])material-(?:icons|symbols)/.freeze
 
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
@@ -129,6 +130,7 @@ module Nokodown
 
       def element_text(node)
         name = node.name
+        return "" if node["class"].to_s.match?(ICON_FONT)
         return emphasis(node, EMPHASIS[name]) if EMPHASIS.key?(name)
         return code_span(node) if CODE.include?(name)
 
@@ -213,7 +215,7 @@ module Nokodown
       end
 
       def image(node)
-        alt = Dom.squish(node["alt"].to_s)
+        alt = Text.collapse(Dom.squish(node["alt"].to_s)).strip
         return Image.tex(alt) if node["class"].to_s.include?("mwe-math-fallback-image")
         return alt if Image.emoji?(node, alt)
         return "" if !@images || @in_heading

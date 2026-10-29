@@ -6,9 +6,9 @@ module Nokodown
     # meaning, so prose stays free of backslashes.
     module Text
       # Joiners count only between letters or emoji (Persian words, family
-      # emoji).
+      # emoji); private-use characters are icon-font glyphs.
       INVISIBLE = /
-        [\u00AD\u200B\u2060\uFEFF]|
+        [\u00AD\u200B\u2060\uFEFF\p{Co}]|
         (?<![\p{L}\p{M}\p{So}\p{Sk}])[\u200C\u200D]|[\u200C\u200D](?![\p{L}\p{M}\p{So}\p{Sk}])
       /x.freeze
 

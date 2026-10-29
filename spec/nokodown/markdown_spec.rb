@@ -30,6 +30,10 @@ RSpec.describe "Markdown conversion" do
         "**Rights**\n\n\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 \u{1F468 200D 1F469}"
     end
 
+    it "drops icon-font glyphs and ligatures" do
+      convert('<p>&#xE001; Next <i class="material-icons">arrow_forward</i></p>').should == "Next"
+    end
+
     it "drops decorative separator lines" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
     end
