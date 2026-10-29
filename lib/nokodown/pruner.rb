@@ -62,6 +62,9 @@ module Nokodown
     LEAD = /\A[^:：]+[:：]\z/.freeze
     LETTER = /\p{L}/.freeze
     MAX_FEED_WORDS = 8
+    LABEL_LINES = %w[p li div].freeze
+    # An icon or an arrow before a label: "📖 Lire aussi :", "» Read more".
+    LEADING_MARKS = /\A[^\p{L}\p{N}]+/.freeze
     # What may follow a site footer: a copyright line, a back-to-top link.
     TAIL_SHARE = 0.1
     TAIL_CHARS = 100
@@ -255,7 +258,7 @@ module Nokodown
     # <link>", a "More:" label over a list of headlines, a paragraph of links.
     def remove_related_links(root)
       root.css("p, li, h2, h3, h4, h5, h6, strong, b").each do |node|
-        text = Dom.text(node)
+        text = Dom.text(node).sub(LEADING_MARKS, "")
         if related_label?(text)
           remove_with_link_box(node)
         elsif related_box?(node, text)
@@ -270,14 +273,24 @@ module Nokodown
     end
 
     # The label may sit in a wrapper of its own (Wikipedia's div.mw-heading),
-    # so the box of links follows the wrapper.
+    # so the box of links follows the wrapper. A line that holds nothing but
+    # the label and links ("📖 Lire aussi : <a>…</a>") goes whole.
     def remove_with_link_box(label)
+      line = label.parent
+      return remove(line) if line&.element? && LABEL_LINES.include?(line.name) && only_links_besides?(line, label)
+
       text = Dom.text(label)
       holder = label
       holder = holder.parent while holder.next_element.nil? && holder.parent&.element? && Dom.text(holder.parent) == text
       following = holder.next_element
       remove(following) if following && link_density(following) >= 0.6
       remove(holder)
+    end
+
+    def only_links_besides?(line, label)
+      links = line.css("a[href]")
+      rest = links.reduce(Dom.text(line).sub(Dom.text(label), "")) { |text, link| text.sub(Dom.text(link), "") }
+      !links.empty? && !rest.match?(LETTER)
     end
 
     # "READ MORE: <headline>", or a paragraph made of several headlines.

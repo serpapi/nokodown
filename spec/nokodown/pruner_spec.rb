@@ -542,6 +542,20 @@ RSpec.describe Nokodown::Pruner do
       titled("Man missing from unit", line).should include("the archive")
     end
 
+    it "drops a line that holds nothing but a label and the link after it" do
+      root = content("#{story}<div class='see-also'>👉 <strong>Siehe auch:</strong> <a href='/news/9'>Ferry fares rise again</a></div>")
+      described_class.new([root], :article, conditional: false).call
+
+      Nokodown::Dom.text(root).should_not include("Ferry fares")
+    end
+
+    it "reads a label after the icon that leads it" do
+      root = content("#{story}<p>📖 Lire aussi : <a href='/news/8'>Port strike ends after two weeks of talks</a></p>")
+      described_class.new([root], :article, conditional: false).call
+
+      Nokodown::Dom.text(root).should_not include("Port strike")
+    end
+
     it "drops links to other stories under a label in the page's language" do
       labels = ["Lea también:", "Читайте также:", "İlgili Haberler:", "Baca juga:", "関連記事", "اقرأ أيضاً:"]
       boxes = labels.map { |label| "<p><strong>#{label}</strong> <a href='/news/9'>Ferry fares rise again in the spring</a></p>" }
