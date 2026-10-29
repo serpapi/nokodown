@@ -86,7 +86,12 @@ module Nokodown
     def keep_conditional_cleaning?(pruner, page_type, nodes)
       kept = pruner.conditional_share >= CONDITIONAL_SHARE ||
              (page_type == :article && pruner.removed_link_share > REMOVED_LINK_SHARE)
-      kept && nodes.none? { |node| Listing.listing?(node) }
+      kept && !listing?(nodes, page_type)
+    end
+
+    # A thread's posts have rules of their own in conditional cleaning.
+    def listing?(nodes, page_type)
+      !ContentLocator::DISCUSSIONS.include?(page_type) && nodes.any? { |node| Listing.listing?(node) }
     end
 
     def almost_nothing_kept?(copies, nodes)

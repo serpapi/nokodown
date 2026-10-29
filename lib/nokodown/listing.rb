@@ -13,6 +13,10 @@ module Nokodown
     UNNAMED_ITEMS = Set.new(%w[article li]).freeze
     MIN_ITEMS = 3
     SHARE = 0.5
+    # An item has a title and perhaps a subtitle; page sections and columns,
+    # one of which can be the article itself, have more headings.
+    MAX_HEADINGS = 2
+    HEADINGS = "h1, h2, h3, h4, h5, h6"
 
     module_function
 
@@ -37,7 +41,7 @@ module Nokodown
     def item_run?(name, leading, run)
       return false if run.size < MIN_ITEMS || (leading.empty? && !UNNAMED_ITEMS.include?(name))
 
-      run.all? { |item| item.at_css("a[href]") }
+      run.all? { |item| item.at_css("a[href]") && item.css(HEADINGS).size <= MAX_HEADINGS }
     end
   end
 end
