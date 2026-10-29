@@ -145,14 +145,14 @@ module Nokodown
       # A row of inline cells reads as one line; rows holding blocks are
       # rendered cell by cell.
       def layout_blocks
-        Tables.rows(@node).flat_map do |row|
+        Labels.siblings(Tables.rows(@node).map do |row|
           cells = Tables.cells(row).reject { |cell| cell.content.strip.empty? && cell.at_css("img").nil? }
           if cells.none? { |cell| @renderer.contains_block?(cell) }
             @renderer.text_paragraphs(cells.map { |cell| @renderer.inline(cell.children) }.join(" "))
           else
             cells.flat_map { |cell| @renderer.children_blocks(cell) }
           end
-        end
+        end.reject(&:empty?))
       end
     end
   end
