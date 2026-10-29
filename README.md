@@ -123,14 +123,16 @@ region, or most of the page's text, is never removed because of its class name.
 6. **Pruner**: in articles, Readability's conditional cleaning plus removal of
    bylines, datelines and inline boxes of links to other stories; on other
    pages, removal of leftover link clusters, with the heading over them, and
-   of columns of links beside a column of prose in layout tables. An index
-   page, whose link clusters hold most of its text, keeps them but for its
-   menus: lists of links holding one to the page itself, and the clusters
-   above its title. In both modes, short links and boxes styled as
-   buttons ("Add to cart", "Book a demo") are removed, except for disclosure
-   toggles, buttons inside a sentence and titles or labels styled as buttons.
-   If article cleaning removes almost everything, it is undone and light
-   cleaning is used instead.
+   of columns of links beside a column of prose in layout tables, unless the
+   table declares them the wider column or they hold the page title. An
+   index page, whose link clusters hold most of its text, keeps them but for
+   its menus: lists of links holding one to the page itself, the clusters
+   above its title, and the side columns its table declares narrower. In
+   both modes, short links and boxes styled as buttons ("Add to cart", "Book
+   a demo") are removed, except for disclosure toggles, buttons inside a
+   sentence and titles or labels styled as buttons. If article cleaning
+   removes almost everything, it is undone and light cleaning, which treats
+   link clusters and menus as page pruning does, is used instead.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data

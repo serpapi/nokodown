@@ -311,16 +311,17 @@ module Nokodown
 
     # The page title opens the content, so the clusters before it are the
     # site's menus. A title with little after it, like an SEO line at the
-    # foot of the page, opens nothing.
+    # foot of the page, opens nothing. Keys number elements in document
+    # order, so a lower key comes first.
     def clusters_above_title(root, clusters)
       title = root.at_css("h1")
-      return [] if title.nil? || text_after(title, root) < MIN_TITLED_CONTENT
+      return [] if title.nil? || Dom.key(title).nil? || text_length_after(title, root) < MIN_TITLED_CONTENT
 
       position = Dom.key(title).to_i
-      outermost(clusters).select { |node| Dom.key(node).to_i < position && !node.at_css("h1") }
+      outermost(clusters).select { |node| Dom.key(node) && Dom.key(node).to_i < position && !node.at_css("h1") }
     end
 
-    def text_after(node, root)
+    def text_length_after(node, root)
       length = 0
       until node.nil? || Dom.key(node) == Dom.key(root)
         sibling = node
