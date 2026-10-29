@@ -73,6 +73,17 @@ RSpec.describe Nokodown::Teasers do
     text.should_not include("Trail shoe model 3")
   end
 
+  it "keeps a listing whose address looks like its items' when its list comes first" do
+    products = Array.new(6) do |index|
+      "<li class='item'><a href='/san-pham/tra-sam-#{index}'><img src='/img/#{index}.jpg' alt=''>" \
+        "<h3>Trà sâm số #{index}</h3><span>1.400.000 đ, còn hàng</span></a></li>"
+    end.join
+    html = "<div class='cat'><h2>Trà sâm</h2><ul class='items'>#{products}</ul></div>" \
+           "<p>Giao hàng toàn quốc trong ba ngày, đổi trả miễn phí trong bảy ngày.</p>"
+
+    blocks(html, "https://shop.example.com/san-pham/tra-sam-27", :product).should be_empty
+  end
+
   it "removes pages like this one listed under its text in the same container" do
     items = stories.each_with_index.map do |title, index|
       "<div class='row'><img src='/img/#{index}.jpg' alt=''><b>12.08.2026</b> " \

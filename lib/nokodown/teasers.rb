@@ -38,6 +38,7 @@ module Nokodown
     BODY_SHARE = 1.0
     DOMINANT_SHARE = 0.4
     MIN_SIBLINGS_BODY = 50
+    MIN_TEXT_BEFORE_LIST = 100
     MIN_SECTIONS = 3
     MIN_WORDS_LEFT = 20
     BODIES = %i[article product forum qa].freeze
@@ -89,14 +90,13 @@ module Nokodown
       return Set.new if @page.nil? || home?
 
       @stats = Stats.new(@body)
+      @total = @stats.chars(@body)
       # The slides of a carousel are runs of one block.
-      blocks = runs.map { |run| block(run) }.uniq { |block| block.nodes.map { |node| Dom.key(node) } }
-      own_text = @stats.text_chars(@body) - blocks.sum { |block| block.nodes.sum { |node| @stats.text_chars(node) } }
-      body = body?(blocks, own_text)
-      total = @stats.chars(@body)
-      sections = sections(blocks)
-      blocks.each_with_object(Set.new) do |block, keys|
-        next if sections.include?(Dom.key(block.nodes.first)) || !removable?(block, own_text, body, total)
+      @blocks = runs.map { |run| block(run) }.uniq { |block| block.nodes.map { |node| Dom.key(node) } }
+      hub = sections
+      body = body?
+      @blocks.each_with_object(Set.new) do |block, keys|
+        next if hub.include?(Dom.key(block.nodes.first)) || !removable?(block, body)
 
         (block.nodes + [block.title]).compact.each { |node| keys << Dom.key(node) unless Dom.in_code?(node) }
       end
@@ -111,22 +111,23 @@ module Nokodown
 
     # Text of the page's own that outweighs the titled boxes, as an article
     # does its sidebars; a hub of titled sections has a line of intro at most.
-    def body?(blocks, own_text)
-      boxes = blocks.select { |block| block.title && !block.siblings }.sum(&:chars)
-      (own_text >= MIN_BODY && own_text >= boxes * BODY_SHARE) || listing?(blocks)
+    def body?
+      own_text = @stats.text_chars(@body) - @blocks.sum { |block| text_of(block) }
+      boxes = @blocks.select { |block| block.title && !block.siblings }.sum(&:chars)
+      (own_text >= MIN_BODY && own_text >= boxes * BODY_SHARE) || listing?
     end
 
     # Titled blocks built alike, one after another, are the sections of a
     # hub ("Audio", "Cameras", "Laptops"), not boxes beside its content.
-    def sections(blocks)
-      groups = blocks.select(&:title).group_by { |block| shape_of(block.nodes.first) }.values
+    def sections
+      groups = @blocks.select(&:title).group_by { |block| shape_of(block.nodes.first) }.values
       groups.select { |group| group.size >= MIN_SECTIONS }.flatten.map { |block| Dom.key(block.nodes.first) }.to_set
     end
 
     # A listing's own list outweighs the titled boxes beside it.
-    def listing?(blocks)
-      list = blocks.select { |block| own_list?(block) && !block.siblings }.max_by(&:chars)
-      list && list.chars >= blocks.sum(&:chars) - list.chars
+    def listing?
+      list = @blocks.select { |block| own_list?(block) && !block.siblings }.max_by(&:chars)
+      list && list.chars >= @blocks.sum(&:chars) - list.chars
     end
 
     # A list with no title of its own, or under the page's H1.
@@ -135,12 +136,45 @@ module Nokodown
     end
 
     # Links to pages below this one are its own sections.
-    def removable?(block, own_text, body, total)
+    def removable?(block, body)
       return false if block.children || block.nodes.any? { |node| node.at_css(PROTECTED) }
       return false if own_list?(block) && !(block.title.nil? && block.siblings && after_text?(block))
-      return own_text >= MIN_SIBLINGS_BODY if block.siblings
+      return follows_text?(block) if block.siblings
 
-      @declared && body && block.chars < total * DOMINANT_SHARE
+      @declared && body && !dominant?(block)
+    end
+
+    def dominant?(block)
+      block.chars >= @total * DOMINANT_SHARE
+    end
+
+    # Pages like this one come after the page's own text. A listing whose
+    # address looks like its items' has only a title and a crumb before its
+    # list, which outweighs the page.
+    def follows_text?(block)
+      text_before(block) >= (dominant?(block) ? MIN_TEXT_BEFORE_LIST : MIN_SIBLINGS_BODY)
+    end
+
+    # The page's own text before the block. Keys number elements in
+    # document order.
+    def text_before(block)
+      first = block.nodes.first
+      text = 0
+      first.ancestors.to_a.unshift(first).each do |node|
+        break if !node.element? || node.name == "body"
+
+        sibling = node.previous_element
+        while sibling
+          text += @stats.text_chars(sibling)
+          sibling = sibling.previous_element
+        end
+      end
+      earlier = @blocks.select { |other| Dom.key(other.nodes.last).to_i < Dom.key(first).to_i }
+      text - earlier.sum { |other| text_of(other) }
+    end
+
+    def text_of(block)
+      block.nodes.sum { |node| @stats.text_chars(node) }
     end
 
     # Pages like this one listed under its text in the same container, as a
