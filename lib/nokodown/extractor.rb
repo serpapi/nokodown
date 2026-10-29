@@ -36,7 +36,7 @@ module Nokodown
 
     def render(nodes, mode, urls)
       redundant = redundant_images(nodes, mode, urls)
-      renderer = Markdown::Renderer.new(urls, images: @images, links: @links, redundant_images: redundant)
+      renderer = Markdown::Renderer.new(urls, images: @images, links: @links, redundant_images: redundant, main_content: mode != :full)
       Markdown::Cleanup.call(renderer.render(nodes), renderer.rendered_images)
     end
 

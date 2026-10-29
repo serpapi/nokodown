@@ -78,10 +78,12 @@ module Nokodown
         url unless url.nil? || urls.same_page?(url)
       end
 
-      # redundant_images: RedundantImages#call.
-      def initialize(urls, images:, links:, redundant_images: {})
+      # redundant_images: RedundantImages#call. main_content: keep only images
+      # that say what they show.
+      def initialize(urls, images:, links:, redundant_images: {}, main_content: false)
         @urls = urls
         @images = images
+        @main_content = main_content
         @links = links
         @redundant_images = redundant_images
         @rendered_images = {}
@@ -255,7 +257,7 @@ module Nokodown
         return "" if src.nil? || Image.decorative?(node, src, alt)
 
         markup = "![#{Text.link_text(Text.escape(alt))}](#{Text.destination(src)})"
-        record(markup, src, node)
+        record(markup, src, node, @main_content && !Image.content?(node, src, alt))
         return markup unless @link_images
 
         @link_images << markup
@@ -263,11 +265,12 @@ module Nokodown
       end
 
       # An image is redundant only if every copy of it is. Targets are the
-      # pages whose text links make its thumbnail copies redundant.
-      def record(markup, src, node)
+      # pages whose text links make its thumbnail copies redundant; an image
+      # that says nothing is redundant wherever it is.
+      def record(markup, src, node, unnamed)
         image = (@rendered_images[markup] ||= RenderedImage.new(src, true, Set.new))
         key = Dom.key(node)
-        image.redundant &&= @redundant_images.key?(key)
+        image.redundant &&= unnamed || @redundant_images.key?(key)
         target = @redundant_images[key]
         image.targets << target if target
       end

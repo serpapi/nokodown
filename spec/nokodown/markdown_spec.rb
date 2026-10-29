@@ -304,6 +304,10 @@ RSpec.describe "Markdown conversion" do
       convert('<img srcset="/s.jpg 320w, /l.jpg 1280w, /m.jpg 640w" alt="Photo">').should == "![Photo](https://example.com/l.jpg)"
     end
 
+    it "drops images that stand in for one still loading or missing" do
+      convert('<p><img src="/img_load.gif" alt="Rose"><img src="/no-image.png" alt="Rose"><img src="/placeholder100.png"></p><p>Rose</p>').should == "Rose"
+    end
+
     it "drops tracking pixels, icons, placeholders and badges" do
       html = '<img src="/pixel.gif" width="1" height="1"><img src="/icon.png" width="16" height="16">' \
              '<img src="/assets/grey-placeholder.png"><img src="https://img.shields.io/badge/ci-passing-green" alt="CI">' \
@@ -474,7 +478,7 @@ RSpec.describe "Markdown conversion" do
                                 "![Globex conveyor belts](https://example.com/3.jpg)"
       end
 
-      it "keeps article images unless a short alt repeats a text link to the same page" do
+      it "keeps article images with alt text unless a short alt repeats a text link to the same page" do
         prose = "<p>#{'Tidal lagoons release water through turbines as the tide turns. ' * 4}</p>"
         html = "<article><h1>Tidal power</h1>#{prose}" \
                '<p><a href="/media/harbour-full.jpg"><img src="/media/harbour.jpg" alt="Harbour wall at dawn"></a></p>' \
@@ -484,22 +488,20 @@ RSpec.describe "Markdown conversion" do
         markdown = extract(html)
 
         markdown.should include("![Harbour wall at dawn](https://example.com/media/harbour.jpg)")
-        markdown.should include("![](https://example.com/media/turbine.jpg)")
+        markdown.should_not include("turbine.jpg")
         markdown.should include("Next: [A guide to tides](https://example.com/guide)")
         markdown.should_not include("guide.jpg")
       end
 
-      it "drops an article thumbnail whose longer alt repeats the link text, and keeps photos without alt text in any wrapper" do
+      it "drops an article thumbnail whose longer alt repeats the link text" do
         prose = "<p>#{'Tidal lagoons release water through turbines as the tide turns. ' * 4}</p>"
         html = "<article><h1>Tidal power</h1>#{prose}" \
-               '<div><img src="/media/lagoon.jpg" alt=""></div>' \
                '<p>Start here: <a href="/tides"><img src="/tides.jpg" alt="Tides explained in four pictures"></a> ' \
                '<a href="/tides">Tides explained</a></p>' \
                '<p>Or: <a href="/severn"><img src="/severn.jpg" alt="Map of the Severn estuary"></a> <a href="/severn">Severn guide</a></p>' \
                "#{prose}</article>"
         markdown = extract(html)
 
-        markdown.should include("![](https://example.com/media/lagoon.jpg)")
         markdown.should include("Start here: [Tides explained](https://example.com/tides)")
         markdown.should include("Or: ![Map of the Severn estuary](https://example.com/severn.jpg) [Severn guide](https://example.com/severn)")
       end
@@ -520,12 +522,26 @@ RSpec.describe "Markdown conversion" do
         extract(html).should == "# Plans\n\nPick the plan that fits your team.\n\n\\# 1 rated by small teams\n\n\\> Compare plans"
       end
 
-      it "keeps article figures marked presentational and large photos marked decorative" do
+      it "drops images without alt text in any wrapper and at any size, keeping their caption" do
         prose = "<p>#{'Memory grows each time the cache misses, so the graph below climbs steadily. ' * 4}</p>"
-        figure = '<figure><img src="/leak.png" alt="" role="presentation" width="700" height="400"><figcaption>Memory leak in action</figcaption></figure>'
-        extract("<article><h1>Leaks</h1>#{prose}#{figure}#{prose}</article>").should include("![](https://example.com/leak.png)\n\nMemory leak in action")
-        extract('<main><h1>Kettle</h1><p>A steel kettle.</p><div><img src="/kettle.jpg" alt="" width="2000" height="2000"></div></main>').should ==
-          "# Kettle\n\nA steel kettle.\n\n![](https://example.com/kettle.jpg)"
+        figure = '<figure><img src="/leak.png" alt="" width="700" height="400"><figcaption>Memory leak in action</figcaption></figure>'
+        markdown = extract("<article><h1>Leaks</h1>#{prose}#{figure}<div><img src=\"/graph.png\"></div>#{prose}</article>")
+        markdown.should include("Memory leak in action")
+        markdown.should_not include(".png")
+      end
+
+      it "drops images whose alt text names nothing" do
+        alts = ["IMG_6175.JPG", "DSC_0264", "image", "Foto 2", "描述", "صورة", "9f86d081884c7d65"]
+        images = alts.map.with_index { |alt, index| %(<img src="/#{index}.jpg" alt="#{alt}">) }.join
+        extract("<main><h1>Trip</h1><p>Our trip.</p><p>#{images}<img src=\"/sea.jpg\" alt=\"Boats in the harbour\"></p></main>").should ==
+          "# Trip\n\nOur trip.\n\n![Boats in the harbour](https://example.com/sea.jpg)"
+      end
+
+      it "drops icons, logos and avatars" do
+        html = '<main><h1>Shop</h1><p>Our shop.</p><p><img src="/img/QDLogoBlue.gif" alt="Quality Dogs"><img src="/icons/rss.png" alt="Feed">' \
+               '<img src="/a.jpg" class="avatar" alt="Sam"><img src="/c.svg" alt="Icono de chevron hacia abajo">' \
+               '<img src="/rss-feed-guide.jpg" alt="An RSS reader on a phone" width="800"></p></main>'
+        extract(html).should == "# Shop\n\nOur shop.\n\n![An RSS reader on a phone](https://example.com/rss-feed-guide.jpg)"
       end
 
       it "keeps the words around a decorative image apart" do

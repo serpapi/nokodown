@@ -17,8 +17,8 @@ module Nokodown
       # Heading-anchor markup puts a permalink before or after the text.
       PERMALINK = /\A[#¶§🔗]\s+|\s+[#¶§🔗]\z/.freeze
 
-      def initialize(urls, images: true, links: true, redundant_images: {})
-        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
+      def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
+        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images, main_content: main_content)
         @links = links
         @depth = 0
         @contains_block = {}
