@@ -14,6 +14,11 @@ RSpec.describe Nokodown::Markdown::Repeats do
         "# Trail Stove 2 - Camp Shop\n\nFits a one litre pot and boils water in three minutes."
     end
 
+    it "keeps a copy that is all a section holds" do
+      convert("<h1>Central Asia - Travel Blog</h1><h3>Tag</h3><p>Central Asia</p>").should ==
+        "# Central Asia - Travel Blog\n\n### Tag\n\nCentral Asia"
+    end
+
     it "keeps a paragraph that repeats the title as a link to another page" do
       html = "<h1>Stove review</h1>#{intro}<iframe src='https://www.youtube.com/embed/dQw4w9WgXcQ' title='Stove review'></iframe>"
       convert(html).should end_with("[Stove review](https://www.youtube.com/watch?v=dQw4w9WgXcQ)")

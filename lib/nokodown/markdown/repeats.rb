@@ -40,7 +40,7 @@ module Nokodown
         parts = title_parts(heading)
         blocks.reject.with_index do |block, position|
           text = position == index ? nil : title_text(block)
-          next false if text.nil? || text.empty?
+          next false if text.nil? || text.empty? || section_content?(blocks, position)
 
           text == title || (block.kind == :paragraph && (position - index).abs <= TITLE_HEAD && parts.include?(text))
         end
@@ -68,8 +68,20 @@ module Nokodown
           next false unless block.kind == :paragraph && !block.text.include?("![")
 
           text = Text.plain(block.text)
-          eyebrow?(blocks, index, text) || (!block.text.include?("](") && repeats_heading?(blocks, index, squash(text)))
+          next true if eyebrow?(blocks, index, text)
+
+          !block.text.include?("](") && !section_content?(blocks, index) && repeats_heading?(blocks, index, squash(text))
         end
+      end
+
+      # A paragraph that is all a section below the title holds ("### Tag",
+      # then the tag) stays, so its heading is not left empty.
+      def section_content?(blocks, index)
+        previous = index.positive? ? blocks[index - 1] : nil
+        return false unless blocks[index].kind == :paragraph && previous&.kind == :heading && previous.level > 1
+
+        following = blocks[index + 1]
+        following.nil? || (following.kind == :heading && following.level <= previous.level)
       end
 
       def eyebrow?(blocks, index, text)
