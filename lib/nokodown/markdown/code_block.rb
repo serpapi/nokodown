@@ -35,9 +35,10 @@ module Nokodown
         return previous && previous.kind == :code && block.text.match?(COPY_LABEL) unless following&.kind == :code
 
         name = block.text.sub(COPY_SUFFIX, "").downcase
-        return false unless block.text.match?(COPY_LABEL) || LANGUAGE_NAMES.include?(name) || following.text[/\A`+(.*)/, 1] == name
+        language = LANGUAGE_NAMES.include?(name)
+        return false unless block.text.match?(COPY_LABEL) || language || following.text[/\A`+(.*)/, 1] == name
 
-        following.text = following.text.sub(/\A(`+)\n/, "\\1#{name}\n") if LANGUAGE_NAMES.include?(name) && !NO_LANGUAGE.include?(name)
+        following.text = following.text.sub(/\A(`+)\n/, "\\1#{name}\n") if language && !NO_LANGUAGE.include?(name)
         true
       end
 

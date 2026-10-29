@@ -27,7 +27,9 @@ module Nokodown
       /x.freeze
       ICON_FOLDER = %r{/(?:icons?|logos?|emoji|emojis|flags|avatars?|smilies)/}i.freeze
       ICON_CLASS = /logo|icon|avatar/i.freeze
-      ICON_ALT = /\b(?:logo|logotipo|logotype|icon|icono|ícone|icône|ikona|иконка|loading|cargando|chargement|carregando)\b/i.freeze
+      ICON_ALT = /
+        \b(?:logo|logotipo|logotype|icon|icono|ícone|icône|ikona|иконка|loading|cargando|chargement|carregando)\b
+      /xi.freeze
       CONTENT_SIZE = 300
 
       module_function

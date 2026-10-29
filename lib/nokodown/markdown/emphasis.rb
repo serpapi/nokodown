@@ -46,7 +46,9 @@ module Nokodown
 
       def label?(text)
         plain = Text.plain(text)
-        !plain.include?("\n") && plain.length <= LABEL_LENGTH && plain.split.size <= LABEL_WORDS && !plain.match?(SENTENCE_END)
+        return false if plain.include?("\n") || plain.match?(SENTENCE_END)
+
+        plain.length <= LABEL_LENGTH && plain.split.size <= LABEL_WORDS
       end
 
       def bold?(text)

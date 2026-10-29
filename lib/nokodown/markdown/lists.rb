@@ -28,7 +28,9 @@ module Nokodown
       end
 
       def typed_list?(run, neighbours)
-        !glyph(run.first).nil? && run.sum { |block| block.text.count("\n") + 1 } > 1 && neighbours.none? { |block| glyph(block) }
+        return false if glyph(run.first).nil? || neighbours.any? { |block| glyph(block) }
+
+        run.sum { |block| block.text.count("\n") + 1 } > 1
       end
 
       def list(run)
