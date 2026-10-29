@@ -75,18 +75,20 @@ with `main_content: false`, `:none` for a document without a body.
   home page, then links down the site with separators), a line of links to
   the site's tag or label archives ("Tags: a, b") with at most a short label
   ending in a colon and a category kicker above the title, unless the page
-  repeats the line (a card's tags) or is such an archive, a line of links to
-  the site's sign-in, registration, account, cart or feeds ("您需要登录后才可以回帖
-  登录 | 注册", "View Cart (0)", "Subscribe to: Posts (Atom)") by where they
-  point, unless a sentence runs on around them or they are items of a
-  larger menu, and copyright and licence lines in the major web languages.
-- Once the content is chosen and pruned, so that they cannot sway either,
-  comment, review and contact forms (a visible text box, a name or e-mail
-  field and little text) with the title and notes above them in any
-  language. A form stays when it wraps the page (ASP.NET), holds its title
-  or main region, holds an e-mail address or a phone number, asks how many
-  (an order with a note), or is all an application or sign-up page's main
-  region holds, and none goes when it is all the content holds.
+  repeats the line (a card's tags) or is such an archive, and copyright and
+  licence lines in the major web languages.
+- Once the content is chosen and pruned, so that they cannot sway either, a
+  line of links to the site's sign-in, registration, account, cart or feeds
+  ("您需要登录后才可以回帖 登录 | 注册", "View Cart (0)", "Subscribe to:
+  Posts (Atom)") by where they point, unless a sentence, a heading, the
+  page's title, a date, a table or a picture sits with them or they are
+  items of a larger menu, and comment, review and contact forms (a visible
+  text box, a name or e-mail field and little text) with the title and
+  notes above them in any language. A form stays when it wraps the page
+  (ASP.NET), holds its title or main region, holds an e-mail address or a
+  phone number, asks how many (an order with a note), or is all an
+  application or sign-up page's main region holds, and neither kind goes
+  when it is all the content holds.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
@@ -242,8 +244,9 @@ own, and a cookie banner without headings (a cookie policy has them).
    posts or products (alike blocks, each with a linked title, that hold most
    of the text) and a featured post beside them, since it would judge each
    item on its own. A teaser's linked title with its date and author links
-   is not a link cluster, however short. Then **MessageForms** removes the
-   marked forms left in the content.
+   is not a link cluster, however short. Then **MessageForms** and
+   **ServiceLinks** remove the marked forms and the sign-in, cart and feed
+   lines left in the content.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data

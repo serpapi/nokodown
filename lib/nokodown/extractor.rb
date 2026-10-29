@@ -70,15 +70,15 @@ module Nokodown
       else
         Pruner.new(nodes, :page, urls: urls).call
       end
-      remove_site_lines(nodes)
+      remove_site_lines(nodes, metadata[:title])
       [Teasers.strip(nodes, teasers), selection.mode]
     end
 
-    # Message forms go once the content is chosen and pruned, so that their
-    # few lines sway neither, but never all of it: a contact page may hold
-    # nothing but its form.
-    def remove_site_lines(nodes)
-      lines = MessageForms.blocks(nodes)
+    # Message forms and sign-in or cart lines go once the content is chosen
+    # and pruned, so that their few lines sway neither, but never all of it:
+    # a contact page may hold nothing but its form.
+    def remove_site_lines(nodes, title)
+      lines = MessageForms.blocks(nodes) + ServiceLinks.blocks(nodes, @url, title)
       lines.each(&:remove) if leaves_content?(nodes, lines)
     end
 
