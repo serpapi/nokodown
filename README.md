@@ -38,14 +38,18 @@ result.mode           # :article, :page, :full or :none
 Nokodown.to_markdown(html, url: "https://example.com/post") # just the Markdown
 ```
 
-`html` is a string in any encoding. Binary strings are decoded using their
-`<meta charset>`, and invalid bytes are dropped.
+`html` is a string in any encoding. Binary strings are decoded the way a
+browser reads them, by their `<meta charset>` or XML declaration, except that
+bytes which read as UTF-8 are UTF-8 whatever the page declares, and the
+encoding of a page that declares none is told from its bytes. UTF-8 text that
+was once misread as Windows-1252 ("cafÃ©") is repaired, and invalid bytes are
+dropped.
 
 | Option | Default | |
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
 | `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
-| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
+| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section, or names a section that the page's URL, which names the title, does not mention. Away from the home page, a heading that only names the site gives way to the page title, and a title that only names the site does not head content that has a heading of its own. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |
 
@@ -112,6 +116,12 @@ with `main_content: false`, `:none` for a document without a body.
   images came since the last copy, as in a logo strip shown twice. A line
   with several copies of one image, such as a row of rating stars, keeps
   them all.
+- Markup and server output that leak into the text, outside code: HTML
+  escaped into alt text (its text is kept), escaped elements written out
+  whole, PHP and Liquid error messages, and template placeholders and
+  shortcodes left unrendered. Email addresses hidden from harvesters, by
+  Cloudflare or by a decoy inside the address, are shown as readers see
+  them.
 
 Every structural rule is guarded: an element that contains the `<main>`
 region, or most of the page's text, is never removed because of its class name.
@@ -119,8 +129,13 @@ region, or most of the page's text, is never removed because of its class name.
 ## How it works
 
 1. **Charset**: transcode to UTF-8; Lexbor itself ignores `<meta charset>`.
+   The bytes decide when they disagree with the declared charset or when
+   there is none.
 2. **Metadata**: JSON-LD, Open Graph and other `<meta>` tags, then the
-   document, in Readability's order of preference.
+   document, in Readability's order of preference. The title drops the
+   site's name, as declared, as its domain spells it or as its logo heading
+   shows it, and gives way to an `<h1>` that the page's URL names when the
+   title does not.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
    `<noscript>` copies), drop scripts, invisible elements and form controls.
 4. **Boilerplate**: remove page chrome and noise widgets across the whole page.
