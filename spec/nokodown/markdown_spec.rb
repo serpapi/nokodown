@@ -570,6 +570,13 @@ RSpec.describe "Markdown conversion" do
         extract("<main><h1>Trip</h1><p>#{text}</p><p><img src=\"/2.jpg\" alt=\"photo_ 2\"></p></main>").should == "# Trip\n\n#{text}"
       end
 
+      it "drops the icons of a layout table's text-free cells" do
+        text = "Our shop sells leads, collars, beds and toys for dogs of every size, made by hand in our own workshop."
+        html = "<main><h1>Shop</h1><p>#{text}</p><table><tr><td>Sam wrote:</td>" \
+               '<td><img src="/icon_quote.gif" alt="Reply with quote"></td></tr></table></main>'
+        extract(html).should == "# Shop\n\n#{text}\n\nSam wrote:"
+      end
+
       it "drops icons, logos and avatars" do
         text = "Our shop sells leads, collars, beds and toys for dogs of every size, made by hand in our own workshop."
         html = "<main><h1>Shop</h1><p>#{text}</p>" \

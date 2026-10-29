@@ -91,8 +91,8 @@ with `main_content: false`, `:none` for a document without a body.
   alt text, a file or camera name ("IMG_6175.JPG"), a hash, or a word for
   "image" ("photo", "foto", "画像"); icons, logos and avatars, told by their
   file name ("QDLogoBlue.gif"), folder (`/icons/`), class or alt text. An image
-  alone in a table cell, such as a tick in a comparison table, stays, and so
-  do all images of a page with fewer than 20 words besides them. Images
+  alone in a cell of a data table, such as a tick in a comparison table, stays,
+  and so do all images of a page with fewer than 20 words besides them. Images
   marked decorative (`role="presentation"` or `role="none"`) go unless they sit
   in a figure, an image link or a text-free paragraph or table cell, or declare
   a width or height of 300 pixels or more; and card thumbnails go while the

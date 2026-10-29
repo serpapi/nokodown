@@ -69,10 +69,10 @@ module Nokodown
       end
 
       # In the main content an image stays only when its alt text says what
-      # it shows, and it is not an icon or a logo; a tick alone in a table
-      # cell keeps its place.
+      # it shows, and it is not an icon or a logo; a tick alone in a cell of a
+      # data table keeps its place.
       def content?(node, src, alt)
-        return true if text_free_cell?(node)
+        return true if tick?(node)
 
         names?(alt) && !icon?(node, src, alt)
       end
@@ -94,9 +94,9 @@ module Nokodown
         name.gsub(/([a-z])([A-Z])|([A-Z])([A-Z][a-z])/, '\\1\\3 \\2\\4').downcase.split(/[^a-z0-9]+/)
       end
 
-      def text_free_cell?(node)
-        cell = Dom.ancestors_named(node, "td", "th").first
-        !cell.nil? && Dom.text(cell).empty?
+      def tick?(node)
+        cell, table = Dom.ancestors_named(node, "td", "th", "table").first(2)
+        !table.nil? && table.name == "table" && Dom.text(cell).empty? && Tables.data_table?(table)
       end
 
       def pixels(value)
