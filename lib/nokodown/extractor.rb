@@ -19,6 +19,8 @@ module Nokodown
     end
 
     def call
+      return result([], {}, :none) if Charset.binary?(@html.to_s)
+
       doc = Nokolexbor::HTML(Charset.utf8(@html.to_s))
       metadata = Metadata.new(doc, @url).to_h
       urls = UrlResolver.new(@url, doc.at_css("base[href]")&.[]("href"))
