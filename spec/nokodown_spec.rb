@@ -491,6 +491,12 @@ RSpec.describe Nokodown do
       markdown.should_not include("protected")
     end
 
+    it "writes a protected mail link that holds only the placeholder as its address" do
+      html = '<p>Write to <a href="/cdn-cgi/l/email-protection#5a33343c351a3f223b372a363f74393537">[email&#160;protected]</a> today.</p>'
+
+      Nokodown.to_markdown(html, title: false).should == "Write to info@example.com today."
+    end
+
     it "drops a decoy that a stylesheet hides inside an address" do
       html = '<p>Email: <span class="obfuscate">info@ <span class="decoy-domain">ex.com</span> example.com</span></p>'
 

@@ -56,21 +56,9 @@ module Nokodown
       ICON_FONT = /(?<![\w-])material-(?:icons|symbols)(?:-(?:outlined|round|rounded|sharp|two-tone))?(?![\w-])/.freeze
       # Some CMSs write the caption's markup into the alt attribute.
       TAG = %r{</?[a-z][^<>]*>}i.freeze
-      # Cloudflare hides addresses behind "[email protected]" and a link or a
-      # data-cfemail attribute that holds them encoded.
-      CLOUDFLARE_EMAIL = %r{/cdn-cgi/l/email-protection#([0-9a-f]{6,})\z}i.freeze
-      EMAIL_PLACEHOLDER = "[email protected]"
       URL_TEXT = %r{\A(?:https?://|www\.)\S+\z}i.freeze
       SHORTENED = /…|\.\.\./.freeze
       HOST = %r{\A(?:https?://)?(?:www\.)?([^/?#:]+)}i.freeze
-
-      # The first byte is the key the others are XORed with.
-      def self.cloudflare_email(hex)
-        bytes = [hex].pack("H*").bytes
-        key = bytes.shift
-        email = bytes.map { |byte| byte ^ key }.pack("C*").force_encoding(Encoding::UTF_8)
-        email if email.valid_encoding? && email.match?(/\A[^@\s]+@[^@\s]+\z/)
-      end
 
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
@@ -176,9 +164,6 @@ module Nokodown
         name = node.name
         return "" if node["class"].to_s.match?(ICON_FONT)
 
-        email = node["data-cfemail"] && Inline.cloudflare_email(node["data-cfemail"])
-        return Text.escape(email) if email
-
         return emphasis(node, EMPHASIS[name]) if EMPHASIS.key?(name)
         return code_span(node) if CODE.include?(name)
 
@@ -234,8 +219,6 @@ module Nokodown
       end
 
       def link_markup(text, href)
-        email = href[CLOUDFLARE_EMAIL, 1] && Inline.cloudflare_email(href[CLOUDFLARE_EMAIL, 1])
-        text, href = [text.gsub(EMAIL_PLACEHOLDER, Text.escape(email)), "mailto:#{email}"] if email
         text = Separators.link_text(text)
         return "" if text.empty? || text.match?(Patterns::LINK_NOISE_TEXT)
         return text if !@links || @in_link
