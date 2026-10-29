@@ -22,6 +22,8 @@ module Nokodown
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
+    SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
+    SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
     def initialize(nodes, mode, conditional: true)
@@ -192,8 +194,56 @@ module Nokodown
       return if clusters.empty? || clusters_dominate?(root, clusters)
 
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
-        remove(node) if link_cluster?(node) && !in_data_table?(node)
+        remove_with_label(node, root) if link_cluster?(node) && !in_data_table?(node)
       end
+    end
+
+    def inside?(node, root)
+      key = Dom.key(root)
+      node&.element? && node.ancestors.any? { |ancestor| ancestor.element? && Dom.key(ancestor) == key }
+    end
+
+    def remove_with_label(node, root)
+      labels = labels_of(node, root)
+      remove(node)
+      labels.each { |label| remove(label) }
+    end
+
+    # The headings over a box of links label nothing once the box is gone,
+    # unless more of their section follows. Widgets nest the box and its
+    # heading in wrappers, each level with a heading of its own.
+    def labels_of(node, root)
+      labels = []
+      holder = node
+      loop do
+        holder = holder.parent while only_child?(holder) && inside?(holder.parent, root)
+        label = holder.previous_element
+        break unless label && section_label?(label) && section_end?(holder)
+
+        labels << label
+        break unless label.previous_element.nil? && holder.next_element.nil? && inside?(holder.parent, root)
+
+        holder = holder.parent
+      end
+      labels
+    end
+
+    def only_child?(node)
+      node.previous_element.nil? && node.next_element.nil?
+    end
+
+    def section_end?(node)
+      node.next_element.nil? || section_label?(node.next_element)
+    end
+
+    # A heading below the page title, or a wrapper holding only one. A linked
+    # heading is the title of a card, not a label.
+    def section_label?(node)
+      text = Dom.text(node)
+      return false if text.empty? || node.at_css("a[href]")
+      return true if SECTION_HEADINGS.include?(node.name)
+
+      node.css(SECTION_HEADING_SELECTOR).any? { |heading| Dom.text(heading) == text }
     end
 
     # On an index page (an A-Z list, a category grid) the clusters are the

@@ -96,6 +96,16 @@ RSpec.describe Nokodown do
       markdown.should include("- [Diving](https://example.com/topics/diving)")
     end
 
+    it "drops the heading over a box of links it drops" do
+      types = %w[Backend Frontend Mobile Games Infrastructure Security]
+      links = types.map { |type| "<li><a href=\"/jobs/#{type.downcase}\">#{type}</a></li>" }.join
+      box = "<div><h2>Find jobs of other types</h2><ul>#{links}</ul></div>"
+
+      markdown = extract("<main><h1>Game planner</h1>#{prose}#{box}</main>")
+
+      markdown.should_not include("other types")
+    end
+
     it "drops the few menu links left in a content area that holds almost nothing else" do
       html = '<main><a href="#content">Skip to content</a><div><a href="/shop">Shop all products</a> ' \
              '<a href="/help">Help and contact</a> <a href="/account">Your account</a></div><p>Sold out.</p></main>'
