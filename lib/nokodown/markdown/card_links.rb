@@ -8,8 +8,10 @@ module Nokodown
     # button or the ellipsis of its excerpt. The title keeps the link. A
     # button ("Read more", "Voir") alone on its line or after the excerpt
     # only repeats it and goes, as does a second copy of the title; other
-    # repeats keep their text.
-    class RepeatedLinks
+    # repeats keep their text. A button counts as one only when the page
+    # uses it for several pages; ReadMoreLinks already took the read-more
+    # labels it can tell from the DOM.
+    class CardLinks
       LINK = /\[(#{Text::LINK_TEXT})\]\((#{Text::DESTINATION})\)/.freeze
       # Escapes, image openers and code spans are text, so neither an escaped
       # bracket, an image nor a link written in code is read as a link.

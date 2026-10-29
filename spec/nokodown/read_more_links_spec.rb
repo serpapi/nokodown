@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe Nokodown::RepeatedLinks do
+RSpec.describe Nokodown::ReadMoreLinks do
   def prune(html)
     root = Nokolexbor::HTML("<body><div class='list'>#{html}</div></body>").at_css("div.list")
     Nokodown::Dom.assign_keys(root)

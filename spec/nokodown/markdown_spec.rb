@@ -341,7 +341,7 @@ RSpec.describe "Markdown conversion" do
     it "finds repeated links on a long line of non-ASCII text in linear time" do
       line = (1..3000).map { |i| "[新闻标题第#{i}条](https://example.com/p/#{i}) [详情](https://example.com/p/#{i})" }.join(" ")
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      text = Nokodown::Markdown::RepeatedLinks.new([Nokodown::Markdown::Block.new(:paragraph, line)]).call.first.text
+      text = Nokodown::Markdown::CardLinks.new([Nokodown::Markdown::Block.new(:paragraph, line)]).call.first.text
       (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
       text.should_not include("[详情]")
     end

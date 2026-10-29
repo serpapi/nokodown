@@ -178,7 +178,7 @@ module Nokodown
     # "More", "Menu" or "Close" are content inside a sentence or as a
     # heading, so this is matched against whole paragraphs only. A label
     # that links to its page stays when it is the only way there:
-    # RepeatedLinks takes it when a title links to the same page.
+    # ReadMoreLinks takes it when a title links to the same page.
     UI_LABEL = /
       \A[\s+«»‹›<>←.…(]*(?:
         #{MORE_TEXT}|#{SHOP_CONTROL_TEXT}|(?:#{PREV_NEXT})(?:\s*[\/|·•]?\s*(?:#{PREV_NEXT}))?|

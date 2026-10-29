@@ -5,8 +5,10 @@ module Nokodown
   # names ("Read more", "Leer más", "詳細を見る", "Comprar >" under a linked
   # title) says nothing in any language that the title does not. Dates and
   # counts carry digits and stay, and so does a link that a sentence, a
-  # breadcrumb or a list runs through.
-  class RepeatedLinks
+  # breadcrumb or a list runs through. This works in one card at a time, so
+  # it also takes the label of a page's only teaser, which
+  # Markdown::CardLinks leaves for not repeating across cards.
+  class ReadMoreLinks
     Link = Struct.new(:node, :page, :text, :position)
 
     MAX_LABEL = 30
