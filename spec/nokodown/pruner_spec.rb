@@ -64,7 +64,34 @@ RSpec.describe Nokodown::Pruner do
       described_class.new([root], :page, urls: urls).call
 
       Nokodown::Dom.text(root).should include("The harbor bridge reopened")
-      Nokodown::Dom.text(root).should_not include("Coastal engineering")
+      ["Coastal engineering", "Tide", "Sea"].each { |noise| Nokodown::Dom.text(root).should_not include(noise) }
+    end
+
+    it "keeps a listing column that its layout table declares wider than the column beside it" do
+      rows = %w[Vector Rapid Alpine Corsa Delta Falcon].map do |name|
+        "<tr><td><a href='/wheels/#{name.downcase}'>#{name} R16 alloy wheel, 7J ET40</a></td><td>4,200 rub.</td></tr>"
+      end
+      contact = "<p>Orders by phone from ten to seven every day, pick-up from our warehouse in Lyubertsy, " \
+                "delivery the next day.</p>"
+      root = content("#{story}<table><tr><td><table>#{rows.join}</table></td><td width='160'>#{contact}</td></tr></table>")
+
+      described_class.new([root], :page, urls: urls).call
+
+      Nokodown::Dom.text(root).should include("Falcon R16 alloy wheel")
+    end
+
+    it "drops a column declared narrower than the prose beside it, even when its links hold most of the text" do
+      places = %w[
+        Bagienice Barczewko Barczewo Barkweda Bartag Bartazek Bartolty Bezled Biskupiec Bisztynek Blanki Boguchwaly
+        Bredynki Brzeznica Bukwald Butryny Cerkiewnik Czarny Dadaj Dobre Dorotowo Dywity Gady Gietrzwald
+      ]
+      rail = places.map { |place| "<a href='/places/#{place.downcase}'>#{place}</a><br>" }.join
+      root = content("<table><tr><td width='190'>#{rail}</td><td width='560'>#{story}</td></tr></table>")
+
+      described_class.new([root], :page, urls: urls).call
+
+      Nokodown::Dom.text(root).should include("The harbor bridge reopened")
+      Nokodown::Dom.text(root).should_not include("Bisztynek")
     end
   end
 

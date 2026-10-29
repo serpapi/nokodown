@@ -25,6 +25,8 @@ module Nokodown
     MIN_TITLED_CONTENT = 200
     MIN_LEFT = 200
     MIN_PROSE_COLUMN = 100
+    WIDTH = /\A\s*(\d+(?:\.\d+)?)\s*(%|px)?\s*\z/i.freeze
+    STYLE_WIDTH = /(?:\A|;)\s*width\s*:\s*([^;]+)/i.freeze
     MAX_LABEL = 40
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
     SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
@@ -65,19 +67,56 @@ module Nokodown
     private
 
     def prune_page(root)
-      remove_rail_columns(root)
-      remove_link_clusters(root)
+      clusters = link_clusters(root)
+      index = index?(root, clusters)
+      clusters = link_clusters(root) if remove_rail_columns(root, index)
+      remove_link_clusters(root, clusters, index)
     end
 
     # Pages laid out in table columns put the site's menu or a rail of other
-    # stories in a column of links beside the column of prose.
-    def remove_rail_columns(root)
-      root.css("tr").each do |row|
-        cells = Tables.cells(row)
-        next if cells.size < 2 || cells.none? { |cell| prose_column?(cell) } || in_data_table?(row)
+    # stories in a column of links beside the column of prose. Says whether
+    # any went.
+    def remove_rail_columns(root, index)
+      rails = outermost(root.css("tr").flat_map { |row| rails_of(row, index) })
+      return false if rails.empty? || Dom.text(root).length - rails.sum { |cell| Dom.text(cell).length } < MIN_LEFT
 
-        cells.each { |cell| remove(cell) if rail_column?(cell) }
-      end
+      rails.each { |cell| remove(cell) }
+      true
+    end
+
+    def rails_of(row, index)
+      cells = Tables.cells(row)
+      return [] if cells.size < 2
+
+      prose = cells.select { |cell| prose_column?(cell) }
+      return [] if prose.empty? || in_data_table?(row)
+
+      cells.select { |cell| rail_column?(cell) && side_column?(cell, prose, cells, index) }
+    end
+
+    # The widths a table declares tell a side column from the main one, which
+    # may be a listing beside a short contact or intro column. An index page
+    # only loses a column declared narrower, and the title is never on a side.
+    def side_column?(cell, prose, cells, index)
+      return false if cell.at_css("h1")
+      return prose.any? { |column| narrower?(cell, column, cells) } if index
+
+      prose.none? { |column| narrower?(column, cell, cells) }
+    end
+
+    # Declared narrower in the same unit, or beside a column that declares no
+    # width while the rest of the row does, as that one takes what is left.
+    def narrower?(column, other, cells)
+      width = column_width(column)
+      other_width = column_width(other)
+      return width.last == other_width.last && width.first < other_width.first if width && other_width
+
+      other_width.nil? && cells.all? { |cell| Dom.key(cell) == Dom.key(other) || column_width(cell)&.last == "px" }
+    end
+
+    def column_width(cell)
+      match = (cell["width"] || cell["style"].to_s[STYLE_WIDTH, 1]).to_s.match(WIDTH)
+      [match[1].to_f, match[2] == "%" ? "%" : "px"] if match
     end
 
     def prose_column?(cell)
@@ -171,7 +210,10 @@ module Nokodown
 
     # Turned off, it still drops unlabeled navigation, as page pruning does.
     def clean_conditionally(root, content_length)
-      return remove_link_clusters(root) unless @conditional
+      unless @conditional
+        clusters = link_clusters(root)
+        return remove_link_clusters(root, clusters, index?(root, clusters))
+      end
 
       text_before = Dom.text(root).length
       links_before = link_text_length(root)
@@ -225,15 +267,16 @@ module Nokodown
     # Elsewhere menus go after the clusters, so a menu does not split the
     # cluster around it ("Posted in News | Tagged a, b | Comment") and leave
     # pieces of it behind, and the list a submenu hung from is judged again.
-    def remove_link_clusters(root)
-      clusters = link_clusters(root)
-      if !clusters.empty? && clusters_dominate?(root, clusters)
-        remove_menus(root, clusters_above_title(root, clusters))
-      else
-        # Removal can only start at a cluster, so none means nothing to remove.
-        remove_clusters(root) unless clusters.empty?
-        remove_clusters(root) if remove_menus(root, [])
-      end
+    def remove_link_clusters(root, clusters, index)
+      return remove_menus(root, clusters_above_title(root, clusters) + current_page_menus(root)) if index
+
+      # Removal can only start at a cluster, so none means nothing to remove.
+      remove_clusters(root) unless clusters.empty?
+      remove_clusters(root) if remove_menus(root, current_page_menus(root))
+    end
+
+    def index?(root, clusters)
+      !clusters.empty? && clusters_dominate?(root, clusters)
     end
 
     def remove_clusters(root)
@@ -244,7 +287,7 @@ module Nokodown
 
     # Menus stay when they are nearly all the page holds. Says whether any went.
     def remove_menus(root, menus)
-      menus = outermost((menus + current_page_menus(root)).uniq { |menu| Dom.key(menu) })
+      menus = outermost(menus.uniq { |menu| Dom.key(menu) })
       return false if menus.empty? || Dom.text(root).length - menus.sum { |menu| Dom.text(menu).length } < MIN_LEFT
 
       menus.each { |menu| remove_with_label(menu, root) }

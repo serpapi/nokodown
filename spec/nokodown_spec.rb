@@ -146,12 +146,40 @@ RSpec.describe Nokodown do
               "How we rebuilt the city pool in three weeks", "A sauna for every home: our new range"]
       rail = news.map { |headline| "<p><a href=\"/news/#{headline.length}\">#{headline}</a></p>" }.join
       product = "<h2>Whirlpool bath M-2056A</h2><p>Made in China by Monalisa, 1860 x 830 x 730 mm, " \
-                "with six jets, a heater and a headrest.</p>"
+                "with six jets, a heater and a headrest.</p><p>The acrylic shell is reinforced with fibreglass, " \
+                "and the pump and the heater sit behind a panel that lifts off for service.</p>"
 
       markdown = extract("<table><tr><td>#{product}</td><td>#{rail}</td></tr></table>")
 
       markdown.should include("with six jets, a heater and a headrest.")
       markdown.should_not include("We are hiring")
+    end
+
+    it "keeps the index in a layout table column beside an intro" do
+      topics = %w[
+        Anatomy Astronomy Architecture Biology Botany Banking Chemistry Climate Cooking Dentistry
+        Design Drama Ecology Economics Farming Fashion Geology History Hiking
+      ]
+      index = topics.map { |topic| "<a href=\"/topics/#{topic.downcase}\">#{topic}</a><br>" }.join
+      intro = "<p>Welcome to the topic directory of our small library. Pick a subject to see the books we hold " \
+              "on it and when they are due back.</p>"
+
+      markdown = extract("<table><tr><td>#{intro}</td><td>#{index}</td></tr></table>")
+
+      markdown.should include("[Geology](https://example.com/topics/geology)")
+    end
+
+    it "keeps a column of links that holds the page title" do
+      names = %w[VMC750 VMC850 VMC1000 XH714 XH716]
+      related = names.map { |name| "<a href=\"/p/#{name}\">#{name} vertical machining centre</a><br>" }.join
+      product = "<h1>XHD2312 gantry machining centre</h1><img src=\"/img/xhd2312.jpg\">#{related}"
+      contact = "<p>Sales: Zhai Qing, 138 9766 3235, or write to sales@qyskjc.com. Address: 24 Jing'er Road North, " \
+                "Biological Park, Xining, Qinghai. Open from eight to five on working days, and on Saturday " \
+                "mornings by appointment.</p>"
+
+      markdown = extract("<table><tr><td>#{contact}</td><td>#{product}</td></tr></table>")
+
+      markdown.should include("# XHD2312 gantry machining centre")
     end
 
     it "keeps cards whose tags link to the page itself" do
