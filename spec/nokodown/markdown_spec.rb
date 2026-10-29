@@ -363,15 +363,14 @@ RSpec.describe "Markdown conversion" do
 
     it "writes a link whose text is a whole address as that address" do
       html = '<p><a href="https://track.example.net/ct?url=x&amp;id=9">https://www.bar.example/</a> ' \
-             '<a href="https://example.org/a/very/long/path">https://example.org/a/very/…</a></p>'
-      convert(html).should == "https://www.bar.example/ [https://example.org/a/very/…](https://example.org/a/very/long/path)"
+             '<a href="https://t.co/x1">https://example.org/a/very/…</a> <a href="/wiki/%D8%AD%D8%AF">https://example.com/wiki/حد</a></p>'
+      convert(html).should == "https://www.bar.example/ [https://example.org/a/very/…](https://t.co/x1) https://example.com/wiki/حد"
     end
 
-    it "keeps the link of an address shortened or on the link's own site" do
+    it "writes a link whose text shows an address on its own site, whole or cut short, as its address" do
       html = '<p><a href="https://www.example.org/forum/showthread.php?t=123456&amp;page=2">https://www.example.org/forum/showthread.p...</a> ' \
              '<a href="https://news.example/2019/11/20/bordal-recria">https://news.example/2019/11/20/bordal</a></p>'
-      convert(html).should == "[https://www.example.org/forum/showthread.p...](https://www.example.org/forum/showthread.php?t=123456&page=2) " \
-                              "[https://news.example/2019/11/20/bordal](https://news.example/2019/11/20/bordal-recria)"
+      convert(html).should == "https://www.example.org/forum/showthread.php?t=123456&page=2 https://news.example/2019/11/20/bordal-recria"
     end
 
     it "puts images out of link text" do

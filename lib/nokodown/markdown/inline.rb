@@ -60,7 +60,8 @@ module Nokodown
       # data-cfemail attribute that holds them encoded.
       CLOUDFLARE_EMAIL = %r{/cdn-cgi/l/email-protection#([0-9a-f]{6,})\z}i.freeze
       EMAIL_PLACEHOLDER = "[email protected]"
-      URL_TEXT = %r{\A(?:https?://|www\.)[^\s…]+\z}i.freeze
+      URL_TEXT = %r{\A(?:https?://|www\.)\S+\z}i.freeze
+      SHORTENED = /…|\.\.\./.freeze
       HOST = %r{\A(?:https?://)?(?:www\.)?([^/?#:]+)}i.freeze
 
       # The first byte is the key the others are XORed with.
@@ -245,9 +246,21 @@ module Nokodown
         text = Emphasis.unwrap(text)
         return text if shown?(text, url)
         return url if same_as_url?(text, url)
-        return text if redirected?(text, url)
+        return text if same_as_url?(text, decoded(url))
 
-        "[#{Text.link_text(text)}](#{Text.destination(url)})"
+        address_markup(text, url) || "[#{Text.link_text(text)}](#{Text.destination(url)})"
+      end
+
+      # Link text that shows an address on the link's own site, whole or cut
+      # short ("showthread.p..."), says less than the link's address. One
+      # that shows a whole address on another site is where the link, a
+      # redirect, leads.
+      def address_markup(text, url)
+        shown = text.delete("\\")
+        return unless shown.match?(URL_TEXT)
+        return url if host(shown) == host(url)
+
+        text unless shown.match?(SHORTENED)
       end
 
       # Text that names the address a mail link writes to says everything the
@@ -257,20 +270,18 @@ module Nokodown
         !address.nil? && text.delete("\\").downcase.include?(address.downcase)
       end
 
-      # Link text that shows a whole address on another site than the link's,
-      # which only redirects there. A shortened address ("…", "...") is not
-      # whole.
-      def redirected?(text, url)
-        shown = text.delete("\\")
-        shown.match?(URL_TEXT) && !shown.include?("...") && host(shown) != host(url)
-      end
-
       def host(url)
         url[HOST, 1].to_s.downcase
       end
 
       def same_as_url?(text, url)
         bare(text.delete("\\")) == bare(url)
+      end
+
+      # Link text shows non-ASCII addresses as they read.
+      def decoded(url)
+        text = URI::DEFAULT_PARSER.unescape(url).force_encoding(Encoding::UTF_8)
+        text.valid_encoding? ? text : url
       end
 
       def bare(url)
