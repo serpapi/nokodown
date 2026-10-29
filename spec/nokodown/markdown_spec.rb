@@ -960,9 +960,9 @@ RSpec.describe "Markdown conversion" do
       convert("<p>\u2714\uFE0F Fast</p><p>\u2714\uFE0F Safe</p>").should == "- Fast\n- Safe"
     end
 
-    it "writes lines typed with a pictograph, an asterisk or a dash as a list, but not signs of a name" do
-      convert("<p>🔹 Age<br>🔹 Location</p><p>Then</p><p>* one<br>* two</p><p>Also</p><p>\u2013 Wiring<br>\u2013 Plumbing</p><p>\u00A9 Acme<br>\u00A9 Bob</p>").should ==
-        "- Age\n- Location\n\nThen\n\n- one\n- two\n\nAlso\n\n- Wiring\n- Plumbing\n\n\u00A9 Acme\n\u00A9 Bob"
+    it "writes lines typed with a pictograph or an asterisk as a list, but not signs of a name or a dialogue's dashes" do
+      convert("<p>🔹 Age<br>🔹 Location</p><p>Then</p><p>* one<br>* two</p><p>Also</p><p>\u2013 Hi.<br>\u2013 Hello.</p><p>\u00A9 Acme<br>\u00A9 Bob</p>").should ==
+        "- Age\n- Location\n\nThen\n\n- one\n- two\n\nAlso\n\n\u2013 Hi.\n\u2013 Hello.\n\n\u00A9 Acme\n\u00A9 Bob"
     end
 
     it "writes items set right after a bullet, as Chinese and Japanese pages do, as a list" do

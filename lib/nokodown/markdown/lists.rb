@@ -6,12 +6,13 @@ module Nokodown
     # line instead of writing a list ("• Fast", "✓ Free shipping"), and split
     # a numbered list into one element per item.
     module Lists
-      # Any pictograph serves as a bullet ("🔹 Retargeting"), and so do a
-      # typed asterisk and a dash. Pages in scripts written without spaces
-      # set the bullet right before the item ("・送料無料").
+      # Any pictograph serves as a bullet ("🔹 Retargeting"), and so does a
+      # typed asterisk; a dash opens the lines of a dialogue too. Pages in
+      # scripts written without spaces set the bullet right before the item
+      # ("・送料無料").
       CLOSE_BULLETS = "・･·•●○◆◇■□▪★☆▶►"
       GLYPH = /
-        \A(\\\*|[–#{Renderer::GLYPHS}◽◾]|#{Headings::SYMBOL})\uFE0F?
+        \A(\\\*|[#{Renderer::GLYPHS}◽◾]|#{Headings::SYMBOL})\uFE0F?
         (?:\s+|(?<=[#{CLOSE_BULLETS}])(?=[^\s\p{So}\p{Sm}#{CLOSE_BULLETS}]))
       /x.freeze
       NUMBER = /^(\d+)\. /.freeze
