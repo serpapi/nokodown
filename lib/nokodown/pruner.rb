@@ -278,7 +278,8 @@ module Nokodown
       carriers = notices.reject { |node| node.css(NOTICE_BLOCKS).any? { |child| keys.include?(Dom.key(child)) } }
       carrier_keys = carriers.map { |node| Dom.key(node) }.to_set
       notices.each do |node|
-        remove(node) if carrier_keys.include?(Dom.key(node)) || Dom.squish(text_outside(node, carrier_keys)).match?(ONLY_MARKS)
+        rest = carrier_keys.include?(Dom.key(node)) ? "" : Dom.squish(text_outside(node, carrier_keys))
+        remove(node) if rest.match?(ONLY_MARKS)
       end
     end
 
@@ -437,7 +438,8 @@ module Nokodown
     end
 
     def content_landmark?(node)
-      Boilerplate::CONTENT_ANCESTORS.include?(node.name) || node["role"] == "main" || node["itemprop"].to_s.include?("articleBody")
+      Boilerplate::CONTENT_ANCESTORS.include?(node.name) || node["role"] == "main" ||
+        node["itemprop"].to_s.include?("articleBody")
     end
 
     def footer_named?(node)
