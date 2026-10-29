@@ -997,6 +997,18 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Specs\n\n| Key | Value |\n| --- | --- |\n| Weight | 3 kg |"
     end
 
+    it "keeps rows across a table of names and values in their place" do
+      html = '<table><tr><td colspan="2">Acme Films</td></tr><tr><th>Website:</th><td>acme.org</td></tr>' \
+             '<tr><td colspan="2">Film Festival</td></tr><tr><th>Website:</th><td>festival.org</td></tr></table>'
+      convert(html).should == "- Acme Films\n- Website: acme.org\n- Film Festival\n- Website: festival.org"
+    end
+
+    it "writes a two-column table without column names as a list of names and values" do
+      rows = [%w[Power 3\ W], %w[Voltage 12\ V], ["Sizes", "S|M"], %w[Class III], ["Note:", "dry"], %w[Mass 0.25\ kg]]
+      html = "<table>#{rows.map { |name, value| "<tr><td>#{name}</td><td>#{value}</td></tr>" }.join}</table>"
+      convert(html).should == "- Power: 3 W\n- Voltage: 12 V\n- Sizes: S|M\n- Class: III\n- Note: dry\n- Mass: 0.25 kg"
+    end
+
     it "keeps a header row whose other cells are blank" do
       rows = %w[Apple Pear].map { |fruit| %(<tr><td>#{fruit}</td><td><a href="/buy/#{fruit}">Buy</a></td></tr>) }.join
       convert("<table><tr><th>Item</th><th></th></tr>#{rows}</table>").should ==

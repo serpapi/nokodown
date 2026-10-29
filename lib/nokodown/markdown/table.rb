@@ -17,6 +17,8 @@ module Nokodown
         return layout_blocks unless Tables.data_table?(@node)
 
         grid, spanning = trimmed_grid
+        return caption + [Block.new(:list, name_values(grid))] if grid.size >= 2 && grid.first.size == 2 && !header_row?
+
         titles = title_rows(grid, spanning)
         return layout_blocks if grid.size < 2 || grid.first.size < 2
 
@@ -40,6 +42,27 @@ module Nokodown
           titles << Block.new(:paragraph, Text.escape_line_starts(grid.shift.first.gsub("\\|", "|")))
         end
         titles
+      end
+
+      # GFM takes a table's first row for its column names, which a table of
+      # names and values does not have ("Weight | 3 kg"): each row is a line
+      # of the list instead, and a row across the table, which names the
+      # rows below it, stays in its place.
+      def name_values(grid)
+        grid.map { |row| "- #{name_value(*row.map { |cell| cell.gsub("\\|", "|").strip })}" }.join("\n")
+      end
+
+      def name_value(name, value)
+        return "#{name}#{value}" if name.empty? || value.empty?
+
+        name.match?(/[:：]\z/) ? "#{name} #{value}" : "#{name}: #{value}"
+      end
+
+      # Column names sit in a <thead> or in a row of <th> cells, perhaps below
+      # a title row.
+      def header_row?
+        rows = Tables.rows(@node).reject { |row| row.content.strip.empty? }.first(2)
+        rows.any? { |row| row.parent.name == "thead" || Tables.cells(row).all? { |cell| cell.name == "th" } }
       end
 
       def caption
