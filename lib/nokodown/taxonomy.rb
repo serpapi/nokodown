@@ -1,15 +1,20 @@
 # frozen_string_literal: true
 
 module Nokodown
-  # Lines of links to the site's own tag, category and label archives:
-  # "Tags: a, b", "Labels: Sea", a category kicker above the title. They
-  # say where the page is filed, not what it says. Text between the links
-  # (a date, an author) makes the line a byline, which stays. On an archive
-  # page such lines are its listing, so nothing goes there.
+  # Lines of links to the site's own tag archives ("Tags: a, b", "Labels:
+  # Sea") and the category kicker above the title. They say where the page
+  # is filed, not what it says. A category line after the title stays: a
+  # product's or an event's category is one of its facts. Text between the
+  # links (a date, an author) makes the line a byline, which stays too. On
+  # an archive page such lines are its listing, so nothing goes there.
   module Taxonomy
-    PATH = %r{/(?:tags?|categor(?:y|ies)|labels?|topics)/[^/?#]}i.freeze
-    QUERY = /[?&](?:cat|tag)=[^&#]/.freeze
-    REL = /(?<![\w-])(?:tag|category)(?![\w-])/i.freeze
+    TAG_PATH = %r{/(?:tags?|labels?|topics)/[^/?#]}i.freeze
+    # WooCommerce files products under "/product-category/".
+    CATEGORY_PATH = %r{[/_-]categor(?:y|ies)/[^/?#]}i.freeze
+    TAG_QUERY = /[?&]tag=[^&#]/.freeze
+    CATEGORY_QUERY = /[?&]cat=[^&#]/.freeze
+    TAG_REL = /(?<![\w-])tag(?![\w-])/i.freeze
+    CATEGORY_REL = /(?<![\w-])category(?![\w-])/i.freeze
     ADDRESS = %r{\A(?:https?:)?//(?:www\.)?([^/?#:]+)[^/?#]*}i.freeze
     MAX_LABEL = 24
     MIN_REPEATS = 3
@@ -25,16 +30,16 @@ module Nokodown
 
     # Keys of the outermost elements that hold only such a line. Lines of
     # one shape repeated are the category of every card in a listing, or
-    # the facts of a product linked to their filters ("Roof: gable"), so
-    # they stay.
+    # the facts of a product linked to their filters, so they stay.
     def blocks(body, url)
       page = url.to_s
-      return Set.new if page.match?(PATH) || page.match?(QUERY)
+      return Set.new if page.match?(TAG_PATH) || page.match?(CATEGORY_PATH) || page.match?(TAG_QUERY) || page.match?(CATEGORY_QUERY)
 
       site = page[ADDRESS, 1]&.downcase || Breadcrumbs.site_host(body.css("a[href]"))
+      title = body.at_css("h1")
       judged = {}
-      lines = body.css("a[href]").filter_map { |link| outermost(link, site, judged) if archive?(link, site) }
-      lines = lines.uniq { |node| Dom.key(node) }
+      lines = body.css("a[href]").filter_map { |link| outermost(link, site, judged) if archive(link, site) }
+      lines = lines.uniq { |node| Dom.key(node) }.select { |node| judged[Dom.key(node)] == :tag || kicker?(node, title) }
       repeated = lines.group_by { |node| shape(node) }.select { |_, alike| alike.size >= MIN_REPEATS }.keys
       lines.reject { |node| repeated.include?(shape(node)) }.map { |node| Dom.key(node) }.to_set
     end
@@ -43,13 +48,22 @@ module Nokodown
       "#{node.name}.#{Dom.signature(node)}"
     end
 
-    def archive?(link, site)
+    # A block of its own before the title, holding only the category.
+    def kicker?(node, title)
+      title && Dom.block?(node) && Dom.key(node).to_i < Dom.key(title).to_i && Breadcrumbs.gaps(node).first.empty?
+    end
+
+    # :tag, :category, or nil for any other link.
+    def archive(link, site)
       href = link["href"].strip
       host = href[ADDRESS, 1]&.downcase
-      return false unless host.nil? || host == site
+      return unless host.nil? || host == site
 
       local = href.sub(ADDRESS, "")
-      link["rel"].to_s.match?(REL) || local.match?(PATH) || local.match?(QUERY)
+      rel = link["rel"].to_s
+      return :category if rel.match?(CATEGORY_REL) || local.match?(CATEGORY_PATH) || local.match?(CATEGORY_QUERY)
+
+      :tag if rel.match?(TAG_REL) || local.match?(TAG_PATH) || local.match?(TAG_QUERY)
     end
 
     def outermost(link, site, judged)
@@ -57,7 +71,7 @@ module Nokodown
       node = link.parent
       while node&.element? && node.name != "body"
         key = Dom.key(node)
-        judged[key] = line?(node, site) unless judged.key?(key)
+        judged[key] = line(node, site) unless judged.key?(key)
         break unless judged[key]
 
         found = node
@@ -66,17 +80,23 @@ module Nokodown
       found
     end
 
-    def line?(node, site)
-      return false if LISTS.include?(node.name) || node.at_css(SECTION)
+    # :tag when every link is a tag, :category when any is a category.
+    def line(node, site)
+      return if LISTS.include?(node.name) || node.at_css(SECTION)
 
-      links = node.css("a[href]")
-      return false unless links.all? { |link| archive?(link, site) }
+      kinds = node.css("a[href]").map { |link| archive(link, site) }
+      return if kinds.include?(nil)
 
       gaps = Breadcrumbs.gaps(node)
-      label?(gaps.first) && gaps.drop(1).all? { |gap| gap.match?(BETWEEN) }
+      return unless gaps.drop(1).all? { |gap| gap.match?(BETWEEN) }
+      return unless gaps.first.empty? ? Dom.block?(node) : label?(gaps.first)
+
+      kinds.include?(:category) ? :category : :tag
     end
 
     # "Tags:" leads a line of tags; "Price" before a filter's link is a fact.
+    # A line without a label is a block of its own: an inline one is the
+    # value of a label outside it.
     def label?(text)
       text.empty? || (text.length <= MAX_LABEL && text.match?(LABEL))
     end
