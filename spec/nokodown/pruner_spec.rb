@@ -62,6 +62,14 @@ RSpec.describe Nokodown::Pruner do
 
       Nokodown::Dom.text(root).should_not include("likeCount")
     end
+
+    it "keeps template syntax shown as code" do
+      block = "<div class='language-liquid highlighter-rouge'><div class='highlight'><pre><code>{{ page.title }}</code></pre></div></div>"
+      root = content("#{story}#{block}<p><code>{{ site.url }}</code></p><ul><li><code>{{ content }}</code></li></ul>")
+      described_class.new([root], :page).call
+
+      %w[page.title site.url content].each { |name| Nokodown::Dom.text(root).should include("{{ #{name} }}") }
+    end
   end
 
   describe "article pruning with conditional cleaning off" do
