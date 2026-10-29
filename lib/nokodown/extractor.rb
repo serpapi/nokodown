@@ -53,13 +53,15 @@ module Nokodown
       attribution = PostAttribution.new(body).call if ContentLocator::DISCUSSIONS.include?(page_type)
       Boilerplate.new(body).call
       ProductReviews.new(body).call if product_page
-      teasers = Teasers.new(body, @url, urls, page_type).call
       selection = ContentLocator.new(body, page_type: page_type).call
+      # Writing the attributions numbers the elements anew.
       attribution&.write(selection.nodes)
-      return [Teasers.strip(cleaned_article(selection.nodes, page_type), teasers), :article] if selection.mode == :article
+      teasers = Teasers.new(body, @url, urls, page_type).call
+      nodes = selection.nodes
+      return [Teasers.strip(cleaned_article(nodes, page_type), teasers), :article] if selection.mode == :article
 
-      Pruner.new(selection.nodes, :page).call
-      [Teasers.strip(selection.nodes, teasers), :page]
+      Pruner.new(nodes, :page).call
+      [Teasers.strip(nodes, teasers), :page]
     end
 
     # Like Readability, fall back to lighter cleaning when conditional cleaning

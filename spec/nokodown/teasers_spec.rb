@@ -144,6 +144,30 @@ RSpec.describe Nokodown::Teasers do
     markdown(html, "https://www.example.com/en-us/robotic-lawn-mowers").should include("Robotic mower 2")
   end
 
+  it "drops the threads listed below a thread and keeps every post, with its attribution" do
+    replies = {
+      "wren" => "My starter smells like nail polish remover after two days in the fridge. Is it ruined, or hungry?",
+      "basil" => "Just hungry. The acetone smell means the yeast ran out of food, so feed it twice in the warmth.",
+      "sage" => "Agreed with basil. Keep it on the counter and it will smell sweet and yeasty again within a day."
+    }
+    posts = replies.map do |name, text|
+      "<div class='post'><div class='meta'><span class='username'>#{name}</span> " \
+        "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time> <span>via the mobile app</span> " \
+        "<span>edited twice today</span> <span>one more label here</span></div>" \
+        "<div class='content'><p>#{text}</p></div></div>"
+    end
+    threads = ["Starter not rising after a week", "Best flour for a rye starter", "How often to feed a starter"]
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<h1>Starter smells like acetone</h1><div class='posts'>#{posts.join}</div>" \
+           "<section><h2>Similar threads</h2><div class='grid'>#{cards(threads, '/threads/')}</div></section>" \
+           "</main></body></html>"
+
+    text = Nokodown.to_markdown(html, url: "https://forum.example.com/threads/starter")
+    text.should include("**sage** · May 3, 2024")
+    text.should include("smell sweet and yeasty")
+    text.should_not include("Best flour for a rye starter")
+  end
+
   it "keeps a list of links in the prose" do
     items = stories.map { |title| "<li><a href='/docs/#{title.length}'>#{title}</a> explains the next step.</li>" }
 
