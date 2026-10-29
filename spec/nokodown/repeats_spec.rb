@@ -64,6 +64,12 @@ RSpec.describe Nokodown::Markdown::Repeats do
         "[Stovetop kettle](https://example.com/kettles/1)\n\n### Stovetop kettle\n\nHolds 1.5 litres."
     end
 
+    it "keeps a list of images under a heading of symbols" do
+      html = "<h2>🎁</h2><p>Gifts we picked.</p><ul><li><img src='/a.jpg' alt='Red scarf'></li><li><img src='/b.jpg' alt='Wool hat'></li></ul>" \
+             "<h2>Prices</h2><p>From $10.</p>"
+      convert(html).should include("- ![Red scarf](https://example.com/a.jpg)")
+    end
+
     it "drops a list whose items are the headings of the page" do
       html = "<ul><li>Overview</li><li>Specifications</li></ul><h2>Overview</h2>#{intro}<h2>Specifications</h2><p>85 grams.</p>"
       convert(html).should == "## Overview\n\nFits a one litre pot and boils water in three minutes.\n\n## Specifications\n\n85 grams."

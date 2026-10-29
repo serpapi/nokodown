@@ -128,9 +128,10 @@ module Nokodown
       end
 
       # A list whose every item is a heading of the page is a table of
-      # contents or a strip of tabs.
+      # contents or a strip of tabs. Items of images or symbols name nothing.
       def drop_heading_lists(blocks)
         headings = blocks.select { |block| block.kind == :heading }.map { |block| squash(Cleanup.heading_text(block)) }.to_set
+        headings.delete("")
         return blocks if headings.size < 2
 
         blocks.reject do |block|
