@@ -19,6 +19,7 @@ module Nokodown
     BUTTON_WORD = /btn|button|cta/.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
+    HEADINGS = "h1, h2, h3, h4, h5, h6"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
@@ -192,8 +193,15 @@ module Nokodown
       return if clusters.empty? || clusters_dominate?(root, clusters)
 
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
-        remove(node) if link_cluster?(node) && !in_data_table?(node)
+        remove(node) if link_cluster?(node) && !in_data_table?(node) && !teaser_header?(node)
       end
+    end
+
+    # One linked heading with its date and author links heads a teaser, not
+    # a menu, however short the title: in Chinese or Japanese it fits in a
+    # dozen characters. Menus of linked headings have several.
+    def teaser_header?(node)
+      node.css("a[href]").count { |link| Dom.ancestors_named(link, *Dom::HEADINGS).any? || link.at_css(HEADINGS) } == 1
     end
 
     # On an index page (an A-Z list, a category grid) the clusters are the

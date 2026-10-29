@@ -43,6 +43,20 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "page pruning" do
+    it "keeps a teaser's short linked title with its date and author links, not a menu of linked headings" do
+      teaser = "<header><h2><a href='/archives/42822'>ショップが新しくなりました</a></h2>" \
+               "<a href='/archives/42822'>2021年03月09日</a> <a href='/author/micasa'>micasa</a></header>"
+      menu = "<div><h3><a href='/men'>Men</a></h3><h3><a href='/women'>Women</a></h3><h3><a href='/sale'>Sale</a></h3></div>"
+      root = content(teaser + story + menu)
+      described_class.new([root], :page).call
+      text = Nokodown::Dom.text(root)
+
+      text.should include("ショップが新しくなりました2021年03月09日 micasa")
+      text.should_not include("Women")
+    end
+  end
+
   describe "article pruning with conditional cleaning off" do
     let(:html) do
       "<p class='byline'>By Jo Pine</p>#{story}#{cards}" \
