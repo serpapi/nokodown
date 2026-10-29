@@ -58,9 +58,10 @@ with `main_content: false`, `:none` for a document without a body.
 - Site navigation, headers, footers, sidebars, breadcrumbs, pagination and
   tables of contents, found through HTML semantics (`nav`, page-level `header`
   and `footer`, ARIA roles, schema.org types) and class/id names. Structure
-  finds the rest: a site header above the page's title however much it
-  holds, a footer by any name that ends a page (not one inside `main` or an
-  article), a breadcrumb trail by its shape in any language (a link to the
+  finds the rest: a site header of menus or notices above the page's title
+  however much it holds, a footer by any name that ends a page (not one
+  inside `main` or an article, nor the footer of a section, a card or a
+  quote), a breadcrumb trail by its shape in any language (a link to the
   home page, then links down the site with separators), and copyright and
   licence lines in the major web languages.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
