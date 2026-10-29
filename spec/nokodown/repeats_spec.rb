@@ -59,6 +59,11 @@ RSpec.describe Nokodown::Markdown::Repeats do
       convert(html).should == "### Pumas win the first leg\n\n4/2/2026"
     end
 
+    it "keeps a link over a heading that repeats its name without it" do
+      convert("<p><a href='/kettles/1'>Stovetop kettle</a></p><h3>Stovetop kettle</h3><p>Holds 1.5 litres.</p>").should ==
+        "[Stovetop kettle](https://example.com/kettles/1)\n\n### Stovetop kettle\n\nHolds 1.5 litres."
+    end
+
     it "drops a list whose items are the headings of the page" do
       html = "<ul><li>Overview</li><li>Specifications</li></ul><h2>Overview</h2>#{intro}<h2>Specifications</h2><p>85 grams.</p>"
       convert(html).should == "## Overview\n\nFits a one litre pot and boils water in three minutes.\n\n## Specifications\n\n85 grams."

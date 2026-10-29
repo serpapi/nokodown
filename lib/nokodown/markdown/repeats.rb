@@ -15,6 +15,7 @@ module Nokodown
       LABEL_LENGTH = 40
       ECHO_WINDOW = 4
       LIST_ITEM = /\A\s*(?:[-*+]|\d+\.)\s+(.*)\z/.freeze
+      LINK_TARGET = /\]\(([^)\s]*)/.freeze
 
       module_function
 
@@ -60,20 +61,17 @@ module Nokodown
         parts.size > 1 ? parts.to_set : Set.new
       end
 
-      # A short label over a heading that contains it ("About" over "About
-      # Jo") is an eyebrow or a tab; a paragraph repeating a heading just
-      # above is the same title rendered twice, unless it links elsewhere. A
-      # label right under a heading of the same level or deeper is that
-      # section's content.
+      # A paragraph repeating a heading just above is the same title
+      # rendered twice, unless it links elsewhere.
       def drop_heading_echoes(blocks)
         blocks.reject.with_index do |block, index|
           next false unless block.kind == :paragraph && !block.text.include?("![")
 
           text = Text.plain(block.text)
-          next true if eyebrow?(blocks, index, text)
+          next true if repeats_heading_below?(blocks, index, text)
 
           !block.text.include?("](") && !section_content?(blocks, index) && !runs_on?(blocks, index) &&
-            repeats_heading?(blocks, index, squash(text))
+            repeats_heading_above?(blocks, index, squash(text))
         end
       end
 
@@ -97,9 +95,12 @@ module Nokodown
         following.nil? || (following.kind == :heading && following.level <= previous.level)
       end
 
-      # Text equal to the heading below it, whatever its length, is that
-      # title rendered twice.
-      def eyebrow?(blocks, index, text)
+      # A short label over a heading that contains it ("About" over "About
+      # Jo") is an eyebrow or a tab, and text of any length equal to the
+      # heading below is that title rendered twice, unless it links to a page
+      # the heading does not. A label right under a heading of the same level
+      # or deeper is that section's content.
+      def repeats_heading_below?(blocks, index, text)
         following = blocks[index + 1]
         following = blocks[index + 2] if following&.kind == :rule
         return false unless following&.kind == :heading && !squash(text).empty?
@@ -108,13 +109,17 @@ module Nokodown
         return false if previous&.kind == :heading && previous.level >= following.level
 
         heading = Cleanup.heading_text(following)
-        return !runs_on?(blocks, index) if squash(heading) == squash(text)
+        return copy_of?(blocks[index], following) && !runs_on?(blocks, index) if squash(heading) == squash(text)
         return false if text.length > LABEL_LENGTH || words(text).size > LABEL_WORDS || text.match?(/[.!?]\z/)
 
         contains_words?(words(heading), words(text))
       end
 
-      def repeats_heading?(blocks, index, text)
+      def copy_of?(paragraph, heading)
+        (paragraph.text.scan(LINK_TARGET) - heading.text.scan(LINK_TARGET)).empty?
+      end
+
+      def repeats_heading_above?(blocks, index, text)
         return false if text.empty?
 
         blocks[[0, index - ECHO_WINDOW].max...index].any? do |block|
