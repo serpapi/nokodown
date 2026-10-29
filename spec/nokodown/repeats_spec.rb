@@ -14,6 +14,11 @@ RSpec.describe Nokodown::Markdown::Repeats do
         "# Trail Stove 2 - Camp Shop\n\nFits a one litre pot and boils water in three minutes."
     end
 
+    it "keeps the first line of a poem that gives the poem its name" do
+      convert("<h1>The aesthete</h1><p>The aesthete,</p><p>the aesthete</p><p>turns left at once</p>").should ==
+        "# The aesthete\n\nThe aesthete,\n\nthe aesthete\n\nturns left at once"
+    end
+
     it "keeps a copy that is all a section holds" do
       convert("<h1>Central Asia - Travel Blog</h1><h3>Tag</h3><p>Central Asia</p>").should ==
         "# Central Asia - Travel Blog\n\n### Tag\n\nCentral Asia"
@@ -41,6 +46,12 @@ RSpec.describe Nokodown::Markdown::Repeats do
     it "keeps a short answer that opens the section above the heading" do
       convert("<h3>Is it free?</h3><p>Yes</p><h3>Yes, but for how long?</h3><p>A year.</p>").should ==
         "### Is it free?\n\nYes\n\n### Yes, but for how long?\n\nA year."
+    end
+
+    it "drops a paragraph of any length that repeats the heading below it" do
+      title = "How to choose the best mascot for an online shop"
+      convert("<h2>Similar</h2><p>#{title}</p><h4><a href='/mascot'>#{title}</a></h4><p>March 23, 2026</p>").should ==
+        "## Similar\n\n#### [#{title}](https://example.com/mascot)\n\nMarch 23, 2026"
     end
 
     it "drops a paragraph that repeats a heading just above" do

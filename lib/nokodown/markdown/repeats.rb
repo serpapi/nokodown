@@ -42,7 +42,7 @@ module Nokodown
         blocks.reject.with_index do |block, position|
           near = (position - index).abs <= TITLE_HEAD
           text = position == index ? nil : title_text(block, near)
-          next false if text.nil? || text.empty? || section_content?(blocks, position)
+          next false if text.nil? || text.empty? || section_content?(blocks, position) || runs_on?(blocks, position)
 
           text == title || (block.kind == :paragraph && near && parts.include?(text))
         end
@@ -72,8 +72,19 @@ module Nokodown
           text = Text.plain(block.text)
           next true if eyebrow?(blocks, index, text)
 
-          !block.text.include?("](") && !section_content?(blocks, index) && repeats_heading?(blocks, index, squash(text))
+          !block.text.include?("](") && !section_content?(blocks, index) && !runs_on?(blocks, index) &&
+            repeats_heading?(blocks, index, squash(text))
         end
+      end
+
+      # A line that runs on into the next, like the first line of a poem
+      # that gives the poem its name, is part of the text.
+      def runs_on?(blocks, index)
+        return false unless blocks[index].kind == :paragraph
+
+        following = blocks[index + 1]
+        Text.plain(blocks[index].text).match?(/[,;:–—-]\z/) ||
+          (following&.kind == :paragraph && Text.plain(following.text).match?(/\A\p{Ll}/))
       end
 
       # A paragraph that is all a section below the title holds ("### Tag",
@@ -86,16 +97,20 @@ module Nokodown
         following.nil? || (following.kind == :heading && following.level <= previous.level)
       end
 
+      # Text equal to the heading below it, whatever its length, is that
+      # title rendered twice.
       def eyebrow?(blocks, index, text)
-        return false if text.length > LABEL_LENGTH || words(text).size > LABEL_WORDS || text.match?(/[.!?]\z/)
-
         following = blocks[(index + 1)..].find { |block| block.kind != :rule }
         return false unless following&.kind == :heading
 
         previous = index.positive? ? blocks[index - 1] : nil
         return false if previous&.kind == :heading && previous.level >= following.level
 
-        contains_words?(words(Cleanup.heading_text(following)), words(text))
+        heading = Cleanup.heading_text(following)
+        return !runs_on?(blocks, index) if squash(heading) == squash(text)
+        return false if text.length > LABEL_LENGTH || words(text).size > LABEL_WORDS || text.match?(/[.!?]\z/)
+
+        contains_words?(words(heading), words(text))
       end
 
       def repeats_heading?(blocks, index, text)
