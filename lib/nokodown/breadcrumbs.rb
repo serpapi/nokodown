@@ -14,13 +14,19 @@ module Nokodown
       \A(?:index|default|home)\.\w+\z
     }xi.freeze
     HOST = %r{\A(?:https?:)?//(?:www\.)?([^/?#]+)}i.freeze
-    SEPARATOR = %r{\A[\s>/»›→\-–|\\·•:~＞〉]+}.freeze
-    ONLY_SEPARATORS = %r{\A[\s>/»›→\-–|\\·•:~＞〉]*\z}.freeze
     # Dashes and colons also join a link to its description in a list of
     # resources ("Salary.com – salaries by zip code"), and a bar to a
     # tagline; a lone link needs a mark that only points down a trail.
-    TRAIL_MARK = %r{[>/»›→\\＞〉|]}.freeze
-    DOWN_MARK = %r{\A\s*[>/»›→\\＞〉]}.freeze
+    DOWN_MARKS = '>/»›→\\\\＞〉'
+    TRAIL_MARKS = "#{DOWN_MARKS}|"
+    MARKS = "#{TRAIL_MARKS}\\-–·•:~"
+    SEPARATOR = /\A[\s#{MARKS}]+/.freeze
+    ONLY_SEPARATORS = /\A[\s#{MARKS}]*\z/.freeze
+    TRAIL_MARK = /[#{TRAIL_MARKS}]/.freeze
+    DOWN_MARK = /\A\s*[#{DOWN_MARKS}]/.freeze
+    # The page's name follows the last link the way each link follows the
+    # one before ("› Page", "-> Page"); other text after it is a sentence.
+    LEAD_MARK = /\A[\s\-–]*[#{TRAIL_MARKS}]/.freeze
     LABEL = /[:：]\z/.freeze
     # "20.07.2026 08:42" after a category link is the post's date line.
     DATE = %r{\d{1,4}[./-]\d{1,2}[./-]\d{1,4}|\d{1,2}:\d{2}}.freeze
@@ -35,12 +41,20 @@ module Nokodown
     # so each container is judged once.
     def trails(body)
       checked = Set.new
-      body.css("a[href]").filter_map do |link|
+      links = body.css("a[href]")
+      site = site_host(links)
+      links.filter_map do |link|
         next if !link["href"].strip.match?(HOME) || checked.include?(Dom.key(link.parent))
 
         node = container(link)
-        node if node && checked.add?(Dom.key(node)) && trail_at?(node, link)
+        node if node && checked.add?(Dom.key(node)) && trail_at?(node, link, site)
       end
+    end
+
+    # The host most links point to is the site's own.
+    def site_host(links)
+      hosts = links.filter_map { |link| link["href"].strip[HOST, 1]&.downcase }
+      hosts.tally.max_by { |_, count| count }&.first
     end
 
     # Up from the home link past the wrappers that add only separators, to
@@ -55,13 +69,20 @@ module Nokodown
       node if node&.element? && node.name != "body"
     end
 
-    def trail_at?(node, home)
+    def trail_at?(node, home, site)
       return false if Dom.text(node).length > MAX_CHARS
 
       links = node.css("a[href]").to_a
       return false unless links.size <= MAX_LINKS && Dom.key(links.first) == Dom.key(home) && same_site?(links)
+      # A lone link to another site's home page credits or cites that site.
+      return false if links.size == 1 && !own_site?(home, site)
 
       trail?(node, gaps(node))
+    end
+
+    def own_site?(link, site)
+      host = link["href"].strip[HOST, 1]&.downcase
+      host.nil? || host == site
     end
 
     # Children are judged one by one, so a container of many links stops the
@@ -108,13 +129,15 @@ module Nokodown
       false
     end
 
-    # A lone home link needs the page's name after it.
+    # A lone home link needs the page's name after it, and so does an
+    # ordered list without marks, or it is a numbered list of links.
     def trail?(node, gaps)
       between = gaps[1...-1]
       trailing = gaps.last
       return false unless label?(gaps.first) && current_page?(trailing)
       return false unless between.all? { |gap| gap.match?(ONLY_SEPARATORS) }
-      return true if node.name == "ol" && (between.any? || !trailing.empty?)
+      return true if node.name == "ol" && !trailing.empty?
+      return false unless trailing.empty? || trailing.match?(LEAD_MARK)
 
       between.empty? ? trailing.match?(DOWN_MARK) : between.any? { |gap| gap.match?(TRAIL_MARK) }
     end

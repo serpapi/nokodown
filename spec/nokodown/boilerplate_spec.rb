@@ -211,6 +211,29 @@ RSpec.describe Nokodown::Boilerplate do
       remaining("<div><a href=\"/\">Home</a> | 20.07.2026 08:42</div>#{prose('Health', 2)}").should include("20.07.2026")
     end
 
+    it "keeps a trail-shaped run of links that a sentence continues" do
+      sentences = {
+        "<p>Open <span><a href=\"/\">Home</a> › <a href=\"/account\">Account</a></span> and pick the order to send back.</p>" =>
+          "Open Home › Account and pick",
+        "<ul><li><a href=\"https://github.com/\">GitHub</a> / <a href=\"https://github.com/rails\">rails</a> is where Rails lives</li></ul>" =>
+          "GitHub / rails is where"
+      }
+      sentences.each { |sentence, text| remaining("#{prose('Returns', 2)}#{sentence}").should include(text) }
+    end
+
+    it "keeps a numbered list of links" do
+      steps = '<ol><li><a href="/">Homepage</a></li><li><a href="/settings">Settings</a></li><li><a href="/settings/close">Close account</a></li></ol>'
+
+      remaining("#{prose('Closing an account', 2)}#{steps}").should include("Close account")
+    end
+
+    it "keeps a credit linking to another site's home page" do
+      html = "<p>See <a href=\"https://museum.example/visit\">opening hours</a> and <a href=\"https://museum.example/shop\">the shop</a>.</p>" \
+             "#{prose('The Roman theatre', 2)}<p>© Photo: <a href=\"http://www.archeotech.ch/\">Archéotech S.A.</a> / SACV</p>"
+
+      remaining(html).should include("Archéotech S.A. / SACV")
+    end
+
     it "keeps a list of other sites, each linked at its home page with a description" do
       html = "#{prose('Salary research', 2)}<ul><li><a href=\"https://www.salary.com/\">Salary.com</a> – salaries by industry and zip code</li>" \
              "<li><a href=\"https://www.homefair.com/\">HomeFair.com</a>: a relocation guide with a salary calculator</li></ul>"

@@ -88,11 +88,19 @@ module Nokodown
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if chrome_element?(node) || chrome_role?(node)
       return if dominant?(node) && !header_above_title?(node)
-      return :guess if @trails.include?(Dom.key(node))
+      return :guess if trail?(node)
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
       MemberPanel.panel?(node) ? :panel : :guess
+    end
+
+    # A trail stands apart from the text around it; one that words lead into
+    # or out of is part of a sentence ("Open Home › Account and pick...").
+    def trail?(node)
+      return false unless @trails.include?(Dom.key(node))
+
+      [node.previous_sibling, node.next_sibling].none? { |sibling| sibling&.text? && !Dom.squish(sibling.content).empty? }
     end
 
     # A link or span in the middle of running text is part of that text,
