@@ -35,14 +35,24 @@ module Nokodown
       # A page's headline may be anything; below it, text without letters (a
       # date, a price, a phone number, but not a year, which names a period)
       # is a paragraph, and so is a sentence, unless it is a card's title,
-      # which names another page.
-      def paragraph?(text, level, linked: false)
-        return false if level == 1
+      # which names another page. Runs last: until then such a heading still
+      # ends a section, so the boilerplate a site sets in heading tags at the
+      # end of a page goes with the other empty sections, and a number under
+      # it is that heading's value, not a counter.
+      def paragraphs(blocks)
+        blocks.map do |block|
+          next block unless block.kind == :heading && block.level > 1
 
+          text = block.text.sub(/\A#+ /, "")
+          paragraph?(text) ? Block.new(:paragraph, Text.escape_line_starts(text)) : block
+        end
+      end
+
+      def paragraph?(text)
         plain = Text.plain(text)
         return !plain.match?(YEARS) unless plain.match?(/\p{L}/)
 
-        !linked && !text.match?(LINK) && sentence?(plain)
+        !text.match?(LINK) && sentence?(plain)
       end
 
       def sentence?(plain)

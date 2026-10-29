@@ -20,6 +20,8 @@ module Nokodown
       # "1.", "1)" and the "1、" of Chinese and Japanese pages.
       TYPED_NUMBER = /\A(\d{1,3})(?:[.)．]\s+|、\s*)/.freeze
       LABEL = /[:：]\z/.freeze
+      # An item's text that would open a list of its own at a line's start.
+      MARKED_TEXT = /\A- (?:\d{1,9}[.)]|[-+*])(?:\s|\z)/.freeze
 
       module_function
 
@@ -129,7 +131,8 @@ module Nokodown
       # Sites wrap a date or a tag in a list of its own, and each entry of a
       # directory in one. A blank line between items of one groups nothing,
       # so side by side they are one list, and alone, beside no other list,
-      # the item is a line of text. Runs last, once the cards CardLinks
+      # the item is a line of text, unless its text would read as a list
+      # item there ("1. Read it aloud."). Runs last, once the cards CardLinks
       # reads are settled.
       def single_items(blocks)
         runs = blocks.each_index.chunk_while { |a, b| single_item?(blocks[a]) && single_item?(blocks[b]) }
@@ -137,7 +140,7 @@ module Nokodown
           first = blocks[run.first]
           next blocks.values_at(*run) unless single_item?(first)
           next [Block.new(:list, run.map { |index| blocks[index].text }.join("\n"))] if run.size > 1
-          next [first] if beside_list?(blocks, run.first)
+          next [first] if beside_list?(blocks, run.first) || first.text.match?(MARKED_TEXT)
 
           [Block.new(:paragraph, first.text.delete_prefix("- "))]
         end

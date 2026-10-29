@@ -137,20 +137,15 @@ module Nokodown
         end
       end
 
+      # Text that long is a paragraph some site wrapped in a heading tag.
       def heading(node)
         text = Emphasis.unwrap(Text.single_line(@inline.render(node.children, heading: true)))
         text = Headings.undecorated(Text.unescape_lone(text.gsub(PERMALINK, "")))
         return [] unless Text.plain(text).match?(/[\p{L}\p{N}]/)
+        return [Block.new(:paragraph, text)] if text.length > 300
 
         level = node.name[1].to_i
-        return [Block.new(:paragraph, Text.escape_line_starts(text))] if paragraph_heading?(node, text, level)
-
         [Block.new(:heading, "#{'#' * level} #{text}", level)]
-      end
-
-      # Text that long is a paragraph some site wrapped in a heading tag.
-      def paragraph_heading?(node, text, level)
-        text.length > 300 || Headings.paragraph?(text, level, linked: Dom.ancestors_named(node, "a").any?)
       end
 
       def list(node)
