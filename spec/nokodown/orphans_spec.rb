@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-RSpec.describe Nokodown::Markdown::Counters do
+RSpec.describe Nokodown::Markdown::Orphans do
   it "drops numbers without a label, such as comment counts and FAQ badges" do
     html = "<p><a href='/author/jo'>Jo Pine</a></p><p>0</p><p>Common questions about the stove.</p>" \
            "<div>1</div><h3>How fast does it boil?</h3><p>Three minutes.</p>"
@@ -20,5 +20,15 @@ RSpec.describe Nokodown::Markdown::Counters do
 
   it "drops slide numbers and a player's empty time readout, but keeps a phone number" do
     convert("<p>1 2 3 4 5 6</p><p>0:00 / 3:45</p><p>Call us.</p><p>777 326 454</p>").should == "Call us.\n\n777 326 454"
+  end
+
+  it "drops labels left without their value, such as a form's fields and a list of tags at the end" do
+    convert("<p>Write to us.</p><p>Your name:</p><p>E-mail:</p><p>Subject:</p><h2>Stoves</h2><p>Light.</p><p>Tags:</p>").should ==
+      "Write to us.\n\n## Stoves\n\nLight."
+  end
+
+  it "keeps a label before its value, a heading or a list" do
+    html = "<p>Price:</p><p>$40</p><p>Reviewed article:</p><h2>Weaving in ancient Greece</h2><p>Sizes:</p><ul><li>S</li><li>M</li></ul>"
+    convert(html).should == "Price:\n\n$40\n\nReviewed article:\n\n## Weaving in ancient Greece\n\nSizes:\n\n- S\n- M"
   end
 end
