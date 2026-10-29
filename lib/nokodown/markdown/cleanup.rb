@@ -22,7 +22,7 @@ module Nokodown
 
       # images: the Renderer's rendered_images.
       def call(blocks, images = {})
-        blocks = CodeBlock.without_labels(blocks.reject { |block| noise?(block) })
+        blocks = TypedLists.call(CodeBlock.without_labels(blocks.reject { |block| noise?(block) }))
         blocks = dedupe(blocks)
         blocks = drop_repeated_runs(blocks)
         blocks = shorten_repeated_quotes(blocks)

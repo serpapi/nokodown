@@ -651,6 +651,11 @@ RSpec.describe "Markdown conversion" do
       convert("<ol><li><ol><li>a</li><li>b</li></ol></li><li>c</li></ol>").should == "1. 1. a\n   2. b\n2. c"
     end
 
+    it "writes paragraphs that all open with one glyph as a list" do
+      convert("<p>• Fast</p><p>• Safe</p><p>Also:</p><p>▪ Free shipping<br>▪ Returns</p><p>Verdict</p><p>✓ Light</p><p>✗ Loud</p>").should ==
+        "- Fast\n- Safe\n\nAlso:\n\n- Free shipping\n- Returns\n\nVerdict\n\n✓ Light\n\n✗ Loud"
+    end
+
     it "renders definition lists as term and definition pairs" do
       convert("<dl><dt>Weight</dt><dd>540 g</dd><dt>Colors</dt><dd>Brown</dd><dd>Black</dd></dl>").should ==
         "- **Weight**: 540 g\n- **Colors**: Brown; Black"
