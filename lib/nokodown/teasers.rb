@@ -23,6 +23,8 @@ module Nokodown
     Run = Struct.new(:parent, :items, :targets, :chars)
     # alike: the items are pages like this one; below: pages under it.
     Block = Struct.new(:nodes, :title, :alike, :below, :chars)
+    # An item with its headings and the keys of the links in them.
+    Card = Struct.new(:node, :headings, :title_links)
 
     MIN_ITEMS = 3
     MAX_ITEM_CHARS = 400
@@ -67,7 +69,8 @@ module Nokodown
     def self.strip(nodes, keys)
       return nodes if keys.empty?
 
-      found = nodes.flat_map { |root| root.css("*").select { |node| keys.include?(Dom.key(node)) } }
+      found = []
+      nodes.each { |root| root.traverse { |node| found << node if node.element? && keys.include?(Dom.key(node)) } }
       found.reject! { |node| node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) } }
       left = nodes.sum { |root| words(root) } - found.sum { |node| words(node) }
       return nodes if left < MIN_WORDS_LEFT
@@ -178,8 +181,10 @@ module Nokodown
       @declared && body && !dominant?(block)
     end
 
+    # Not matches?, which Nokolexbor runs over the whole document.
     def protected?(node)
-      node.matches?(PROTECTED) || !node.at_css(PROTECTED).nil?
+      main = %w[h1 main].include?(node.name) || node["role"] == "main"
+      main || node["itemprop"].to_s.split.include?("articleBody") || !node.at_css(PROTECTED).nil?
     end
 
     # A post's body and its parent, which also holds its attachments.
@@ -231,14 +236,25 @@ module Nokodown
     end
 
     # Columns of a layout can pass for teasers too, so a run holding another
-    # one is the layout around it.
+    # one is the layout around it. Children come before their parents.
     def runs
-      found = @body.css("*").flat_map do |parent|
-        children = parent.element_children
-        children.size < MIN_ITEMS ? [] : shapes(parent).filter_map { |items| run(parent, items) }
+      found = []
+      holding = Set.new
+      @body.traverse do |node|
+        next if !node.element? || node.name == "body"
+
+        children = node.element_children
+        if children.any? { |child| holding.include?(Dom.key(child)) }
+          holding << Dom.key(node)
+          next
+        end
+        next if children.size < MIN_ITEMS
+
+        here = shapes(node).filter_map { |items| run(node, items) }
+        found.concat(here)
+        holding << Dom.key(node) unless here.empty?
       end
-      outer = found.flat_map { |run| run.parent.ancestors.map { |ancestor| Dom.key(ancestor) } }.compact.to_set
-      found.reject { |run| outer.include?(Dom.key(run.parent)) }
+      found
     end
 
     # Children of the same tag and first class, in unbroken runs: text
@@ -279,25 +295,43 @@ module Nokodown
       chars = items.sum { |item| @stats.chars(item) }
       return if chars > MAX_ITEM_CHARS * items.size
 
-      links = primary_links(items)
-      return if links.nil? || items.zip(links).count { |item, link| teaser?(item, link) } < items.size * RICH_SHARE
+      cards = items.map { |item| card(item) }
+      links = primary_links(cards)
+      return if links.nil? || !rich?(cards, links)
 
       targets = links.map { |link| link && target(link["href"]) }
       Run.new(parent, items, targets, chars) if distinct_targets?(targets.compact, items.size)
     end
 
+    def card(item)
+      headings = item.css(HEADING)
+      title_links = headings.flat_map { |heading| heading.css("a[href]").map { |link| Dom.key(link) } }.to_set
+      Card.new(item, headings, title_links)
+    end
+
     # Most items of a list have a link: gives up once more than a fifth have
     # none.
-    def primary_links(items)
-      allowed = items.size * (1 - DISTINCT_SHARE)
+    def primary_links(cards)
+      allowed = cards.size * (1 - DISTINCT_SHARE)
       missing = 0
-      items.map do |item|
-        link = primary_link(item)
+      cards.map do |card|
+        link = primary_link(card)
         missing += 1 unless link
         return nil if missing > allowed
 
         link
       end
+    end
+
+    # Gives up once fewer than half the items can be teasers.
+    def rich?(cards, links)
+      allowed = cards.size * (1 - RICH_SHARE)
+      misses = 0
+      cards.zip(links).each do |card, link|
+        misses += 1 unless teaser?(card, link)
+        return false if misses > allowed
+      end
+      true
     end
 
     def distinct_targets?(targets, size)
@@ -306,18 +340,16 @@ module Nokodown
 
     # The title link, or else the first link with text: an image link often
     # comes first.
-    def primary_link(item)
-      return item if item.name == "a"
+    def primary_link(card)
+      return card.node if card.node.name == "a"
 
-      links = item.css("a[href]")
-      headings = item.css(HEADING)
-      title = links.find { |link| title_link?(link, headings) } unless headings.empty?
+      links = card.node.css("a[href]")
+      title = links.find { |link| title_link?(link, card) } unless card.headings.empty?
       title || links.find { |link| @stats.chars(link) > 1 } || links.first
     end
 
-    def title_link?(link, headings)
-      key = Dom.key(link)
-      link.at_css(HEADING) || headings.any? { |heading| heading.css("a[href]").any? { |inner| Dom.key(inner) == key } }
+    def title_link?(link, card)
+      card.title_links.include?(Dom.key(link)) || !link.at_css(HEADING).nil?
     end
 
     # A teaser shows a thumbnail or a date, or is a card: its title is a
@@ -325,23 +357,23 @@ module Nokodown
     # ("Load data with batch jobs") is a list in the prose, a card whose
     # heading is not its link is content with a call to action ("Deposit ...
     # More →"), and a column of links is a menu.
-    def teaser?(item, link)
-      headings = item.css(HEADING)
-      return false if link.nil? || (!headings.empty? && !title_link?(link, headings))
+    def teaser?(card, link)
+      item = card.node
+      return false if link.nil? || (!card.headings.empty? && !title_link?(link, card))
       return true if item.at_css(MEDIA)
 
-      card = Dom.key(link) == Dom.key(item)
-      return false unless card || !headings.empty? || Dom.text(item).match?(DATE)
+      whole = Dom.key(link) == Dom.key(item)
+      return false unless whole || !card.headings.empty? || Dom.text(item).match?(DATE)
 
-      beside_title(item, card, headings) >= RICH_TEXT
+      beside_title(card, whole) >= RICH_TEXT
     end
 
     # Text besides the title: a card link holds all of it.
-    def beside_title(item, card, headings)
-      return @stats.text_chars(item) unless card
-      return 0 if headings.empty?
+    def beside_title(card, whole)
+      return @stats.text_chars(card.node) unless whole
+      return 0 if card.headings.empty?
 
-      @stats.chars(item) - headings.sum { |heading| @stats.chars(heading) }
+      @stats.chars(card.node) - card.headings.sum { |heading| @stats.chars(heading) }
     end
 
     # Another page of this site, not a file on it, nor a post further down
