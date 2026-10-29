@@ -154,7 +154,7 @@ module Nokodown
         width > 1 && cells.size == 1 && span(cells.first, "colspan", MAX_COLSPAN) >= width
       end
 
-      # The blocks of each cell.
+      # A row across the table keeps its cell's blocks to write them below it.
       def place_cells(row, line, spans)
         column = 0
         Tables.cells(row).map do |cell|
