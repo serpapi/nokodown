@@ -356,4 +356,14 @@ RSpec.describe Nokodown::Teasers do
 
     blocks(html, "https://gov.example.org/video-detail?id=105", nil).should_not be_empty
   end
+
+  it "weighs each titled box, not all of them together, against the page's own text" do
+    boxes = %w[popular latest picks].map do |name|
+      "<div class='#{name}'><h3>#{name.capitalize}</h3>" \
+        "#{cards(stories.map { |title| "#{name.capitalize}: #{title}" }, '/blog/', '<p>What changes, and for whom.</p>')}</div>"
+    end
+    html = "<h1>Bridge reopens</h1>#{story(2)}#{boxes.join}"
+
+    blocks(html, article_url).size.should == 6
+  end
 end

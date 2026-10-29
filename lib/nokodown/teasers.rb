@@ -127,9 +127,10 @@ module Nokodown
       @total = @stats.chars(@body)
       @blocks = blocks
       hub = sections
-      body = body?
+      @own_text = @stats.text_chars(@body) - @blocks.sum { |block| text_of(block) }
+      listing = listing?
       @blocks.each_with_object(Set.new) do |block, keys|
-        next if hub.include?(Dom.key(block.nodes.first)) || !removable?(block, body)
+        next if hub.include?(Dom.key(block.nodes.first)) || !removable?(block, listing)
 
         (block.nodes + [block.title]).compact.each { |node| keys << Dom.key(node) unless Dom.in_code?(node) }
       end
@@ -151,12 +152,11 @@ module Nokodown
       end
     end
 
-    # Text of the page's own that outweighs the titled boxes, as an article
-    # does its sidebars; a hub of titled sections has a line of intro at most.
-    def body?
-      own_text = @stats.text_chars(@body) - @blocks.sum { |block| text_of(block) }
-      boxes = @blocks.select { |block| block.title && !block.alike }.sum(&:chars)
-      (own_text >= MIN_BODY && own_text >= boxes) || listing?
+    # Text of the page's own that outweighs a titled box, as an article does
+    # each of its sidebars; a hub of titled sections has a line of intro at
+    # most.
+    def body_beside?(block)
+      @own_text >= MIN_BODY && @own_text >= block.chars
     end
 
     # Titled blocks built alike, one after another, are the sections of a
@@ -179,12 +179,12 @@ module Nokodown
 
     # Links to pages below this one are its own sections, and attachments are
     # part of the post that holds them.
-    def removable?(block, body)
+    def removable?(block, listing)
       return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
       return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
       return text_before(block) >= MIN_TEXT_BEFORE if block.alike
 
-      @declared && body && !dominant?(block)
+      @declared && !dominant?(block) && (listing || body_beside?(block))
     end
 
     # Not matches?, which Nokolexbor runs over the whole document.
