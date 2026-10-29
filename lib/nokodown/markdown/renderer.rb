@@ -30,6 +30,7 @@ module Nokodown
         @links = links
         @depth = 0
         @contains_block = {}
+        @tables = {}
         @in_cell = false
       end
 
@@ -109,6 +110,17 @@ module Nokodown
 
       private
 
+      # A table that falls back to its layout renders its cells again, so
+      # without this a table nested n deep would be rendered 2^n times. A
+      # cell renders its content apart from the layout, so each table is
+      # rendered once in each.
+      def table(node)
+        key = Dom.key(node)
+        return Table.new(self, node).blocks unless key
+
+        (@tables[[key, @in_cell]] ||= Table.new(self, node).blocks).map(&:dup)
+      end
+
       def block_element?(node)
         Dom::BLOCK.include?(node.name) && !Dom.inline_div?(node)
       end
@@ -132,7 +144,7 @@ module Nokodown
         when "blockquote" then quote(node)
         when "pre" then CodeBlock.prose?(node) ? children_blocks(node) : CodeBlock.render(node, CodeBlock.preformatted(node))
         when "code" then CodeBlock.render(node, node.content)
-        when "table" then Table.new(self, node).blocks
+        when "table" then table(node)
         when "dl" then definition_list(node)
         when "hr" then []
         when "iframe" then embed(node)
