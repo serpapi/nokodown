@@ -369,11 +369,13 @@ module Nokodown
       links = primary_links(cards)
       return if links.nil?
 
+      rich = rich?(cards, links)
+      return unless rich || bare?(parent, cards, links)
+
+      # Resolving every link is the costly part, so it waits for the shape.
       targets = links.map { |link| link && target(link["href"]) }
       return unless distinct_targets?(targets.compact, items.size)
-      return Run.new(parent, items, targets, chars, false) if rich?(cards, links)
-
-      return unless bare?(parent, cards, links)
+      return Run.new(parent, items, targets, chars, false) if rich
 
       kinds = kinds(targets)
       Run.new(parent, items, targets, chars, true) if alike?(kinds, items.size) || named?(kinds, items.size)
