@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "cgi"
 require "json"
 
 module Nokodown
@@ -25,6 +24,7 @@ module Nokodown
     HEADING_END = /\A([?!.)\]"'”’]*)(?:\s[-–—]\s|\s*[|:·•,])/.freeze
     HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?/?(?:index\.[a-z]+|[a-z]{2}(?:[-_][a-z]{2})?/?)?(?:[?#].*)?\z}i.freeze
     LOGO_NAME = /logo|brand|site[-_]?(?:title|name)/i.freeze
+    ENTITY = /&(?:#\d+|#x\h+|[a-z][a-z\d]*);/i.freeze
 
     TITLE_KEYS = %w[dc:title dcterm:title og:title weibo:article:title weibo:webpage:title title twitter:title parsely-title].freeze
     BYLINE_KEYS = %w[dc:creator dcterm:creator author parsely-author].freeze
@@ -308,9 +308,16 @@ module Nokodown
       return if value.nil?
 
       value = value.to_s
-      value = CGI.unescapeHTML(value) if value.match?(/&(?:#\d+|#x\h+|[a-z]+);/i)
+      value = unescape(value) if value.match?(ENTITY)
       value = Dom.squish(value)
       value.empty? ? nil : value
+    end
+
+    # JSON-LD strings and twice-escaped attributes keep their entities
+    # ("MLS&reg;"). Lexbor decodes every HTML entity in a textarea's text,
+    # which it does not parse for tags.
+    def unescape(value)
+      Nokolexbor::HTML("<textarea>#{value.gsub("<", "&lt;")}</textarea>").at_css("textarea").text
     end
   end
 end

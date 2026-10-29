@@ -73,6 +73,12 @@ RSpec.describe Nokodown::Metadata do
     result[:page_type].should == :product
   end
 
+  it "decodes the named entities left in metadata values" do
+    json = { "@type" => "Article", "headline" => "Lot B, Kitchener: MLS&reg; #1038 &ndash; Caf&eacute; &lt;3" }
+
+    metadata(%(<script type="application/ld+json">#{JSON.generate(json)}</script>))[:title].should == "Lot B, Kitchener: MLS® #1038 – Café <3"
+  end
+
   it "removes the site name from the title" do
     metadata(%(<title>Release notes | Example</title><meta property="og:site_name" content="Example">))[:title].should == "Release notes"
   end
