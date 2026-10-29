@@ -247,6 +247,47 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "links within the page" do
+    let(:faq) do
+      questions = ["How do I register?", "Can I change my name?", "Why was my post removed?"]
+      toc = questions.each_with_index.map { |question, index| "<li><a href='#q#{index}'>#{question}</a></li>" }.join
+      answers = questions.each_with_index.map do |question, index|
+        "<h3 id='q#{index}'>#{question}</h3><p>Answer #{index}: the forum explains this at length in a paragraph.</p>" \
+          "<p><a href='#faqtop'>Back to top</a></p>"
+      end
+      "<a name='faqtop'></a><h2>Contents</h2><ul>#{toc}</ul>#{answers.join}"
+    end
+
+    it "drops a table of contents and the links back to the top" do
+      %i[page article].each do |mode|
+        root = content("#{story}#{faq}")
+
+        described_class.new([root], mode).call
+
+        text = Nokodown::Dom.text(root)
+        text.scan("How do I register?").size.should == 1
+        text.should include("Answer 2")
+        text.should_not include("Back to top")
+        text.should_not include("Contents")
+      end
+    end
+
+    it "keeps footnote marks, back-references and questions that open their answers" do
+      notes = "<p>The bridge reopened.<sup><a href='#n1'>1</a></sup> Crews worked fast.<sup><a href='#n2'>2</a></sup></p>" \
+              "<ol><li id='n1'><a href='#r1'>↑</a> City press release, May 2026.</li>" \
+              "<li id='n2'><a href='#r2'>↑</a> Interview with the site manager.</li></ol>"
+      accordion = "<div id='a1'><a href='#a1'>Opening hours</a><div>From six to ten every day.</div></div>"
+      root = content("#{story}#{notes}#{accordion}")
+
+      described_class.new([root], :page).call
+
+      text = Nokodown::Dom.text(root)
+      text.should include("reopened.1")
+      text.should include("↑ City press release")
+      text.should include("Opening hours")
+    end
+  end
+
   describe "footers by any name" do
     let(:report) do
       "#{story}<p>The city will repaint the railings next spring, when river traffic is light and scaffolding can hang over the water.</p>"

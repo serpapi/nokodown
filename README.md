@@ -61,8 +61,10 @@ with `main_content: false`, `:none` for a document without a body.
 
 - Site navigation, headers, footers, sidebars, breadcrumbs, pagination
   (runs of page numbers, by their shape too) and archive calendars of day
-  links, and tables of contents, found through HTML semantics (`nav`, page-level `header`
-  and `footer`, ARIA roles, schema.org types) and class/id names. Structure
+  links, tables of contents and links back to the top (by class name, or as
+  links to points on the page itself), found through HTML semantics (`nav`,
+  page-level `header` and `footer`, ARIA roles, schema.org types) and
+  class/id names. Structure
   finds the rest: a site header of menus or notices above the page's title
   however much it holds, a footer by any name that ends a page (not one
   inside `main` or an article, nor the footer of a section, a card or a

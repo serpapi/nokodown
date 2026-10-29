@@ -73,6 +73,7 @@ module Nokodown
       @nodes.each do |root|
         # Before the index decision, which a long pager would sway.
         Pagers.find(root).each { |node| remove_with_label(node, root, Set.new) }
+        remove_in_page_links(root)
         @mode == :article ? prune_article(root) : prune_page(root)
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
@@ -96,6 +97,13 @@ module Nokodown
     end
 
     private
+
+    def remove_in_page_links(root)
+      @anchors ||= InPageLinks.anchors(root.document)
+      links = InPageLinks.new(root, @anchors, @urls)
+      links.contents.each { |node| remove_with_label(node, root, Set.new) }
+      links.back_links.each { |link| remove(link) }
+    end
 
     # A page whose side columns made it look like an index is judged again
     # without them, but no page becomes an index by losing them.
