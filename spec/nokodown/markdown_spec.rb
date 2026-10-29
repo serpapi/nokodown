@@ -219,6 +219,11 @@ RSpec.describe "Markdown conversion" do
                               "![Portrait](https://example.com/me.jpg) The whole paragraph is set in bold and italics."
     end
 
+    it "drops emphasis around all of a cell's text after its images" do
+      html = '<table><tr><th>Country</th><th>Capital</th></tr><tr><td><img src="/it.png" alt="flag"><b>Italy</b></td><td>Rome</td></tr></table>'
+      convert(html).should == "| Country | Capital |\n| --- | --- |\n| ![flag](https://example.com/it.png) Italy | Rome |"
+    end
+
     it "marks emphasis that spans paragraphs in each paragraph" do
       convert("<p>Meanings: <i>1. To work in vain.<br><br>2. A <b>pointless</b> task.</i></p>").should ==
         "Meanings: *1. To work in vain.*\n\n2. A **pointless** task."
@@ -1043,6 +1048,10 @@ RSpec.describe "Markdown conversion" do
     it "keeps the line that introduces glyph lines in one paragraph apart from the list" do
       convert("<p><b>Safety notes:</b><br>\u2022 Do not drop.<br>\u2022 Keep dry.</p><p>Targeting:<br>🔹 Age<br>🔹 Location</p>").should ==
         "**Safety notes:**\n\n- Do not drop.\n- Keep dry.\n\nTargeting:\n\n- Age\n- Location"
+    end
+
+    it "keeps a line and the one glyph line below it together" do
+      convert("<p>Note:<br>• Keep dry.</p>").should == "Note:\n• Keep dry."
     end
 
     it "joins numbered lists whose numbering runs on" do
