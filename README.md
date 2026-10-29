@@ -43,7 +43,9 @@ browser reads them, by their `<meta charset>` or XML declaration, except that
 bytes which read as UTF-8 are UTF-8 whatever the page declares, and the
 encoding of a page that declares none is told from its bytes. UTF-8 text that
 was once misread as Windows-1252 ("cafÃ©") is repaired, and invalid bytes are
-dropped.
+dropped. A body that is not a page at all, such as a PDF, an image or an
+archive served as HTML, or bytes made largely of control characters, gives
+empty Markdown and `mode` `:none`.
 
 | Option | Default | |
 | --- | --- | --- |
