@@ -43,7 +43,9 @@ browser reads them, by their `<meta charset>` or XML declaration, except that
 bytes which read as UTF-8 are UTF-8 whatever the page declares, and the
 encoding of a page that declares none is told from its bytes. UTF-8 text that
 was once misread as Windows-1252 ("cafÃ©") is repaired, and invalid bytes are
-dropped.
+dropped. A body that is not a page at all, such as a PDF, an image or an
+archive served as HTML, or bytes made largely of control characters, gives
+empty Markdown and `mode` `:none`.
 
 | Option | Default | |
 | --- | --- | --- |
@@ -187,10 +189,16 @@ region, or most of the page's text, is never removed because of its class name.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data
-   tables while layout tables are unwrapped, definition lists, details, TeX
-   from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
-   other scripts as 2^(n-1) and a_n. Text is escaped only where it would
-   otherwise change meaning.
+   tables while layout tables are unwrapped, and a list of "name: value" lines
+   for a two-column table without column names, definition lists, details,
+   TeX from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
+   other scripts as 2^(n-1) and a_n. A `<pre>` whose lines are set with `<br>`
+   or `<p>` and read as sentences, as site builders write product
+   descriptions, is text, not code. A label and its value, or a number and
+   its unit, set in sibling elements share a line ("Type: Condo"), and words,
+   numbers and dates that adjacent elements run together are spaced
+   ("20.07 2026"). Text is escaped only where it would otherwise change
+   meaning.
 
 ## Quality
 

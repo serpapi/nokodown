@@ -35,6 +35,19 @@ RSpec.describe "Markdown conversion" do
                               "[admin](https://example.com/u/admin) 24/04/2022\n\n**20h30 vendredi**, i**NP**ut, j**ährlich**, 2024年, Model 3"
     end
 
+    it "spaces numbers, prices and dates that adjacent elements run together" do
+      html = "<p>20.07<span>2026</span>, <time>October 5, 2024</time><span>1 min</span>, <time>2021年9月6日</time><time>2025年2月18日</time></p>" \
+             "<p><span>350.000đ</span><span>Đã gồm VAT</span> <span>KABAR DAERAH</span><span>November</span> " \
+             "<span>delivered</span><span>£199</span> <span>admin</span><span>اخبار</span></p>"
+      convert(html).should == "20.07 2026, October 5, 2024 1 min, 2021年9月6日 2025年2月18日\n\n" \
+                              "350.000đ Đã gồm VAT KABAR DAERAH November delivered £199 admin اخبار"
+    end
+
+    it "keeps a counter's digits and text split by a comment together" do
+      convert("<p><span>1</span><span>2</span><span>8</span> views, page 4<!-- -->2, iPhone<!-- -->Case</p>").should ==
+        "128 views, page 42, iPhoneCase"
+    end
+
     it "keeps a word broken by <wbr> whole" do
       convert("<h3>add<wbr>Listener</h3><p>report<wbr>2024.pdf</p>").should == "### addListener\n\nreport2024.pdf"
     end
@@ -63,6 +76,17 @@ RSpec.describe "Markdown conversion" do
 
     it "does not take a label or a sentence for a number's unit" do
       convert("<h3>Rooms</h3><p>3</p><p>Baths:</p><p>2</p><p>Pick a page.</p>").should == "### Rooms\n\n3\n\nBaths: 2\n\nPick a page."
+    end
+
+    it "joins a label only to a value its sibling element holds" do
+      html = "<div><p>Thanks for watching</p><div><div><span>Date:</span></div><div>2026. 08. 10.</div></div>" \
+             '<div><div>Tags:</div><div> </div></div></div><div><a href="/list">Add to list</a></div>'
+      convert(html).should == "Thanks for watching\n\nDate: 2026. 08. 10.\n\nTags:\n\n[Add to list](https://example.com/list)"
+    end
+
+    it "takes a number after a name for that name's value, not the next name's" do
+      html = "<div><p>Main Floor</p><p>1045</p><p>Second Floor</p><p>Loft</p><p>440</p><p>Stories</p><p>1.5</p><p>Basement</p></div>"
+      convert(html).should == "Main Floor\n\n1045\n\nSecond Floor\n\nLoft\n\n440\n\nStories\n\n1.5\n\nBasement"
     end
 
     it "drops decorative separator lines" do
@@ -174,6 +198,11 @@ RSpec.describe "Markdown conversion" do
              '<h2><i>Title</i></h2><p>See <b><a href="/a">this</a></b> and <a href="/b"><i>that</i></a>.</p>'
       convert(html).should == "- Bold item\n\n| Key | Value |\n| --- | --- |\n| a | 1 |\n\n## Title\n\n" \
                               "See [this](https://example.com/a) and [that](https://example.com/b)."
+    end
+
+    it "marks emphasis that spans paragraphs in each paragraph" do
+      convert("<p>Meanings: <i>1. To work in vain.<br><br>2. A <b>pointless</b> task.</i></p>").should ==
+        "Meanings: *1. To work in vain.*\n\n2. A **pointless** task."
     end
   end
 
@@ -910,6 +939,13 @@ RSpec.describe "Markdown conversion" do
         "```js\nlet a = 1\n```\n\n```python\nprint(1)\n```\n\nOutput\n\n```\n1\n```"
     end
 
+    it "writes a description that a site builder set in <pre> as text" do
+      html = "<pre data-hook=\"description\">Get to know your new favorite tee, made from a soft cotton jersey that keeps its shape." \
+             "<br><br>- Fabric: 96% polyester<br>- Regular fit</pre><pre>Usage: tool [options]<br>Run the tool on every file in the folder.</pre>"
+      convert(html).should == "Get to know your new favorite tee, made from a soft cotton jersey that keeps its shape.\n\n" \
+                              "- Fabric: 96% polyester\n- Regular fit\n\n```\nUsage: tool [options]\nRun the tool on every file in the folder.\n```"
+    end
+
     it "uses a longer fence when the code contains one" do
       convert("<pre>```\ninner\n```</pre>").should == "````\n```\ninner\n```\n````"
     end
@@ -970,6 +1006,18 @@ RSpec.describe "Markdown conversion" do
     it "writes a title row spanning the table above it" do
       html = '<table><tr><th colspan="2">Specs</th></tr><tr><th>Key</th><th>Value</th></tr><tr><td>Weight</td><td>3 kg</td></tr></table>'
       convert(html).should == "Specs\n\n| Key | Value |\n| --- | --- |\n| Weight | 3 kg |"
+    end
+
+    it "keeps rows across a table of names and values in their place" do
+      html = '<table><tr><td colspan="2">Acme Films</td></tr><tr><th>Website:</th><td>acme.org</td></tr>' \
+             '<tr><td colspan="2">Film Festival</td></tr><tr><th>Website:</th><td>festival.org</td></tr></table>'
+      convert(html).should == "- Acme Films\n- Website: acme.org\n- Film Festival\n- Website: festival.org"
+    end
+
+    it "writes a two-column table without column names as a list of names and values" do
+      rows = [%w[Power 3\ W], %w[Voltage 12\ V], ["Sizes", "S|M"], %w[Class III], ["Note:", "dry"], %w[Mass 0.25\ kg]]
+      html = "<table>#{rows.map { |name, value| "<tr><td>#{name}</td><td>#{value}</td></tr>" }.join}</table>"
+      convert(html).should == "- Power: 3 W\n- Voltage: 12 V\n- Sizes: S|M\n- Class: III\n- Note: dry\n- Mass: 0.25 kg"
     end
 
     it "keeps a header row whose other cells are blank" do
