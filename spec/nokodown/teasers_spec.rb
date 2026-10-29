@@ -465,16 +465,6 @@ RSpec.describe Nokodown::Teasers do
     text.should_not include(stories.first)
   end
 
-  it "counts the words of a paragraph set as a heading toward what the teasers leave" do
-    html = "<div class='story'><h5>#{story(1)[3..-5]}</h5><div class='box'>#{cards(stories, '/blog/')}</div></div>"
-    root = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css(".story")
-    Nokodown::Dom.assign_keys(root)
-
-    described_class.strip([root], Set[Nokodown::Dom.key(root.at_css(".box"))])
-    root.content.should include("cracked bearings")
-    root.content.should_not include("School board")
-  end
-
   it "keeps a list under a title that the page's address names" do
     html = "<h1>Bridge reopens</h1>#{story(1)}<section><h2>Harbor bridge news</h2>" \
            "<div class='grid'>#{cards(stories, '/')}</div></section>"

@@ -116,12 +116,10 @@ module Nokodown
     end
     private_class_method :remove_emptied
 
-    # Words outside headings. A heading longer than any title is a paragraph
-    # set in a heading's type.
+    # Words outside headings.
     def self.words(node)
       return node.content.scan(WORD).size if node.text?
-      return 0 unless node.element?
-      return 0 if (Dom.heading?(node) || node["role"] == "heading") && Dom.text(node).length <= MAX_HEADING
+      return 0 if !node.element? || Dom.heading?(node) || node["role"] == "heading"
 
       node.children.sum { |child| words(child) }
     end
