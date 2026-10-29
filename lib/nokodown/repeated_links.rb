@@ -97,8 +97,15 @@ module Nokodown
 
     def blank_side?(node, direction)
       sibling = node.send(direction)
-      sibling = sibling.send(direction) while sibling && Dom.text(sibling).empty?
+      sibling = sibling.send(direction) while sibling && blank?(sibling)
       sibling.nil?
+    end
+
+    # An image or an embedded video beside the label is content of its own.
+    def blank?(node)
+      return false unless Dom.text(node).empty?
+
+      !node.element? || !(MEDIA.include?(node.name) || node.at_css(MEDIA_SELECTOR))
     end
 
     # On a line of its own, at the end of an excerpt or in a row of

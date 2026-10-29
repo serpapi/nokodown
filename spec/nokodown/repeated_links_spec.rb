@@ -1,11 +1,15 @@
 # frozen_string_literal: true
 
 RSpec.describe Nokodown::RepeatedLinks do
-  def text_after(html)
+  def prune(html)
     root = Nokolexbor::HTML("<body><div class='list'>#{html}</div></body>").at_css("div.list")
     Nokodown::Dom.assign_keys(root)
     described_class.new(root).call
-    Nokodown::Dom.text(root)
+    root
+  end
+
+  def text_after(html)
+    Nokodown::Dom.text(prune(html))
   end
 
   def card(title, extra)
@@ -52,5 +56,12 @@ RSpec.describe Nokodown::RepeatedLinks do
   it "keeps a name over a line of its own" do
     html = "<div><p><a href='/fam/7'>Shepard Steven Trenholm</a></p><p><b><a href='/fam/7'>Henrietta Polley</a></b><br>(1862 - 1927)</p></div>"
     text_after(html).should == "Shepard Steven TrenholmHenrietta Polley(1862 - 1927)"
+  end
+
+  it "removes the label but not an image or a video beside it" do
+    root = prune(card("The harbor bridge reopens", "<div><iframe src='https://www.youtube.com/embed/abc'></iframe><a href='/posts/25'>Leer más</a></div>") +
+                 card("Crews finish early", "<div><a href='/posts/18'><img src='/18.jpg'></a><a href='/posts/18'>Leer más</a></div>"))
+    root.css("iframe, img").size.should == 2
+    Nokodown::Dom.text(root).should_not include("Leer más")
   end
 end
