@@ -2,7 +2,7 @@
 
 module Nokodown
   # Lines of links to the site's own tag, category and label archives:
-  # "Tags: a, b", "Posted in News", a category kicker above the title. They
+  # "Tags: a, b", "Labels: Sea", a category kicker above the title. They
   # say where the page is filed, not what it says. Text between the links
   # (a date, an author) makes the line a byline, which stays. On an archive
   # page such lines are its listing, so nothing goes there.
@@ -12,7 +12,8 @@ module Nokodown
     REL = /(?<![\w-])(?:tag|category)(?![\w-])/i.freeze
     ADDRESS = %r{\A(?:https?:)?//(?:www\.)?([^/?#:]+)[^/?#]*}i.freeze
     MAX_LABEL = 24
-    MIN_CARDS = 3
+    MIN_REPEATS = 3
+    LABEL = /[:：]\z/.freeze
     # Separators, and the counts an archive widget puts after each link.
     BETWEEN = /\A(?:[\s,;|·•\/–—-]|\(\d+\))*\z/.freeze
     # A grid of category tiles, a titled box or a list of topics is a
@@ -22,9 +23,10 @@ module Nokodown
 
     module_function
 
-    # Keys of the outermost elements that hold only such a line. The same
-    # line in every card of a listing is part of the cards, and what
-    # selects the content weighs them with it.
+    # Keys of the outermost elements that hold only such a line. Lines of
+    # one shape repeated are the category of every card in a listing, or
+    # the facts of a product linked to their filters ("Roof: gable"), so
+    # they stay.
     def blocks(body, url)
       page = url.to_s
       return Set.new if page.match?(PATH) || page.match?(QUERY)
@@ -33,16 +35,12 @@ module Nokodown
       judged = {}
       lines = body.css("a[href]").filter_map { |link| outermost(link, site, judged) if archive?(link, site) }
       lines = lines.uniq { |node| Dom.key(node) }
-      cards = lines.group_by { |node| shape(node) }.select { |_, alike| in_cards?(alike) }.keys
-      lines.reject { |node| cards.include?(shape(node)) }.map { |node| Dom.key(node) }.to_set
+      repeated = lines.group_by { |node| shape(node) }.select { |_, alike| alike.size >= MIN_REPEATS }.keys
+      lines.reject { |node| repeated.include?(shape(node)) }.map { |node| Dom.key(node) }.to_set
     end
 
     def shape(node)
       "#{node.name}.#{Dom.signature(node)}"
-    end
-
-    def in_cards?(lines)
-      lines.map { |node| Dom.key(node.parent) }.uniq.size >= MIN_CARDS
     end
 
     def archive?(link, site)
@@ -75,7 +73,12 @@ module Nokodown
       return false unless links.all? { |link| archive?(link, site) }
 
       gaps = Breadcrumbs.gaps(node)
-      gaps.first.length <= MAX_LABEL && gaps.drop(1).all? { |gap| gap.match?(BETWEEN) }
+      label?(gaps.first) && gaps.drop(1).all? { |gap| gap.match?(BETWEEN) }
+    end
+
+    # "Tags:" leads a line of tags; "Price" before a filter's link is a fact.
+    def label?(text)
+      text.empty? || (text.length <= MAX_LABEL && text.match?(LABEL))
     end
   end
 end
