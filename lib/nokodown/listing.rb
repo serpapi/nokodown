@@ -18,6 +18,8 @@ module Nokodown
     MAX_HEADINGS = 2
     RECORD_PARTS = "table, pre, code"
     SCRIPT_LINK = /\Ajavascript:/i.freeze
+    # Nokolexbor's css("*") is over ten times slower than this XPath.
+    DESCENDANTS = ".//*"
 
     module_function
 
@@ -25,7 +27,7 @@ module Nokodown
     # elements around them, for conditional cleaning to leave alone.
     def keys(roots)
       roots.flat_map { |root| items(root) }.each_with_object(Set.new) do |item, keys|
-        [item, *item.css("*"), *item.ancestors.select(&:element?)].each { |node| keys << Dom.key(node) }
+        [item, *item.xpath(DESCENDANTS), *item.ancestors.select(&:element?)].each { |node| keys << Dom.key(node) }
       end
     end
 
@@ -36,7 +38,7 @@ module Nokodown
       total = stats.text_chars(root)
       return [] if total.zero?
 
-      runs = [root, *root.css("*")].flat_map { |parent| item_runs(parent, stats).map { |run| [parent, run] } }
+      runs = [root, *root.xpath(DESCENDANTS)].flat_map { |parent| item_runs(parent, stats).map { |run| [parent, run] } }
       items = runs.flat_map(&:last)
       return [] if outermost(items).sum { |item| stats.text_chars(item) } < total * SHARE
 
