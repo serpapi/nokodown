@@ -100,8 +100,9 @@ module Nokodown
       # Text equal to the heading below it, whatever its length, is that
       # title rendered twice.
       def eyebrow?(blocks, index, text)
-        following = blocks[(index + 1)..].find { |block| block.kind != :rule }
-        return false unless following&.kind == :heading
+        following = blocks[index + 1]
+        following = blocks[index + 2] if following&.kind == :rule
+        return false unless following&.kind == :heading && !squash(text).empty?
 
         previous = index.positive? ? blocks[index - 1] : nil
         return false if previous&.kind == :heading && previous.level >= following.level

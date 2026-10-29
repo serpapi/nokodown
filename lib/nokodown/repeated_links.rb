@@ -17,22 +17,25 @@ module Nokodown
     # Cards sit next to each other, so the nearest longer links are the
     # ones that can share a card with the label.
     NEAREST = 2
+    NEAREST_SCAN = 10
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th caption figcaption].freeze
     # An excerpt the label follows ends like a sentence or with "[…]".
     EXCERPT_END = /[.…!?。！？\])]\z/.freeze
 
     def initialize(root)
       @root = root
+      @chars = {}
     end
 
     def call
       links = @root.css("a[href]").each_with_index.map { |node, index| Link.new(node, page(node), Dom.text(node), index) }
       by_page = links.select { |link| destination?(link.page) }.group_by(&:page)
+      namers = by_page.transform_values { |group| group.select { |link| namer?(link) } }
       holders = by_page.values.flatten.filter_map do |link|
         next unless label?(link)
 
         holder = holder(link)
-        holder if standalone?(holder) && named_in_card?(link, holder, by_page[link.page])
+        holder if standalone?(holder) && named_in_card?(link, holder, namers[link.page])
       end
       holders.each { |holder| holder.remove unless Dom.in_code?(holder) }
     end
@@ -94,15 +97,20 @@ module Nokodown
       node.element? && (%w[a br].include?(node.name) || Dom.block?(node))
     end
 
-    # Controls follow what they act on; a badge before a title ("HD",
-    # "New") is a fact about the item. A term of a definition list is
-    # written without its link, so it does not name the page.
-    def named_in_card?(label, holder, links)
-      longer = links.select do |link|
-        link.position < label.position && link.text.length > label.text.length && link.text.match?(/\p{L}/) &&
-          Dom.ancestors_named(link.node, "dt").empty?
-      end
-      longer.min_by(NEAREST) { |link| (link.position - label.position).abs }.any? { |link| same_card?(holder, link.node) }
+    # A link in words can name its page. A term of a definition list is
+    # written without its link, so it does not.
+    def namer?(link)
+      link.text.match?(/\p{L}/) && Dom.ancestors_named(link.node, "dt").empty?
+    end
+
+    # Controls follow what they act on, so the nearest longer links before
+    # the label are the ones to check; a badge before a title ("HD", "New")
+    # is a fact about the item.
+    def named_in_card?(label, holder, namers)
+      count = namers.bsearch_index { |link| link.position >= label.position } || namers.size
+      before = namers[[0, count - NEAREST_SCAN].max...count]
+      longer = before.reverse.select { |link| link.text.length > label.text.length }.first(NEAREST)
+      longer.any? { |link| same_card?(holder, link.node) }
     end
 
     # Both links in one card, but not side by side like the items of a list
@@ -110,9 +118,14 @@ module Nokodown
     def same_card?(holder, other)
       keys = other.ancestors.select(&:element?).map { |ancestor| Dom.key(ancestor) }.to_set
       common = holder.ancestors.find { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) }
-      return false if common.nil? || Dom.char_count(common.content) > CARD_LENGTH
+      return false if common.nil? || chars(common) > CARD_LENGTH
 
       Dom.key(common) != Dom.key(holder.parent) || branch(other, common).name != holder.name
+    end
+
+    # Labels in a grid share their containers, so each is measured once.
+    def chars(node)
+      @chars[Dom.key(node)] ||= Dom.char_count(node.content)
     end
 
     # The child of the common ancestor that holds the other link.
