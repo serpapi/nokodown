@@ -19,6 +19,11 @@ RSpec.describe "Markdown conversion" do
         "2011\\* *a*\n\nLeser*innen\n\n**Ontdek\n\n!_Tokyo, \u09AC\u09BE_\u09A6\n\n\\* note\n\n5\\*21\\*19"
     end
 
+    it "escapes a lone asterisk or underscore in a heading or a table cell only where it could pair" do
+      convert("<h2>【9P】_3D</h2><p>a</p><table><tr><th>Size</th><th>Note</th></tr><tr><td>28.5*21</td><td>2011*</td></tr></table>").should ==
+        "## 【9P】_3D\n\na\n\n| Size | Note |\n| --- | --- |\n| 28.5*21 | 2011* |"
+    end
+
     it "escapes text that would start a heading or a quote" do
       convert("<p># not a heading</p><p>&gt; not a quote</p>").should == "\\# not a heading\n\n\\> not a quote"
     end

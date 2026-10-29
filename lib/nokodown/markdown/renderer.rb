@@ -18,7 +18,8 @@ module Nokodown
       PERMALINK = /\A[#¶§🔗]\s+|\s+[#¶§🔗]\z/.freeze
 
       def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
-        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images, main_content: main_content)
+        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images,
+                                   main_content: main_content)
         @links = links
         @depth = 0
         @contains_block = {}
@@ -51,7 +52,9 @@ module Nokodown
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
           chunk = Labels.lines(Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) }.join("\n").strip)
-          Block.new(:paragraph, Text.escape_line_starts(Text.unescape_lone(Emphasis.paragraph(chunk)))) unless chunk.empty?
+          next if chunk.empty?
+
+          Block.new(:paragraph, Text.escape_line_starts(Text.unescape_lone(Emphasis.paragraph(chunk))))
         end
       end
 
@@ -113,7 +116,8 @@ module Nokodown
 
       # Text that long is a paragraph some site wrapped in a heading tag.
       def heading(node)
-        text = Emphasis.unwrap(Text.single_line(@inline.render(node.children, heading: true))).gsub(PERMALINK, "")
+        text = Emphasis.unwrap(Text.single_line(@inline.render(node.children, heading: true)))
+        text = Text.unescape_lone(text.gsub(PERMALINK, ""))
         return [] if text.empty?
         return [Block.new(:paragraph, text)] if text.length > 300
 

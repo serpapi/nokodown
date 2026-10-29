@@ -72,7 +72,8 @@ module Nokodown
         column = 0
         Tables.cells(row).each do |cell|
           column += 1 while line.key?(column)
-          text = Text.table_cell(Emphasis.unwrap(Emphasis.merge(@renderer.children_blocks(cell).map(&:text).join(" "))))
+          text = Emphasis.unwrap(Emphasis.merge(@renderer.children_blocks(cell).map(&:text).join(" ")))
+          text = Text.table_cell(Text.unescape_lone(text))
           rows = span(cell, "rowspan", MAX_ROWSPAN)
           span(cell, "colspan", MAX_COLSPAN).times do |offset|
             value = offset.zero? ? text : ""
