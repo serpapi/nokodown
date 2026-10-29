@@ -67,9 +67,11 @@ with `main_content: false`, `:none` for a document without a body.
   names: a run of cards, each a title link with a thumbnail, a date or an
   excerpt, under a title of its own in any language ("Flere Nyheder",
   "Похожие товары"). They go when they list pages like this one (the same
-  path but for its last segment), or when the page's own text, or its own
-  list, outweighs them. On home pages, hubs of sections built alike and pages
-  with no text of their own they stay.
+  path but for its last segment, with the same query keys), or, on a page
+  that declares itself an article, a product or a thread, when the page's
+  own text, or its own list, outweighs them. They stay on home pages, in hubs
+  of sections built alike, when they link to pages below this one, and when
+  the content would be left with fewer than 20 words.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut

@@ -12,8 +12,10 @@ module Nokodown
   #
   # On listings, archives and hubs teasers are the content, so a block only
   # goes when its items are pages like this one (the same path but for its
-  # last segment, or the same query keys), or when the page keeps a body of
-  # text, or a list of its own, that outweighs the titled blocks.
+  # last segment, with the same query keys), or, on a page that declares
+  # itself an article, a product or a thread, when it has a title of its own
+  # and the page keeps a body of text, or a list of its own, that outweighs
+  # the titled blocks.
   #
   # The page is judged whole, but the blocks found are only dropped from the
   # selected content once it is cleaned, so they weigh in locating the
@@ -34,18 +36,18 @@ module Nokodown
     MAX_HEADING = 100
     MIN_BODY = 200
     BODY_SHARE = 1.0
+    DOMINANT_SHARE = 0.4
     MIN_SIBLINGS_BODY = 50
     MIN_SECTIONS = 3
     MIN_WORDS_LEFT = 20
-    # Scripts written without spaces count a word per character.
-    WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[\p{L}\p{N}]+/.freeze
-    DOMINANT_SHARE = 0.4
     BODIES = %i[article product forum qa].freeze
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
     HEADING = "h1, h2, h3, h4, h5, h6, [role=heading]"
     MEDIA = "img, picture, time"
     STRUCTURE = "ul, ol, dl, table, li, p + p"
     DATE = %r{\d{1,4}[./-]\d{1,2}[./-]\d{1,4}}.freeze
+    # Scripts written without spaces count a word per character.
+    WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[\p{L}\p{N}]+/.freeze
     # The root, a language's root ("/en/", "/pt-br/") or its index file.
     HOME = %r{\A/*(?:[a-z]{2}(?:[-_][a-z]{2})?/*)?(?:index\.\w+)?\z}i.freeze
     FILE = /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|docx?|xlsx?|pptx?|mp[34])\z/i.freeze
