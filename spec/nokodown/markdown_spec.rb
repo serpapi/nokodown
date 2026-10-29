@@ -833,13 +833,13 @@ RSpec.describe "Markdown conversion" do
 
   describe "headings" do
     it "drops emoji, arrows and separators around the heading's text" do
-      convert("<h2>📱 Benefícios do Canal</h2><p>a</p><h3>☛ Такси</h3><p>b</p><h2>- Forum</h2><p>c</p><h2>***** Fest *****</h2><p>d</p>").should ==
-        "## Benefícios do Canal\n\na\n\n### Такси\n\nb\n\n## Forum\n\nc\n\n## Fest\n\nd"
+      convert("<h2>📱 Benefícios do Canal</h2><p>a</p><h3>☛ Такси</h3><p>b</p><h2>- Forum</h2><p>c</p><h2>***** Fest *****</h2><p>d</p><h2>👍🏽 Tips</h2><p>e</p>").should ==
+        "## Benefícios do Canal\n\na\n\n### Такси\n\nb\n\n## Forum\n\nc\n\n## Fest\n\nd\n\n## Tips\n\ne"
     end
 
     it "keeps signs that are part of the heading's text" do
-      convert("<h2>№ 5 Chanel</h2><p>a</p><h2>© Acme</h2><p>b</p><h2>« Ainsi » :</h2><p>c</p><h2>Contact :</h2><p>d</p>").should ==
-        "## № 5 Chanel\n\na\n\n## © Acme\n\nb\n\n## « Ainsi » :\n\nc\n\n## Contact :\n\nd"
+      convert("<h2>№ 5 Chanel</h2><p>a</p><h2>© Acme</h2><p>b</p><h2>« Ainsi » :</h2><p>c</p><h2>Contact :</h2><p>d</p><h2>㈱ アクメ</h2><p>e</p>").should ==
+        "## № 5 Chanel\n\na\n\n## © Acme\n\nb\n\n## « Ainsi » :\n\nc\n\n## Contact :\n\nd\n\n## ㈱ アクメ\n\ne"
     end
 
     it "keeps a closing guillemet that an opening one pairs with" do

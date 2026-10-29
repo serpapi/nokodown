@@ -12,8 +12,9 @@ module Nokodown
         (?<![\p{L}\p{M}\p{So}\p{Sk}])[\u200C\u200D]|[\u200C\u200D](?![\p{L}\p{M}\p{So}\p{Sk}])
       /x.freeze
       # Pictographs, dingbats, arrows and shapes, but not the signs that are
-      # part of a name or a value (©, №, °, ℃).
-      PICTOGRAPH = "(?:(?![\u00A9\u00AE\u00B0\u2100-\u214F])\\p{So}|[\u2190-\u21FF\u25B7\u25C1\u27F0-\u27FF\u2900-\u297F\uFE0F\u200D])"
+      # part of a name or a value (©, №, °, ℃, 〒, ㈱, ㎡).
+      PICTOGRAPH = "(?:(?![\u00A9\u00AE\u00B0\u2100-\u214F\u3012\u3020\u3200-\u33FF])\\p{So}|" \
+                   "[\u2190-\u21FF\u25B7\u25C1\u27F0-\u27FF\u2900-\u297F\uFE0F\u200D\u{1F3FB}-\u{1F3FF}])"
       # Characters that could open or close emphasis. An underscore inside a
       # word cannot.
       DELIMITERS = { "*" => /\*/, "_" => /(?<![\p{L}\p{N}\p{M}])_|_(?![\p{L}\p{N}\p{M}])/ }.freeze
