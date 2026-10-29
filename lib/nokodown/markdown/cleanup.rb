@@ -30,7 +30,9 @@ module Nokodown
         blocks = dedupe(blocks)
         blocks = drop_repeated_runs(blocks)
         blocks = shorten_repeated_quotes(blocks)
-        blocks = drop_empty_sections(CardLinks.new(blocks).call)
+        # Labels joins a counter to its label and CardLinks unlinks a card's
+        # repeated "Read more", so both make noise the first pass missed.
+        blocks = drop_empty_sections(CardLinks.new(blocks).call.reject { |block| noise?(block) })
         images.empty? ? blocks : ImageCleanup.new(images, unnamed: !image_page?(blocks)).call(blocks)
       end
 

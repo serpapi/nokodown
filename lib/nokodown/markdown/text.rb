@@ -18,6 +18,9 @@ module Nokodown
       # and the destination's parentheses are balanced or percent-encoded.
       LINK_TEXT = /(?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*/.freeze
       DESTINATION = /(?:[^()\s]|\([^()\s]*\))*/.freeze
+      ENCODED_NON_ASCII = /(?:%[89A-F]\h)+/i.freeze
+      # Spaces and invisible characters would end or hide the destination.
+      UNPRINTABLE = /[\p{Z}\p{C}]/.freeze
 
       module_function
 
@@ -86,7 +89,17 @@ module Nokodown
       def destination(url)
         url = url.gsub(" ", "%20").gsub("<", "%3C").gsub(">", "%3E")
         url = url.gsub("(", "%28").gsub(")", "%29") unless url.count("(") == url.count(")")
-        url
+        url.gsub(ENCODED_NON_ASCII) { |run| readable(run) }
+      end
+
+      # A word in another script costs a token or two as letters and two or
+      # three per letter percent-encoded. The URL means the same either way
+      # (RFC 3987).
+      def readable(run)
+        decoded = [run.delete("%")].pack("H*").force_encoding(Encoding::UTF_8)
+        return run unless decoded.valid_encoding?
+
+        decoded.gsub(UNPRINTABLE) { |char| char.bytes.map { |byte| format("%%%02X", byte) }.join }
       end
 
       # Markdown back to readable text: no images, link targets, emphasis or

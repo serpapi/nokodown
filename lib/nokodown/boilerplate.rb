@@ -24,8 +24,9 @@ module Nokodown
     # The word goes with its separators: "footer__disclaimer" without it is "footer", not "footer__".
     DISCLAIMER_WORD = /[-_]*#{Patterns::DISCLAIMER.source}[-_]*/.freeze
 
-    def initialize(body)
+    def initialize(body, url: nil)
       @body = body
+      @url = url
     end
 
     def call
@@ -33,6 +34,7 @@ module Nokodown
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
       @trails = Breadcrumbs.trails(@body).map { |trail| Dom.key(trail) }.to_set
+      @taxonomy = Taxonomy.blocks(@body, @url)
       @last_h1 = @body.css("h1").map { |h1| Dom.key(h1).to_i }.max.to_i
       # Card grids repeat the same class list hundreds of times.
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
@@ -88,7 +90,7 @@ module Nokodown
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if chrome_element?(node) || chrome_role?(node)
       return if dominant?(node) && !header_above_title?(node)
-      return :guess if trail?(node)
+      return :guess if trail?(node) || @taxonomy.include?(Dom.key(node))
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 

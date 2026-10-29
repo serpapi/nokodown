@@ -582,6 +582,13 @@ RSpec.describe Nokodown do
 
       convert(body).should == "Rooms with a view of the lake. {Christmas}"
     end
+
+    it "keeps template placeholders written as code" do
+      body = "<p>{{ page.title }}</p><p>Use <kbd>{{ page.title }}</kbd>, <samp>{{ site.url }}</samp> and " \
+             "<tt>{{ content }}</tt> in the layout.</p>"
+
+      convert(body).should == "Use `{{ page.title }}`, `{{ site.url }}` and `{{ content }}` in the layout."
+    end
   end
 
   describe "encodings" do
