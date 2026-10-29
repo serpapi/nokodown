@@ -15,7 +15,10 @@ module Nokodown
     # Elements that stop Readability from treating a div as a paragraph.
     PARAGRAPH_BREAKERS = Set.new(%w[blockquote dl div img ol p pre table ul]).freeze
 
-    CODE = %w[pre code].freeze
+    # The renderer writes these as code, so their text is never furniture or
+    # leaked markup.
+    INLINE_CODE = %w[code kbd samp tt].freeze
+    CODE = ["pre", *INLINE_CODE].freeze
 
     NBSP = "\u00A0"
     WHITESPACE = " \t\n\r\f\u00A0"

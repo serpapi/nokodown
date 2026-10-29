@@ -88,9 +88,9 @@ module Nokodown
       end
 
       # A line with several copies of one image is a count, such as a row of
-      # rating stars, and keeps them all. Otherwise a copy without alt text,
-      # or whose alt is only a file name as in a gallery's thumbnail strip,
-      # adds nothing. One with alt text can mark its own item (an award, a
+      # rating stars, and keeps them all. Otherwise a copy whose alt names
+      # nothing (none, a file or camera name, "photo"), as in a gallery's
+      # thumbnail strip, adds nothing. One with alt text can mark its own item (an award, a
       # verified tick), so it goes only when nothing but images came since
       # the last copy, as in a logo strip shown twice.
       def repeats(content)
