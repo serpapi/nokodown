@@ -213,6 +213,15 @@ RSpec.describe Nokodown::Metadata do
     metadata(head)[:title].should == "Rachmaninov MK2 RCA Cable"
   end
 
+  it "cuts the site's name from a title of thousands of parts in linear time" do
+    parts = Array.new(3000) { |index| "cheap flights #{index}" }
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    title = metadata_at("https://www.example.com/travel/deals", "<title>#{parts.join(' | ')} | Example.com</title>")[:title]
+
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 2
+    title.should == parts.join(" | ")
+  end
+
   it "takes the last part of a breadcrumb title that the site's name leads" do
     metadata_at("http://www.gta-series.com/it/gta-5/armi.html", "<title>GTA-Series.com » GTA 5 » Armi » Fucili d'assalto</title>")[:title]
       .should == "Fucili d'assalto"
