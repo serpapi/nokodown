@@ -29,7 +29,7 @@ module Nokodown
       nodes, mode = select_content(body, metadata[:page_type], product_page)
       blocks = render(nodes, mode, urls)
       blocks = with_title(blocks, metadata[:title]) if @title
-      blocks = Markdown::Repeats.call(blocks)
+      blocks = Markdown::Counters.call(Markdown::Repeats.call(blocks))
       result(blocks, metadata, mode)
     end
 
