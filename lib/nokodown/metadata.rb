@@ -23,7 +23,7 @@ module Nokodown
     WORD = /[\p{L}\p{N}]+/.freeze
     CLOSING = /\A[?!.)\]"'”’）」』】》]*/.freeze
     HEADING_END = /\G(?:\s[-–—]\s|\s*[|:·•,]|#{SiteName::UNDERSCORE})/.freeze
-    HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?/?(?:index\.[a-z]+|[a-z]{2}(?:[-_][a-z]{2})?/?)?(?:[?#].*)?\z}i.freeze
+    HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?#{SiteName::ROOT_PATH}(?:[?#].*)?\z}i.freeze
     LOGO_NAME = /logo|brand|site[-_]?(?:title|name)/i.freeze
     SITE_LOGO_NAME = /logo|site[-_]?(?:title|name)/i.freeze
     SCRIPT_QUERY = /index\.[a-z]+\?/i.freeze
@@ -174,12 +174,16 @@ module Nokodown
     # Readability's <title> heuristics: drop the site name around a separator
     # unless that leaves too few words.
     def document_title
-      original = Dom.squish((@doc.at_css("head title") || @doc.at_css("title"))&.content.to_s)
+      original = original_title
       title = Dom.squish(shortened_title(original))
       keep_original = words(title) <= 4 &&
                       (!original.match?(HIERARCHY_SEPARATOR) || words(title) != words(original.gsub(SEPARATOR, "")) - 1)
       title = original if keep_original
       title.empty? ? nil : title
+    end
+
+    def original_title
+      Dom.squish((@doc.at_css("head title") || @doc.at_css("title"))&.content.to_s)
     end
 
     def shortened_title(original)
@@ -236,7 +240,7 @@ module Nokodown
     end
 
     def document_page_title(site_name, site)
-      original = Dom.squish((@doc.at_css("head title") || @doc.at_css("title"))&.content.to_s)
+      original = original_title
       title = site.without(strip_site_name(original, site_name))
       title == original ? strip_site_name(document_title, site_name) : title
     end

@@ -11,7 +11,9 @@ module Nokodown
     PART_SEPARATOR = %r{\s+[|\-–—»>→/\\·•]+\s+|\s*\|\s*|#{UNDERSCORE}}.freeze
     BREADCRUMB = /[»>→\\]/.freeze
     URL = %r{\A[a-z][a-z\d+.-]*://(?:[^@/?#]*@)?([^/:?#]+)(?::\d+)?([^?#]*)}i.freeze
-    HOME_PATH = %r{\A/?(?:index\.[a-z]+|[a-z]{2}(?:[-_][a-z]{2})?/?)?\z}i.freeze
+    # The site's root, its index page, or a language's root ("/it/", "/en-us").
+    ROOT_PATH = '/?(?:index\.[a-z]+|[a-z]{2}(?:[-_][a-z]{2})?/?)?'
+    HOME_PATH = /\A#{ROOT_PATH}\z/i.freeze
     # Labels under a country code that are not the site's name (example.co.uk).
     SECOND_LEVEL = %w[ac co com edu go gob gouv gov ne net nic or org].freeze
     WORD = /[\p{L}\p{N}]+/.freeze

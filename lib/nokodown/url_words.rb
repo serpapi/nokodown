@@ -8,7 +8,6 @@ module Nokodown
   # rollover/"), which name the page as its author did when publishing it.
   # Ids and short slugs say too little to compare names with.
   class UrlWords
-    PATH = %r{\A[a-z][a-z\d+.-]*://[^/?#]*([^?#]*)}i.freeze
     EXTENSION = /\.(?:s?html?|php\d?|aspx?|jsp|cgi)\z/i.freeze
     WORD = /[\p{L}\p{N}]+/.freeze
     MIN_WORDS = 3
@@ -17,7 +16,7 @@ module Nokodown
     MARGIN = 0.25
 
     def initialize(url)
-      segment = url.to_s[PATH, 1].to_s.split("/").reject(&:empty?).last.to_s.sub(EXTENSION, "")
+      segment = url.to_s[SiteName::URL, 2].to_s.split("/").reject(&:empty?).last.to_s.sub(EXTENSION, "")
       words = fold(decode(segment)).scan(WORD)
       @words = words.size >= MIN_WORDS && words.count { |word| word.match?(/\p{L}{3}/) } >= MIN_NAMES ? words : []
     end
