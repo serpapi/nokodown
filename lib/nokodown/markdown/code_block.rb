@@ -5,8 +5,41 @@ module Nokodown
     module CodeBlock
       LANGUAGE_CLASS = /\A(?:language|lang|highlight-source|highlight)-([\w+#.-]+)\z/i.freeze
       NO_LANGUAGE = %w[none plain plaintext text nohighlight].freeze
+      LANGUAGE_NAMES = Set.new(%w[
+        bash sh shell zsh console terminal powershell ps1 cmd batch javascript js jsx typescript ts tsx json yaml yml
+        toml xml html css scss sass less python py ruby rb php java kotlin swift go golang rust c c++ cpp csharp c#
+        objective-c sql graphql dockerfile makefile r scala perl lua dart elixir haskell clojure groovy gradle ini
+        diff markdown md vue svelte nginx http curl text plaintext
+      ]).freeze
+      # The copy button a highlighter prints with the code.
+      COPY = /
+        copy(?:\scode|\sto\sclipboard)?|copied!?|copiar(?:\sc[oó]digo)?|copier(?:\sle\scode)?|(?:code\s)?kopieren|
+        copia(?:\scodice)?|kopi[eë]ren|копировать(?:\sкод)?|kopiuj(?:\skod)?|kopyala|コピー|コードをコピー|复制(?:代码)?|複製|
+        (?:코드\s?)?복사|نسخ(?:\sالكود)?|sao\schép|salin(?:\skode)?
+      /xi.freeze
+      COPY_LABEL = /\A(?:#{COPY.source})\z/xi.freeze
+      COPY_SUFFIX = /\s+(?:#{COPY.source})\z/xi.freeze
 
       module_function
+
+      # Drops the language label a highlighter prints above the code and its
+      # copy button, and fences the code with the labelled language.
+      def without_labels(blocks)
+        blocks.each_with_index.reject do |block, index|
+          label_block?(block, blocks[index + 1], index.positive? && blocks[index - 1])
+        end.map(&:first)
+      end
+
+      def label_block?(block, following, previous)
+        return false unless block.kind == :paragraph
+        return previous && previous.kind == :code && block.text.match?(COPY_LABEL) unless following&.kind == :code
+
+        name = block.text.sub(COPY_SUFFIX, "").downcase
+        return false unless block.text.match?(COPY_LABEL) || LANGUAGE_NAMES.include?(name) || following.text[/\A`+(.*)/, 1] == name
+
+        following.text = following.text.sub(/\A(`+)\n/, "\\1#{name}\n") if LANGUAGE_NAMES.include?(name) && !NO_LANGUAGE.include?(name)
+        true
+      end
 
       def render(node, raw)
         text = raw.tr(Dom::NBSP, " ").sub(/\A\n/, "").split("\n").map(&:rstrip).join("\n")

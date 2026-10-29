@@ -219,6 +219,11 @@ RSpec.describe "Markdown conversion" do
       convert('<h2>Setup<a href="#setup">¶</a></h2><p>Intro. <a href="/post">Read more »</a></p>').should == "## Setup\n\nIntro."
     end
 
+    it "drops permalink marks before or after heading text" do
+      convert('<h2>Setup <a href="#setup">#</a></h2><p>a</p><h3><a href="#run">¶</a> Run</h3><p>b</p><h3>#Shots</h3><p>6</p>').should ==
+        "## Setup\n\na\n\n### Run\n\nb\n\n### #Shots\n\n6"
+    end
+
     it "drops separators and arrows at the ends of link text" do
       html = '<p><a href="/f">Forum |</a> <a href="/j">· Jobs</a> <a href="/m">Learn more →</a> <a href="/n">»</a> ' \
              '<a href="/v">Voir ›</a> <a href="/q">«Rycari 2017»</a></p>'
@@ -518,8 +523,8 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "writes the headings of list items as their text" do
-      convert('<ul><li><h3><a href="/p/1">Trail boot</a></h3><p>Leather</p></li></ul><ol><li><h2># 1 pick</h2></li></ol>').should ==
-        "- [Trail boot](https://example.com/p/1)\n  Leather\n\n1. \\# 1 pick"
+      convert('<ul><li><h3><a href="/p/1">Trail boot</a></h3><p>Leather</p></li></ul><ol><li><h2>&gt; 1 pick</h2></li></ol>').should ==
+        "- [Trail boot](https://example.com/p/1)\n  Leather\n\n1. \\> 1 pick"
     end
 
     it "looks through wrappers between the list and its items" do
@@ -613,6 +618,11 @@ RSpec.describe "Markdown conversion" do
 
     it "reads the language from wrappers used by GitHub and Sphinx" do
       convert('<div class="highlight-shell"><div class="highlight"><pre>ls -la</pre></div></div>').should == "```shell\nls -la\n```"
+    end
+
+    it "drops the language label and copy button printed with the code" do
+      convert("<p>js</p><pre><code>let a = 1</code></pre><p>Copy</p><p>Python Copy code</p><pre>print(1)</pre><p>Output</p><pre>1</pre>").should ==
+        "```js\nlet a = 1\n```\n\n```python\nprint(1)\n```\n\nOutput\n\n```\n1\n```"
     end
 
     it "uses a longer fence when the code contains one" do

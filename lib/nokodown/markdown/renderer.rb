@@ -14,6 +14,8 @@ module Nokodown
       # Any symbols before a space can be an item's marker (+ and - in pros
       # and cons, ✓ and ✗), not only the glyphs that are stripped.
       LEADING_SYMBOLS = /\A[^\p{L}\p{N}\s]+(?=\s)/.freeze
+      # Heading-anchor markup puts a permalink before or after the text.
+      PERMALINK = /\A[#¶§🔗]\s+|\s+[#¶§🔗]\z/.freeze
 
       def initialize(urls, images: true, links: true, redundant_images: {})
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
@@ -111,7 +113,7 @@ module Nokodown
 
       # Text that long is a paragraph some site wrapped in a heading tag.
       def heading(node)
-        text = Emphasis.unwrap(Text.single_line(@inline.render(node.children, heading: true)))
+        text = Emphasis.unwrap(Text.single_line(@inline.render(node.children, heading: true))).gsub(PERMALINK, "")
         return [] if text.empty?
         return [Block.new(:paragraph, text)] if text.length > 300
 
