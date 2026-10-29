@@ -66,8 +66,10 @@ with `main_content: false`, `:none` for a document without a body.
   however much it holds, a footer by any name that ends a page (not one
   inside `main` or an article, nor the footer of a section, a card or a
   quote), a breadcrumb trail by its shape in any language (a link to the
-  home page, then links down the site with separators), and copyright and
-  licence lines in the major web languages.
+  home page, then links down the site with separators), a line of links to
+  the site's tag, category or label archives ("Tags: a, b", a category above
+  the title) with at most a short label, except on such an archive, and
+  copyright and licence lines in the major web languages.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
