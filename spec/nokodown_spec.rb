@@ -589,6 +589,12 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html, title: false).should == "Ünïcödé text, Reykjavík © 2020"
     end
 
+    it "reads stray bytes in UTF-8 in the single-byte charset that the page declares" do
+      html = "<meta charset=windows-1251><p>Привет, мир, \xB9 5</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Привет, мир, № 5"
+    end
+
     it "drops what is left of a character cut off" do
       html = "<meta charset=utf-8><p>Zażółć gęślą jaźń przekaza\xC4...</p>".b
 

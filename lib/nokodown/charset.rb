@@ -16,6 +16,7 @@ module Nokodown
     LEAD_BYTE = /\A[\xC2-\xF4]/n.freeze
     HIGH_BYTE = /[\x80-\xFF]/n.freeze
     DOUBLE_BYTE_RUN = /[\x80-\xFF](?:[\x40-\x7E]?[\x80-\xFF])*/n.freeze
+    SINGLE_BYTE_PROBE = "\x81\xA1\xC1\xE1\xF1".b.freeze
     UTF8_BOM = "\xEF\xBB\xBF".b.freeze
     BOM_OR_REPLACEMENT = /\xEF(?:\xBB\xBF|\xBF\xBD)/n.freeze
     UTF16_BOMS = { "\xFF\xFE".b => Encoding::UTF_16LE, "\xFE\xFF".b => Encoding::UTF_16BE }.freeze
@@ -108,12 +109,24 @@ module Nokodown
       return redecoded_runs(utf8) if utf8.valid_encoding? && (!utf8.ascii_only? || declared.nil? || declared.ascii_compatible?)
 
       declared = nil if declared == Encoding::UTF_8
-      return mixed(bytes, latin: declared == Encoding::Windows_1252) if reads_as_utf8?(bytes, declared ? DECLARED_UTF8_SHARE : UTF8_SHARE)
+      return with_strays(bytes, declared) if reads_as_utf8?(bytes, declared ? DECLARED_UTF8_SHARE : UTF8_SHARE)
 
       encoding = declared || detected(bytes)
       return bytes.force_encoding(encoding) unless encoding.nil? || encoding == Encoding::Windows_1252
 
-      mixed(bytes, latin: !encoding.nil?)
+      mixed(bytes, Encoding::Windows_1252, whole: !encoding.nil?)
+    end
+
+    # UTF-8 with bytes of another encoding here and there: the declared one
+    # when each of its bytes is a character, Windows-1252 otherwise.
+    def with_strays(bytes, declared)
+      legacy = declared if declared && single_byte?(declared)
+      mixed(bytes, legacy || Encoding::Windows_1252, whole: !legacy.nil?)
+    end
+
+    def single_byte?(encoding)
+      probe = SINGLE_BYTE_PROBE.dup.force_encoding(encoding)
+      !encoding.dummy? && probe.valid_encoding? && probe.length == probe.bytesize
     end
 
     def declared(html)
@@ -158,13 +171,14 @@ module Nokodown
       chars >= MIN_CHARACTERS && text.count("\uFFFD") <= chars * MAX_ERRORS && text.scan(script).size >= chars * share
     end
 
-    # UTF-8 with stray bytes of another encoding: on a Western page every
-    # run that is not UTF-8 is Windows-1252. Elsewhere only a lone byte is,
-    # and a lone lead byte only inside a word: before anything else it is
-    # what is left of a character cut off ("przekaza\xC4...").
-    def mixed(bytes, latin:)
+    # UTF-8 with runs of a legacy encoding: when the page is known to be
+    # Western or to use a single-byte encoding, every run that is not UTF-8
+    # is in it. Otherwise only a lone byte is, and a lone lead byte only
+    # inside a word: before anything else it is what is left of a character
+    # cut off ("przekaza\xC4...").
+    def mixed(bytes, legacy, whole: false)
       bytes.delete_prefix(UTF8_BOM).gsub(HIGH_RUN_BEFORE_LETTER) do |run|
-        mixed_run(run, latin || stray?(run, Regexp.last_match(1)))
+        mixed_run(run, (whole || stray?(run, Regexp.last_match(1))) && legacy)
       end.force_encoding(Encoding::UTF_8)
     end
 
@@ -181,15 +195,15 @@ module Nokodown
       run.bytesize == 1 && (letter || !run.match?(LEAD_BYTE))
     end
 
-    def mixed_run(run, windows_1252)
+    def mixed_run(run, legacy)
       redecoded = redecoded(run)
       return redecoded if redecoded
 
       utf8 = run.dup.force_encoding(Encoding::UTF_8)
       return run if utf8.valid_encoding?
-      return utf8.scrub("").b unless windows_1252
+      return utf8.scrub("").b unless legacy
 
-      run.force_encoding(Encoding::Windows_1252).encode(Encoding::UTF_8, undef: :replace, replace: "").b
+      run.force_encoding(legacy).encode(Encoding::UTF_8, undef: :replace, replace: "").b
     end
 
     # A run decoded twice over is undone until it no longer reads back. One
