@@ -14,12 +14,72 @@ RSpec.describe "Markdown conversion" do
       convert("<p>snake_case, 5 * 3, *starred*, `tick`, <b>bold</b></p>").should == "snake_case, 5 * 3, \\*starred\\*, \\`tick\\`, **bold**"
     end
 
+    it "escapes a lone asterisk or underscore only where it would start a list" do
+      convert("<p>2011* <i>a</i></p><p>Leser*innen</p><p>**Ontdek</p><p>!_Tokyo, \u09AC\u09BE_\u09A6</p><p>* note</p><p>5*21*19</p>").should ==
+        "2011\\* *a*\n\nLeser*innen\n\n**Ontdek\n\n!_Tokyo, \u09AC\u09BE_\u09A6\n\n\\* note\n\n5\\*21\\*19"
+    end
+
+    it "escapes a lone asterisk or underscore in a heading or a table cell only where it could pair" do
+      convert("<h2>【9P】_3D</h2><p>a</p><table><tr><th>Size</th><th>Note</th></tr><tr><td>28.5*21</td><td>2011*</td></tr></table>").should ==
+        "## 【9P】_3D\n\na\n\n| Size | Note |\n| --- | --- |\n| 28.5*21 | 2011* |"
+    end
+
     it "escapes text that would start a heading or a quote" do
       convert("<p># not a heading</p><p>&gt; not a quote</p>").should == "\\# not a heading\n\n\\> not a quote"
     end
 
+    it "spaces words that adjacent elements run together" do
+      html = '<p><a href="/t/1">Song for Wife</a><a href="/t/2">Personalized Song</a></p><p><a href="/u/admin">admin</a>24/04/2022</p>' \
+             "<p><b>20h30</b><b>vendredi</b>, i<b>NP</b>ut, j<b>ährlich</b>, 2024<span>年</span>, Model<span>3</span></p>"
+      convert(html).should == "[Song for Wife](https://example.com/t/1) [Personalized Song](https://example.com/t/2)\n\n" \
+                              "[admin](https://example.com/u/admin) 24/04/2022\n\n**20h30 vendredi**, i**NP**ut, j**ährlich**, 2024年, Model 3"
+    end
+
+    it "keeps a word broken by <wbr> whole" do
+      convert("<h3>add<wbr>Listener</h3><p>report<wbr>2024.pdf</p>").should == "### addListener\n\nreport2024.pdf"
+    end
+
+    it "drops joiners outside words and emoji" do
+      convert("<p>\u200D<b>Rights</b></p><p>\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 \u{1F468 200D 1F469}</p>").should ==
+        "**Rights**\n\n\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 \u{1F468 200D 1F469}"
+    end
+
+    it "drops icon-font glyphs and ligatures" do
+      convert('<p>&#xE001; Opening hours <i class="material-icons">arrow_forward</i></p>').should == "Opening hours"
+    end
+
+    it "keeps the text of an element named after an icon font" do
+      convert('<p><span class="material-icons-wrapper">Next steps</span> <i class="material-icons-outlined">home</i></p>').should == "Next steps"
+    end
+
+    it "writes a label and its value, or a number and its unit, on one line" do
+      html = "<p>Type:</p><p>Condo</p><p>Built:</p><p>1988</p><p>27<br>Nov</p><ul><li><p>Time:</p><p>17:00 - 19:00</p></li></ul>" \
+             "<p>Ingredients:</p><p>Mix the flour and the eggs, then let the dough rest for an hour before baking.</p>" \
+             "<p>Check all that apply:</p><p>Furniture</p><p>Junk</p><p>Tyres</p>"
+      convert(html).should == "Type: Condo\n\nBuilt: 1988\n\n27 Nov\n\n- Time: 17:00 - 19:00\n\nIngredients:\n\n" \
+                              "Mix the flour and the eggs, then let the dough rest for an hour before baking.\n\n" \
+                              "Check all that apply:\n\nFurniture\n\nJunk\n\nTyres"
+    end
+
+    it "does not take a label or a sentence for a number's unit" do
+      convert("<h3>Rooms</h3><p>3</p><p>Baths:</p><p>2</p><p>Pick a page.</p>").should == "### Rooms\n\n3\n\nBaths: 2\n\nPick a page."
+    end
+
     it "drops decorative separator lines" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
+    end
+
+    it "drops lines of only punctuation and operators" do
+      convert("<p>a<br>|<br>~<br>- -&gt;<br>👍<br>b</p><ul><li>|</li><li>c</li></ul>").should == "a\n👍\nb\n\n- c"
+    end
+
+    it "keeps emoticons on lines of their own" do
+      convert("<p>Thanks<br>:)<br>See you<br>:-(</p>").should == "Thanks\n:)\nSee you\n:-("
+    end
+
+    it "drops separators between links and at the ends of lines" do
+      convert('<p>by | Oct 7, 2011 |</p><p><a href="/a">A</a> | <a href="/b">B</a> · <a href="/c">C</a></p><p>Volume 13 | Issue 1</p>').should ==
+        "by | Oct 7, 2011\n\n[A](https://example.com/a) [B](https://example.com/b) [C](https://example.com/c)\n\nVolume 13 | Issue 1"
     end
 
     it "writes raised and lowered digits as Unicode characters and drops the tag from footnote markers" do
@@ -97,6 +157,23 @@ RSpec.describe "Markdown conversion" do
 
     it "skips empty emphasis" do
       convert("<p>x<b> </b>y<i></i></p>").should == "x y"
+    end
+
+    it "joins runs a page split in two" do
+      convert("<p>a <b>tw</b><b>o</b> <b>three</b> <b>four</b> <i>five</i> <i>six</i></p>").should == "a **two three four** *five six*"
+    end
+
+    it "drops emphasis around a whole paragraph but keeps a bold label" do
+      html = "<p><i>The whole paragraph is set in italics.</i></p><p><b>Ingredients</b></p><p><b>Mix the flour and the eggs.</b></p>" \
+             "<p><i><b>Note:</b> it rises.</i></p><p><b><i>Serves</i></b></p>"
+      convert(html).should == "The whole paragraph is set in italics.\n\n**Ingredients**\n\nMix the flour and the eggs.\n\n**Note:** it rises.\n\n**Serves**"
+    end
+
+    it "drops emphasis around a whole list item, table cell, heading or link text" do
+      html = "<ul><li><b>Bold item</b></li></ul><table><tr><th><b>Key</b></th><th>Value</th></tr><tr><td><b>a</b></td><td><i>1</i></td></tr></table>" \
+             '<h2><i>Title</i></h2><p>See <b><a href="/a">this</a></b> and <a href="/b"><i>that</i></a>.</p>'
+      convert(html).should == "- Bold item\n\n| Key | Value |\n| --- | --- |\n| a | 1 |\n\n## Title\n\n" \
+                              "See [this](https://example.com/a) and [that](https://example.com/b)."
     end
   end
 
@@ -177,8 +254,145 @@ RSpec.describe "Markdown conversion" do
       convert('<h2>Setup<a href="#setup">¶</a></h2><p>Intro. <a href="/post">Read more »</a></p>').should == "## Setup\n\nIntro."
     end
 
+    it "drops permalink marks before or after heading text" do
+      convert('<h2>Setup <a href="#setup">#</a></h2><p>a</p><h3><a href="#run">¶</a> Run</h3><p>b</p><h3>#Shots</h3><p>6</p>').should ==
+        "## Setup\n\na\n\n### Run\n\nb\n\n### #Shots\n\n6"
+    end
+
+    it "keeps a section sign that opens a numbered heading" do
+      convert("<h2>§ 1 Geltungsbereich</h2><p>a</p>").should == "## § 1 Geltungsbereich\n\na"
+    end
+
+    it "drops separators and arrows at the ends of link text" do
+      html = '<p><a href="/f">Forum |</a> <a href="/j">· Jobs</a> <a href="/m">Learn more →</a> <a href="/n">»</a> ' \
+             '<a href="/v">Voir ›</a> <a href="/q">«Rycari 2017»</a></p>'
+      convert(html).should == "[Forum](https://example.com/f) [Jobs](https://example.com/j) [Learn more](https://example.com/m) " \
+                              "[Voir](https://example.com/v) [«Rycari 2017»](https://example.com/q)"
+    end
+
+    it "trims long runs of separators in linear time" do
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      convert("<p>a #{'•' * 20_000} b</p><p><a href=\"/x\">x#{'•' * 20_000}</a></p>").should start_with("a •")
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+    end
+
+    it "keeps a card's link on its title and drops the buttons that repeat it" do
+      card = '<li><a href="/p/1">2 options</a><h3><a href="/p/1">Trail boot</a></h3><p>Leather for rocky ground <a href="/p/1">…</a> ' \
+             '<a href="/p/1/">Weiterlesen</a></p><p>Try <a href="/p/1">this one</a> today.</p></li>' \
+             '<li><h3><a href="/p/2">Ridge runner</a></h3><p>Mesh <a href="/p/2">Weiterlesen</a></p></li>'
+      convert("<ul>#{card}</ul><h2>Edge</h2><p>7 octobre</p><p><a href=\"/e/edge\">Voir</a></p>").should ==
+        "- 2 options\n  [Trail boot](https://example.com/p/1)\n  Leather for rocky ground …\n  Try this one today.\n" \
+        "- [Ridge runner](https://example.com/p/2)\n  Mesh Weiterlesen\n\n## Edge\n\n7 octobre\n\n[Voir](https://example.com/e/edge)"
+    end
+
+    it "keeps the dates of cards, as text, even when cards share one" do
+      cards = %w[a b].map { |page| %(<h2><a href="/#{page}">Post #{page.upcase}</a></h2><p><a href="/#{page}">May 30, 2018</a></p>) }.join
+      convert(cards).should == "## [Post A](https://example.com/a)\n\nMay 30, 2018\n\n## [Post B](https://example.com/b)\n\nMay 30, 2018"
+    end
+
+    it "keeps the texts that differ from card to card, as values" do
+      cars = [%w[1 Golf Sold], %w[2 Polo Available], %w[3 Passat Sold], %w[4 Up Available]].map do |id, name, status|
+        %(<li><h3><a href="/car/#{id}">#{name}</a></h3><p><a href="/car/#{id}">#{status}</a></p><p><a href="/car/#{id}">Details</a></p></li>)
+      end
+      convert("<ul>#{cars.join}</ul>").should == "- [Golf](https://example.com/car/1)\n  Sold\n- [Polo](https://example.com/car/2)\n  Available\n" \
+                                                  "- [Passat](https://example.com/car/3)\n  Sold\n- [Up](https://example.com/car/4)\n  Available"
+    end
+
+    it "keeps a status repeated in most cards when one card has another" do
+      cars = [%w[1 Golf Sold], %w[2 Polo Available], %w[3 Passat Sold]].map do |id, name, status|
+        %(<li><h3><a href="/car/#{id}">#{name}</a></h3><p><a href="/car/#{id}">#{status}</a></p></li>)
+      end
+      convert("<ul>#{cars.join}</ul>").should == "- [Golf](https://example.com/car/1)\n  Sold\n- [Polo](https://example.com/car/2)\n  Available\n" \
+                                                  "- [Passat](https://example.com/car/3)\n  Sold"
+    end
+
+    it "drops the buttons of cards that links to other pages follow" do
+      cards = (1..3).map { |id| %(<li><h3><a href="/p/#{id}">Plate #{id}</a></h3><p><a href="/p/#{id}">Details</a></p></li>) }.join
+      tags = '<p><a href="/t/a">Alpha</a> <a href="/t/b">Beta</a></p><p><a href="/t/a">Tags</a>, <a href="/t/b">Tags</a> and more</p>'
+      convert("<ul>#{cards}</ul>#{tags}").should == "- [Plate 1](https://example.com/p/1)\n- [Plate 2](https://example.com/p/2)\n" \
+                                                     "- [Plate 3](https://example.com/p/3)\n\n[Alpha](https://example.com/t/a) " \
+                                                     "[Beta](https://example.com/t/b)\n\nTags, Tags and more"
+    end
+
+    it "keeps a text the page links again and again to a few pages" do
+      stores = %w[a a a a b]
+      products = stores.each_with_index.map do |store, index|
+        %(<li><a href="/p/#{index}">Boiler #{index}</a><p><a href="/s/#{store}">Shop #{store}</a></p><p><a href="/s/#{store}">Henan/Zhoukou</a></p></li>)
+      end
+      expected = stores.each_with_index.map do |store, index|
+        "- [Boiler #{index}](https://example.com/p/#{index})\n  [Shop #{store}](https://example.com/s/#{store})\n  Henan/Zhoukou"
+      end
+      convert("<ul>#{products.join}</ul>").should == expected.join("\n")
+    end
+
+    it "leaves links written in code alone" do
+      html = "<ol><li><p>Call the handler:</p><pre><code>handlers[name](event);\nhandlers[type](event);</code></pre></li></ol>" \
+             "<p><code>[text](https://example.com/docs)</code> or <code>[the docs](https://example.com/docs)</code></p>"
+      convert(html).should == "1. Call the handler:\n   ```\n   handlers[name](event);\n   handlers[type](event);\n   ```\n\n" \
+                              "`[text](https://example.com/docs)` or `[the docs](https://example.com/docs)`"
+    end
+
+    it "drops the list marker a dropped button leaves" do
+      html = '<ul><li><a href="/d/1">Rainfall</a><ul><li><a href="/d/1">CSV</a></li></ul></li>' \
+             '<li><a href="/d/2">Rivers</a><ul><li><a href="/d/2">CSV</a></li></ul></li></ul>'
+      convert(html).should == "- [Rainfall](https://example.com/d/1)\n- [Rivers](https://example.com/d/2)"
+    end
+
+    it "finds repeated links on a long line of non-ASCII text in linear time" do
+      line = (1..3000).map { |i| "[新闻标题第#{i}条](https://example.com/p/#{i}) [详情](https://example.com/p/#{i})" }.join(" ")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = Nokodown::Markdown::CardLinks.new([Nokodown::Markdown::Block.new(:paragraph, line)]).call.first.text
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      text.should_not include("[详情]")
+    end
+
+    it "keeps a card's link on its title when initials or a count come first" do
+      html = '<ul><li><a href="/w">J</a> <a href="/w">John Wick, Chapter 2</a><p>Foley artist</p></li>' \
+             '<li><a href="/h">TFH</a><h4><a href="/h">The Finest Hours</a></h4><p>Foley artist</p></li></ul>'
+      convert(html).should == "- J [John Wick, Chapter 2](https://example.com/w)\n  Foley artist\n" \
+                              "- TFH\n  [The Finest Hours](https://example.com/h)\n  Foley artist"
+    end
+
+    it "keeps the links to other sections of a page and spaces the links it unwraps" do
+      html = '<p><a href="/g#1">One</a> <a href="/g#2">Two</a></p><p><a href="/a">apples</a><a href="/b">pears</a><a href="/a">fruit</a> ' \
+             'and more on <a href="/a">apples</a>.</p>'
+      convert(html).should == "[One](https://example.com/g#1) [Two](https://example.com/g#2)\n\n" \
+                              "[apples](https://example.com/a)[pears](https://example.com/b) fruit and more on apples."
+    end
+
+    it "does not space the parts of an address split over links" do
+      html = '<p><a href="mailto:info@agios.org">info</a><a href="mailto:info@agios.org">@</a><a href="mailto:info@agios.org">agios</a>' \
+             '<a href="mailto:info@agios.org">.</a><a href="mailto:info@agios.org">org</a></p>'
+      convert(html).should == "[info](mailto:info@agios.org)@agios.org"
+    end
+
+    it "writes a mail link that shows its address as text" do
+      convert('<p><a href="mailto:info@g-stroot.de">E-Mail info@g-stroot.de</a>, <a href="mailto:a@b.co">Write us</a></p>').should ==
+        "E-Mail info@g-stroot.de, [Write us](mailto:a@b.co)"
+    end
+
+    it "decodes addresses Cloudflare hides" do
+      html = '<p><a href="/cdn-cgi/l/email-protection#5a33343c351a3f223b372a363f74393537">[email&#160;protected]</a>, ' \
+             '<span class="__cf_email__" data-cfemail="5a33343c351a3f223b372a363f74393537">[email&#160;protected]</span></p>'
+      convert(html).should == "info@example.com, info@example.com"
+    end
+
     it "writes a link whose text is its URL as a bare URL" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
+    end
+
+    it "writes a link whose text is a whole address as that address" do
+      html = '<p><a href="https://track.example.net/ct?url=x&amp;id=9">https://www.bar.example/</a> ' \
+             '<a href="https://t.co/x1">https://example.org/a/very/…</a> <a href="/wiki/%D8%AD%D8%AF">https://example.com/wiki/حد</a> ' \
+             '<a href="https://www.naver.com/?a=b">https://www.naver.com?a=b</a></p>'
+      convert(html).should == "https://www.bar.example/ [https://example.org/a/very/…](https://t.co/x1) https://example.com/wiki/حد " \
+                              "https://www.naver.com?a=b"
+    end
+
+    it "writes a link whose text shows an address on its own site, whole or cut short, as its address" do
+      html = '<p><a href="https://www.example.org/forum/showthread.php?t=123456&amp;page=2">https://www.example.org/forum/showthread.p...</a> ' \
+             '<a href="https://news.example/2019/11/20/bordal-recria">https://news.example/2019/11/20/bordal</a></p>'
+      convert(html).should == "https://www.example.org/forum/showthread.php?t=123456&page=2 https://news.example/2019/11/20/bordal-recria"
     end
 
     it "puts images out of link text" do
@@ -213,11 +427,28 @@ RSpec.describe "Markdown conversion" do
       convert('<img srcset="/s.jpg 320w, /l.jpg 1280w, /m.jpg 640w" alt="Photo">').should == "![Photo](https://example.com/l.jpg)"
     end
 
+    it "drops images that stand in for one still loading or missing" do
+      html = '<p><img src="/img_load.gif" alt="Rose"><img src="/no-image.png" alt="Rose"><img src="/placeholder100.png">' \
+             '<img src="/poster_loading.png" alt="Rose"></p><p>Rose</p>'
+      convert(html).should == "Rose"
+    end
+
+    it "keeps images whose file name holds a placeholder or loading word inside another word" do
+      html = '<p><img src="/grand-piano-image.jpg" alt="Steinway grand piano"><img src="/server-load-chart.png" alt="Server load">' \
+             '<img src="/loading-dock.jpg" alt="Dock"><img src="/tribe-loading.gif" alt="Loading Events"><img src="/ajax-loader.png"></p>'
+      convert(html).should == "![Steinway grand piano](https://example.com/grand-piano-image.jpg)![Server load](https://example.com/server-load-chart.png)" \
+                              "![Dock](https://example.com/loading-dock.jpg)"
+    end
+
     it "drops tracking pixels, icons, placeholders and badges" do
       html = '<img src="/pixel.gif" width="1" height="1"><img src="/icon.png" width="16" height="16">' \
              '<img src="/assets/grey-placeholder.png"><img src="https://img.shields.io/badge/ci-passing-green" alt="CI">' \
              '<img src="/arrow.svg"><p>Text</p>'
       convert(html).should == "Text"
+    end
+
+    it "drops markup written into alt text" do
+      convert('<p><img src="/a.jpg" alt="<p>Design <b>the</b> solution</p>"></p>').should == "![Design the solution](https://example.com/a.jpg)"
     end
 
     it "uses the alt text of emoji images" do
@@ -325,14 +556,14 @@ RSpec.describe "Markdown conversion" do
     it "keeps nested list markers when it drops a repeated image" do
       html = '<p><img src="https://ex.com/avatar.png"> Forum</p><ol><li><p>First post</p></li>' \
              '<li><ol><li><ul><li><img src="https://ex.com/avatar.png"><p>Reply</p></li></ul></li></ol></li></ol>'
-      convert(html).should == "![](https://ex.com/avatar.png) Forum\n\n1. First post\n\n   1. - Reply"
+      convert(html).should == "![](https://ex.com/avatar.png) Forum\n\n1. First post\n   1. - Reply"
     end
 
     it "does not remove repeated images from code blocks, nested ones included" do
       code = "<pre><code>![](https://example.com/logo.png)\n\n\nend</code></pre>"
       html = %(<p><img src="/logo.png" alt=""></p>#{code}<ul><li><img src="/logo.png" alt=""></li><li>Use this:#{code}</li></ul>)
       convert(html).should == "![](https://example.com/logo.png)\n\n```\n![](https://example.com/logo.png)\n\n\nend\n```\n\n" \
-                              "- Use this:\n\n  ```\n  ![](https://example.com/logo.png)\n\n\n  end\n  ```"
+                              "- Use this:\n  ```\n  ![](https://example.com/logo.png)\n\n\n  end\n  ```"
     end
 
     describe "in the main content" do
@@ -348,8 +579,8 @@ RSpec.describe "Markdown conversion" do
                '<h3><a href="/p/2">Ridge runner</a></h3><p>A light mesh boot for fast summer hikes.</p></li>' \
                '<li><a href="/lookbook.jpg"><img src="/lookbook-small.jpg" alt="Boots on a mountain trail"></a></li></ul></main>'
         extract(html).should == "# Hiking boots\n\n" \
-                                "- ### [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
-                                "- ### [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes.\n\n" \
+                                "- [Trail boot](https://example.com/p/1)\n  Waterproof leather for long days on rocky ground.\n" \
+                                "- [Ridge runner](https://example.com/p/2)\n  A light mesh boot for fast summer hikes.\n" \
                                 "- ![Boots on a mountain trail](https://example.com/lookbook-small.jpg)"
       end
 
@@ -361,8 +592,8 @@ RSpec.describe "Markdown conversion" do
                '<li><ul><li><a href="/p/2"><img src="/2a.jpg" alt="Ridge runner, front"></a></li></ul>' \
                '<h3><a href="/p/2">Ridge runner</a></h3><p>A light mesh boot for fast summer hikes.</p></li></ul></main>'
         extract(html).should == "# Hiking boots\n\n" \
-                                "- ### [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
-                                "- ### [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes."
+                                "- [Trail boot](https://example.com/p/1)\n  Waterproof leather for long days on rocky ground.\n" \
+                                "- [Ridge runner](https://example.com/p/2)\n  A light mesh boot for fast summer hikes."
       end
 
       it "keeps a thumbnail when no link left in the Markdown names its page in words" do
@@ -379,7 +610,7 @@ RSpec.describe "Markdown conversion" do
                                 "![Globex conveyor belts](https://example.com/3.jpg)"
       end
 
-      it "keeps article images unless a short alt repeats a text link to the same page" do
+      it "keeps article images with alt text unless a short alt repeats a text link to the same page" do
         prose = "<p>#{'Tidal lagoons release water through turbines as the tide turns. ' * 4}</p>"
         html = "<article><h1>Tidal power</h1>#{prose}" \
                '<p><a href="/media/harbour-full.jpg"><img src="/media/harbour.jpg" alt="Harbour wall at dawn"></a></p>' \
@@ -389,22 +620,20 @@ RSpec.describe "Markdown conversion" do
         markdown = extract(html)
 
         markdown.should include("![Harbour wall at dawn](https://example.com/media/harbour.jpg)")
-        markdown.should include("![](https://example.com/media/turbine.jpg)")
+        markdown.should_not include("turbine.jpg")
         markdown.should include("Next: [A guide to tides](https://example.com/guide)")
         markdown.should_not include("guide.jpg")
       end
 
-      it "drops an article thumbnail whose longer alt repeats the link text, and keeps photos without alt text in any wrapper" do
+      it "drops an article thumbnail whose longer alt repeats the link text" do
         prose = "<p>#{'Tidal lagoons release water through turbines as the tide turns. ' * 4}</p>"
         html = "<article><h1>Tidal power</h1>#{prose}" \
-               '<div><img src="/media/lagoon.jpg" alt=""></div>' \
                '<p>Start here: <a href="/tides"><img src="/tides.jpg" alt="Tides explained in four pictures"></a> ' \
                '<a href="/tides">Tides explained</a></p>' \
                '<p>Or: <a href="/severn"><img src="/severn.jpg" alt="Map of the Severn estuary"></a> <a href="/severn">Severn guide</a></p>' \
                "#{prose}</article>"
         markdown = extract(html)
 
-        markdown.should include("![](https://example.com/media/lagoon.jpg)")
         markdown.should include("Start here: [Tides explained](https://example.com/tides)")
         markdown.should include("Or: ![Map of the Severn estuary](https://example.com/severn.jpg) [Severn guide](https://example.com/severn)")
       end
@@ -425,12 +654,75 @@ RSpec.describe "Markdown conversion" do
         extract(html).should == "# Plans\n\nPick the plan that fits your team.\n\n\\# 1 rated by small teams\n\n\\> Compare plans"
       end
 
-      it "keeps article figures marked presentational and large photos marked decorative" do
+      it "drops images without alt text in any wrapper and at any size, keeping their caption" do
         prose = "<p>#{'Memory grows each time the cache misses, so the graph below climbs steadily. ' * 4}</p>"
-        figure = '<figure><img src="/leak.png" alt="" role="presentation" width="700" height="400"><figcaption>Memory leak in action</figcaption></figure>'
-        extract("<article><h1>Leaks</h1>#{prose}#{figure}#{prose}</article>").should include("![](https://example.com/leak.png)\n\nMemory leak in action")
-        extract('<main><h1>Kettle</h1><p>A steel kettle.</p><div><img src="/kettle.jpg" alt="" width="2000" height="2000"></div></main>').should ==
-          "# Kettle\n\nA steel kettle.\n\n![](https://example.com/kettle.jpg)"
+        figure = '<figure><img src="/leak.png" alt="" width="700" height="400"><figcaption>Memory leak in action</figcaption></figure>'
+        markdown = extract("<article><h1>Leaks</h1>#{prose}#{figure}<div><img src=\"/graph.png\"></div>#{prose}</article>")
+        markdown.should include("Memory leak in action")
+        markdown.should_not include(".png")
+      end
+
+      it "keeps the images of a page that has hardly any text" do
+        extract('<main><h1>Gallery</h1><p><img src="/IMG_1.jpg"><img src="/IMG_2.jpg" alt=""></p></main>').should ==
+          "# Gallery\n\n![](https://example.com/IMG_1.jpg)![](https://example.com/IMG_2.jpg)"
+      end
+
+      it "drops images whose alt text names nothing" do
+        alts = ["IMG_6175.JPG", "DSC_0264", "DSC08251s", "Screenshot 2025-10-31 at 5.19.44 PM", "image", "Foto 2", "描述", "صورة",
+                "9f86d081884c7d65", "Cargando..."]
+        images = alts.map.with_index { |alt, index| %(<img src="/#{index}.jpg" alt="#{alt}">) }.join
+        text = "We sailed along the rocky coast for a whole week, stopping at small harbours, fish markets and quiet beaches on the way."
+        extract("<main><h1>Trip</h1><p>#{text}</p><p>#{images}<img src=\"/sea.jpg\" alt=\"Boats in the harbour\"></p></main>").should ==
+          "# Trip\n\n#{text}\n\n![Boats in the harbour](https://example.com/sea.jpg)"
+      end
+
+      it "keeps images whose class, id, alt or file name only resembles an icon's" do
+        text = "We sailed along the rocky coast for a whole week, stopping at small harbours, fish markets and quiet beaches on the way."
+        images = '<img src="/1.jpg" class="img-catalogo" alt="Red running shoe"><img src="/2.jpg" id="silicon-wafer" alt="Wafer of pure silicon">' \
+                 '<img src="/3.jpg" alt="Photo 2023 keynote on stage"><img src="/4.jpg" alt="Trucks loading containers">' \
+                 '<img src="/kitchen-counter.jpg" alt="Granite kitchen counter with oak cabinets">'
+        extract("<main><h1>Trip</h1><p>#{text}</p><p>#{images}</p></main>").should ==
+          "# Trip\n\n#{text}\n\n![Red running shoe](https://example.com/1.jpg)![Wafer of pure silicon](https://example.com/2.jpg)" \
+          "![Photo 2023 keynote on stage](https://example.com/3.jpg)![Trucks loading containers](https://example.com/4.jpg)" \
+          "![Granite kitchen counter with oak cabinets](https://example.com/kitchen-counter.jpg)"
+      end
+
+      it "keeps the ticks of a long data table in linear time" do
+        rows = (1..400).map { |i| %(<tr><td>Plan #{i}</td><td><img src="/yes.png"></td><td><img src="/no.png"></td></tr>) }.join
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        markdown = extract("<main><h1>Plans</h1><table>#{rows}</table></main>")
+        (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 2
+        markdown.should include("| Plan 400 | ![](https://example.com/yes.png) | ![](https://example.com/no.png) |")
+      end
+
+      it "drops the buttons of a layout table in a data table's cell" do
+        text = "Our shop sells leads, collars, beds and toys for dogs of every size, made by hand in our own workshop."
+        buttons = '<table><tr><td><a href="/profile/7"><img src="/icon_profile.gif" alt="View profile"></a></td></tr></table>'
+        html = "<main><h1>Shop</h1><p>#{text}</p><table><tr><th>Author</th><th>Message</th></tr>" \
+               "<tr><td>Sam</td><td>Great collars.</td></tr><tr><td>Top</td><td>#{buttons}</td></tr></table></main>"
+        extract(html).should == "# Shop\n\n#{text}\n\n| Author | Message |\n| --- | --- |\n| Sam | Great collars. |\n| Top | |"
+      end
+
+      it "drops an image that names nothing although its alt text holds an escape" do
+        text = "We sailed along the rocky coast for a whole week, stopping at small harbours, fish markets and quiet beaches on the way."
+        extract("<main><h1>Trip</h1><p>#{text}</p><p><img src=\"/2.jpg\" alt=\"photo_ 2\"></p></main>").should == "# Trip\n\n#{text}"
+      end
+
+      it "drops the icons of a layout table's text-free cells" do
+        text = "Our shop sells leads, collars, beds and toys for dogs of every size, made by hand in our own workshop."
+        html = "<main><h1>Shop</h1><p>#{text}</p><table><tr><td>Sam replied</td>" \
+               '<td><img src="/icon_quote.gif" alt="Reply with quote"></td></tr></table></main>'
+        extract(html).should == "# Shop\n\n#{text}\n\nSam replied"
+      end
+
+      it "drops icons, logos and avatars" do
+        text = "Our shop sells leads, collars, beds and toys for dogs of every size, made by hand in our own workshop."
+        html = "<main><h1>Shop</h1><p>#{text}</p>" \
+               '<p><img src="/img/QDLogoBlue.gif" alt="Quality Dogs"><img src="/icons/rss.png" alt="Feed">' \
+               '<img src="/a.jpg" class="avatar" alt="Sam"><img src="/c.svg" alt="Icono de chevron hacia abajo">' \
+               '<img src="/badge_67_8@3x.png" alt="Allied Kitchen, Bath, Home and Outdoor Living in Fort Lauderdale on Houzz">' \
+               '<img src="/rss-feed-guide.jpg" alt="An RSS reader on a phone" width="800"></p></main>'
+        extract(html).should == "# Shop\n\n#{text}\n\n![An RSS reader on a phone](https://example.com/rss-feed-guide.jpg)"
       end
 
       it "keeps the words around a decorative image apart" do
@@ -464,8 +756,13 @@ RSpec.describe "Markdown conversion" do
       convert('<ol start="3"><li>c</li><li>d</li></ol>').should == "3. c\n4. d"
     end
 
-    it "separates items holding several paragraphs" do
-      convert("<ol><li><p>First</p><p>More</p></li><li><p>Second</p></li></ol>").should == "1. First\n\n   More\n\n2. Second"
+    it "keeps items holding several paragraphs tight, the later paragraphs indented" do
+      convert("<ol><li><p>First</p><p>More</p></li><li><p>Second</p></li></ol>").should == "1. First\n   More\n2. Second"
+    end
+
+    it "writes the headings of list items as their text" do
+      convert('<ul><li><h3><a href="/p/1">Trail boot</a></h3><p>Leather</p></li></ul><ol><li><h2>&gt; 1 pick</h2></li></ol>').should ==
+        "- [Trail boot](https://example.com/p/1)\n  Leather\n\n1. \\> 1 pick"
     end
 
     it "looks through wrappers between the list and its items" do
@@ -473,7 +770,12 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "renders task list checkboxes" do
-      convert('<ul><li><input type="checkbox" checked> Done</li><li><input type="checkbox"> Todo</li></ul>').should == "- [x] Done\n- [ ] Todo"
+      convert('<ul><li><input type="checkbox" disabled checked> Done</li><li><input type="checkbox" disabled> Todo</li></ul>').should == "- [x] Done\n- [ ] Todo"
+    end
+
+    it "drops the checkboxes of product options and filters" do
+      convert('<ul><li><input type="checkbox"> Pipe rolling +1,00 ₽</li><li><input type="checkbox" checked> Red</li></ul>').should ==
+        "- Pipe rolling +1,00 ₽\n- Red"
     end
 
     it "drops bullets and repeated numbers typed into items" do
@@ -521,13 +823,27 @@ RSpec.describe "Markdown conversion" do
       convert("<ul><li>Mouse<ul><li>Quiet</li></ul></li><li><ul><li>Heavy</li></ul></li></ul>").should == "- Mouse\n  - Quiet\n- Heavy"
     end
 
-    it "keeps an item together when content follows its nested list" do
+    it "writes a one-item list that opens an item as the item's first line" do
       convert("<ul><li><ul><li>Photo</li></ul>Boot $5</li><li><ul><li>Photo</li></ul>Sock $6</li></ul>").should ==
-        "- - Photo\n\n  Boot $5\n\n- - Photo\n\n  Sock $6"
+        "- Photo\n  Boot $5\n- Photo\n  Sock $6"
     end
 
     it "keeps a numbered list nested at the start of an item under its own number" do
       convert("<ol><li><ol><li>a</li><li>b</li></ol></li><li>c</li></ol>").should == "1. 1. a\n   2. b\n2. c"
+    end
+
+    it "writes paragraphs that all open with one glyph as a list" do
+      convert("<p>• Fast</p><p>• Safe</p><p>Also:</p><p>▪ Free shipping<br>▪ Returns</p><p>Verdict</p><p>✓ Light</p><p>✗ Loud</p>").should ==
+        "- Fast\n- Safe\n\nAlso:\n\n- Free shipping\n- Returns\n\nVerdict\n\n✓ Light\n\n✗ Loud"
+    end
+
+    it "writes paragraphs typed with an emoji glyph as a list" do
+      convert("<p>\u2714\uFE0F Fast</p><p>\u2714\uFE0F Safe</p>").should == "- Fast\n- Safe"
+    end
+
+    it "joins numbered lists whose numbering runs on" do
+      convert('<ul><li>a</li></ul><ul><li>b</li></ul><ol><li>one</li></ol><ol start="2"><li>two</li></ol><ol><li>again</li></ol>').should ==
+        "- a\n\n- b\n\n1. one\n2. two\n\n1. again"
     end
 
     it "renders definition lists as term and definition pairs" do
@@ -543,12 +859,12 @@ RSpec.describe "Markdown conversion" do
     it "keeps a list or a table inside a definition under its term" do
       html = "<dl><dt>Colors</dt><dd><ul><li>Brown</li><li>Black</li></ul></dd>" \
              "<dt>Sizes</dt><dd><table><tr><th>S</th><th>M</th></tr><tr><td>36</td><td>38</td></tr></table></dd></dl>"
-      convert(html).should == "- **Colors**\n  - Brown\n  - Black\n\n- **Sizes**\n\n  | S | M |\n  | --- | --- |\n  | 36 | 38 |"
+      convert(html).should == "- **Colors**\n  - Brown\n  - Black\n- **Sizes**\n  | S | M |\n  | --- | --- |\n  | 36 | 38 |"
     end
 
     it "keeps the paragraphs and code of a longer definition under its term" do
       html = "<dl><dt>cache(f)</dt><dd><p>Caches results.</p><pre>cache(f)(1)</pre></dd><dt>Since</dt><dd>3.9</dd></dl>"
-      convert(html).should == "- **cache(f)**\n\n  Caches results.\n\n  ```\n  cache(f)(1)\n  ```\n\n- **Since**: 3.9"
+      convert(html).should == "- **cache(f)**\n  Caches results.\n  ```\n  cache(f)(1)\n  ```\n- **Since**: 3.9"
     end
   end
 
@@ -559,6 +875,11 @@ RSpec.describe "Markdown conversion" do
 
     it "reads the language from wrappers used by GitHub and Sphinx" do
       convert('<div class="highlight-shell"><div class="highlight"><pre>ls -la</pre></div></div>').should == "```shell\nls -la\n```"
+    end
+
+    it "drops the language label and copy button printed with the code" do
+      convert("<p>js</p><pre><code>let a = 1</code></pre><p>Copy</p><p>Python Copy code</p><pre>print(1)</pre><p>Output</p><pre>1</pre>").should ==
+        "```js\nlet a = 1\n```\n\n```python\nprint(1)\n```\n\nOutput\n\n```\n1\n```"
     end
 
     it "uses a longer fence when the code contains one" do
@@ -618,6 +939,39 @@ RSpec.describe "Markdown conversion" do
         "Left column\n\nRight column"
     end
 
+    it "writes a title row spanning the table above it" do
+      html = '<table><tr><th colspan="2">Specs</th></tr><tr><th>Key</th><th>Value</th></tr><tr><td>Weight</td><td>3 kg</td></tr></table>'
+      convert(html).should == "Specs\n\n| Key | Value |\n| --- | --- |\n| Weight | 3 kg |"
+    end
+
+    it "keeps a header row whose other cells are blank" do
+      rows = %w[Apple Pear].map { |fruit| %(<tr><td>#{fruit}</td><td><a href="/buy/#{fruit}">Buy</a></td></tr>) }.join
+      convert("<table><tr><th>Item</th><th></th></tr>#{rows}</table>").should ==
+        "| Item |  |\n| --- | --- |\n| Apple | [Buy](https://example.com/buy/Apple) |\n| Pear | [Buy](https://example.com/buy/Pear) |"
+    end
+
+    it "keeps cell values written as a sign" do
+      html = "<table><tr><th>Module</th><th>Status</th><th>Note</th></tr><tr><td>mod_access</td><td>+</td><td>-</td></tr>" \
+             "<tr><td>mod_dbm</td><td>?</td><td>&times;</td></tr></table>"
+      convert(html).should == "| Module | Status | Note |\n| --- | --- | --- |\n| mod_access | + | - |\n| mod_dbm | ? | × |"
+    end
+
+    it "drops separators between links in a table cell" do
+      html = '<table><tr><th>Team</th><th>Links</th></tr><tr><td>Cougars</td><td><a href="/r">Roster</a> | <a href="/s">Stats</a></td></tr></table>'
+      convert(html).should == "| Team | Links |\n| --- | --- |\n| Cougars | [Roster](https://example.com/r) [Stats](https://example.com/s) |"
+    end
+
+    it "drops a signature's separator line in a table cell" do
+      html = "<table><tr><th>Author</th><th>Post</th></tr><tr><td>Sam</td><td>Great collars.<br>_________________<br>Sam's shop</td></tr></table>"
+      convert(html).should == "| Author | Post |\n| --- | --- |\n| Sam | Great collars. Sam's shop |"
+    end
+
+    it "drops a column that holds one sign in every row" do
+      html = "<table><tr><th>Home</th><th>-</th><th>Away</th></tr><tr><td>Schalke</td><td>-</td><td>Hannover</td></tr>" \
+             "<tr><td>Bremen</td><td>-</td><td>Schalke</td></tr></table>"
+      convert(html).should == "| Home | Away |\n| --- | --- |\n| Schalke | Hannover |\n| Bremen | Schalke |"
+    end
+
     it "keeps the caption" do
       convert("<table><caption>Results</caption><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>").should ==
         "Results\n\n| A | B |\n| --- | --- |\n| 1 | 2 |"
@@ -629,8 +983,8 @@ RSpec.describe "Markdown conversion" do
       convert("<blockquote><p>One</p><p>Two</p></blockquote>").should == "> One\n>\n> Two"
     end
 
-    it "keeps one rule between blocks" do
-      convert("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "a\n\n---\n\nb"
+    it "drops horizontal rules" do
+      convert("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "a\n\nb"
     end
 
     it "renders details with a bold summary" do
@@ -672,8 +1026,8 @@ RSpec.describe "Markdown conversion" do
     it "closes the bold a shortened quote cuts through" do
       post = "The stove boils a full litre of water in three minutes on a canister. It is a bit slower in the cold, " \
              "and the piezo lighter fails above 3000 metres, so carry matches."
-      convert("<p><b>#{post}</b></p><blockquote><p><b>#{post}</b></p></blockquote>").should ==
-        "**#{post}**\n\n> **The stove boils a full litre of water in three minutes on a canister.** …"
+      convert("<p>Tip: <b>#{post}</b></p><blockquote><p>Tip: <b>#{post}</b></p></blockquote>").should ==
+        "Tip: **#{post}**\n\n> Tip: **The stove boils a full litre of water in three minutes on a canister.** …"
     end
 
     it "keeps a quote that repeats another quote" do
@@ -701,6 +1055,13 @@ RSpec.describe "Markdown conversion" do
 
     it "drops a trailing heading left without content" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
+    end
+
+    it "keeps the last card's linked title when the control after it is removed" do
+      html = '<p>2026.08.21</p><h2><a href="/news/42">Café night</a></h2><p>2026.07.19</p><h2><a href="/news/40">Survey results</a></h2>' \
+             "<p>Ver más</p><h2>Related</h2>"
+      convert(html).should == "2026.08.21\n\n## [Café night](https://example.com/news/42)\n\n2026.07.19\n\n" \
+                              "## [Survey results](https://example.com/news/40)"
     end
 
     it "keeps a trailing list of linked titles" do

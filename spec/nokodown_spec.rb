@@ -57,6 +57,50 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should start_with("Photo by Ben Hon for Resy\n\n# The Resy Guide to the Michelin Winners")
     end
 
+    it "puts the page's title in place of a heading that only names the site" do
+      body = "<p>#{'We caught twelve trout at the upper pond, and the water was cold and clear all day. ' * 3}</p>"
+      html = "<title>Bonten Fishing Pond - Friends from afar</title><body><article>" \
+             "<h1><a href='http://bonten.example/'>Bonten Fishing Pond</a></h1>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "http://bonten.example/calendar/671515").should start_with("# Friends from afar\n\nWe caught")
+    end
+
+    it "puts the title above a section's name when the URL names the title" do
+      body = "<h1>Transparencia</h1><p>Reporte abril 2023</p><p>#{'The public consultations held in April, with their dates and documents. ' * 3}</p>"
+      html = "<title>Reporte abril 2023</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://sb.gob.do/transparencia/consultas/reporte-abril-2023/")
+              .should start_with("# Reporte abril 2023\n\n## Transparencia\n\nThe public")
+    end
+
+    it "drops a line below the title that only repeats it" do
+      body = "<p><b>Fucili d'assalto</b></p><p>#{'The assault rifles of GTA 5 differ in damage, range and fire rate. ' * 3}</p>"
+      html = "<title>Fucili d'assalto</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html).should start_with("# Fucili d'assalto\n\nThe assault rifles")
+    end
+
+    it "keeps a first line named like the title that runs on into the next" do
+      poem = "<p>Ode to the sea</p><p>#{'that rolls over the stones of the harbour and back again to the deep. ' * 3}</p>"
+      html = "<title>Ode to the sea</title><body><article>#{poem}</article></body>"
+
+      Nokodown.to_markdown(html).should start_with("# Ode to the sea\n\nOde to the sea\n\nthat rolls")
+    end
+
+    it "keeps the site's name heading the content on its home page" do
+      body = "<p>#{'Arcade game with a bouncing ball, cosmic levels and endless runs to beat. ' * 3}</p>"
+      html = "<title>Chickenin Route - Arcade Game</title><body><article><h1>Chickenin Route</h1>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://www.chickenin-route.top/it/").should start_with("# Chickenin Route\n\nArcade game")
+    end
+
+    it "does not head content that has its own heading with a title that only names the site" do
+      body = "<h2>David Hellenius</h2><p>#{'Swedish presenter, comedian and actor, known for his television shows. ' * 3}</p>"
+      html = "<title>Edisonline SK</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://edisonline.sk/catalog/category/person").should start_with("## David Hellenius\n\nSwedish")
+    end
+
     it "accepts nil" do
       Nokodown.extract(nil).markdown.should == ""
     end
@@ -123,7 +167,7 @@ RSpec.describe Nokodown do
 
       markdown = extract("<main><h1>Mugs</h1>#{categories}<ul>#{card * 3}</ul></main>")
 
-      markdown.should include("## [Stoneware mug](https://example.com/p/mug)\n\n  $18")
+      markdown.should include("- [Stoneware mug](https://example.com/p/mug)\n  $18")
       ["Cups", "Add to cart", "Quick view"].each { |noise| markdown.should_not include(noise) }
     end
 
@@ -319,6 +363,21 @@ RSpec.describe Nokodown do
       convert('<p>Open daily.</p><div class="w-condition-invisible"><p>Closed for the holidays.</p></div>').should == "Open daily."
     end
 
+    it "drops link spam placed far off screen or in a strip one pixel high" do
+      html = '<p>Open daily.</p><div style="position: absolute; left: -7786px;"><a href="https://spam.example">casino bonus</a></div>' \
+             '<div style="position:fixed;top:-9000px"><a href="https://spam.example">live casino</a></div>' \
+             '<div style="position:absolute;left:-999em"><a href="https://spam.example">slots</a></div>' \
+             '<div style="overflow:hidden;height:1px;"><a href="https://spam.example">no kyc casino</a></div>'
+
+      convert(html).should == "Open daily."
+    end
+
+    it "keeps screen-reader text clipped to one pixel in place, which can be the only copy of a price" do
+      html = '<p>Camp kettle</p><span style="position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden">Price: 30 euro</span>'
+
+      convert(html).should == "Camp kettle\n\nPrice: 30 euro"
+    end
+
     it "drops a large hidden block beside the visible title, but not an anti-flicker wrapper around the page" do
       article = "<h1>Trail stoves</h1><p>#{'A trail stove boils a litre in three minutes. ' * 14}</p>"
       copy = "<pre hidden>#{'# Trail stoves raw markdown copy of the article. ' * 8}</pre>"
@@ -443,6 +502,88 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "protected email addresses" do
+    it "decodes the addresses Cloudflare hides" do
+      link = '<a href="/cdn-cgi/l/email-protection#f79494b7989492969984969192838e8385969e999e9990d994989a">' \
+             '<span class="__cf_email__" data-cfemail="36555576595553575845575053424f4244575f585f58511855595b">[email&#160;protected]</span></a>'
+      html = "<p>Questions about your certificate? Write to #{link} and we will answer within a day.</p>"
+
+      markdown = Nokodown.to_markdown(html, url: "https://www.oceansafetytraining.com/cert", title: false)
+      markdown.should include("cc@oceansafetytraining.com and")
+      markdown.should_not include("protected")
+    end
+
+    it "writes a protected mail link that holds only the placeholder as its address" do
+      html = '<p>Write to <a href="/cdn-cgi/l/email-protection#5a33343c351a3f223b372a363f74393537">[email&#160;protected]</a> today.</p>'
+
+      Nokodown.to_markdown(html, title: false).should == "Write to info@example.com today."
+    end
+
+    it "drops a decoy that a stylesheet hides inside an address" do
+      html = '<p>Email: <span class="obfuscate">info@ <span class="decoy-domain">ex.com</span> example.com</span></p>'
+
+      Nokodown.to_markdown(html, title: false).should == "Email: info@example.com"
+    end
+  end
+
+  describe "leaked markup" do
+    def convert(body)
+      Nokodown.to_markdown("<body>#{body}</body>", url: "https://example.com/page", title: false)
+    end
+
+    it "reads alt text that holds escaped markup as text" do
+      convert('<p><img src="/pinot.jpg" alt="2020 Pinot Noir &lt;br&gt; Presqu’ile Vineyard"></p>')
+        .should == "![2020 Pinot Noir Presqu’ile Vineyard](https://example.com/pinot.jpg)"
+    end
+
+    it "drops escaped elements written out whole, but not a tutorial's lines of markup" do
+      convert("<p>&lt;abbr id=\"kygai\"&gt;&lt;/abbr&gt;</p><p>Garden furniture for every terrace.</p>").should == "Garden furniture for every terrace."
+      convert("<p>Start the form with</p><p>&lt;form method=\"GET\" action=\"get.asp\"&gt;</p>")
+        .should == "Start the form with\n\n\\<form method=\"GET\" action=\"get.asp\">"
+    end
+
+    it "drops PHP errors printed into the page" do
+      error = "<br />\n<b>Warning</b>:  Use of undefined constant mimes in <b>/home/site/functions.php</b> on line <b>28</b><br />"
+
+      convert("#{error}<p>Mestin recipes for camping.</p>").should == "Mestin recipes for camping."
+    end
+
+    it "drops Liquid errors" do
+      html = "<p>Coffee <span>Liquid error (snippets/facets line 538): Could not find asset snippets/icon-close.liquid</span></p>"
+
+      convert(html).should == "Coffee"
+    end
+
+    it "keeps the template's text after a Liquid error's message" do
+      html = "<p>Type Liquid error (snippets/facets line 602): Could not find asset snippets/icon-arrow.liquid Coffee</p>" \
+             "<p>Saved Liquid error (product-template line 135): divided by 0. Free shipping on every order.</p>"
+
+      convert(html).should == "Type Coffee\n\nSaved Free shipping on every order."
+    end
+
+    it "leaves template placeholders and addresses in code alone" do
+      html = "<p>Print <code>{{item.guest_name}}</code> in the template.</p><p>Run <code>info@ <span>ex.com</span> example.com</code></p>"
+
+      convert(html).should == "Print `{{item.guest_name}}` in the template.\n\nRun `info@ ex.com example.com`"
+    end
+
+    it "looks for decoys in addresses in time linear in the lines of a page" do
+      lines = Array.new(6000) { |index| "Week #{index}: Lakers @ Celtics, user#{index}@ example.org<br>" }
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert("<div>#{lines.join}</div>")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 5
+      markdown.should include("Week 5999: Lakers @ Celtics, user5999@ example.org")
+    end
+
+    it "drops template placeholders and shortcodes left unrendered" do
+      body = "<p>{{item.guest_name}}, {{item.nationality}}</p><p>[mailerlite_form form_id=2]</p><p>{title}</p>" \
+             "<p>Rooms with a view of the lake. {Christmas}</p>"
+
+      convert(body).should == "Rooms with a view of the lake. {Christmas}"
+    end
+  end
+
   describe "encodings" do
     it "transcodes binary input using the declared charset" do
       html = "<html><head><meta charset=\"windows-1252\"></head><body><p>caf\xE9</p></body></html>".b
@@ -452,6 +593,112 @@ RSpec.describe Nokodown do
 
     it "drops invalid UTF-8 bytes" do
       Nokodown.to_markdown("<p>a\xFFb</p>", title: false).should == "ab"
+    end
+
+    it "reads a page declared Latin-1 as Windows-1252" do
+      html = "<meta charset=iso-8859-1><p>\x93Caf\xE9\x94 \x96 open</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "“Café” – open"
+    end
+
+    it "reads the charset of a <meta> deep in the head" do
+      html = "<head><script>#{"x" * 5000}</script><meta charset=windows-1254></head><p>K\xFDble y\xF6n\xFC</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Kıble yönü"
+    end
+
+    it "reads the encoding of an XML declaration" do
+      html = "<?xml version=\"1.0\" encoding=\"windows-1251\"?><html><body><p>\xCF\xF0\xE8\xE2\xE5\xF2</p></body></html>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Привет"
+    end
+
+    it "reads bytes that are UTF-8 as UTF-8 whatever the page declares" do
+      html = "<meta charset=windows-1251><p>Привет, мир</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Привет, мир"
+    end
+
+    it "detects the encoding of a page that declares none" do
+      {
+        "Windows-1252" => "Ein schöner Tag für große Äpfel und süße Öle",
+        "Windows-1251" => "Добро пожаловать на наш форум о рыбалке",
+        "KOI8-R" => "Добро пожаловать на наш форум о рыбалке",
+        "Shift_JIS" => "今日はとても良い天気ですね。散歩に行きましょう。",
+        "GBK" => "欢迎来到我们的网站，这里有最新的产品信息。",
+        "EUC-KR" => "우리 웹사이트에 오신 것을 환영합니다. 최신 소식을 확인하세요.",
+        "Big5" => "歡迎來到我們的網站，這裡有最新的產品資訊。",
+        "EUC-JP" => "今日はとても良い天気ですね。散歩に行きましょう。"
+      }.each do |encoding, text|
+        Nokodown.to_markdown("<p>#{text}</p>".encode(encoding).b, title: false).should == text
+      end
+    end
+
+    it "reads UTF-16 by its byte order mark" do
+      %w[UTF-16LE UTF-16BE].each do |encoding|
+        Nokodown.to_markdown("\uFEFF<p>Grüße aus Köln</p>".encode(encoding).b, title: false).should == "Grüße aus Köln"
+      end
+    end
+
+    it "reads accented pairs inside words as Western, not as Han" do
+      html = "<p>Anota\xE7\xF5es e informa\xE7\xF5es da legisla\xE7\xE3o: administra\xE7\xE3o, cat\xE1logo, in\xEDcio, " \
+             "respons\xE1vel, situa\xE7\xE3o, publica\xE7\xF5es, altera\xE7\xF5es, revoga\xE7\xE3o</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Anotações e informações da legislação: administração, catálogo, " \
+                                                          "início, responsável, situação, publicações, alterações, revogação"
+    end
+
+    it "reads stray bytes in UTF-8 as Windows-1252" do
+      html = "<meta charset=utf-8><p>Ünïcödé text, Reykjav\xEDk \xA9 2020</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Ünïcödé text, Reykjavík © 2020"
+    end
+
+    it "reads stray bytes in UTF-8 in the single-byte charset that the page declares" do
+      html = "<meta charset=windows-1251><p>Привет, мир, \xB9 5</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Привет, мир, № 5"
+    end
+
+    it "reads a Western page's runs that are UTF-8 by chance as Windows-1252" do
+      html = "<meta charset=iso-8859-1><p>\x84Ohne Unterla\xDF\x93, sagt K\xF6ln, caf\xE9\xA0\xBB \x96 und caf\xC3\xA9</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "„Ohne Unterlaß“, sagt Köln, café » – und café"
+    end
+
+    it "drops what is left of a character cut off" do
+      html = "<meta charset=utf-8><p>Zażółć gęślą jaźń przekaza\xC4...</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Zażółć gęślą jaźń przekaza..."
+    end
+
+    it "undoes UTF-8 read as Windows-1252" do
+      html = "<p>CafÃ© crÃ¨me, itâ€™s ÐŸÑ€Ð¸Ð²ÐµÑ‚ Ã¢â‚¬â€œ twice</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Café crème, it’s Привет – twice"
+    end
+
+    it "drops a misread run that reads back as control characters only" do
+      Nokodown.to_markdown("<p>Fall 2017</p><p>ÂŽ</p>".b, title: false).should == "Fall 2017"
+    end
+
+    it "keeps letters that only look like UTF-8 read as Windows-1252" do
+      html = "<p>Spaß\u00A0an der « identité\u00A0» und 2×–3×</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Spaß an der « identité » und 2×–3×"
+    end
+
+    it "reads valid UTF-8 quickly when its letters come before signs" do
+      text = "phí” lệ, áš " * 200_000
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      html = Nokodown::Charset.utf8("<p>#{text}</p>".b)
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 0.3
+      html.should == "<p>#{text}</p>"
+    end
+
+    it "drops byte order marks and replacement characters" do
+      Nokodown.to_markdown("\uFEFF<p>a\uFEFFb\uFFFDc</p>".b, title: false).should == "abc"
     end
   end
 end

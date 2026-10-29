@@ -180,6 +180,95 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "share links" do
+    it "removes links that ask a network to share the page, whatever their label" do
+      html = "#{prose('Bonsai care', 2)}<ul><li><a href=\"http://www.facebook.com/sharer.php?u=https%3A%2F%2Fex.com\">シェア</a></li>" \
+             "<li><a href=\"https://www.linkedin.com/shareArticle?mini=true\">Partager sur LinkedIn</a></li>" \
+             "<li><a href=\"mailto:?subject=Bonsai\">Envoyer</a></li></ul><p>Write to <a href=\"mailto:ana@ex.com\">Ana</a> " \
+             "or <a href=\"https://api.whatsapp.com/send?phone=34600000000\">message us</a>.</p>"
+      text = remaining(html)
+
+      %w[シェア LinkedIn Envoyer].each { |label| text.should_not include(label) }
+      text.should include("Write to Ana or message us")
+    end
+  end
+
+  describe "breadcrumb trails" do
+    it "removes a trail from the home page that no class names, in any language" do
+      trails = [
+        '<div><a href="https://shop.example/">首页</a> &gt; <a href="/dushi/">都市小说</a> &gt; 厌世假少爷</div>',
+        '<ol><li><a href="/">Úvod</a></li><li><a href="/umeni">Umění</a></li><li>Afghanistán známky</li></ol>',
+        '<span>Ti trovi in: <a href="index.php">Home</a> -&gt; <a href="ricerca.php">Ricerca</a> -&gt; Volume 0002</span>',
+        '<div><a href="/">Главная</a> / Люше (LYS)</div>'
+      ]
+      trails.each do |trail|
+        text = remaining("#{trail}#{prose('Choosing a stamp album', 2)}")
+
+        text.should start_with("Choosing a stamp album")
+      end
+    end
+
+    it "keeps a category link followed by the post's date" do
+      remaining("<div><a href=\"/\">Home</a> | 20.07.2026 08:42</div>#{prose('Health', 2)}").should include("20.07.2026")
+    end
+
+    it "keeps a trail-shaped run of links that a sentence continues" do
+      sentences = {
+        "<p>Open <span><a href=\"/\">Home</a> › <a href=\"/account\">Account</a></span> and pick the order to send back.</p>" =>
+          "Open Home › Account and pick",
+        "<ul><li><a href=\"https://github.com/\">GitHub</a> / <a href=\"https://github.com/rails\">rails</a> is where Rails lives</li></ul>" =>
+          "GitHub / rails is where"
+      }
+      sentences.each { |sentence, text| remaining("#{prose('Returns', 2)}#{sentence}").should include(text) }
+    end
+
+    it "keeps a numbered list of links" do
+      steps = '<ol><li><a href="/">Homepage</a></li><li><a href="/settings">Settings</a></li><li><a href="/settings/close">Close account</a></li></ol>'
+
+      remaining("#{prose('Closing an account', 2)}#{steps}").should include("Close account")
+    end
+
+    it "keeps a credit linking to another site's home page" do
+      html = "<p>See <a href=\"https://museum.example/visit\">opening hours</a> and <a href=\"https://museum.example/shop\">the shop</a>.</p>" \
+             "#{prose('The Roman theatre', 2)}<p>© Photo: <a href=\"http://www.archeotech.ch/\">Archéotech S.A.</a> / SACV</p>"
+
+      remaining(html).should include("Archéotech S.A. / SACV")
+    end
+
+    it "keeps a list of other sites, each linked at its home page with a description" do
+      html = "#{prose('Salary research', 2)}<ul><li><a href=\"https://www.salary.com/\">Salary.com</a> – salaries by industry and zip code</li>" \
+             "<li><a href=\"https://www.homefair.com/\">HomeFair.com</a>: a relocation guide with a salary calculator</li></ul>"
+
+      text = remaining(html)
+      text.should include("salaries by industry")
+      text.should include("relocation guide")
+    end
+  end
+
+  describe "site headers" do
+    it "removes a header above the page's title however much it holds" do
+      notices = Array.new(12) { |index| "<li>Service centre #{index + 1}: 600 Friendship Road, open 8:30 to 18:30 by appointment</li>" }
+      html = "<div class=\"header\"><ul>#{notices.join}</ul></div><h1>Repairing a chronograph</h1>#{prose('Servicing a watch', 1)}"
+
+      remaining(html).should_not include("Service centre")
+    end
+
+    it "keeps a header that holds the page's prose above a banner's title" do
+      html = "<div class=\"main\"><header><h2>Neurology</h2>#{prose('Nerve pain', 3)}</header></div>" \
+             "<div class=\"banner\"><h1>New Medicine</h1></div>"
+
+      remaining(html).should include("Nerve pain")
+    end
+
+    it "keeps a header that holds the title or follows it" do
+      notices = Array.new(12) { |index| "<li>Branch #{index + 1}: 600 Friendship Road, open 8:30 to 18:30 by appointment</li>" }.join
+      ["<div class=\"header\"><h1>Branches</h1><ul>#{notices}</ul></div>",
+       "<h1>Branches</h1><div class=\"header\"><ul>#{notices}</ul></div>"].each do |html|
+        remaining(html).should include("Branch 12")
+      end
+    end
+  end
+
   describe "member panels" do
     def post(panel)
       "<div class=\"message\">#{panel}<div class=\"message-userContent\">#{prose('Bleeding the radiators', 2)}</div></div>"

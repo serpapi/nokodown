@@ -5,8 +5,65 @@ module Nokodown
     module CodeBlock
       LANGUAGE_CLASS = /\A(?:language|lang|highlight-source|highlight)-([\w+#.-]+)\z/i.freeze
       NO_LANGUAGE = %w[none plain plaintext text nohighlight].freeze
+      LANGUAGE_NAMES = Set.new(%w[
+        bash sh shell zsh console terminal powershell ps1 cmd batch javascript js jsx typescript ts tsx json yaml yml
+        toml xml html css scss sass less python py ruby rb php java kotlin swift go golang rust c c++ cpp csharp c#
+        objective-c sql graphql dockerfile makefile r scala perl lua dart elixir haskell clojure groovy gradle ini
+        diff markdown md vue svelte nginx http curl text plaintext
+      ]).freeze
+      # The copy button a highlighter prints with the code.
+      COPY = /
+        copy(?:\scode|\sto\sclipboard)?|copied!?|copiar(?:\sc[oó]digo)?|copier(?:\sle\scode)?|(?:code\s)?kopieren|
+        copia(?:\scodice)?|kopi[eë]ren|копировать(?:\sкод)?|kopiuj(?:\skod)?|kopyala|コピー|コードをコピー|复制(?:代码)?|複製|
+        (?:코드\s?)?복사|نسخ(?:\sالكود)?|sao\schép|salin(?:\skode)?
+      /xi.freeze
+      COPY_LABEL = /\A(?:#{COPY.source})\z/xi.freeze
+      COPY_SUFFIX = /\s+(?:#{COPY.source})\z/xi.freeze
+      # Text never starts a line with ``` (Text.escape_line_starts), so after
+      # list and quote markers this is the fence of a code block nested in
+      # a list or a quote.
+      NESTED_FENCE = /\A(?: |>|(?:[-*+]|\d+\.) )*(`{3,})/.freeze
 
       module_function
+
+      # Whether each line of a block belongs to a code block nested in it.
+      def nested_code_lines(lines)
+        fence = nil
+        lines.map do |line|
+          run = line[NESTED_FENCE, 1]
+          if fence
+            fence = nil if run && run.length >= fence.length
+            next true
+          end
+          fence = run
+          !run.nil?
+        end
+      end
+
+      # Drops the language label a highlighter prints above the code and its
+      # copy button, and fences the code with the labelled language.
+      def without_labels(blocks)
+        blocks.each_with_index.each_with_object([]) do |(block, index), kept|
+          following = blocks[index + 1]
+          name = label(block, following, index.positive? ? blocks[index - 1] : nil)
+          next kept << block unless name
+
+          following.text = following.text.sub(/\A(`+)\n/, "\\1#{name}\n") if language?(name) && following&.kind == :code
+        end
+      end
+
+      # The label's text when the block is a label or a copy button.
+      def label(block, following, previous)
+        return unless block.kind == :paragraph
+        return (block.text if previous&.kind == :code && block.text.match?(COPY_LABEL)) unless following&.kind == :code
+
+        name = block.text.sub(COPY_SUFFIX, "").downcase
+        name if block.text.match?(COPY_LABEL) || LANGUAGE_NAMES.include?(name) || following.text[/\A`+(.*)/, 1] == name
+      end
+
+      def language?(name)
+        LANGUAGE_NAMES.include?(name) && !NO_LANGUAGE.include?(name)
+      end
 
       def render(node, raw)
         text = raw.tr(Dom::NBSP, " ").sub(/\A\n/, "").split("\n").map(&:rstrip).join("\n")

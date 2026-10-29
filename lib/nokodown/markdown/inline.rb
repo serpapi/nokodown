@@ -2,7 +2,7 @@
 
 module Nokodown
   module Markdown
-    RenderedImage = Struct.new(:url, :redundant, :targets)
+    RenderedImage = Struct.new(:url, :redundant, :targets, :unnamed)
 
     # Renders a run of inline nodes (text, emphasis, code, links, images) to
     # one string. Line breaks from <br> are kept as "\n".
@@ -37,6 +37,28 @@ module Nokodown
       ATTACHED = /[\p{L}\p{N})\]]\z/.freeze
       WORD_START = /\A[\p{L}\p{N}]/.freeze
       WORD_END = /[\p{L}\p{N}]\z/.freeze
+      TAIL_BYTES = 1600
+      LINK_ONLY = /\A!?\[(?:\\.|[^\\\]])*\]\([^\s]*\)\z/.freeze
+      # Markup around the first and last visible characters of a piece.
+      TRAILING_MARKUP = /(?:[*~`]|\]\([^()\s]*(?:\([^()\s]*\)[^()\s]*)*\))+\z/.freeze
+      LEADING_MARKUP = /\A[*~`]*(?:\[(?=(?:\\.|[^\]\\\n])*\]\())?[*~`]*/.freeze
+      CASED = /[\p{Latin}\p{Greek}\p{Cyrillic}\p{Armenian}]/.freeze
+      # Where two words meet without a space: a lowercase word before a
+      # capitalised one ("WifePersonalized"), or a word before a number and a
+      # number before a word ("admin24/04/2022", "20h30vendredi"). Scripts
+      # written without spaces and numbers with counters (2024年) never match.
+      GLUED = [
+        [/\p{Ll}\p{Ll}\z/, /\A\p{Lu}\p{Ll}/],
+        [/#{CASED.source}\z/, /\A\p{Nd}/],
+        [/\p{Nd}\z/, /\A#{CASED.source}{2}/]
+      ].freeze
+      # Material icon fonts draw a glyph from a ligature word ("arrow_forward").
+      ICON_FONT = /(?<![\w-])material-(?:icons|symbols)(?:-(?:outlined|round|rounded|sharp|two-tone))?(?![\w-])/.freeze
+      # Some CMSs write the caption's markup into the alt attribute.
+      TAG = %r{</?[a-z][^<>]*>}i.freeze
+      URL_TEXT = %r{\A(?:https?://|www\.)\S+\z}i.freeze
+      SHORTENED = /…|\.\.\./.freeze
+      HOST = %r{\A(?:https?://)?(?:www\.)?([^/?#:]+)}i.freeze
 
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
@@ -48,10 +70,12 @@ module Nokodown
         url unless url.nil? || urls.same_page?(url)
       end
 
-      # redundant_images: RedundantImages#call.
-      def initialize(urls, images:, links:, redundant_images: {})
+      # redundant_images: RedundantImages#call. main_content: keep only images
+      # that say what they show.
+      def initialize(urls, images:, links:, redundant_images: {}, main_content: false)
         @urls = urls
         @images = images
+        @main_content = main_content
         @links = links
         @redundant_images = redundant_images
         @rendered_images = {}
@@ -59,6 +83,7 @@ module Nokodown
         @in_heading = false
         @in_link = false
         @link_images = nil
+        @tick_cell = nil
       end
 
       # Markup of every image written, for Cleanup to drop redundant images
@@ -68,7 +93,14 @@ module Nokodown
       def render(nodes, heading: false)
         outer = @in_heading
         @in_heading ||= heading
-        nodes.map { |node| node_text(node) }.join
+        previous = ""
+        nodes.each_with_object(+"") do |node, out|
+          piece = node_text(node)
+          append(out, piece, previous, node)
+          previous = piece unless piece.empty?
+          # <wbr> marks where a word may break, not where two words meet.
+          previous = "" if node.element? && node.name == "wbr"
+        end
       ensure
         @in_heading = outer
       end
@@ -77,7 +109,46 @@ module Nokodown
         Inline.link_url(href, @urls)
       end
 
+      # Renders a cell of a data table, where an image alone is a tick.
+      def in_cell(cell)
+        outer = @tick_cell
+        @tick_cell = Dom.key(cell) if cell.at_css("img") && Dom.text(cell).empty?
+        yield
+      ensure
+        @tick_cell = outer
+      end
+
       private
+
+      # Sites set tags, labels and dates in elements of their own and space
+      # them with CSS, so their words would run together. Raised and lowered
+      # text decides its own spacing.
+      def append(out, piece, previous, node)
+        out << " " if glued?(previous, piece) && !script?(node)
+        out << piece
+      end
+
+      def script?(node)
+        return false unless node.element?
+        return true if node.name == "sup" || node.name == "sub"
+
+        children = node.children.reject { |child| child.text? && child.content.strip.empty? }
+        children.size == 1 && script?(children.first)
+      end
+
+      def glued?(left, right)
+        return false if left.empty? || right.empty?
+
+        last = tail(left).sub(TRAILING_MARKUP, "")
+        first = right[0, 200].sub(LEADING_MARKUP, "")
+        GLUED.any? { |before, after| last.match?(before) && first.match?(after) }
+      end
+
+      # A character offset into non-ASCII text costs as much as the text; a
+      # byte offset does not.
+      def tail(text)
+        text.bytesize > TAIL_BYTES ? text.byteslice(-TAIL_BYTES, TAIL_BYTES).scrub("") : text
+      end
 
       def node_text(node)
         if node.text? || node.cdata?
@@ -91,6 +162,8 @@ module Nokodown
 
       def element_text(node)
         name = node.name
+        return "" if node["class"].to_s.match?(ICON_FONT)
+
         return emphasis(node, EMPHASIS[name]) if EMPHASIS.key?(name)
         return code_span(node) if CODE.include?(name)
 
@@ -102,7 +175,7 @@ module Nokodown
         when "q" then "\"#{render(node.children)}\""
         when "math" then math(node)
         when "sup", "sub" then script(node)
-        when "input" then node.key?("checked") ? "[x] " : "[ ] "
+        when "input" then checkbox(node)
         else
           text = render(node.children)
           Dom::BLOCK.include?(name) ? " #{text} " : text
@@ -117,7 +190,7 @@ module Nokodown
         content = render(node.children)
         @emphasis[marker] -= 1
         core = content.strip
-        return content if core.empty? || core.match?(/\A[^\p{L}\p{N}]*\z/)
+        return content if core.empty? || core.match?(/\A[^\p{L}\p{N}]*\z/) || core.match?(LINK_ONLY)
 
         "#{content[/\A\s*/]}#{marker}#{core}#{marker}#{content[/\s*\z/]}"
       end
@@ -146,18 +219,61 @@ module Nokodown
       end
 
       def link_markup(text, href)
+        text = Separators.link_text(text)
         return "" if text.empty? || text.match?(Patterns::LINK_NOISE_TEXT)
         return text if !@links || @in_link
 
         url = link_url(href)
         return text unless url
-        return url if same_as_url?(text, url)
 
-        "[#{Text.link_text(text)}](#{Text.destination(url)})"
+        text = Emphasis.unwrap(text)
+        return text if shown?(text, url)
+        return url if same_as_url?(text, url)
+        return text if same_address?(text, url)
+
+        address_markup(text, url) || "[#{Text.link_text(text)}](#{Text.destination(url)})"
+      end
+
+      # Link text that shows an address on the link's own site, whole or cut
+      # short ("showthread.p..."), says less than the link's address. One
+      # that shows a whole address on another site is where the link, a
+      # redirect, leads.
+      def address_markup(text, url)
+        shown = text.delete("\\")
+        return unless shown.match?(URL_TEXT)
+        return url if host(shown) == host(url)
+
+        text unless shown.match?(SHORTENED)
+      end
+
+      # Text that names the address a mail link writes to says everything the
+      # link would.
+      def shown?(text, url)
+        address = url[/\Amailto:([^?]+)/i, 1]
+        !address.nil? && text.delete("\\").downcase.include?(address.downcase)
+      end
+
+      def host(url)
+        url[HOST, 1].to_s.downcase
       end
 
       def same_as_url?(text, url)
         bare(text.delete("\\")) == bare(url)
+      end
+
+      # Text that writes the link's address as a person would: decoded
+      # ("wiki/حد"), in another case, or without the slash before a query.
+      def same_address?(text, url)
+        comparable(text.delete("\\")) == comparable(decoded(url))
+      end
+
+      def comparable(url)
+        bare(url).downcase.sub(%r{/(?=[?#])}, "")
+      end
+
+      def decoded(url)
+        text = URI::DEFAULT_PARSER.unescape(url).force_encoding(Encoding::UTF_8)
+        text.valid_encoding? ? text : url
       end
 
       def bare(url)
@@ -173,7 +289,7 @@ module Nokodown
       end
 
       def image(node)
-        alt = Dom.squish(node["alt"].to_s)
+        alt = Text.collapse(Dom.squish(node["alt"].to_s.gsub(TAG, " "))).strip
         return Image.tex(alt) if node["class"].to_s.include?("mwe-math-fallback-image")
         return alt if Image.emoji?(node, alt)
         return "" if !@images || @in_heading
@@ -182,21 +298,36 @@ module Nokodown
         return "" if src.nil? || Image.decorative?(node, src, alt)
 
         markup = "![#{Text.link_text(Text.escape(alt))}](#{Text.destination(src)})"
-        record(markup, src, node)
+        record(markup, src, node, @main_content && !Image.content?(node, src, alt, tick?(node)))
         return markup unless @link_images
 
         @link_images << markup
         ""
       end
 
+      # Only in the cell itself: a layout table nested in the cell holds
+      # forum buttons, not ticks.
+      def tick?(node)
+        !@tick_cell.nil? && Dom.key(Dom.ancestors_named(node, "td", "th").first) == @tick_cell
+      end
+
       # An image is redundant only if every copy of it is. Targets are the
       # pages whose text links make its thumbnail copies redundant.
-      def record(markup, src, node)
-        image = (@rendered_images[markup] ||= RenderedImage.new(src, true, Set.new))
+      def record(markup, src, node, unnamed)
+        image = (@rendered_images[markup] ||= RenderedImage.new(src, true, Set.new, true))
         key = Dom.key(node)
         image.redundant &&= @redundant_images.key?(key)
+        image.unnamed &&= unnamed
         target = @redundant_images[key]
         image.targets << target if target
+      end
+
+      # Task lists render disabled checkboxes; an enabled one is a product
+      # option or a filter.
+      def checkbox(node)
+        return "" unless node.key?("disabled") || node["class"].to_s.include?("task-list")
+
+        node.key?("checked") ? "[x] " : "[ ] "
       end
 
       # Markdown has no superscript, and "2attempt" is wrong. Digits and signs
