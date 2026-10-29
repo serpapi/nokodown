@@ -102,24 +102,25 @@ module Nokodown
     end
 
     # On a line of its own, at the end of an excerpt or in a row of
-    # controls; not where a word, a colon or a separator leads into it.
+    # controls; not where a word, a colon or a separator leads into it, nor
+    # over a line of its own, as a name over a person's dates.
     def standalone?(holder)
       return true if Dom.block?(holder)
 
-      before = neighbour_text(holder, :previous_sibling)
-      neighbour_text(holder, :next_sibling).empty? && (before.empty? || before.match?(EXCERPT_END))
+      before = neighbour_text(holder, :previous_sibling, %w[a br])
+      neighbour_text(holder, :next_sibling, %w[a]).empty? && (before.empty? || before.match?(EXCERPT_END))
     end
 
-    # The text beside the node in its line. A block, a line break or
-    # another link ends it.
-    def neighbour_text(node, direction)
+    # The text beside the node in its block, up to another link or, when
+    # `stops` has it, a line break.
+    def neighbour_text(node, direction, stops)
       sibling = node.send(direction)
-      sibling = sibling.send(direction) while sibling && !boundary?(sibling) && Dom.text(sibling).empty?
-      sibling.nil? || boundary?(sibling) ? "" : Dom.text(sibling)
+      sibling = sibling.send(direction) while sibling && !boundary?(sibling, stops) && Dom.text(sibling).empty?
+      sibling.nil? || boundary?(sibling, stops) ? "" : Dom.text(sibling)
     end
 
-    def boundary?(node)
-      node.element? && (%w[a br].include?(node.name) || Dom.block?(node))
+    def boundary?(node, stops)
+      node.element? && (stops.include?(node.name) || Dom.block?(node))
     end
 
     # A link in words can name its page. A term of a definition list is
@@ -137,17 +138,27 @@ module Nokodown
       count = namers.bsearch_index { |link| link.position >= label.position } || namers.size
       before = namers[[0, count - NEAREST_SCAN].max...count]
       longer = before.reverse.select { |link| link.text.length > label.text.length }.first(NEAREST)
-      longer.any? { |link| same_card?(holder, link.node) }
+      longer.any? { |link| same_card?(holder, label.node, link.node) }
     end
 
-    # Both links in one card, but not side by side like the items of a list
-    # or a row of links to one page under different names.
-    def same_card?(holder, other)
+    # Both links in one card, but not side by side like the items of a list,
+    # a row of links to one page under different names, or two people of a
+    # family table placed alike.
+    def same_card?(holder, label, other)
       keys = other.ancestors.select(&:element?).map { |ancestor| Dom.key(ancestor) }.to_set
       common = holder.ancestors.find { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) }
-      return false if common.nil? || chars(common) > CARD_LENGTH
+      return false if common.nil? || chars(common) > CARD_LENGTH || shape(label, common) == shape(other, common)
 
       Dom.key(common) != Dom.key(holder.parent) || branch(other, common).name != holder.name
+    end
+
+    def shape(node, ancestor)
+      shape = []
+      until Dom.key(node) == Dom.key(ancestor)
+        shape << [node.name, node["class"]]
+        node = node.parent
+      end
+      shape
     end
 
     # Labels in a grid share their containers, so each is measured once.

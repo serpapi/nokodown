@@ -42,4 +42,15 @@ RSpec.describe Nokodown::RepeatedLinks do
            "<div><a href='/game/2'><div>15 September, 19:00</div></a><div><a href='/game/2'>Bunker</a></div></div>"
     text_after(html).should == "Episode 54 addedPokémon15 September, 19:00Bunker"
   end
+
+  it "keeps a name placed like the longer name before it" do
+    html = "<table><tr><td><b><a href='/fam/9'>Francis Coleman Allen</a></b></td><td><b><a href='/fam/7'>Shepard Trenholm</a></b></td></tr>" \
+           "<tr><td><b><a href='/fam/9'>Minnie Black</a></b></td><td><b><a href='/fam/7'>Henrietta Polley</a></b></td></tr></table>"
+    text_after(html).should == "Francis Coleman AllenShepard TrenholmMinnie BlackHenrietta Polley"
+  end
+
+  it "keeps a name over a line of its own" do
+    html = "<div><p><a href='/fam/7'>Shepard Steven Trenholm</a></p><p><b><a href='/fam/7'>Henrietta Polley</a></b><br>(1862 - 1927)</p></div>"
+    text_after(html).should == "Shepard Steven TrenholmHenrietta Polley(1862 - 1927)"
+  end
 end
