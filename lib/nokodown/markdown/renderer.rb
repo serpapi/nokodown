@@ -33,18 +33,19 @@ module Nokodown
       end
 
       def children_blocks(node)
-        blocks = []
+        groups = []
         run = []
         node.children.each do |child|
           if block_level?(child)
-            blocks.concat(paragraphs(run))
+            groups << paragraphs(run)
             run = []
-            blocks.concat(block(child))
+            groups << block(child)
           else
             run << child
           end
         end
-        blocks.concat(paragraphs(run))
+        groups << paragraphs(run)
+        Labels.siblings(groups.reject(&:empty?))
       end
 
       def paragraphs(nodes)
@@ -120,7 +121,7 @@ module Nokodown
         when "ul", "ol", "menu", "dir" then list(node)
         when "li" then format_list([children_blocks(node)].reject(&:empty?), nil)
         when "blockquote" then quote(node)
-        when "pre" then CodeBlock.render(node, CodeBlock.preformatted(node))
+        when "pre" then CodeBlock.prose?(node) ? children_blocks(node) : CodeBlock.render(node, CodeBlock.preformatted(node))
         when "code" then CodeBlock.render(node, node.content)
         when "table" then Table.new(self, node).blocks
         when "dl" then definition_list(node)

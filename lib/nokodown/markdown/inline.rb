@@ -38,20 +38,37 @@ module Nokodown
       WORD_START = /\A[\p{L}\p{N}]/.freeze
       WORD_END = /[\p{L}\p{N}]\z/.freeze
       TAIL_BYTES = 1600
+      PARAGRAPH_BREAK = /(\s*\n\s*\n\s*)/.freeze
       LINK_ONLY = /\A!?\[(?:\\.|[^\\\]])*\]\([^\s]*\)\z/.freeze
       # Markup around the first and last visible characters of a piece.
       TRAILING_MARKUP = /(?:[*~`]|\]\([^()\s]*(?:\([^()\s]*\)[^()\s]*)*\))+\z/.freeze
       LEADING_MARKUP = /\A[*~`]*(?:\[(?=(?:\\.|[^\]\\\n])*\]\())?[*~`]*/.freeze
       CASED = /[\p{Latin}\p{Greek}\p{Cyrillic}\p{Armenian}]/.freeze
-      # Where two words meet without a space: a lowercase word before a
-      # capitalised one ("WifePersonalized"), or a word before a number and a
-      # number before a word ("admin24/04/2022", "20h30vendredi"). Scripts
-      # written without spaces and numbers with counters (2024年) never match.
+      # Scripts written with spaces between words.
+      SPACED = /[\p{Latin}\p{Greek}\p{Cyrillic}\p{Armenian}\p{Arabic}\p{Hebrew}]/.freeze
+      RIGHT_TO_LEFT = /[\p{Arabic}\p{Hebrew}]/.freeze
+      # Where two words meet without a space: a lowercase word or an amount
+      # before a capitalised word ("WifePersonalized", "350.000đĐã"), a
+      # capitalised one after a word in capitals ("DAERAHNovember"), a word
+      # before a number and a number before a word ("admin24/04/2022",
+      # "20h30vendredi"), a word before a price ("delivered£199"), a date
+      # before a number ("2021年9月6日2025年") and a word in a right-to-left
+      # script beside one in another. Scripts written without spaces and
+      # numbers with counters (2024年) never match.
       GLUED = [
-        [/\p{Ll}\p{Ll}\z/, /\A\p{Lu}\p{Ll}/],
-        [/#{CASED.source}\z/, /\A\p{Nd}/],
-        [/\p{Nd}\z/, /\A#{CASED.source}{2}/]
+        [/[\p{Ll}\p{Nd}]\p{Ll}\z/, /\A\p{Lu}\p{Ll}/],
+        [/\p{Lu}{2}\z/, /\A\p{Lu}\p{Ll}/],
+        [/#{SPACED.source}\z/, /\A\p{Nd}/],
+        [/\p{Nd}\z/, /\A#{SPACED.source}{2}/],
+        [/#{CASED.source}{2}\z/, /\A\p{Sc}\s?\p{Nd}/],
+        [/\p{Nd}[日일]\z/, /\A\p{Nd}/],
+        [/#{CASED.source}\z/, /\A#{RIGHT_TO_LEFT.source}/],
+        [/#{RIGHT_TO_LEFT.source}\z/, /\A#{CASED.source}/]
       ].freeze
+      # Two numbers ("20.07" and "2026", a date and "1 min"), unless both are
+      # one digit, as a counter draws its digits.
+      DIGIT_BEFORE = /(?<![\p{N}.,])\p{Nd}\z/.freeze
+      DIGIT_AFTER = /\A\p{Nd}(?![\p{N}.,])/.freeze
       # Material icon fonts draw a glyph from a ligature word ("arrow_forward").
       ICON_FONT = /(?<![\w-])material-(?:icons|symbols)(?:-(?:outlined|round|rounded|sharp|two-tone))?(?![\w-])/.freeze
       # Some CMSs write the caption's markup into the alt attribute.
@@ -101,10 +118,15 @@ module Nokodown
         outer = @in_heading
         @in_heading ||= heading
         previous = ""
+        previous_text = false
         nodes.each_with_object(+"") do |node, out|
           piece = node_text(node)
-          append(out, piece, previous, node)
-          previous = piece unless piece.empty?
+          # Text split by a comment runs together in the browser as well.
+          append(out, piece, previous_text && node.text? ? "" : previous, node)
+          unless piece.empty?
+            previous = piece
+            previous_text = node.text?
+          end
           # <wbr> marks where a word may break, not where two words meet.
           previous = "" if node.element? && node.name == "wbr"
         end
@@ -148,7 +170,11 @@ module Nokodown
 
         last = tail(left).sub(TRAILING_MARKUP, "")
         first = right[0, 200].sub(LEADING_MARKUP, "")
-        GLUED.any? { |before, after| last.match?(before) && first.match?(after) }
+        GLUED.any? { |before, after| last.match?(before) && first.match?(after) } || numbers?(last, first)
+      end
+
+      def numbers?(last, first)
+        last.match?(/\p{Nd}\z/) && first.match?(/\A\p{Nd}/) && !(last.match?(DIGIT_BEFORE) && first.match?(DIGIT_AFTER))
       end
 
       # A character offset into non-ASCII text costs as much as the text; a
@@ -190,6 +216,7 @@ module Nokodown
       end
 
       # Headings are bold already; nested emphasis of the same kind is dropped.
+      # Emphasis cannot span paragraphs, so each paragraph is marked alone.
       def emphasis(node, marker)
         return render(node.children) if @emphasis[marker].positive? || (@in_heading && marker == "**")
 
@@ -197,9 +224,14 @@ module Nokodown
         content = render(node.children)
         @emphasis[marker] -= 1
         core = content.strip
-        return content if core.empty? || core.match?(/\A[^\p{L}\p{N}]*\z/) || core.match?(LINK_ONLY)
+        marked = core.split(PARAGRAPH_BREAK, -1).map { |paragraph| marked(paragraph, marker) }.join
+        "#{content[/\A\s*/]}#{marked}#{content[/\s*\z/]}"
+      end
 
-        "#{content[/\A\s*/]}#{marker}#{core}#{marker}#{content[/\s*\z/]}"
+      def marked(text, marker)
+        return text if text.match?(PARAGRAPH_BREAK) || text.empty? || text.match?(/\A[^\p{L}\p{N}]*\z/) || text.match?(LINK_ONLY)
+
+        "#{marker}#{text}#{marker}"
       end
 
       def code_span(node)

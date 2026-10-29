@@ -262,6 +262,13 @@ RSpec.describe Nokodown::Metadata do
       .should == "1850002 Gerüstnutzer - Pflichtunterweisung E-Learning / iNPut 2.0"
   end
 
+  it "reads a line break in the H1 as a space between its words" do
+    url = "https://example.com/es/sectores/maquinas-de-cafe-para-caterings"
+    body = "<h1>Máquinas de café<br><span>para caterings</span></h1>"
+
+    metadata_at(url, "<title>Coffee machines for catering | WMF</title>", body)[:title].should == "Máquinas de café para caterings"
+  end
+
   it "does not match an H1 without words to the end of a title without words" do
     body = '<h1><img src="/logo.png" alt=""></h1><h2>Understanding Ownership Rules</h2>'
 
