@@ -40,10 +40,16 @@ module Nokodown
       end
 
       # What a number before a heading counts is the heading's position.
+      # Text that runs on from the number ("17" over "stores in the city")
+      # says what it counts.
       def labelled?(blocks, index)
         previous = index.positive? ? blocks[index - 1] : nil
         following = blocks[index + 1]
-        previous&.kind == :heading || label?(previous) || label?(following)
+        previous&.kind == :heading || label?(previous) || label?(following) || continues?(following)
+      end
+
+      def continues?(block)
+        block&.kind == :paragraph && Text.plain(block.text).match?(/\A[\p{Ll}\p{Lo}]/)
       end
 
       # A short line of words that is not a link of its own, such as

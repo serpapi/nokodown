@@ -13,6 +13,11 @@ RSpec.describe Nokodown::Markdown::Counters do
     convert(html).should == "### Rooms\n\n3\n\nBaths:\n\n2\n\nOur team is growing.\n\n250\n\nEmployees"
   end
 
+  it "keeps a number that the next line runs on from" do
+    convert("<p>The chain opened a new store.</p><p><b>17</b></p><p>stores in the city now carry its name.</p>").should ==
+      "The chain opened a new store.\n\n**17**\n\nstores in the city now carry its name."
+  end
+
   it "drops slide numbers and a player's empty time readout, but keeps a phone number" do
     convert("<p>1 2 3 4 5 6</p><p>0:00 / 3:45</p><p>Call us.</p><p>777 326 454</p>").should == "Call us.\n\n777 326 454"
   end
