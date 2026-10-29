@@ -23,6 +23,7 @@ module Nokodown
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
+    MAX_TEASER_HEAD_LINKS = 4
     # A counter or label a script never filled in: "{{options.likeCount}}".
     UNRENDERED_TEMPLATE = /\A(?:\{\{[^{}]*\}\}\s*)+\z/.freeze
     CODE_HOLDERS = "pre, code, kbd, samp"
@@ -200,11 +201,14 @@ module Nokodown
       end
     end
 
-    # One linked heading with its date and author links heads a teaser, not
-    # a menu, however short the title: in Chinese or Japanese it fits in a
-    # dozen characters. Menus of linked headings have several.
+    # A linked title followed by its date, author or category links heads a
+    # teaser, not a menu, however short the title: in Chinese or Japanese it
+    # fits in a dozen characters. A menu or a widget under a linked heading
+    # has more links, or icons and logos.
     def teaser_header?(node)
-      node.css("a[href]").count { |link| headline?(link) } == 1
+      links = node.css("a[href]")
+      links.size <= MAX_TEASER_HEAD_LINKS && headline?(links.first) && links.drop(1).none? { |link| headline?(link) } &&
+        links.none? { |link| Dom.text(link).empty? }
     end
 
     def headline?(link)

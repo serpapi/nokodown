@@ -56,6 +56,17 @@ RSpec.describe Nokodown::Pruner do
       text.should_not include("Women")
     end
 
+    it "drops a menu or a widget under a single linked heading" do
+      menu = "<div><h4><a href='/shop'>Shop</a></h4>" + %w[Men Women Kids Sale].map { |name| "<a href='/#{name}'>#{name}</a> " }.join + "</div>"
+      icons = "<div><h3><a href='/login'>Login</a></h3>" + %w[x fb ig].map { |name| "<a href='https://#{name}.example'><img src='/#{name}.svg'></a>" }.join + "</div>"
+      root = content(story + menu + icons)
+      described_class.new([root], :page).call
+      text = Nokodown::Dom.text(root)
+
+      text.should_not include("Women")
+      text.should_not include("Login")
+    end
+
     it "drops counters a script never filled in" do
       root = content("#{story}<div class='like-icon'><a href=''>{{options.likeCount}}</a> <span>{{ options.likeCount }}</span></div>")
       described_class.new([root], :page).call
