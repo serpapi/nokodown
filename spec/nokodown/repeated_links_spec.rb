@@ -47,6 +47,13 @@ RSpec.describe Nokodown::RepeatedLinks do
     text_after(html).should == "Episode 54 addedPokémon15 September, 19:00Bunker"
   end
 
+  it "keeps a source's domain and a dataset's format after the title" do
+    html = card("The harbor bridge reopens", "<p><a href='/posts/25'>vice.com</a></p>") +
+           card("Crews finish early", "<ul><li><a href='/posts/18' data-format='csv'>CSV</a></li></ul>")
+    text_after(html).should == "The harbor bridge reopensA short excerpt of the post…vice.com" \
+                               "Crews finish earlyA short excerpt of the post…CSV"
+  end
+
   it "keeps a name placed like the longer name before it" do
     html = "<table><tr><td><b><a href='/fam/9'>Francis Coleman Allen</a></b></td><td><b><a href='/fam/7'>Shepard Trenholm</a></b></td></tr>" \
            "<tr><td><b><a href='/fam/9'>Minnie Black</a></b></td><td><b><a href='/fam/7'>Henrietta Polley</a></b></td></tr></table>"

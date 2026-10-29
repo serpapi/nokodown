@@ -21,6 +21,9 @@ module Nokodown
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th caption figcaption].freeze
     MEDIA = %w[img picture video audio iframe svg object embed].freeze
     MEDIA_SELECTOR = MEDIA.join(", ").freeze
+    # A domain names a story's source and a format a dataset's file, facts
+    # about the item like a badge: "vice.com", "CSV".
+    FACT = /\A(?:[\p{L}\d-]+(?:\.[\p{L}\d-]+)+|pdf|csv|json|xml|rdf|kml|geojson|txt|zip|docx?|xlsx?|pptx?|odt|ods|epub|html?)\z/i.freeze
     # An excerpt the label follows ends like a sentence or with "[…]".
     EXCERPT_END = /[.…!?。！？\])]\z/.freeze
 
@@ -62,7 +65,7 @@ module Nokodown
     # cell's value, and a menu item over a submenu names it.
     def label?(link)
       text = link.text
-      return false if text.empty? || text.length > MAX_LABEL || text.match?(/\d/)
+      return false if text.empty? || text.length > MAX_LABEL || text.match?(/\d/) || text.match?(FACT)
       return false if text.include?(" ") ? text.split.size > MAX_WORDS : text.length > MAX_UNSPACED
       return false if link.page.sub(/[?#].*/m, "").match?(Pruner::DOWNLOAD) || link.node.at_css("img")
 
