@@ -37,7 +37,7 @@ module Nokodown
     MAX_LABEL = 40
     HEADLINE_WIDTH = 30
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
-    SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
+    SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ").freeze
     MIN_SERIES = 3
     MEDIA = %w[img picture iframe].freeze
     MEDIA_SELECTOR = MEDIA.join(", ")
@@ -66,6 +66,7 @@ module Nokodown
       @conditional_seen = 0
       @conditional_kept = 0
       @conditional_removed_links = 0
+      @data_tables = {}
     end
 
     def call
@@ -551,7 +552,15 @@ module Nokodown
 
     def in_data_table?(node)
       tables = node.name == "table" ? [node] : []
-      (tables + Dom.ancestors_named(node, "table")).any? { |table| Tables.data_table?(table) }
+      (tables + Dom.ancestors_named(node, "table")).any? { |table| data_table?(table) }
+    end
+
+    # Each row, cell and cluster of a long table asks about the same table.
+    def data_table?(table)
+      key = Dom.key(table)
+      return Tables.data_table?(table) if key.nil?
+
+      @data_tables.fetch(key) { @data_tables[key] = Tables.data_table?(table) }
     end
 
     def remove_boilerplate_text(root)

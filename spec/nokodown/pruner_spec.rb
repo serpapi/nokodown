@@ -85,6 +85,19 @@ RSpec.describe Nokodown::Pruner do
       (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
     end
 
+    it "judges a long table once, however many of its rows hold prose beside links" do
+      prose = "A long sentence of prose that describes the item in some detail and goes on for a while."
+      rows = (1..2000).map do |number|
+        "<tr><td>#{prose} #{number}</td><td><a href='/a#{number}'>x</a> <a href='/b#{number}'>y</a> <a href='/c#{number}'>z</a></td></tr>"
+      end
+      root = content("<table>#{rows.join}</table>")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+      described_class.new([root], :page, urls: urls).call
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 3
+    end
+
     it "keeps a listing column that its layout table declares wider than the column beside it" do
       rows = %w[Vector Rapid Alpine Corsa Delta Falcon].map do |name|
         "<tr><td><a href='/wheels/#{name.downcase}'>#{name} R16 alloy wheel, 7J ET40</a></td><td>4,200 rub.</td></tr>"
