@@ -321,12 +321,14 @@ RSpec.describe Nokodown do
 
     it "drops link spam placed far off screen or in a strip one pixel high" do
       html = '<p>Open daily.</p><div style="position: absolute; left: -7786px;"><a href="https://spam.example">casino bonus</a></div>' \
+             '<div style="position:fixed;top:-9000px"><a href="https://spam.example">live casino</a></div>' \
+             '<div style="position:absolute;left:-999em"><a href="https://spam.example">slots</a></div>' \
              '<div style="overflow:hidden;height:1px;"><a href="https://spam.example">no kyc casino</a></div>'
 
       convert(html).should == "Open daily."
     end
 
-    it "keeps screen-reader text in a one-pixel box, which can be the only copy of a price" do
+    it "keeps screen-reader text clipped to one pixel in place, which can be the only copy of a price" do
       html = '<p>Camp kettle</p><span style="position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden">Price: 30 euro</span>'
 
       convert(html).should == "Camp kettle\n\nPrice: 30 euro"

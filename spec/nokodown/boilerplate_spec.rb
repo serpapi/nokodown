@@ -184,11 +184,12 @@ RSpec.describe Nokodown::Boilerplate do
     it "removes links that ask a network to share the page, whatever their label" do
       html = "#{prose('Bonsai care', 2)}<ul><li><a href=\"http://www.facebook.com/sharer.php?u=https%3A%2F%2Fex.com\">シェア</a></li>" \
              "<li><a href=\"https://www.linkedin.com/shareArticle?mini=true\">Partager sur LinkedIn</a></li>" \
-             "<li><a href=\"mailto:?subject=Bonsai\">Envoyer</a></li></ul><p>Write to <a href=\"mailto:ana@ex.com\">Ana</a>.</p>"
+             "<li><a href=\"mailto:?subject=Bonsai\">Envoyer</a></li></ul><p>Write to <a href=\"mailto:ana@ex.com\">Ana</a> " \
+             "or <a href=\"https://api.whatsapp.com/send?phone=34600000000\">message us</a>.</p>"
       text = remaining(html)
 
       %w[シェア LinkedIn Envoyer].each { |label| text.should_not include(label) }
-      text.should include("Write to Ana")
+      text.should include("Write to Ana or message us")
     end
   end
 

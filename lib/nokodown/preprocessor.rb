@@ -28,10 +28,11 @@ module Nokodown
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
-    # Injected link spam and honeypot fields are placed far off screen or in
-    # a strip one pixel high. Sliders move their tracks by a few screen widths
-    # at most, and collapsed panels have no height. A box one pixel wide as
-    # well is screen-reader text, which can be the only copy of a price.
+    # Injected link spam, honeypot fields and hidden copies of the page are
+    # placed far off screen or in a strip one pixel high; collapsed panels
+    # have no height. A box clipped to one pixel where it stands is
+    # screen-reader text, which can be the only copy of a price. Moved off
+    # screen as well, such boxes held only spam, skip links and copies.
     POSITIONED_STYLE = /(?:\A|;)\s*position\s*:\s*(?:absolute|fixed)/i.freeze
     OFFSCREEN_STYLE = /(?:\A|;)\s*(?:left|top)\s*:\s*-(?:\d{4,}(?:\.\d+)?px|999px|\d{3,}(?:\.\d+)?r?em)/i.freeze
     PIXEL_STRIP_STYLE = /(?:\A|;)\s*height\s*:\s*1px/i.freeze
