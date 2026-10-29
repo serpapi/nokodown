@@ -526,6 +526,13 @@ RSpec.describe Nokodown do
       convert(html).should == "Filter"
     end
 
+    it "keeps the template's text after a Liquid error's message" do
+      html = "<p>Type Liquid error (snippets/facets line 602): Could not find asset snippets/icon-arrow.liquid Coffee</p>" \
+             "<p>Saved Liquid error (product-template line 135): divided by 0. Free shipping on every order.</p>"
+
+      convert(html).should == "Type Coffee\n\nSaved Free shipping on every order."
+    end
+
     it "leaves template placeholders and addresses in code alone" do
       html = "<p>Print <code>{{item.guest_name}}</code> in the template.</p><p>Run <code>info@ <span>ex.com</span> example.com</code></p>"
 

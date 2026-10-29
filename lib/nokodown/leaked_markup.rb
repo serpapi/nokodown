@@ -22,7 +22,10 @@ module Nokodown
     TEMPLATE_TAG = %r{#{BRACE_TAG}|\[/?[a-z][\w-]*(?:\s+[\w-]+=[^\[\]]*)?\]}.freeze
     SURE_TEMPLATE_TAG = %r{#{BRACE_TAG}|\[/[a-z][\w-]*\]|\[[a-z]+_\w+(?:\s+[\w-]+=[^\[\]]*)?\]}.freeze
     WORD = /[\p{L}\p{N}]/.freeze
-    LIQUID_ERROR = /Liquid (?:syntax )?error(?: \([^)]*\))?: .*?(?=Liquid (?:syntax )?error|\z)/m.freeze
+    # Liquid prints its error in place of the tag and goes on with the
+    # template, so the message ends at its asset's path or its sentence.
+    LIQUID = "Liquid (?:syntax )?error"
+    LIQUID_ERROR = /#{LIQUID}(?: \([^)]*\))?: (?:Could not find asset \S+|[^\n]*?(?:[.!?](?=\s|\z)|(?=\n|#{LIQUID}|\z)))/.freeze
     PHP_LEVEL = /\A(?:(?:Catchable |Recoverable )?fatal error|Parse error|Warning|Notice|Deprecated|Strict Standards)\z/i.freeze
     PHP_ERROR = /(?:(?:Catchable |Recoverable )?Fatal error|Parse error|Warning|Notice|Deprecated|Strict Standards): [\s\S]{1,600}? in \S+\.(?:php|inc)\S* on line \d+/.freeze
     LINE_END = /on line\s*\z/.freeze
