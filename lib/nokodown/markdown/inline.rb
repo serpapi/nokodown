@@ -59,6 +59,12 @@ module Nokodown
       URL_TEXT = %r{\A(?:https?://|www\.)\S+\z}i.freeze
       SHORTENED = /…|\.\.\./.freeze
       HOST = %r{\A(?:https?://)?(?:www\.)?([^/?#:]+)}i.freeze
+      # A blog's author, date, category and tag archives: their address says
+      # nothing the link's text does not.
+      ARCHIVE_PATH = %r{/(?:author|category|categories|tags?)/|/(?:19|20)\d\d/(?:\d\d?/){0,2}\z}i.freeze
+      ARCHIVE_QUERY = /(?:\A|&)(?:(?:author|cat|tag)=[^&]|m=\d{6})/.freeze
+      ARCHIVE_REL = /\b(?:author|category|tag)\b/i.freeze
+      WORD = /[\p{L}\p{N}]/.freeze
 
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
@@ -84,6 +90,7 @@ module Nokodown
         @in_link = false
         @link_images = nil
         @tick_cell = nil
+        @line_words = {}
       end
 
       # Markup of every image written, for Cleanup to drop redundant images
@@ -214,17 +221,17 @@ module Nokodown
         @link_images = outer_images
         @in_link = outer_link
 
-        parts = images + [link_markup(Text.single_line(content), node["href"].to_s)]
+        parts = images + [link_markup(Text.single_line(content), node)]
         surround_like(content, parts.reject(&:empty?).join(" "))
       end
 
-      def link_markup(text, href)
+      def link_markup(text, node)
         text = Separators.link_text(text)
         return "" if text.empty? || text.match?(Patterns::LINK_NOISE_TEXT)
         return text if !@links || @in_link
 
-        url = link_url(href)
-        return text unless url
+        url = link_url(node["href"].to_s)
+        return text if url.nil? || archive_in_line?(node, url)
 
         text = Emphasis.unwrap(text)
         return text if shown?(text, url)
@@ -232,6 +239,30 @@ module Nokodown
         return text if same_address?(text, url)
 
         address_markup(text, url) || "[#{Text.link_text(text)}](#{Text.destination(url)})"
+      end
+
+      # In a byline or a post's meta line ("By Ann in News"), not as an entry
+      # of its own in a list of archives.
+      def archive_in_line?(node, url)
+        uri = URI.parse(url)
+        return false unless uri.host && host(url) == host(@urls.page_url.to_s)
+        return false unless node["rel"].to_s.match?(ARCHIVE_REL) || uri.path.to_s.match?(ARCHIVE_PATH) ||
+                            uri.query.to_s.match?(ARCHIVE_QUERY)
+
+        line_words?(node)
+      rescue URI::Error
+        false
+      end
+
+      def line_words?(node)
+        line = node.ancestors.find { |ancestor| Dom.block?(ancestor) }
+        return false unless line
+
+        key = Dom.key(line)
+        return @line_words[key] if key && @line_words.key?(key)
+
+        words = line.xpath(".//text()[not(ancestor::a)]").any? { |text| text.content.match?(WORD) }
+        key ? @line_words[key] = words : words
       end
 
       # Link text that shows an address on the link's own site, whole or cut

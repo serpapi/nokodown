@@ -184,6 +184,16 @@ RSpec.describe "Markdown conversion" do
       convert('<p><a href="https://shop.example/p?id=7&_ga=2.1.2-3&srsltid=AfmBOx">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
     end
 
+    it "writes archive links in a byline or meta line as their text" do
+      html = '<p>By <a href="/author/ann/" rel="author">Ann</a> on <a href="/2024/05/03/">May 3</a> in ' \
+             '<a href="/?cat=3">Letters</a>, <a href="https://other.example/tag/x/">X</a></p>' \
+             '<ul><li><a href="/category/news/">News</a></li><li><a href="/2024/05/">May 2024</a></li></ul>' \
+             '<p>Read <a href="/2024/05/03/harbour/">the harbour post</a>.</p>'
+      convert(html).should == "By Ann on May 3 in Letters, [X](https://other.example/tag/x/)\n\n" \
+                              "- [News](https://example.com/category/news/)\n- [May 2024](https://example.com/2024/05/)\n\n" \
+                              "Read [the harbour post](https://example.com/2024/05/03/harbour/)."
+    end
+
     it "writes encoded letters of other scripts in a destination as letters" do
       html = '<p><a href="/tag/%D8%A7%D8%AE%D8%A8%D8%A7%D8%B1">News</a> <a href="/новости/спорт">Sport</a> ' \
              '<a href="/a%20b%C2%A0c%E2%80%8Bd%E9">Odd</a> <img src="/%E5%9C%B0%E5%9B%BE.png" alt="Map"></p>'

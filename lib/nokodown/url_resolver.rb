@@ -68,6 +68,10 @@ module Nokodown
       @base = join(@base, href) || @base if !href.empty? && !href.start_with?("javascript:")
     end
 
+    def page_url
+      @base
+    end
+
     def resolve(href)
       absolute(href) { |uri| clean_link(uri) }
     end
