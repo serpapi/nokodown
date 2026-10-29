@@ -165,10 +165,16 @@ region, or most of the page's text, is never removed because of its class name.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data
-   tables while layout tables are unwrapped, definition lists, details, TeX
-   from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
-   other scripts as 2^(n-1) and a_n. Text is escaped only where it would
-   otherwise change meaning.
+   tables while layout tables are unwrapped, and a list of "name: value" lines
+   for a two-column table without column names, definition lists, details,
+   TeX from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
+   other scripts as 2^(n-1) and a_n. A `<pre>` whose lines are set with `<br>`
+   or `<p>` and read as sentences, as site builders write product
+   descriptions, is text, not code. A label and its value, or a number and
+   its unit, set in sibling elements share a line ("Type: Condo"), and words,
+   numbers and dates that adjacent elements run together are spaced
+   ("20.07 2026"). Text is escaped only where it would otherwise change
+   meaning.
 
 ## Quality
 
