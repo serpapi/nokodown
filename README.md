@@ -77,10 +77,16 @@ with `main_content: false`, `:none` for a document without a body.
   unless it is mostly links, as carousels of recommended products are.
 - Sections rendered twice, such as a desktop and a mobile copy.
 - Tracking pixels, spacers, icons, placeholders (`no-image.png`,
-  `img_load.gif`), README badges, click-tracking
-  URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,
-  "Read more" links, code line numbers, and repeated responsive copies of the
-  same image.
+  `img_load.gif`), README badges, click-tracking URL parameters (`utm_*`,
+  `gclid`, `fbclid`, ...), permalink anchors, "Read more" links, code line
+  numbers, and repeated responsive copies of the same image.
+- Markdown that costs tokens without meaning: horizontal rules, blank lines
+  inside lists, headings inside list items, emphasis around a whole
+  paragraph, cell, heading or link (a short bold label stays), separators
+  between links and at line ends, lines of only punctuation, icon-font
+  glyphs, code-language labels and copy buttons, a card's repeated links to
+  its own page (its title keeps the link), and escapes that cannot change
+  the rendering.
 - In the main content, images whose alt text does not say what they show: no
   alt text, a file or camera name ("IMG_6175.JPG"), a hash, or a word for
   "image" ("photo", "foto", "画像"); icons, logos and avatars, told by their
