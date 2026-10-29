@@ -24,12 +24,14 @@ module Nokodown
     MIN_INDEX_LENGTH = 80
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
     SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
+    LETTER = /\p{L}/.freeze
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
-    def initialize(nodes, mode, conditional: true)
+    def initialize(nodes, mode, conditional: true, urls: nil)
       @nodes = nodes
       @mode = mode
       @conditional = conditional
+      @urls = urls
       @conditional_seen = 0
       @conditional_kept = 0
       @conditional_removed_links = 0
@@ -189,6 +191,7 @@ module Nokodown
     # Navigation that survived as unlabeled markup: several links, almost no
     # other text, and no link long enough to be a headline.
     def remove_link_clusters(root)
+      remove_menus(root)
       clusters = root.css(CLUSTER_CONTAINERS).select { |node| link_cluster?(node) && !in_data_table?(node) }
       # Removal can only start at one of these, so none means nothing to remove.
       return if clusters.empty? || clusters_dominate?(root, clusters)
@@ -196,6 +199,40 @@ module Nokodown
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
         remove_with_label(node, root) if link_cluster?(node) && !in_data_table?(node)
       end
+    end
+
+    # A list of links holding one to the page itself shows the reader where
+    # they are: a menu, a breadcrumb trail, a pager. That holds on an index
+    # page too, where the other clusters are the content.
+    def remove_menus(root)
+      return unless @urls
+
+      links = root.css("a[href]").select { |link| @urls.current_page?(link["href"]) }
+      menus = links.filter_map { |link| menu_of(link, root) }.uniq { |menu| Dom.key(menu) }
+      menus.each { |menu| remove_with_label(menu, root) }
+    end
+
+    def menu_of(link, root)
+      holder = link.ancestors.find { |ancestor| !ancestor.element? || ancestor.css("a[href]").size >= 3 }
+      holder if holder&.element? && inside?(holder, root) && menu_entries?(holder) && !in_data_table?(holder)
+    end
+
+    # Alike entries of one link each, perhaps with a count beside it, and
+    # separators between them. Cards that link to their title, category and
+    # author, or a post header whose title links to itself, are no menu.
+    def menu_entries?(holder)
+      entries, rest = holder.element_children.partition { |child| child.name == "a" || child.at_css("a[href]") }
+      entries.size >= 3 && entries.map(&:name).uniq.size == 1 && entries.all? { |entry| one_link?(entry) } &&
+        rest.none? { |child| Dom.text(child).match?(LETTER) }
+    end
+
+    # A gallery's thumbnails link to each picture without a word.
+    def one_link?(entry)
+      links = entry.name == "a" ? [entry] : entry.css("a[href]")
+      return false unless links.size == 1
+
+      label = Dom.text(links.first)
+      !label.empty? && !Dom.text(entry).sub(label, "").match?(LETTER)
     end
 
     def inside?(node, root)

@@ -26,7 +26,7 @@ module Nokodown
 
       product_page = @main_content && ProductReviews.product_page?(doc, metadata[:page_type])
       Preprocessor.new(body).call
-      nodes, mode = select_content(body, metadata[:page_type], product_page)
+      nodes, mode = select_content(body, metadata[:page_type], product_page, urls)
       blocks = render(nodes, mode, urls)
       blocks = with_title(blocks, metadata[:title]) if @title
       result(blocks, metadata, mode)
@@ -47,7 +47,7 @@ module Nokodown
       Markdown::RedundantImages.new(nodes, mode, urls).call
     end
 
-    def select_content(body, page_type, product_page)
+    def select_content(body, page_type, product_page, urls)
       return [[body], :full] unless @main_content
 
       attribution = PostAttribution.new(body).call if ContentLocator::DISCUSSIONS.include?(page_type)
@@ -55,9 +55,9 @@ module Nokodown
       ProductReviews.new(body).call if product_page
       selection = ContentLocator.new(body, page_type: page_type).call
       attribution&.write(selection.nodes)
-      return [cleaned_article(selection.nodes, page_type), :article] if selection.mode == :article
+      return [cleaned_article(selection.nodes, page_type, urls), :article] if selection.mode == :article
 
-      Pruner.new(selection.nodes, :page).call
+      Pruner.new(selection.nodes, :page, urls: urls).call
       [selection.nodes, :page]
     end
 
@@ -66,16 +66,16 @@ module Nokodown
     # (React apps, card grids) trips it, and a short intro would otherwise pass
     # for the article. When almost nothing is left at all, the content is
     # pruned like a page. Cleaning runs on a copy so it can be undone.
-    def cleaned_article(nodes, page_type)
+    def cleaned_article(nodes, page_type, urls)
       copies = nodes.map(&:dup)
       pruner = Pruner.new(copies, :article).call
       if almost_nothing_kept?(copies, nodes)
-        Pruner.new(nodes, :page).call
+        Pruner.new(nodes, :page, urls: urls).call
         return nodes
       end
       return copies if keep_conditional_cleaning?(pruner, page_type)
 
-      Pruner.new(nodes, :article, conditional: false).call
+      Pruner.new(nodes, :article, conditional: false, urls: urls).call
       nodes
     end
 

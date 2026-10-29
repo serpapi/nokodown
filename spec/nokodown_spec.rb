@@ -96,6 +96,27 @@ RSpec.describe Nokodown do
       markdown.should include("- [Diving](https://example.com/topics/diving)")
     end
 
+    it "drops a menu that links to the page itself, even on an index page" do
+      topics = %w[Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts]
+      index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
+      menu = '<ul><li><a href="/news">News</a></li><li><a href="https://www.example.com/page/">Topics</a> (8)</li>' \
+             '<li><a href="/events">Events</a></li></ul>'
+
+      markdown = extract("<main><h1>Topics</h1>#{index}#{menu}</main>")
+
+      markdown.should include("- [Baking](https://example.com/topics/baking)")
+      ["News", "Events"].each { |noise| markdown.should_not include(noise) }
+    end
+
+    it "keeps cards whose tags link to the page itself" do
+      tags = '<div><a href="/tags/tide">tide</a> <a href="/page">energy</a> <a href="/tags/coast">coast</a></div>'
+      card = "<article><h2><a href=\"/notes/lagoon\">The lagoon wall opens</a></h2>#{tags}</article>"
+
+      markdown = extract("<main><h1>Energy</h1>#{card}<p>Two more notes this week.</p></main>")
+
+      markdown.should include("## [The lagoon wall opens](https://example.com/notes/lagoon)")
+    end
+
     it "drops the heading over a box of links it drops" do
       types = %w[Backend Frontend Mobile Games Infrastructure Security]
       links = types.map { |type| "<li><a href=\"/jobs/#{type.downcase}\">#{type}</a></li>" }.join
