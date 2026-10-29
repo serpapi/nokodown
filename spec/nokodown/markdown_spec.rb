@@ -865,6 +865,21 @@ RSpec.describe "Markdown conversion" do
         "# 2024\n\n28/01/2023\n\nText\n\n€ 7,95\n\nAdd\n\n### 1987–1990\n\nFounded"
     end
 
+    it "keeps the headline whatever it holds" do
+      convert("<h1>Emergency response is available to you 24 hours a day, 7 days a week, all year round in every city.</h1><p>Call</p>").should ==
+        "# Emergency response is available to you 24 hours a day, 7 days a week, all year round in every city.\n\nCall"
+    end
+
+    it "drops a sentence set as a heading at the end of the page with the other empty sections" do
+      html = "<h2>Recipe</h2><p>Mix the flour and the eggs.</p>" \
+             "<h6>All prices include VAT and are subject to change without notice at any time by the shop owner.</h6>"
+      convert(html).should == "## Recipe\n\nMix the flour and the eggs."
+    end
+
+    it "keeps a number under a date set as a heading" do
+      convert("<p>Intro</p><h3>28/01/2023</h3><p>12</p>").should == "Intro\n\n28/01/2023\n\n12"
+    end
+
     it "writes a sentence set as a heading as a paragraph, but keeps a tagline, a question and a card's title" do
       html = "<h5>Legrand offers an array of products that provide power, data and charging connections where it is needed in offices.</h5>" \
              "<p>Read on</p><h2>Emergency response available 24 hours a day, 7 days a week.</h2><p>Call</p>" \
@@ -1002,6 +1017,10 @@ RSpec.describe "Markdown conversion" do
     it "joins numbered lists whose numbering runs on" do
       convert('<ul><li>a</li><li>b</li></ul><ul><li>c</li><li>d</li></ul><ol><li>one</li></ol><ol start="2"><li>two</li></ol><ol><li>again</li></ol>').should ==
         "- a\n- b\n\n- c\n- d\n\n1. one\n2. two\n\n1. again"
+    end
+
+    it "keeps a one-item list whose text would open a list as a line" do
+      convert("<ul><li>1. Read it aloud.</li></ul><p>Then</p><ul><li>- Breathe</li></ul>").should == "- 1. Read it aloud.\n\nThen\n\n- - Breathe"
     end
 
     it "joins one-item lists side by side into one list" do
