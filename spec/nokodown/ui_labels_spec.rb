@@ -10,6 +10,17 @@ RSpec.describe "UI labels" do
     convert(labels.map { |label| "<p>#{label}</p>" }.join + text).should == "The stove boils a litre in three minutes."
   end
 
+  it "drops view counters and the line a comment or review widget shows when empty" do
+    lines = ["2362 views", "<b>Views</b>: 1,915", "Okuyan sayısı : 1.064", "点击：571", "Comments are closed.", "( No hay valoraciones aún. )",
+             "<b>0</b> out of 5", "등록된 댓글이 없습니다."]
+    convert(lines.map { |line| "<p>#{line}</p>" }.join + text).should == "The stove boils a litre in three minutes."
+  end
+
+  it "keeps a count that is part of a sentence" do
+    convert("<p>The video passed 2362 views in a day.</p><p>Rated 4.5 out of 5</p>").should ==
+      "The video passed 2362 views in a day.\n\nRated 4.5 out of 5"
+  end
+
   it "keeps a read-more link that is the only way to its page" do
     convert("<h3>Kocher im Test</h3><p>Er kocht einen Liter in drei Minuten …</p><p><a href='/kocher'>Weiterlesen</a></p>").should ==
       "### Kocher im Test\n\nEr kocht einen Liter in drei Minuten …\n\n[Weiterlesen](https://example.com/kocher)"

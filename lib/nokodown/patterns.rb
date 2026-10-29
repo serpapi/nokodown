@@ -208,6 +208,41 @@ module Nokodown
       )[\s.:：!…«»‹›<>→➔)\]]*\z
     /xi.freeze
 
+    # What a view, read, download or like counter counts, in the major web
+    # languages.
+    COUNTED = /
+      views?|reads?|hits|visits|downloads?|likes?|favou?rites?|clicks|comments?|
+      visitas|vistas|visualizaciones|lecturas|descargas|comentarios|visualizações|leituras|curtidas|comentários|
+      vues|lectures|téléchargements|commentaires|aufrufe|zugriffe|kommentare|visualizzazioni|letture|visite|commenti|
+      weergaven|keer\sbekeken|reacties|просмотр(?:ов|а|ы)?|прочтени[йя]|скачивани[йя]|комментари(?:ев|я|й)|переглядів|
+      wyświetle(?:ń|nia)|odsłon|komentarz[ey]?|görüntülenme|(?:okunma|okuyan|[iİ]ndirme|görüntülenme)\ssayısı|okunma|yorum|
+      閲覧数?|回閲覧|コメント|浏览(?:量|次数)?|次浏览|阅读量?|次阅读|點擊|点击(?:量|数)?|瀏覽|閱讀|评论|評論|조회수?|댓글|
+      عدد\s(?:القراءات|المشاهدات|الزيارات)|مشاهدات?|تعليقات|lượt\s(?:xem|tải)|bình\sluận|(?:kali\s)?dilihat|komentar
+    /xi.freeze
+
+    # A counter on its own ("2362 views", "Views: 1,915", "点击：571"), or
+    # the line a comment or review widget shows when there are none.
+    COUNTER_TEXT = /
+      \A[\s|(]*(?:
+        (?:(?:[\d.,\s]*\d[kmкм]?\s?(?:#{COUNTED})|(?:#{COUNTED})\s?[:：(]?\s?[\d.,\s]*\d[kmкм]?\)?)[\s|·•,]*)+|
+        0(?:[.,]0)?\s?(?:out\sof|of|von|de|sur|su|из|na|\/)\s?5|
+        comments\s(?:are\s)?(?:closed|off)|both\scomments\sand\strackbacks\sare\s(?:currently\s)?closed|
+        no\scomments(?:\syet)?|(?:there\sare\s)?no\sreviews\syet|no\sratings?\syet|be\sthe\sfirst\sto\s(?:review|comment).*|
+        no\shay\s(?:comentarios|valoraciones\saún|reseñas)|sin\scomentarios|los\scomentarios\sestán\scerrados|
+        sem\scomentários|nenhum\scomentário|(?:os\s)?comentários\s(?:estão\s)?encerrados|ainda\snão\shá\savaliações|
+        aucun\s(?:commentaire|avis)|les\scommentaires\ssont\sfermés|il\sn'y\sa\spas\sencore\sd'avis|
+        keine\skommentare|kommentare\ssind\sgeschlossen|(?:es\sgibt\s)?noch\skeine\sbewertungen|
+        nessun\s(?:commento|recensione)|i\scommenti\ssono\schiusi|non\sci\ssono\sancora\srecensioni|
+        geen\sreacties|reacties\szijn\sgesloten|(?:er\szijn\s)?nog\sgeen\s(?:beoordelingen|reviews)|
+        (?:комментариев|отзывов)\s(?:пока\s)?нет|нет\s(?:комментариев|отзывов)|комментарии\sзакрыты|пока\sнет\sотзывов|
+        brak\s(?:komentarzy|opinii)|komentarze\ssą\s(?:wyłączone|zamknięte)|
+        yorum\syok|henüz\syorum\syapılmamış|yorumlar\skapalı|
+        コメントは(?:まだ)?ありません|レビューはまだありません|暂无(?:评论|评价)|暫無(?:評論|評價)|还没有评论|
+        (?:등록된\s)?댓글이\s없습니다|리뷰가\s없습니다|لا\sتوجد\s(?:تعليقات|مراجعات)|التعليقات\sمغلقة|
+        chưa\scó\s(?:bình\sluận|đánh\sgiá)(?:\snào)?|belum\sada\s(?:komentar|ulasan)|nincs\shozzászólás
+      )[\s.!)]*\z
+    /xi.freeze
+
     # Whole-text matches for short blocks and links that carry no content.
     BOILERPLATE_TEXT = /
       \A(?:
