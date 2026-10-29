@@ -13,11 +13,12 @@ RSpec.describe Nokodown::Markdown::Orphans do
     convert(html).should == "### Rooms\n\n3\n\nBaths:\n\n2\n\nOur team is growing.\n\n250\n\nEmployees"
   end
 
-  it "keeps numbers side by side, but not the options of a picker" do
+  it "keeps numbers side by side, but not the options of a picker or a count beside a date" do
     html = "<p>News from the scene.</p><p>149</p><p>25</p><p>House in Mijas.</p><p>5</p><p>393m²</p>" \
-           "<p>Pick how many you need.</p><p>1</p><p>2</p><p>3</p><p>Pick a page.</p><p>2</p><p>3</p><p>4</p>"
+           "<p>Pick how many you need.</p><p>1</p><p>2</p><p>3</p><p>Pick a page.</p><p>2</p><p>3</p><p>4</p>" \
+           "<p>Court rules on the merger.</p><p>13.09.2026</p><p>724</p>"
     convert(html).should == "News from the scene.\n\n149\n\n25\n\nHouse in Mijas.\n\n5\n\n393m²\n\n" \
-                            "Pick how many you need.\n\nPick a page."
+                            "Pick how many you need.\n\nPick a page.\n\nCourt rules on the merger.\n\n13.09.2026"
   end
 
   it "keeps a number that the next line runs on from" do

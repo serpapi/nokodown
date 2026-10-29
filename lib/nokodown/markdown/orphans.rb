@@ -8,6 +8,7 @@ module Nokodown
       NUMBERS = /\A\d{1,3}(?:\s+\d{1,3})?\z/.freeze
       # A number, with its separators and unit: "4.155", "393m²", "€24".
       VALUE = /\A\p{Sc}?\d[\d.,\s]*[\p{L}\p{Sc}%²³]{0,4}\z/.freeze
+      DATE = %r{\A\d{1,4}[./-]\d{1,2}[./-]\d{1,4}\z}.freeze
       SEQUENCE = /\A[01](?:\s+\d{1,2})+\z/.freeze
       TIME = /(?:\d{1,2}:)?\d{1,2}:\d{2}/.freeze
       # A player shows the elapsed time and the duration, run together
@@ -66,7 +67,8 @@ module Nokodown
 
       # Numbers side by side are the columns of a row, such as a forum's
       # posts and threads or a house's bedrooms and floor area, unless they
-      # count up like the options of a picker or the pages of a slider.
+      # count up like the options of a picker or the pages of a slider. A
+      # count beside a date is a post's views.
       def columns(blocks)
         values = blocks.map { |block| value_block?(block) }
         runs = blocks.each_index.chunk_while { |a, b| values[a] && values[b] }.select { |run| values[run.first] && run.size > 1 }
@@ -74,7 +76,10 @@ module Nokodown
       end
 
       def value_block?(block)
-        block.kind == :paragraph && !block.text.include?("](") && Text.plain(block.text).match?(VALUE)
+        return false unless block.kind == :paragraph && !block.text.include?("](")
+
+        text = Text.plain(block.text)
+        text.match?(VALUE) && !text.match?(DATE)
       end
 
       def counting?(texts)
