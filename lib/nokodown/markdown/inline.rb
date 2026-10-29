@@ -60,8 +60,8 @@ module Nokodown
       # data-cfemail attribute that holds them encoded.
       CLOUDFLARE_EMAIL = %r{/cdn-cgi/l/email-protection#([0-9a-f]{6,})\z}i.freeze
       EMAIL_PLACEHOLDER = "[email protected]"
-      # Link text that shows a whole address, not a shortened one.
       URL_TEXT = %r{\A(?:https?://|www\.)[^\s…]+\z}i.freeze
+      HOST = %r{\A(?:https?://)?(?:www\.)?([^/?#:]+)}i.freeze
 
       # The first byte is the key the others are XORed with.
       def self.cloudflare_email(hex)
@@ -245,7 +245,7 @@ module Nokodown
         text = Emphasis.unwrap(text)
         return text if shown?(text, url)
         return url if same_as_url?(text, url)
-        return text if text.delete("\\").match?(URL_TEXT)
+        return text if redirected?(text, url)
 
         "[#{Text.link_text(text)}](#{Text.destination(url)})"
       end
@@ -255,6 +255,18 @@ module Nokodown
       def shown?(text, url)
         address = url[/\Amailto:([^?]+)/i, 1]
         !address.nil? && text.delete("\\").downcase.include?(address.downcase)
+      end
+
+      # Link text that shows a whole address on another site than the link's,
+      # which only redirects there. A shortened address ("…", "...") is not
+      # whole.
+      def redirected?(text, url)
+        shown = text.delete("\\")
+        shown.match?(URL_TEXT) && !shown.include?("...") && host(shown) != host(url)
+      end
+
+      def host(url)
+        url[HOST, 1].to_s.downcase
       end
 
       def same_as_url?(text, url)

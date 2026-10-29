@@ -359,6 +359,13 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "https://www.bar.example/ [https://example.org/a/very/…](https://example.org/a/very/long/path)"
     end
 
+    it "keeps the link of an address shortened or on the link's own site" do
+      html = '<p><a href="https://www.example.org/forum/showthread.php?t=123456&amp;page=2">https://www.example.org/forum/showthread.p...</a> ' \
+             '<a href="https://news.example/2019/11/20/bordal-recria">https://news.example/2019/11/20/bordal</a></p>'
+      convert(html).should == "[https://www.example.org/forum/showthread.p...](https://www.example.org/forum/showthread.php?t=123456&page=2) " \
+                              "[https://news.example/2019/11/20/bordal](https://news.example/2019/11/20/bordal-recria)"
+    end
+
     it "puts images out of link text" do
       convert('<p><a href="/p/1"><img src="/1.jpg" alt="Boot"> Trail boot</a></p>').should ==
         "![Boot](https://example.com/1.jpg) [Trail boot](https://example.com/p/1)"
