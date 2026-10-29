@@ -20,8 +20,9 @@ module Nokodown
   # Blocks are found once the content is located, but only dropped from it
   # once it is cleaned, so they weigh in pruning as before.
   class Teasers
-    # bare: each item is a link and nothing else.
-    Run = Struct.new(:parent, :items, :targets, :chars, :bare)
+    # kinds: how each target is kin to this page; bare: each item is a link
+    # and nothing else.
+    Run = Struct.new(:parent, :items, :targets, :kinds, :chars, :bare)
     # alike: the items are pages like this one; named: posts under the root
     # named by their titles, as this one is; below: pages under it.
     Block = Struct.new(:nodes, :title, :alike, :named, :below, :chars, :bare)
@@ -375,16 +376,17 @@ module Nokodown
       # Resolving every link is the costly part, so it waits for the shape.
       targets = links.map { |link| link && target(link["href"]) }
       return unless distinct_targets?(targets.compact, items.size)
-      return Run.new(parent, items, targets, chars, false) if rich
 
-      kinds = kinds(targets)
-      Run.new(parent, items, targets, chars, true) if alike?(kinds, items.size) || named?(kinds, items.size)
+      kinds = targets.compact.map { |uri| kinship(uri) }
+      return Run.new(parent, items, targets, kinds, chars, false) if rich
+
+      Run.new(parent, items, targets, kinds, chars, true) if alike?(kinds, items.size) || named?(kinds, items.size)
     end
 
     # Items that are each a link and nothing else, as in a "See also" list,
     # not links in a line of text.
     def bare?(parent, cards, links)
-      return false if parent.children.any? { |child| child.text? && !Dom.squish(child.content).empty? }
+      return false if in_text?(parent)
 
       labels = cards.zip(links).map do |card, link|
         label = link && Dom.text(link)
@@ -393,6 +395,16 @@ module Nokodown
         label
       end
       labels.sum { |label| width(label) } >= MIN_BARE_LABEL * labels.size
+    end
+
+    # A flat list can hold thousands of items and many runs, so each parent
+    # is read once.
+    def in_text?(parent)
+      @in_text ||= {}
+      key = Dom.key(parent)
+      return @in_text[key] if @in_text.key?(key)
+
+      @in_text[key] = parent.children.any? { |child| child.text? && !Dom.squish(child.content).empty? }
     end
 
     # A CJK character says about as much as a short word.
@@ -524,7 +536,7 @@ module Nokodown
       nodes, title = holds_more?(run.parent, run, length(title)) ? [run.items, nil] : widen(run, title)
       title ||= title_before(nodes.first)
       size = run.items.size
-      kinds = kinds(run.targets)
+      kinds = run.kinds
       alike = alike?(kinds, size)
       below = run.targets.compact.count { |uri| child?(uri) } >= size * SIBLING_SHARE
       Block.new(nodes, title, alike, !alike && named?(kinds, size), below, run.chars, run.bare)
@@ -619,10 +631,6 @@ module Nokodown
       node.css(HEADING).any? { |heading| Dom.text(heading) == Dom.text(node) }
     end
 
-    def kinds(targets)
-      targets.compact.map { |uri| kinship(uri) }
-    end
-
     # Pages like this one, a few of which may sit a folder deeper beside the
     # others ("l-27-12/2" beside "l-20d-11").
     def alike?(kinds, size)
@@ -635,7 +643,7 @@ module Nokodown
     end
 
     def child?(uri)
-      page = segments(@page)
+      page = page_segments
       other = segments(uri)
       other.size > page.size && other.first(page.size) == page
     end
@@ -646,10 +654,10 @@ module Nokodown
     # page that pages through its list of others ("detail?p=8&id=105") links
     # to them without the page number ("detail?id=17").
     def kinship(uri)
-      page = segments(@page)
+      page = page_segments
       other = segments(uri)
       return (:sibling if same_kind?(uri)) if page == other
-      return unless query_keys(uri) == query_keys(@page)
+      return unless query_keys(uri) == page_keys
       return folder_kinship(page, other) if page.size > 1
       return unless page.size == 1 && other.size == 1
       return :sibling if skeleton(page.first) == skeleton(other.first)
@@ -686,7 +694,7 @@ module Nokodown
     end
 
     def same_kind?(uri)
-      own = params(@page).to_h
+      own = @page_params ||= params(@page).to_h
       other = params(uri)
       !other.empty? && other.all? { |key, value| value == own[key] || (id?(value) && id?(own[key])) }
     end
@@ -700,8 +708,16 @@ module Nokodown
       uri.path.to_s.split("/").reject(&:empty?)
     end
 
+    def page_segments
+      @page_segments ||= segments(@page)
+    end
+
     def query_keys(uri)
       params(uri).map(&:first).sort
+    end
+
+    def page_keys
+      @page_keys ||= query_keys(@page)
     end
 
     def params(uri)
