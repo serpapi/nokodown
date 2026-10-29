@@ -541,6 +541,23 @@ RSpec.describe Nokodown do
       convert('<p>Open daily.</p><div class="w-condition-invisible"><p>Closed for the holidays.</p></div>').should == "Open daily."
     end
 
+    it "drops a comment, review or contact form with the title that heads it, in any language" do
+      html = '<p>Open daily.</p><div id="respond"><h3>Laisser un commentaire <small>' \
+             '<a href="/lac/#respond" style="display:none">Annuler</a></small></h3>' \
+             '<form action="/wp-comments-post.php"><p>Votre adresse e-mail ne sera pas publiée.</p>' \
+             '<p><label>Commentaire</label><textarea name="comment"></textarea></p><p>Nom <input name="author"></p></form></div>'
+
+      convert(html).should == "Open daily."
+    end
+
+    it "keeps a page wrapped in one form, and the page's title above a message form" do
+      page = "<form><h2>Opening hours</h2><p>#{'We open at nine and close at six, also on public holidays. ' * 8}</p><textarea></textarea></form>"
+      post = "<article><h1>Lake trip</h1><p>We went.</p><form><textarea></textarea><p>Your email stays private.</p></form></article>"
+
+      convert(page).should include("We open at nine")
+      convert(post).should == "# Lake trip\n\nWe went."
+    end
+
     it "drops the messages Webflow shows only once a form is sent" do
       form = '<div class="w-form"><form><input name="email"></form><div class="w-form-done"><div>Thank you! Check your inbox.</div></div>' \
              '<div class="w-form-fail"><div>There was an issue with the form.</div></div></div>'

@@ -28,6 +28,13 @@ module Nokodown
 
     STREAMED_LINK_SHARE = 0.5
 
+    UTILITY_FORM_TEXT = 300
+    FORM_TITLE = 120
+    TITLE_HOLDERS = %w[body main article].freeze
+    BEYOND_FORM_TITLE = "a[href], img, picture, video, iframe, table, ul, ol, dl"
+    FORM_TITLE_PIECES = 3
+    TEXT_PIECES = ".//text()[normalize-space()]"
+
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
     # Injected link spam, honeypot fields and hidden copies of the page are
@@ -64,11 +71,13 @@ module Nokodown
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
       restore_picture_sources
+      message_forms = @body.css("form").select { |form| form.at_css("textarea") }
       @body.css(JUNK).each(&:remove)
       LeakedMarkup.clean(@body)
       @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
+      remove_message_forms(message_forms)
       remove_form_controls
       HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
@@ -274,6 +283,41 @@ module Nokodown
       @body.css("form").each { |form| form.remove if leftover_form?(form) }
     end
 
+    # Comment, review and contact forms ask for a message in a text box (gone
+    # with the other controls by now), under a title such as "Leave a Reply"
+    # or "Be the first to review" in any language. A page wrapped in one form
+    # (ASP.NET) holds far more text. Forms inside hidden boxes went with them.
+    def remove_message_forms(forms)
+      forms.each do |form|
+        next if form.ancestors.none? { |ancestor| ancestor.name == "body" }
+        next if Dom.char_count(form.content) >= UTILITY_FORM_TEXT
+
+        titled_form(form).remove
+      end
+    end
+
+    # The form with the wrappers that add only a short title or note to it.
+    def titled_form(form)
+      own = [Dom.char_count(form.content), form.xpath(TEXT_PIECES).size, form.css(Dom::HEADING_SELECTOR).size,
+             form.css(BEYOND_FORM_TITLE).size]
+      node = form
+      node = node.parent while node.parent&.element? && form_title?(node.parent, own)
+      node
+    end
+
+    # A few short lines under one heading, not the page's title or main
+    # region, nor links, pictures, tables or lists. The details beside a
+    # contact form, or the other tabs beside a review form, are more.
+    def form_title?(wrapper, own)
+      chars, pieces, headings, beyond = own
+      return false if TITLE_HOLDERS.include?(wrapper.name) || wrapper["role"] == "main" || wrapper.at_css("h1")
+      return false if Dom.char_count(wrapper.content) - chars > FORM_TITLE
+      return false if wrapper.xpath(TEXT_PIECES).size - pieces > FORM_TITLE_PIECES
+      return false if wrapper.css(Dom::HEADING_SELECTOR).size - headings > 1
+
+      wrapper.css(BEYOND_FORM_TITLE).size == beyond
+    end
+
     # Only a prompt such as "Search:" is left once the controls are gone.
     def leftover_form?(form)
       text = Dom.text(form)
@@ -287,7 +331,7 @@ module Nokodown
     # Search boxes, sign-ups and logins. Forms that wrap real content (ASP.NET
     # pages, product option pickers) are left alone.
     def utility_form?(form)
-      return false if Dom.char_count(form.content) >= 300
+      return false if Dom.char_count(form.content) >= UTILITY_FORM_TEXT
 
       form["role"] == "search" ||
         form.css("input").any? { |i| %w[search email password].include?(i["type"].to_s.downcase) } ||

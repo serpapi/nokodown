@@ -78,7 +78,9 @@ with `main_content: false`, `:none` for a document without a body.
   repeats the line (a card's tags) or is such an archive, and
   copyright and licence lines in the major web languages.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
-  links by where they point, modals, chat widgets, "related", "recommended"
+  links by where they point, comment, review and contact forms (a form with
+  a text box and little text) with the title and notes around them in any
+  language, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
   continuing the paragraph before it, or the footnote to a mark just above),
   and, next to an article, its comment thread.
