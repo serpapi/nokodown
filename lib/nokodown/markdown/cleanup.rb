@@ -2,11 +2,14 @@
 
 module Nokodown
   module Markdown
-    # Block-level tidying after rendering: repeated blocks, stray rules,
-    # punctuation-only lines, section headings left without a section, and
-    # redundant or repeated images.
+    # Block-level tidying after rendering: repeated blocks, punctuation-only
+    # lines, section headings left without a section, and redundant or
+    # repeated images.
     module Cleanup
       DEDUPE_WINDOW = 4
+      # A page with fewer words than this is its images: a gallery, a
+      # photo post.
+      IMAGE_PAGE_WORDS = 20
       IMAGE_ONLY = /\A!\[([^\]]*)\]\([^)]*\)\z/.freeze
       LINKED_HEADING = /\A#+ \[.*\]\(.*\)\z/.freeze
       TITLE_LIST_MIN = 3
@@ -22,13 +25,18 @@ module Nokodown
 
       # images: the Renderer's rendered_images.
       def call(blocks, images = {})
-        blocks = blocks.reject { |block| noise?(block) }
+        blocks = CodeBlock.without_labels(blocks.reject { |block| noise?(block) })
+        blocks = Labels.blocks(Lists.call(blocks))
         blocks = dedupe(blocks)
         blocks = drop_repeated_runs(blocks)
         blocks = shorten_repeated_quotes(blocks)
-        blocks = trim_rules(blocks)
-        blocks = drop_empty_sections(blocks)
-        images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
+        blocks = drop_empty_sections(CardLinks.new(blocks).call)
+        images.empty? ? blocks : ImageCleanup.new(images, unnamed: !image_page?(blocks)).call(blocks)
+      end
+
+      def image_page?(blocks)
+        words = 0
+        blocks.none? { |block| (words += Text.plain(block.text).scan(/[\p{L}\p{N}]+/).size) >= IMAGE_PAGE_WORDS }
       end
 
       def noise?(block)
@@ -38,7 +46,7 @@ module Nokodown
         return true unless text.match?(/[\p{L}\p{N}]/) || text.include?("](")
 
         plain = text.gsub(/[*_`~]/, "").strip
-        plain.length <= 80 && plain.match?(Patterns::BOILERPLATE_TEXT)
+        plain.length <= 80 && plain.match?(Patterns::PARAGRAPH_NOISE)
       end
 
       # Responsive and "enlarge" variants repeat an image (and its caption) a
@@ -157,21 +165,11 @@ module Nokodown
         alt && alt.length >= 10 ? "image:#{alt}" : block.text
       end
 
-      def trim_rules(blocks)
-        blocks = blocks.each_with_object([]) do |block, kept|
-          next if block.kind == :rule && (kept.empty? || kept.last.kind == :rule || kept.last.kind == :heading)
-
-          kept << block
-        end
-        blocks.pop while blocks.last&.kind == :rule
-        blocks
-      end
-
       # A heading followed by nothing, or by a heading at the same or a higher
       # level, lost its section during extraction. Title lists are content in
       # their own right, and a page that is only its headline keeps it.
       def drop_empty_sections(blocks)
-        titles = title_list_indexes(blocks)
+        titles = title_list_indexes(blocks) | card_titles(blocks)
         kept = blocks.each_index.reject { |index| !titles.include?(index) && empty_section?(blocks, index) }
         kept.pop while kept.any? && blocks[kept.last].kind == :heading && !titles.include?(kept.last)
         return blocks.values_at(*kept) if kept.any?
@@ -179,11 +177,26 @@ module Nokodown
         [blocks.find { |block| block.kind == :heading && block.level == 1 }].compact
       end
 
+      # The last card of a listing whose "More" control was removed ends the
+      # page with its linked title. A linked title at a level where an
+      # earlier title links too is a card's, not a section's.
+      def card_titles(blocks)
+        levels = Set.new
+        blocks.each_index.select do |index|
+          block = blocks[index]
+          block.kind == :heading && linked_title?(block) && !levels.add?(block.level)
+        end.to_set
+      end
+
+      def linked_title?(heading)
+        heading.text.match?(LINKED_HEADING) && !heading_text(heading).match?(Patterns::NOISE_HEADING)
+      end
+
       def empty_section?(blocks, index)
         block = blocks[index]
         return false unless block.kind == :heading
 
-        following = blocks[(index + 1)..].find { |b| b.kind != :rule }
+        following = blocks[index + 1]
         return true if following.nil?
         return false unless following.kind == :heading && following.level <= block.level
 
@@ -194,7 +207,7 @@ module Nokodown
       # whose details were removed (products, related guides), not sections.
       # A "Trending" or "Related" heading among them is still a section label.
       def title_list_indexes(blocks)
-        runs = blocks.each_index.reject { |index| blocks[index].kind == :rule }.slice_when do |a, b|
+        runs = blocks.each_index.slice_when do |a, b|
           blocks[a].kind != :heading || blocks[b].kind != :heading || blocks[a].level != blocks[b].level
         end
         indexes = runs.select { |run| title_list?(blocks.values_at(*run)) }.flatten

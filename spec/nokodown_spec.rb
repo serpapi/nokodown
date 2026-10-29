@@ -57,6 +57,50 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should start_with("Photo by Ben Hon for Resy\n\n# The Resy Guide to the Michelin Winners")
     end
 
+    it "puts the page's title in place of a heading that only names the site" do
+      body = "<p>#{'We caught twelve trout at the upper pond, and the water was cold and clear all day. ' * 3}</p>"
+      html = "<title>Bonten Fishing Pond - Friends from afar</title><body><article>" \
+             "<h1><a href='http://bonten.example/'>Bonten Fishing Pond</a></h1>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "http://bonten.example/calendar/671515").should start_with("# Friends from afar\n\nWe caught")
+    end
+
+    it "puts the title above a section's name when the URL names the title" do
+      body = "<h1>Transparencia</h1><p>Reporte abril 2023</p><p>#{'The public consultations held in April, with their dates and documents. ' * 3}</p>"
+      html = "<title>Reporte abril 2023</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://sb.gob.do/transparencia/consultas/reporte-abril-2023/")
+              .should start_with("# Reporte abril 2023\n\n## Transparencia\n\nThe public")
+    end
+
+    it "drops a line below the title that only repeats it" do
+      body = "<p><b>Fucili d'assalto</b></p><p>#{'The assault rifles of GTA 5 differ in damage, range and fire rate. ' * 3}</p>"
+      html = "<title>Fucili d'assalto</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html).should start_with("# Fucili d'assalto\n\nThe assault rifles")
+    end
+
+    it "keeps a first line named like the title that runs on into the next" do
+      poem = "<p>Ode to the sea</p><p>#{'that rolls over the stones of the harbour and back again to the deep. ' * 3}</p>"
+      html = "<title>Ode to the sea</title><body><article>#{poem}</article></body>"
+
+      Nokodown.to_markdown(html).should start_with("# Ode to the sea\n\nOde to the sea\n\nthat rolls")
+    end
+
+    it "keeps the site's name heading the content on its home page" do
+      body = "<p>#{'Arcade game with a bouncing ball, cosmic levels and endless runs to beat. ' * 3}</p>"
+      html = "<title>Chickenin Route - Arcade Game</title><body><article><h1>Chickenin Route</h1>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://www.chickenin-route.top/it/").should start_with("# Chickenin Route\n\nArcade game")
+    end
+
+    it "does not head content that has its own heading with a title that only names the site" do
+      body = "<h2>David Hellenius</h2><p>#{'Swedish presenter, comedian and actor, known for his television shows. ' * 3}</p>"
+      html = "<title>Edisonline SK</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://edisonline.sk/catalog/category/person").should start_with("## David Hellenius\n\nSwedish")
+    end
+
     it "accepts nil" do
       Nokodown.extract(nil).markdown.should == ""
     end
@@ -80,6 +124,13 @@ RSpec.describe Nokodown do
     end
 
     let(:prose) { "<p>#{'The command line tool runs on every major platform and needs nothing else to work. ' * 3}</p>" }
+    let(:product) do
+      "<h1>Hardcover notebook, 200 sheets</h1><ul><li>Code: 31579</li><li>Barcode: 7894494526435</li>" \
+        "<li>Brand: Jandaia</li><li>Package: 4 units</li><li>Weight: 0.4 kg</li></ul>" \
+        "<p>A ruled notebook with a hard PET cover, a ribbon marker and a pocket inside the back cover. " \
+        "The sheets are 56 g paper with a margin line, and the notebook is sold by the package.</p>"
+    end
+    let(:delivery) { "<div><h3>Delivery</h3><p>Orders leave our warehouse the next working day.</p></div>" }
 
     it "keeps the link lists of an index page, which are its content" do
       sections = {
@@ -119,6 +170,154 @@ RSpec.describe Nokodown do
       extract("<main><h1>Blog</h1><div class='posts'>#{posts.join}</div>#{promo}</main>").should_not include("weekly tips")
     end
 
+    it "drops a menu that links to the page itself, even on an index page" do
+      topics = %w[
+        Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts
+        Dentistry Design Drama Diving Ecology Economics Energy Ethics Farming Fashion Fishing Forestry
+        Gardening Geography Geology Glassmaking Hiking History Horses Hunting
+      ]
+      index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
+      menu = '<ul><li><a href="/news">News</a></li><li><a href="https://www.example.com/page/">Topics</a> (8)</li>' \
+             '<li><a href="/events">Events</a></li></ul>'
+
+      markdown = extract("<main><h1>Topics</h1>#{index}#{menu}</main>")
+
+      markdown.should include("- [Baking](https://example.com/topics/baking)")
+      ["News", "Events"].each { |noise| markdown.should_not include(noise) }
+    end
+
+    it "keeps the link lists above a title that opens nothing, like an SEO line at the foot of an index" do
+      topics = %w[
+        Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts
+        Dentistry Design Drama Diving Ecology Economics Energy Ethics Farming Fashion Fishing Forestry
+        Gardening Geography Geology Glassmaking Hiking History Horses Hunting
+      ]
+      index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
+      intro = "<p>Every subject the library holds, from anatomy to hunting. Each topic lists its books, the shelf " \
+              "they stand on and when they are due back, and the librarians add new topics every month.</p>"
+
+      markdown = extract("<main>#{intro}#{index}<h1>Topics for every reader</h1><p>Browse them all.</p></main>")
+
+      markdown.should include("- [Anatomy](https://example.com/topics/anatomy)")
+    end
+
+    it "keeps the menu of an index page that holds little else" do
+      topics = %w[Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts]
+      index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
+      menu = '<ul><li><a href="/news">News</a></li><li><a href="/page">Topics</a></li>' \
+             '<li><a href="/events">Events</a></li></ul>'
+
+      markdown = extract("<main><h1>Topics</h1>#{index}#{menu}</main>")
+
+      markdown.should include("- [Events](https://example.com/events)")
+    end
+
+    it "keeps a list of CJK headlines above the title of a page they dominate" do
+      headlines = Array.new(20) { |index| "<li><a href=\"/news/#{index}\">东京大学研究团队发现新型超导材料样品 #{index + 1}</a></li>" }
+      markdown = extract("<body><div><ul>#{headlines.join}</ul></div><div>#{product}</div></body>")
+
+      markdown.should include("东京大学研究团队发现新型超导材料样品 20")
+    end
+
+    it "drops the menus above the page title even when they hold most of the text" do
+      departments = %w[
+        Party Toys Bedding Cleaning Office School Kitchen Garden Tools Paint Pets Books Music Sports Baby Lighting
+        Bath Storage Crafts Travel
+      ]
+      groups = departments.map do |name|
+        slug = "/#{name.downcase}"
+        "<li><a href=\"#{slug}\">#{name}</a><ul><li><a href=\"#{slug}/new\">New</a></li>" \
+          "<li><a href=\"#{slug}/sale\">Sale</a></li><li><a href=\"#{slug}/all\">All #{name}</a></li></ul></li>"
+      end
+      markdown = extract("<body><div><ul>#{groups.join}</ul></div><div>#{product}</div></body>")
+
+      markdown.should include("- Barcode: 7894494526435")
+      ["Party", "Bedding", "All Books"].each { |noise| markdown.should_not include(noise) }
+    end
+
+    it "drops a column of links beside the column of prose in a layout table" do
+      news = ["Pool season opens with a new water system", "We are hiring installers for the summer",
+              "How we rebuilt the city pool in three weeks", "A sauna for every home: our new range"]
+      rail = news.map { |headline| "<p><a href=\"/news/#{headline.length}\">#{headline}</a></p>" }.join
+      product = "<h2>Whirlpool bath M-2056A</h2><p>Made in China by Monalisa, 1860 x 830 x 730 mm, " \
+                "with six jets, a heater and a headrest.</p><p>The acrylic shell is reinforced with fibreglass, " \
+                "and the pump and the heater sit behind a panel that lifts off for service.</p>"
+
+      markdown = extract("<table><tr><td>#{product}</td><td>#{rail}</td></tr></table>")
+
+      markdown.should include("with six jets, a heater and a headrest.")
+      markdown.should_not include("We are hiring")
+    end
+
+    it "keeps the index in a layout table column beside an intro" do
+      topics = %w[
+        Anatomy Astronomy Architecture Biology Botany Banking Chemistry Climate Cooking Dentistry
+        Design Drama Ecology Economics Farming Fashion Geology History Hiking
+      ]
+      index = topics.map { |topic| "<a href=\"/topics/#{topic.downcase}\">#{topic}</a><br>" }.join
+      intro = "<p>Welcome to the topic directory of our small library. Pick a subject to see the books we hold " \
+              "on it and when they are due back.</p>"
+
+      markdown = extract("<table><tr><td>#{intro}</td><td>#{index}</td></tr></table>")
+
+      markdown.should include("[Geology](https://example.com/topics/geology)")
+    end
+
+    it "keeps a column of links that holds the page title" do
+      names = %w[VMC750 VMC850 VMC1000 XH714 XH716]
+      related = names.map { |name| "<a href=\"/p/#{name}\">#{name} vertical machining centre</a><br>" }.join
+      product = "<h1>XHD2312 gantry machining centre</h1><img src=\"/img/xhd2312.jpg\">#{related}"
+      contact = "<p>Sales: Zhai Qing, 138 9766 3235, or write to sales@qyskjc.com. Address: 24 Jing'er Road North, " \
+                "Biological Park, Xining, Qinghai. Open from eight to five on working days, and on Saturday " \
+                "mornings by appointment.</p>"
+
+      markdown = extract("<table><tr><td>#{contact}</td><td>#{product}</td></tr></table>")
+
+      markdown.should include("# XHD2312 gantry machining centre")
+    end
+
+    it "keeps cards whose tags link to the page itself" do
+      tags = '<div><a href="/tags/tide">tide</a> <a href="/page">energy</a> <a href="/tags/coast">coast</a></div>'
+      card = "<article><h2><a href=\"/notes/lagoon\">The lagoon wall opens</a></h2>#{tags}</article>"
+
+      markdown = extract("<main><h1>Energy</h1>#{card}<p>Two more notes this week.</p></main>")
+
+      markdown.should include("## [The lagoon wall opens](https://example.com/notes/lagoon)")
+    end
+
+    it "drops the heading over a box of links it drops" do
+      kinds = %w[Notebooks Pens Folders Markers Erasers Rulers]
+      links = kinds.map { |kind| "<li><a href=\"/shop/#{kind.downcase}\">#{kind}</a></li>" }.join
+      box = "<div><h2>More from the shop</h2><ul>#{links}</ul></div>"
+
+      markdown = extract("<main>#{product}#{box}#{delivery}</main>")
+
+      markdown.should include("the notebook is sold by the package.\n\n### Delivery")
+      markdown.should_not include("More from the shop")
+    end
+
+    it "keeps a title too long to be the label of the box of links below it" do
+      tags = %w[Health Tech Equity].map { |tag| "<a href=\"/tags/#{tag.downcase}\">#{tag}</a>" }.join(" ")
+      tags = "<div>#{tags}</div>"
+      card = "<article><h2>The future of healthcare is digital: seven reasons why</h2>#{tags}</article>"
+
+      markdown = extract("<main><h1>Piotr's posts</h1>#{card}<p>One more post this week.</p></main>")
+
+      markdown.should include("## The future of healthcare is digital: seven reasons why")
+      markdown.should_not include("Equity")
+    end
+
+    it "drops the heading over a box of links that a rule parts from the next section" do
+      skills = %w[PHP Java Ruby Python Swift Kotlin]
+      links = skills.map { |skill| "<li><a href=\"/jobs/#{skill.downcase}\">#{skill}</a></li>" }.join
+      boxes = "<div><h2>Find jobs by type</h2><ul>#{links}</ul><hr><h3>Find jobs by skill</h3><ul>#{links}</ul></div>"
+
+      markdown = extract("<main>#{product}#{boxes}#{delivery}</main>")
+
+      markdown.should include("### Delivery")
+      markdown.should_not include("by type")
+    end
+
     it "drops the few menu links left in a content area that holds almost nothing else" do
       html = '<main><a href="#content">Skip to content</a><div><a href="/shop">Shop all products</a> ' \
              '<a href="/help">Help and contact</a> <a href="/account">Your account</a></div><p>Sold out.</p></main>'
@@ -146,7 +345,7 @@ RSpec.describe Nokodown do
 
       markdown = extract("<main><h1>Mugs</h1>#{categories}<ul>#{card * 3}</ul></main>")
 
-      markdown.should include("## [Stoneware mug](https://example.com/p/mug)\n\n  $18")
+      markdown.should include("- [Stoneware mug](https://example.com/p/mug)\n  $18")
       ["Cups", "Add to cart", "Quick view"].each { |noise| markdown.should_not include(noise) }
     end
 
@@ -347,6 +546,21 @@ RSpec.describe Nokodown do
              '<div class="w-form-fail"><div>There was an issue with the form.</div></div></div>'
 
       convert("<p>Open daily.</p>#{form}").should == "Open daily."
+    end
+
+    it "drops link spam placed far off screen or in a strip one pixel high" do
+      html = '<p>Open daily.</p><div style="position: absolute; left: -7786px;"><a href="https://spam.example">casino bonus</a></div>' \
+             '<div style="position:fixed;top:-9000px"><a href="https://spam.example">live casino</a></div>' \
+             '<div style="position:absolute;left:-999em"><a href="https://spam.example">slots</a></div>' \
+             '<div style="overflow:hidden;height:1px;"><a href="https://spam.example">no kyc casino</a></div>'
+
+      convert(html).should == "Open daily."
+    end
+
+    it "keeps screen-reader text clipped to one pixel in place, which can be the only copy of a price" do
+      html = '<p>Camp kettle</p><span style="position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden">Price: 30 euro</span>'
+
+      convert(html).should == "Camp kettle\n\nPrice: 30 euro"
     end
 
     it "drops a large hidden block beside the visible title, but not an anti-flicker wrapper around the page" do
@@ -576,6 +790,88 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "protected email addresses" do
+    it "decodes the addresses Cloudflare hides" do
+      link = '<a href="/cdn-cgi/l/email-protection#f79494b7989492969984969192838e8385969e999e9990d994989a">' \
+             '<span class="__cf_email__" data-cfemail="36555576595553575845575053424f4244575f585f58511855595b">[email&#160;protected]</span></a>'
+      html = "<p>Questions about your certificate? Write to #{link} and we will answer within a day.</p>"
+
+      markdown = Nokodown.to_markdown(html, url: "https://www.oceansafetytraining.com/cert", title: false)
+      markdown.should include("cc@oceansafetytraining.com and")
+      markdown.should_not include("protected")
+    end
+
+    it "writes a protected mail link that holds only the placeholder as its address" do
+      html = '<p>Write to <a href="/cdn-cgi/l/email-protection#5a33343c351a3f223b372a363f74393537">[email&#160;protected]</a> today.</p>'
+
+      Nokodown.to_markdown(html, title: false).should == "Write to info@example.com today."
+    end
+
+    it "drops a decoy that a stylesheet hides inside an address" do
+      html = '<p>Email: <span class="obfuscate">info@ <span class="decoy-domain">ex.com</span> example.com</span></p>'
+
+      Nokodown.to_markdown(html, title: false).should == "Email: info@example.com"
+    end
+  end
+
+  describe "leaked markup" do
+    def convert(body)
+      Nokodown.to_markdown("<body>#{body}</body>", url: "https://example.com/page", title: false)
+    end
+
+    it "reads alt text that holds escaped markup as text" do
+      convert('<p><img src="/pinot.jpg" alt="2020 Pinot Noir &lt;br&gt; Presqu’ile Vineyard"></p>')
+        .should == "![2020 Pinot Noir Presqu’ile Vineyard](https://example.com/pinot.jpg)"
+    end
+
+    it "drops escaped elements written out whole, but not a tutorial's lines of markup" do
+      convert("<p>&lt;abbr id=\"kygai\"&gt;&lt;/abbr&gt;</p><p>Garden furniture for every terrace.</p>").should == "Garden furniture for every terrace."
+      convert("<p>Start the form with</p><p>&lt;form method=\"GET\" action=\"get.asp\"&gt;</p>")
+        .should == "Start the form with\n\n\\<form method=\"GET\" action=\"get.asp\">"
+    end
+
+    it "drops PHP errors printed into the page" do
+      error = "<br />\n<b>Warning</b>:  Use of undefined constant mimes in <b>/home/site/functions.php</b> on line <b>28</b><br />"
+
+      convert("#{error}<p>Mestin recipes for camping.</p>").should == "Mestin recipes for camping."
+    end
+
+    it "drops Liquid errors" do
+      html = "<p>Coffee <span>Liquid error (snippets/facets line 538): Could not find asset snippets/icon-close.liquid</span></p>"
+
+      convert(html).should == "Coffee"
+    end
+
+    it "keeps the template's text after a Liquid error's message" do
+      html = "<p>Type Liquid error (snippets/facets line 602): Could not find asset snippets/icon-arrow.liquid Coffee</p>" \
+             "<p>Saved Liquid error (product-template line 135): divided by 0. Free shipping on every order.</p>"
+
+      convert(html).should == "Type Coffee\n\nSaved Free shipping on every order."
+    end
+
+    it "leaves template placeholders and addresses in code alone" do
+      html = "<p>Print <code>{{item.guest_name}}</code> in the template.</p><p>Run <code>info@ <span>ex.com</span> example.com</code></p>"
+
+      convert(html).should == "Print `{{item.guest_name}}` in the template.\n\nRun `info@ ex.com example.com`"
+    end
+
+    it "looks for decoys in addresses in time linear in the lines of a page" do
+      lines = Array.new(6000) { |index| "Week #{index}: Lakers @ Celtics, user#{index}@ example.org<br>" }
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert("<div>#{lines.join}</div>")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 5
+      markdown.should include("Week 5999: Lakers @ Celtics, user5999@ example.org")
+    end
+
+    it "drops template placeholders and shortcodes left unrendered" do
+      body = "<p>{{item.guest_name}}, {{item.nationality}}</p><p>[mailerlite_form form_id=2]</p><p>{title}</p>" \
+             "<p>Rooms with a view of the lake. {Christmas}</p>"
+
+      convert(body).should == "Rooms with a view of the lake. {Christmas}"
+    end
+  end
+
   describe "encodings" do
     it "transcodes binary input using the declared charset" do
       html = "<html><head><meta charset=\"windows-1252\"></head><body><p>caf\xE9</p></body></html>".b
@@ -585,6 +881,112 @@ RSpec.describe Nokodown do
 
     it "drops invalid UTF-8 bytes" do
       Nokodown.to_markdown("<p>a\xFFb</p>", title: false).should == "ab"
+    end
+
+    it "reads a page declared Latin-1 as Windows-1252" do
+      html = "<meta charset=iso-8859-1><p>\x93Caf\xE9\x94 \x96 open</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "“Café” – open"
+    end
+
+    it "reads the charset of a <meta> deep in the head" do
+      html = "<head><script>#{"x" * 5000}</script><meta charset=windows-1254></head><p>K\xFDble y\xF6n\xFC</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Kıble yönü"
+    end
+
+    it "reads the encoding of an XML declaration" do
+      html = "<?xml version=\"1.0\" encoding=\"windows-1251\"?><html><body><p>\xCF\xF0\xE8\xE2\xE5\xF2</p></body></html>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Привет"
+    end
+
+    it "reads bytes that are UTF-8 as UTF-8 whatever the page declares" do
+      html = "<meta charset=windows-1251><p>Привет, мир</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Привет, мир"
+    end
+
+    it "detects the encoding of a page that declares none" do
+      {
+        "Windows-1252" => "Ein schöner Tag für große Äpfel und süße Öle",
+        "Windows-1251" => "Добро пожаловать на наш форум о рыбалке",
+        "KOI8-R" => "Добро пожаловать на наш форум о рыбалке",
+        "Shift_JIS" => "今日はとても良い天気ですね。散歩に行きましょう。",
+        "GBK" => "欢迎来到我们的网站，这里有最新的产品信息。",
+        "EUC-KR" => "우리 웹사이트에 오신 것을 환영합니다. 최신 소식을 확인하세요.",
+        "Big5" => "歡迎來到我們的網站，這裡有最新的產品資訊。",
+        "EUC-JP" => "今日はとても良い天気ですね。散歩に行きましょう。"
+      }.each do |encoding, text|
+        Nokodown.to_markdown("<p>#{text}</p>".encode(encoding).b, title: false).should == text
+      end
+    end
+
+    it "reads UTF-16 by its byte order mark" do
+      %w[UTF-16LE UTF-16BE].each do |encoding|
+        Nokodown.to_markdown("\uFEFF<p>Grüße aus Köln</p>".encode(encoding).b, title: false).should == "Grüße aus Köln"
+      end
+    end
+
+    it "reads accented pairs inside words as Western, not as Han" do
+      html = "<p>Anota\xE7\xF5es e informa\xE7\xF5es da legisla\xE7\xE3o: administra\xE7\xE3o, cat\xE1logo, in\xEDcio, " \
+             "respons\xE1vel, situa\xE7\xE3o, publica\xE7\xF5es, altera\xE7\xF5es, revoga\xE7\xE3o</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Anotações e informações da legislação: administração, catálogo, " \
+                                                          "início, responsável, situação, publicações, alterações, revogação"
+    end
+
+    it "reads stray bytes in UTF-8 as Windows-1252" do
+      html = "<meta charset=utf-8><p>Ünïcödé text, Reykjav\xEDk \xA9 2020</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Ünïcödé text, Reykjavík © 2020"
+    end
+
+    it "reads stray bytes in UTF-8 in the single-byte charset that the page declares" do
+      html = "<meta charset=windows-1251><p>Привет, мир, \xB9 5</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Привет, мир, № 5"
+    end
+
+    it "reads a Western page's runs that are UTF-8 by chance as Windows-1252" do
+      html = "<meta charset=iso-8859-1><p>\x84Ohne Unterla\xDF\x93, sagt K\xF6ln, caf\xE9\xA0\xBB \x96 und caf\xC3\xA9</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "„Ohne Unterlaß“, sagt Köln, café » – und café"
+    end
+
+    it "drops what is left of a character cut off" do
+      html = "<meta charset=utf-8><p>Zażółć gęślą jaźń przekaza\xC4...</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Zażółć gęślą jaźń przekaza..."
+    end
+
+    it "undoes UTF-8 read as Windows-1252" do
+      html = "<p>CafÃ© crÃ¨me, itâ€™s ÐŸÑ€Ð¸Ð²ÐµÑ‚ Ã¢â‚¬â€œ twice</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Café crème, it’s Привет – twice"
+    end
+
+    it "drops a misread run that reads back as control characters only" do
+      Nokodown.to_markdown("<p>Fall 2017</p><p>ÂŽ</p>".b, title: false).should == "Fall 2017"
+    end
+
+    it "keeps letters that only look like UTF-8 read as Windows-1252" do
+      html = "<p>Spaß\u00A0an der « identité\u00A0» und 2×–3×</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Spaß an der « identité » und 2×–3×"
+    end
+
+    it "reads valid UTF-8 quickly when its letters come before signs" do
+      text = "phí” lệ, áš " * 200_000
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      html = Nokodown::Charset.utf8("<p>#{text}</p>".b)
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 0.3
+      html.should == "<p>#{text}</p>"
+    end
+
+    it "drops byte order marks and replacement characters" do
+      Nokodown.to_markdown("\uFEFF<p>a\uFEFFb\uFFFDc</p>".b, title: false).should == "abc"
     end
   end
 end

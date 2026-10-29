@@ -56,9 +56,12 @@ module Nokodown
     PRIVATE_BUCKET = /\Abucketeer-/i.freeze
     WEB_URL = %r{\Ahttps?://}i.freeze
     UNSAFE = %r{[^A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]}.freeze
+    # The lookbehind keeps a long run of slashes from backtracking on Ruby 2.7.
+    TRAILING_SLASHES = %r{(?<!/)/+\z}.freeze
 
     def initialize(url, base_href = nil)
-      @base = parse(url)
+      @url = parse(url)
+      @base = @url
       href = base_href.to_s.strip
       @base = join(@base, href) || @base if !href.empty? && !href.start_with?("javascript:")
     end
@@ -81,7 +84,27 @@ module Nokodown
       uri.fragment && strip_fragment(uri) == @page
     end
 
+    # Whether a link leads back to this very page, as a menu's entry for the
+    # page being read does. A link to a part of the page is a table of
+    # contents, not a menu entry.
+    def current_page?(href)
+      href = href.to_s.strip.delete("\t\n\r")
+      return false if !web?(@url) || href.empty? || href.include?("#")
+
+      uri = join(@base, href)
+      @address ||= address(clean_link(@url))
+      web?(uri) && address(clean_link(uri)) == @address
+    end
+
     private
+
+    # Scheme, a "www." host, a trailing slash and the case of escapes rarely
+    # tell two pages apart.
+    def address(uri)
+      path = uri.path.to_s.sub(TRAILING_SLASHES, "")
+      port = ":#{uri.port}" unless uri.port == uri.default_port
+      "#{uri.host.downcase.delete_prefix("www.")}#{port}#{path}?#{uri.query}".gsub(/%\h\h/, &:upcase)
+    end
 
     def absolute(href)
       href = href.to_s.strip.delete("\t\n\r")

@@ -38,14 +38,18 @@ result.mode           # :article, :page, :full or :none
 Nokodown.to_markdown(html, url: "https://example.com/post") # just the Markdown
 ```
 
-`html` is a string in any encoding. Binary strings are decoded using their
-`<meta charset>`, and invalid bytes are dropped.
+`html` is a string in any encoding. Binary strings are decoded the way a
+browser reads them, by their `<meta charset>` or XML declaration, except that
+bytes which read as UTF-8 are UTF-8 whatever the page declares, and the
+encoding of a page that declares none is told from its bytes. UTF-8 text that
+was once misread as Windows-1252 ("cafÃ©") is repaired, and invalid bytes are
+dropped.
 
 | Option | Default | |
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
 | `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
-| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. With `false`, an `<h1>` the content holds, such as the article's own headline, still opens it. |
+| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section, or names a section that the page's URL, which names the title, does not mention. Away from the home page, a heading that only names the site gives way to the page title, and a title that only names the site does not head content that has a heading of its own. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. With `false`, an `<h1>` the content holds, such as the article's own headline, still opens it. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |
 
@@ -57,12 +61,29 @@ with `main_content: false`, `:none` for a document without a body.
 
 - Site navigation, headers, footers, sidebars, breadcrumbs, pagination and
   tables of contents, found through HTML semantics (`nav`, page-level `header`
-  and `footer`, ARIA roles, schema.org types) and class/id names.
-- Cookie banners, ads, newsletter and sign-in prompts, share bars, modals,
-  chat widgets, "related", "recommended" and "most popular" boxes, legal
-  disclaimers and disclosures (but not a note continuing the paragraph before
-  it, or the footnote to a mark just above), and, next to an article, its
-  comment thread.
+  and `footer`, ARIA roles, schema.org types) and class/id names. Structure
+  finds the rest: a site header of menus or notices above the page's title
+  however much it holds, a footer by any name that ends a page (not one
+  inside `main` or an article, nor the footer of a section, a card or a
+  quote), a breadcrumb trail by its shape in any language (a link to the
+  home page, then links down the site with separators), and copyright and
+  licence lines in the major web languages.
+- Cookie banners, ads, newsletter and sign-in prompts, share bars and share
+  links by where they point, modals, chat widgets, "related", "recommended"
+  and "most popular" boxes, legal disclaimers and disclosures (but not a note
+  continuing the paragraph before it, or the footnote to a mark just above),
+  and, next to an article, its comment thread.
+- Blocks of teasers for other pages of the same site whatever their class
+  names: a run of cards, each a title link with a thumbnail, a date or an
+  excerpt, under a title of its own in any language ("Flere Nyheder",
+  "Похожие товары"). They go when they list pages like this one (the same
+  path but for its last segment, with the same query keys and ids for the
+  values that differ) after a line of the page's own text, or, on a page that
+  declares itself an article, a product or a thread, when the page's own
+  text, or its own list, outweighs them. They stay on home pages, in hubs of
+  sections built alike, in forum posts (attachments), when they link to pages
+  below this one, and when the content would be left with fewer than 20 words
+  outside headings.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
@@ -71,31 +92,68 @@ with `main_content: false`, `:none` for a document without a body.
   summaries and rating histograms. An inline rating badge ("212 reviews" next
   to the price), testimonials and editorial reviews stay.
 - Invisible elements (`hidden`, `aria-hidden`, inline `display: none`,
-  screen-reader-only and other hiding classes), keeping collapsed accordions,
-  tab panels and FAQ answers. Content that React streams into hidden
-  containers at the end of the page is put back where the page shows it,
-  unless it is mostly links, as carousels of recommended products are.
+  screen-reader-only and other hiding classes, and elements placed far off
+  screen or in a one-pixel strip, where hacked sites hide link spam), keeping
+  collapsed accordions, tab panels and FAQ answers. Content that React streams
+  into hidden containers at the end of the page is put back where the page
+  shows it, unless it is mostly links, as carousels of recommended products
+  are.
 - Sections rendered twice, such as a desktop and a mobile copy: the mobile
   copy goes and the desktop one stays.
-- Tracking pixels, spacers, icons, placeholders, README badges, click-tracking
-  URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,
-  "Read more" links, code line numbers, and repeated responsive copies of the
-  same image.
-- In the main content, images marked decorative (`role="presentation"` or
-  `role="none"`, and outside an `:article` also `alt=""`) unless they sit in a
-  figure, an image link or a text-free paragraph or table cell, or declare a
-  width or height of 300 pixels or more; and card thumbnails while the
-  Markdown still has a text link to the same page. "Read more" or
+- Repeated text and the labels of controls, in the major web languages:
+  copies of the title (an H2 or bold line under the H1, a gallery label on
+  every item), labels and tabs over the heading they repeat, lists made of
+  the page's own headings, a "Read more", "Leer más" or "Comprar" link
+  after a title that links to the same page, labels of controls ("Menu",
+  "Loading...", "Back to top", "Quantity:", "prev / next"), counters
+  without a label (view and comment counts, FAQ and step badges, slide
+  numbers, a player's "0:00"), and form labels left without their fields.
+  A read-more link that is the only way to its page, a number a label
+  explains or that sits in a row of numbers, and a fact repeated on every
+  card ("In stock") stay.
+- Tracking pixels, spacers, icons, placeholders and loading spinners
+  (`no-image.png`, `img_load.gif`), README badges, click-tracking URL
+  parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors, "Read more"
+  links, code line numbers, and repeated responsive copies of the same image.
+- Markdown that costs tokens without meaning: horizontal rules, blank lines
+  inside lists, headings inside list items, emphasis around a whole
+  paragraph, cell, heading or link (a short bold label stays), separators
+  between links and at line ends, lines of only punctuation, icon-font
+  glyphs, code-language labels and copy buttons, and escapes that cannot
+  change the rendering. A card's repeated links to its own page keep their
+  text without the URL (its title keeps the link), and a button such as
+  "Read more", a text the page uses once for each of several pages, goes when
+  it ends its line; texts that take turns from card to card ("Sold",
+  "Available") are values and stay.
+- In the main content, images whose alt text does not say what they show, at
+  any size and in any wrapper (a figure keeps its caption): no alt text, a
+  file or camera name ("IMG_6175.JPG"), a hash, or a word for "image" or
+  "loading" ("photo", "foto", "画像"); icons, logos and avatars, told by their
+  file name ("QDLogoBlue.gif"), folder (`/icons/`), class or alt text. An image
+  alone in a text-free cell of a data table, such as a tick in a comparison
+  table, stays, and so do all images of a page with fewer than 20 words
+  besides them. An image with alt text that is marked decorative
+  (`role="presentation"` or `role="none"`) goes unless it sits in a figure, an
+  image link or a text-free paragraph or table cell, or declares a width or
+  height of 300 pixels or more; and card thumbnails go while the Markdown
+  still has a text link to the same page. "Read more" or
   "3 comments" never names the page, and a label without letters ("$40") or
   with only a date ("Oct 1, 2026") names it only for an image without alt
   text. Any other text does, so in `:page` mode a thumbnail beside a
   "Shop now" link goes too; in an `:article`, only one outside a figure whose
   alt is a word or two, or is mostly the link text.
 - Later copies of an image that stands alone on its line: always for an
-  image without alt text, and for one with alt text only when nothing but
+  image without alt text or whose alt is only a file name, as in a gallery's
+  thumbnail strip, and for one with alt text only when nothing but
   images came since the last copy, as in a logo strip shown twice. A line
   with several copies of one image, such as a row of rating stars, keeps
   them all.
+- Markup and server output that leak into the text, outside code: HTML
+  escaped into alt text (its text is kept), escaped elements written out
+  whole, PHP and Liquid error messages, and template placeholders and
+  shortcodes left unrendered. Email addresses hidden from harvesters, by
+  Cloudflare or by a decoy inside the address, are shown as readers see
+  them.
 
 Every structural rule is guarded: an element that contains the `<main>`
 region, or most of the page's text, is never removed because of its class name,
@@ -106,8 +164,13 @@ holds the page's only `<h1>` and a fair share of its text is the content.
 ## How it works
 
 1. **Charset**: transcode to UTF-8; Lexbor itself ignores `<meta charset>`.
+   The bytes decide when they disagree with the declared charset or when
+   there is none.
 2. **Metadata**: JSON-LD, Open Graph and other `<meta>` tags, then the
-   document, in Readability's order of preference.
+   document, in Readability's order of preference. The title drops the
+   site's name, as declared, as its domain spells it or as its logo heading
+   shows it, and gives way to an `<h1>` that the page's URL names when the
+   title does not.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
    `<noscript>` copies), drop scripts, invisible elements and form controls.
 4. **Boilerplate**: remove page chrome and noise widgets across the whole page.
@@ -128,19 +191,25 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    boilerplate removal, become one line above the post's body
    (`**JGD** · April 2, 2024`) in place of the header, the panel around the
    name and repeated copies of the date. A post "by" Advertisement is an ad
-   slot and goes.
+   slot and goes. **Teasers** then finds the blocks of teasers for other
+   pages, which are dropped from the content once it is cleaned.
 6. **Pruner**: in articles, Readability's conditional cleaning plus removal of
    bylines, datelines and inline boxes of links to other stories; on other
-   pages, removal of leftover link clusters, unless they hold most of the text
-   as on an index page. In both modes, short links and boxes styled as
-   buttons ("Add to cart", "Book a demo") are removed, except for disclosure
-   toggles, buttons inside a sentence and titles or labels styled as buttons.
-   If article cleaning removes almost everything, it is undone and light
-   cleaning is used instead. Conditional cleaning leaves alone the items of a
-   listing of posts or products (alike blocks, each with a linked title, that
-   hold most of the text) and a featured post beside them, since it would
-   judge each item on its own. A teaser's linked title with its date and author
-   links is not a link cluster, however short.
+   pages, removal of leftover link clusters, with the heading over them, and
+   of columns of links beside a column of prose in layout tables, unless the
+   table declares them the wider column or they hold the page title. An index
+   page, whose link clusters hold most of its text, keeps them but for its
+   menus: lists of links holding one to the page itself, the clusters above
+   its title, and the side columns its table declares narrower. In both modes,
+   short links and boxes styled as buttons ("Add to cart", "Book a demo") are
+   removed, except for disclosure toggles, buttons inside a sentence and
+   titles or labels styled as buttons. If article cleaning removes almost
+   everything, it is undone and light cleaning, which treats link clusters and
+   menus as page pruning does, is used instead. Conditional cleaning leaves
+   alone the items of a listing of posts or products (alike blocks, each with
+   a linked title, that hold most of the text) and a featured post beside
+   them, since it would judge each item on its own. A teaser's linked title
+   with its date and author links is not a link cluster, however short.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data
