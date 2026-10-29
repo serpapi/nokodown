@@ -228,6 +228,21 @@ RSpec.describe Nokodown::Boilerplate do
 
       remaining(html).should_not include("Service centre")
     end
+
+    it "keeps a header that holds the page's prose above a banner's title" do
+      html = "<div class=\"main\"><header><h2>Neurology</h2>#{prose('Nerve pain', 3)}</header></div>" \
+             "<div class=\"banner\"><h1>New Medicine</h1></div>"
+
+      remaining(html).should include("Nerve pain")
+    end
+
+    it "keeps a header that holds the title or follows it" do
+      notices = Array.new(12) { |index| "<li>Branch #{index + 1}: 600 Friendship Road, open 8:30 to 18:30 by appointment</li>" }.join
+      ["<div class=\"header\"><h1>Branches</h1><ul>#{notices}</ul></div>",
+       "<h1>Branches</h1><div class=\"header\"><ul>#{notices}</ul></div>"].each do |html|
+        remaining(html).should include("Branch 12")
+      end
+    end
   end
 
   describe "member panels" do

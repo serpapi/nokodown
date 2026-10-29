@@ -33,6 +33,7 @@ module Nokodown
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
       @trails = Breadcrumbs.trails(@body).map { |trail| Dom.key(trail) }.to_set
+      @last_h1 = @body.css("h1").map { |h1| Dom.key(h1).to_i }.max.to_i
       # Card grids repeat the same class list hundreds of times.
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
@@ -283,13 +284,23 @@ module Nokodown
     end
 
     # A mega menu or a banner of notices can outweigh the content, but the
-    # site header holding it still sits above the page's title.
+    # site header holding it still sits above the page's title. Prose is not
+    # furniture: Drupal views wrap their whole content in a header, and a
+    # banner below may hold the page's only h1.
     def header_above_title?(node)
       return false unless node.name == "header" || Dom.signature(node).match?(Patterns::HEADER)
-      return false if node.at_css("h1")
+      return false if node.at_css("h1") || !furniture_shaped?(node)
 
-      last = node.css("*").last || node
-      @body.css("h1").any? { |h1| Dom.key(h1).to_i > Dom.key(last).to_i }
+      Dom.key(last_descendant(node)).to_i < @last_h1
+    end
+
+    def furniture_shaped?(node)
+      @stats.link_density(node) > 0.5 || node.css("p").none? { |paragraph| @stats.text_chars(paragraph) >= NOTE_PROSE }
+    end
+
+    def last_descendant(node)
+      node = node.last_element_child while node.last_element_child
+      node
     end
 
     def aside_noise?(node)
