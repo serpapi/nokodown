@@ -173,10 +173,18 @@ module Nokodown
         nested_only = items.map { |blocks| blocks.size == 1 && bulleted_list?(blocks.first) }
         rendered = items.each_with_index.map do |blocks, index|
           previous = index.positive? && nested_only[index - 1]
-          list_entry(start ? "#{start + index}. " : "- ", blocks, nested_only[index] && !previous && !nested_only[index + 1])
+          list_entry(start ? "#{start + index}. " : "- ", unheaded(blocks), nested_only[index] && !previous && !nested_only[index + 1])
         end
         loose = items.any? { |blocks| blocks.drop(1).any? { |block| block.kind != :list } }
         [Block.new(:list, rendered.join(loose ? "\n\n" : "\n"))]
+      end
+
+      # Card grids put each title in a heading; in a list item the marker
+      # already sets it apart.
+      def unheaded(blocks)
+        blocks.map do |block|
+          block.kind == :heading ? Block.new(:paragraph, Text.escape_line_starts(block.text.sub(/\A#+ /, ""))) : block
+        end
       end
 
       # Markers that differ between items carry meaning, as in legends where

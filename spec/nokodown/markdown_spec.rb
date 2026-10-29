@@ -348,8 +348,8 @@ RSpec.describe "Markdown conversion" do
                '<h3><a href="/p/2">Ridge runner</a></h3><p>A light mesh boot for fast summer hikes.</p></li>' \
                '<li><a href="/lookbook.jpg"><img src="/lookbook-small.jpg" alt="Boots on a mountain trail"></a></li></ul></main>'
         extract(html).should == "# Hiking boots\n\n" \
-                                "- ### [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
-                                "- ### [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes.\n\n" \
+                                "- [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
+                                "- [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes.\n\n" \
                                 "- ![Boots on a mountain trail](https://example.com/lookbook-small.jpg)"
       end
 
@@ -361,8 +361,8 @@ RSpec.describe "Markdown conversion" do
                '<li><ul><li><a href="/p/2"><img src="/2a.jpg" alt="Ridge runner, front"></a></li></ul>' \
                '<h3><a href="/p/2">Ridge runner</a></h3><p>A light mesh boot for fast summer hikes.</p></li></ul></main>'
         extract(html).should == "# Hiking boots\n\n" \
-                                "- ### [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
-                                "- ### [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes."
+                                "- [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
+                                "- [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes."
       end
 
       it "keeps a thumbnail when no link left in the Markdown names its page in words" do
@@ -466,6 +466,11 @@ RSpec.describe "Markdown conversion" do
 
     it "separates items holding several paragraphs" do
       convert("<ol><li><p>First</p><p>More</p></li><li><p>Second</p></li></ol>").should == "1. First\n\n   More\n\n2. Second"
+    end
+
+    it "writes the headings of list items as their text" do
+      convert('<ul><li><h3><a href="/p/1">Trail boot</a></h3><p>Leather</p></li></ul><ol><li><h2># 1 pick</h2></li></ol>').should ==
+        "- [Trail boot](https://example.com/p/1)\n\n  Leather\n\n1. \\# 1 pick"
     end
 
     it "looks through wrappers between the list and its items" do

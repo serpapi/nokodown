@@ -123,7 +123,7 @@ RSpec.describe Nokodown do
 
       markdown = extract("<main><h1>Mugs</h1>#{categories}<ul>#{card * 3}</ul></main>")
 
-      markdown.should include("## [Stoneware mug](https://example.com/p/mug)\n\n  $18")
+      markdown.should include("- [Stoneware mug](https://example.com/p/mug)\n\n  $18")
       ["Cups", "Add to cart", "Quick view"].each { |noise| markdown.should_not include(noise) }
     end
 
