@@ -24,7 +24,7 @@ module Nokodown
     # Utility classes that make a "hidden" element visible again at some breakpoint.
     RESPONSIVE_SHOW = /\A(?:(?:sm|md|lg|xl|2xl):(?:block|flex|grid|inline|inline-block|inline-flex|table|contents)|d-(?:sm|md|lg|xl|xxl)-(?:block|flex|grid|inline|inline-block|inline-flex|table))\z/.freeze
 
-    NARROW_COPY = /\A[a-z\d]+:hidden\z/.freeze
+    NARROW_COPY = /\A(?:sm|md|lg|xl|2xl):hidden\z/.freeze
 
     STREAMED_LINK_SHARE = 0.5
 
@@ -56,10 +56,10 @@ module Nokodown
       @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
-      mark_wide_copies
       remove_form_controls
       HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
+      mark_wide_copies
     end
 
     private
@@ -208,13 +208,15 @@ module Nokodown
     # beside "md:hidden" for narrow ones. The wide copy is marked so that
     # conditional cleaning, which weighs "hidden" against both, keeps one.
     def mark_wide_copies
-      @body.css(".hidden").each do |node|
-        node[Dom::WIDE_COPY] = "" if node.parent.element_children.any? { |sibling| narrow_copy?(sibling) }
-      end
+      narrow = @body.css("[class*=':hidden']").select { |node| narrow_copy?(node) }
+      return if narrow.empty?
+
+      parents = narrow.map { |node| Dom.key(node.parent) }.to_set
+      @body.css(".hidden").each { |node| node[Dom::WIDE_COPY] = "" if parents.include?(Dom.key(node.parent)) }
     end
 
     def narrow_copy?(node)
-      node["class"].to_s.split.any? { |token| token.match?(NARROW_COPY) }
+      node["class"].split.any? { |token| token.match?(NARROW_COPY) }
     end
 
     def hidden?(node)
