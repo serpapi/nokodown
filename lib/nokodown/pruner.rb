@@ -35,6 +35,7 @@ module Nokodown
     WIDTH = /\A\s*(\d+(?:\.\d+)?)\s*(%|px)?\s*\z/i.freeze
     STYLE_WIDTH = /(?:\A|;)\s*width\s*:\s*([^;]+)/i.freeze
     MAX_LABEL = 40
+    HEADLINE_WIDTH = 30
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
     SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
     MIN_SERIES = 3
@@ -341,7 +342,16 @@ module Nokodown
       return [] if title.nil? || Dom.key(title).nil? || text_length_after(title, root) < MIN_TITLED_CONTENT
 
       position = Dom.key(title).to_i
-      outermost(clusters).select { |node| Dom.key(node) && Dom.key(node).to_i < position && !node.at_css("h1") }
+      outermost(clusters).select do |node|
+        Dom.key(node) && Dom.key(node).to_i < position && !node.at_css("h1") && !headlines?(node)
+      end
+    end
+
+    # A cluster's links are short in characters, but a CJK headline of
+    # fifteen characters reads as long as one in English, and a list of
+    # them is a listing, not a menu.
+    def headlines?(node)
+      node.css("a[href]").any? { |link| label_length(Dom.text(link)) >= HEADLINE_WIDTH }
     end
 
     def text_length_after(node, root)

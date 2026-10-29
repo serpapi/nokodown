@@ -189,6 +189,13 @@ RSpec.describe Nokodown do
       markdown.should include("- [Events](https://example.com/events)")
     end
 
+    it "keeps a list of CJK headlines above the title of a page they dominate" do
+      headlines = Array.new(20) { |index| "<li><a href=\"/news/#{index}\">东京大学研究团队发现新型超导材料样品 #{index + 1}</a></li>" }
+      markdown = extract("<body><div><ul>#{headlines.join}</ul></div><div>#{product}</div></body>")
+
+      markdown.should include("东京大学研究团队发现新型超导材料样品 20")
+    end
+
     it "drops the menus above the page title even when they hold most of the text" do
       departments = %w[
         Party Toys Bedding Cleaning Office School Kitchen Garden Tools Paint Pets Books Music Sports Baby Lighting
