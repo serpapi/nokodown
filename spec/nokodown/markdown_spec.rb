@@ -236,6 +236,21 @@ RSpec.describe "Markdown conversion" do
                               "[Voir](https://example.com/v) [«Rycari 2017»](https://example.com/q)"
     end
 
+    it "keeps a card's link on its title and drops the buttons that repeat it" do
+      card = '<li><a href="/p/1">2 options</a><h3><a href="/p/1">Trail boot</a></h3><p>Leather for rocky ground <a href="/p/1">…</a> ' \
+             '<a href="/p/1/">Weiterlesen</a></p><p>Try <a href="/p/1">this one</a> today.</p></li>'
+      convert("<ul>#{card}</ul><h2>Edge</h2><p>7 octobre</p><p><a href=\"/e/edge\">Voir</a></p>").should ==
+        "- 2 options\n  [Trail boot](https://example.com/p/1)\n  Leather for rocky ground …\n  Try this one today.\n\n" \
+        "## Edge\n\n7 octobre\n\n[Voir](https://example.com/e/edge)"
+    end
+
+    it "keeps the links to other sections of a page and spaces the links it unwraps" do
+      html = '<p><a href="/g#1">One</a> <a href="/g#2">Two</a></p><p><a href="/a">apples</a><a href="/b">pears</a><a href="/a">fruit</a> ' \
+             'and more on <a href="/a">apples</a>.</p>'
+      convert(html).should == "[One](https://example.com/g#1) [Two](https://example.com/g#2)\n\n" \
+                              "[apples](https://example.com/a)[pears](https://example.com/b) fruit and more on apples."
+    end
+
     it "writes a mail link that shows its address as text" do
       convert('<p><a href="mailto:info@g-stroot.de">E-Mail info@g-stroot.de</a>, <a href="mailto:a@b.co">Write us</a></p>').should ==
         "E-Mail info@g-stroot.de, [Write us](mailto:a@b.co)"

@@ -26,7 +26,7 @@ module Nokodown
         blocks = dedupe(blocks)
         blocks = drop_repeated_runs(blocks)
         blocks = shorten_repeated_quotes(blocks)
-        blocks = drop_empty_sections(blocks)
+        blocks = drop_empty_sections(RepeatedLinks.new(blocks).call)
         images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
       end
 
