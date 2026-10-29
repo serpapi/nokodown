@@ -8,14 +8,17 @@ module Nokodown
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
     # A class names a button when that is its last word, before a modifier,
-    # a size or a rank: "btn", "c-button", "hero-cta", "btn--ghost",
-    # "btn_medium", "button-primary". "button-text" and
+    # a size, a rank or a color: "btn", "c-button", "hero-cta", "btn--ghost",
+    # "btn_medium", "button-primary", "btn-outline-dark". "button-text" and
     # "btn-view-author-options" name something else, and Bootstrap's
     # "btn-link" is a button that looks like a link.
     BUTTON_CLASS = /
       (?:\A|[-_])(?:btn|btns|button|buttons|cta|ctas)\d*
-      (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|sm|md|lg))?\z
+      (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|xs|sm|md|lg|xl|
+      light|dark|white|black|success|danger|warning|info|ghost|solid|block|outline(?:-[a-z]+)?))?\z
     /x.freeze
+    # Component libraries (shadcn/ui and others) name the part an element plays.
+    BUTTON_PART = %w[data-slot data-component data-part].freeze
     BUTTON_WORD = /btn|button|cta/.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
@@ -286,7 +289,7 @@ module Nokodown
     end
 
     def button?(node)
-      return true if node["role"] == "button"
+      return true if node["role"] == "button" || BUTTON_PART.any? { |name| node[name] == "button" }
       return false unless "#{node["class"]} #{node["id"]}".downcase.match?(BUTTON_WORD)
 
       tokens = Dom.signature(node).split

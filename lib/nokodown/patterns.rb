@@ -166,14 +166,22 @@ module Nokodown
       seleziona\s(?:le\s)?opzioni|opties\sselecteren|optionen\sausw[äa]hlen|выбрать\sопции
     /xi.freeze
 
+    # Slideshow and pager controls, alone or as a pair ("prev / next").
+    PREV_NEXT = /
+      prev(?:ious)?|next|back|anterior|siguiente|pr[óo]ximo|seguinte|pr[ée]c[ée]dent|suivant|zur[üu]ck|weiter|
+      vorherige|n[äa]chste|precedente|successiv[oa]|avanti|indietro|vorige|volgende|назад|вперёд|вперед|
+      предыдущая|следующая|poprzedni[a]?|następn[ya]|wstecz|dalej|önceki|sonraki|geri|ileri|前へ|次へ|戻る|
+      上一页|下一页|上一張|下一張|上一张|下一张|返回|이전|다음|السابق|التالي|trước|tiếp|sebelumnya|selanjutnya|berikutnya|kembali
+    /xi.freeze
+
     # A paragraph that is only the label of a control. Bare words such as
     # "More", "Menu" or "Close" are content inside a sentence or as a
     # heading, so this is matched against whole paragraphs only. A label
     # that links to its page stays when it is the only way there:
     # RepeatedLinks takes it when a title links to the same page.
     UI_LABEL = /
-      \A[\s+»›>.…(]*(?:
-        #{MORE_TEXT}|#{SHOP_CONTROL_TEXT}|
+      \A[\s+«»‹›<>←.…(]*(?:
+        #{MORE_TEXT}|#{SHOP_CONTROL_TEXT}|(?:#{PREV_NEXT})(?:\s*[\/|·•]?\s*(?:#{PREV_NEXT}))?|
         more|más|mehr|meer|più|więcej|ещё|еще|більше|v[ií]ce|devam[ıi]|selengkapnya|更多|もっと|المزيد|
         loading|cargando|carregando|chargement(?:\sen\scours)?|wird\sgeladen|caricamento|ładowanie|wczytywanie|
         загрузка|завантаження|yükleniyor|読み込み中|加载中|載入中|正在加载|로딩\s?중|불러오는\s중|جار[يی]?\sالتحميل|
@@ -197,7 +205,7 @@ module Nokodown
         quantity|qty|количество|cantidad|quantidade|quantité|menge|anzahl|quantità|aantal|ilość|adet|miktar|
         数量|수량|الكمية|số\slượng|
         купить|kaufen|acheter|comprar|acquista|kopen|購入|购买|구매|شراء
-      )[\s.:：!…»›→➔>)\]]*\z
+      )[\s.:：!…«»‹›<>→➔)\]]*\z
     /xi.freeze
 
     # Whole-text matches for short blocks and links that carry no content.
