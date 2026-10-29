@@ -472,6 +472,24 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "protected email addresses" do
+    it "decodes the addresses Cloudflare hides" do
+      link = '<a href="/cdn-cgi/l/email-protection#f79494b7989492969984969192838e8385969e999e9990d994989a">' \
+             '<span class="__cf_email__" data-cfemail="36555576595553575845575053424f4244575f585f58511855595b">[email&#160;protected]</span></a>'
+      html = "<p>Questions about your certificate? Write to #{link} and we will answer within a day.</p>"
+
+      markdown = Nokodown.to_markdown(html, url: "https://www.oceansafetytraining.com/cert", title: false)
+      markdown.should include("cc@oceansafetytraining.com and")
+      markdown.should_not include("protected")
+    end
+
+    it "drops a decoy that a stylesheet hides inside an address" do
+      html = '<p>Email: <span class="obfuscate">info@ <span class="decoy-domain">ex.com</span> example.com</span></p>'
+
+      Nokodown.to_markdown(html, title: false).should == "Email: info@example.com"
+    end
+  end
+
   describe "encodings" do
     it "transcodes binary input using the declared charset" do
       html = "<html><head><meta charset=\"windows-1252\"></head><body><p>caf\xE9</p></body></html>".b

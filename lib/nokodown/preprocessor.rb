@@ -47,6 +47,7 @@ module Nokodown
     def call
       place_streamed_segments
       @body.xpath(".//comment()").each(&:remove)
+      ProtectedEmails.reveal(@body)
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
       restore_picture_sources
