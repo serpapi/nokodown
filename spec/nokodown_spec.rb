@@ -172,6 +172,16 @@ RSpec.describe Nokodown do
       markdown.should_not include("other types")
     end
 
+    it "keeps a title too long to be the label of the box of links below it" do
+      tags = '<div><a href="/tags/health">Health</a> <a href="/tags/tech">Tech</a> <a href="/tags/equity">Equity</a></div>'
+      card = "<article><h2>The future of healthcare is digital: seven reasons why</h2>#{tags}</article>"
+
+      markdown = extract("<main><h1>Piotr's posts</h1>#{card}<p>One more post this week.</p></main>")
+
+      markdown.should include("## The future of healthcare is digital: seven reasons why")
+      markdown.should_not include("Equity")
+    end
+
     it "drops the heading over a box of links that a rule parts from the next section" do
       skills = %w[PHP Java Ruby Python Swift Kotlin]
       links = skills.map { |skill| "<li><a href=\"/jobs/#{skill.downcase}\">#{skill}</a></li>" }.join

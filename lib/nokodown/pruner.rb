@@ -25,6 +25,7 @@ module Nokodown
     MIN_TITLED_CONTENT = 200
     MIN_LEFT = 200
     MIN_PROSE_COLUMN = 100
+    MAX_LABEL = 40
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
     SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
     SEPARATORS = %w[hr br].freeze
@@ -281,11 +282,22 @@ module Nokodown
 
     # Alike entries of one link each, perhaps with a count beside it, and
     # separators between them. Cards that link to their title, category and
-    # author, or a post header whose title links to itself, are no menu.
+    # author, or a post header whose title links to itself, are no menu. A
+    # label may lead the entries ("Tags:"), but words between them make a
+    # sentence or a list of names.
     def menu_entries?(holder)
-      entries, rest = holder.element_children.partition { |child| child.name == "a" || child.at_css("a[href]") }
-      entries.size >= 3 && entries.map(&:name).uniq.size == 1 && entries.all? { |entry| one_link?(entry) } &&
-        rest.none? { |child| Dom.text(child).match?(LETTER) }
+      entries = []
+      lead = 0
+      holder.children.each do |child|
+        if child.element? && (child.name == "a" || child.at_css("a[href]"))
+          entries << child
+        elsif entries.empty?
+          lead += Dom.text(child).length
+        elsif Dom.text(child).match?(LETTER)
+          return false
+        end
+      end
+      lead <= MAX_LABEL && entries.size >= 3 && entries.map(&:name).uniq.size == 1 && entries.all? { |entry| one_link?(entry) }
     end
 
     # A gallery's thumbnails link to each picture without a word.
@@ -337,11 +349,11 @@ module Nokodown
       following.nil? || section_label?(following)
     end
 
-    # A heading below the page title, or a wrapper holding only one. A linked
-    # heading is the title of a card, not a label.
+    # A short heading below the page title, or a wrapper holding only one. A
+    # linked or long heading is the title of a card, not a label.
     def section_label?(node)
       text = Dom.text(node)
-      return false if text.empty? || node.at_css("a[href]")
+      return false if text.empty? || text.length > MAX_LABEL || node.at_css("a[href]")
       return true if SECTION_HEADINGS.include?(node.name)
 
       node.css(SECTION_HEADING_SELECTOR).any? { |heading| Dom.text(heading) == text }

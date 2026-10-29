@@ -43,6 +43,20 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "page pruning" do
+    let(:urls) { Nokodown::UrlResolver.new("https://example.com/page") }
+
+    it "keeps a line of names that links to the page itself among names without links" do
+      authors = "<p>By <a href='/page'>Ana Ruiz</a>, Ben Ode, <a href='/people/cole'>Cy Cole</a>, Dee Fox and " \
+                "<a href='/people/lin'>Eve Lin</a></p>"
+      root = content(story * 2 + authors)
+
+      described_class.new([root], :page, urls: urls).call
+
+      Nokodown::Dom.text(root).should include("Ben Ode, Cy Cole, Dee Fox")
+    end
+  end
+
   describe "article pruning with conditional cleaning off" do
     let(:html) do
       "<p class='byline'>By Jo Pine</p>#{story}#{cards}" \
