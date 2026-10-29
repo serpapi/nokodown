@@ -25,6 +25,7 @@ module Nokodown
     def initialize(root)
       @root = root
       @chars = {}
+      @data_tables = {}
     end
 
     def call
@@ -61,11 +62,20 @@ module Nokodown
       text = link.text
       return false if text.empty? || text.length > MAX_LABEL || text.match?(/\d/)
       return false if text.include?(" ") ? text.split.size > MAX_WORDS : text.length > MAX_UNSPACED
-      return false if link.node.at_css("img") || Dom.ancestors_named(link.node, *LABEL_HOLDERS).any?
-      return false if link.page.sub(/[?#].*/m, "").match?(Pruner::DOWNLOAD)
-      return false if Dom.ancestors_named(link.node, "li").first&.at_css("ul, ol")
+      return false if link.page.sub(/[?#].*/m, "").match?(Pruner::DOWNLOAD) || link.node.at_css("img")
 
-      Dom.ancestors_named(link.node, "table").none? { |table| Tables.data_table?(table) }
+      ancestors = link.node.ancestors.select(&:element?)
+      return false if ancestors.any? { |node| LABEL_HOLDERS.include?(node.name) }
+      return false if ancestors.find { |node| node.name == "li" }&.at_css("ul, ol")
+
+      ancestors.none? { |node| node.name == "table" && data_table?(node) }
+    end
+
+    # A reference table can hold thousands of links, so each table is
+    # judged once.
+    def data_table?(table)
+      key = Dom.key(table)
+      @data_tables.key?(key) ? @data_tables[key] : (@data_tables[key] = Tables.data_table?(table))
     end
 
     # The link with the elements that hold only it.
