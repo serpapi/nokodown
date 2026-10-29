@@ -462,10 +462,11 @@ module Nokodown
     end
 
     # The first title before the items, however deep: old layouts put it in
-    # the first row of a table around them.
+    # the first row of a table around them. Nokolexbor's css("*") is over ten
+    # times slower than this XPath, which walks in the same order.
     def title_in(node, run)
       items = run.items.map { |item| Dom.key(item) }.to_set
-      node.css("*").each do |descendant|
+      node.xpath(".//*").each do |descendant|
         return nil if items.include?(Dom.key(descendant))
         return descendant if title?(descendant)
       end
