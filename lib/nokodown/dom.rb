@@ -43,7 +43,42 @@ module Nokodown
     # Set by HeadingAnchors on elements whose id is made from their heading.
     ANCHOR = "data-nokodown-anchor"
 
+    # Broken pages nest thousands of unclosed elements, deeper than the
+    # recursive walks after parsing can follow.
+    MAX_DEPTH = 256
+    UNRENDERED = Set.new(%w[script style template noscript]).freeze
+
     module_function
+
+    # Below MAX_DEPTH levels an element keeps only its text, with a space
+    # where a block or a line break parted it.
+    def flatten_deep(root)
+      stack = [[root, 0]]
+      until stack.empty?
+        node, depth = stack.pop
+        children = node.element_children
+        if depth < MAX_DEPTH
+          children.each { |child| stack << [child, depth + 1] }
+        elsif !children.empty?
+          node.content = flat_text(node)
+        end
+      end
+    end
+
+    def flat_text(node)
+      parts = []
+      stack = node.children.to_a.reverse
+      until stack.empty?
+        current = stack.pop
+        if current.text?
+          parts << current.content
+        elsif current.element? && !UNRENDERED.include?(current.name)
+          parts << " " if BLOCK.include?(current.name) || current.name == "br"
+          stack.concat(current.children.to_a.reverse)
+        end
+      end
+      squish(parts.join)
+    end
 
     def assign_keys(root)
       root[KEY] = "0"
