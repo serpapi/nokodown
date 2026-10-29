@@ -106,12 +106,13 @@ RSpec.describe Nokodown::Boilerplate do
         <div class="content-container has-sidebar">#{prose('Grinding coffee', 1)}</div>
         <div class="clearfix with-navigation">#{prose('Brewing', 1)}</div>
         <div class="td-content-and-menu">#{prose('Storing beans', 1)}</div>
+        <div class="o_wsale_container o_wsale_has_sidebar">#{prose('Roasting', 1)}</div>
         <div class="product-grid sidebar-enabled--true"><a href="/p/1">House blend</a> <a href="/p/2">Dark roast</a></div>
         <div class="sidebar"><p>Archive of older posts</p></div>
       HTML
 
       text = remaining(html)
-      ["Grinding coffee", "Brewing", "Storing beans", "House blend"].each { |content| text.should include(content) }
+      ["Grinding coffee", "Brewing", "Storing beans", "Roasting", "House blend"].each { |content| text.should include(content) }
       text.should_not include("Archive")
     end
 

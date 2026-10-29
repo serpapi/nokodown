@@ -18,7 +18,8 @@ module Nokodown
     TITLED_TEXT = 20
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     # What a wrapper has, lacks or allows does not name it: "has-sidebar",
-    # "with-navigation", "content-and-menu", "sidebar-enabled--true". The
+    # "o_wsale_has_sidebar", "with-navigation", "content-and-menu",
+    # "sidebar-enabled--true". The
     # head of a compound names the wrapper, so "menu-and-content" stays a
     # menu. "no-print" names what is left out of print, so it stays too.
     # Nor does the layout it is laid out in: "layout-sidebar-left",
@@ -26,7 +27,8 @@ module Nokodown
     MODIFIER = /
       (?:(?<![\w-])(?:has|with|without|no(?!-?print))|-(?:and|with|without))-[\w-]+|
       (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])|
-      (?<![\w-])(?:layout|one|two)-[\w-]+|(?<![\w-])[\w-]+-layout(?![\w-])
+      (?<![\w-])(?:layout|one|two)-[\w-]+|(?<![\w-])[\w-]+-layout(?![\w-])|
+      _(?:has|with|without)_[\w-]+
     /x.freeze
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
