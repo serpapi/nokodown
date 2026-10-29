@@ -41,6 +41,10 @@ module Nokodown
     MIN_BODY = 200
     DOMINANT_SHARE = 0.4
     MIN_TEXT_BEFORE = 60
+    DATA_COLUMNS = 4
+    CONTROLS = "select, input"
+    CONTROL_TAGS = %w[form select option button].freeze
+    CONTROL_LABEL = /[:：]\z/.freeze
     MIN_SECTIONS = 3
     MIN_WORDS_LEFT = 20
     BODIES = %i[article product forum qa].freeze
@@ -303,7 +307,7 @@ module Nokodown
     end
 
     def run(parent, items)
-      return if items.size < MIN_ITEMS
+      return if items.size < MIN_ITEMS || data_rows?(items.first)
 
       chars = items.sum { |item| @stats.chars(item) }
       return if chars > MAX_ITEM_CHARS * items.size
@@ -314,6 +318,15 @@ module Nokodown
 
       targets = links.map { |link| link && target(link["href"]) }
       Run.new(parent, items, targets, chars) if distinct_targets?(targets.compact, items.size)
+    end
+
+    # Rows under a header row, or of four or more columns, are records
+    # (versions, holdings), not cards.
+    def data_rows?(item)
+      return false unless item.name == "tr"
+
+      table = Dom.ancestors_named(item, "table").first
+      item.css("td, th").size >= DATA_COLUMNS || !table&.at_css("thead, th").nil?
     end
 
     def card(item)
@@ -485,10 +498,19 @@ module Nokodown
     end
 
     def label?(node, text)
-      return false if text.length > MAX_TITLE || text.match?(SENTENCE) || node.at_css(STRUCTURE)
+      return false if text.length > MAX_TITLE || text.match?(SENTENCE) || node.at_css(STRUCTURE) || control?(node)
 
       links = node.css("a[href]")
       links.empty? || (links.size == 1 && Dom.text(links.first) == text)
+    end
+
+    # A sort or filter control, its options, or its label ("Sort by:") name
+    # the control, not the list below it.
+    def control?(node)
+      return true if CONTROL_TAGS.include?(node.name) || node.at_css(CONTROLS)
+      return true if Dom.ancestors_named(node, *CONTROL_TAGS).any?
+
+      Dom.text(node).match?(CONTROL_LABEL) && !node.parent&.at_css(CONTROLS).nil?
     end
 
     def in_data_table?(node)

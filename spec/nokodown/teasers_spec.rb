@@ -81,6 +81,24 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, article_url).should be_empty
   end
 
+  it "keeps the rows of a data table" do
+    rows = stories.map do |title|
+      slug = title.downcase.delete("^a-z ").tr(" ", "-")
+      "<tr><td><a href='/blog/#{slug}'>#{title}</a></td><td>12.04.2026</td><td>51 KB</td></tr>"
+    end
+    header = "<thead><tr><td>Name</td><td>Uploaded</td><td>Size</td></tr></thead>"
+    html = "<h1>Bridge reopens</h1>#{story(3)}<h2>Earlier versions</h2><table>#{header}<tbody>#{rows.join}</tbody></table>"
+
+    blocks(html, article_url).should be_empty
+  end
+
+  it "does not take the label of a sort control for the title of a list" do
+    sort = "<div class='sort'><span>Sort by:</span><form><select name='sort'><option>Price</option></select></form></div>"
+    html = "<h1>Bridge reopens</h1>#{story(3)}<div>#{sort}<div class='grid'>#{cards(stories, '/shop/')}</div></div>"
+
+    blocks(html, article_url).should be_empty
+  end
+
   it "does not take a count over a list of cards for its title" do
     grid = "<div class='grid'>#{cards(stories, '/blog/')}</div>"
     html = "<h1>Bridge reopens</h1>#{story(3)}<p>Showing 1-3 of 40</p>#{grid}"
