@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "uri"
+
 module Nokodown
   # Final cleanup inside the selected content.
   class Pruner
@@ -59,6 +61,9 @@ module Nokodown
     # One colon, at the end: "Tag: Ants Show: Sort:" is a header with controls.
     LEAD = /\A[^:：]+[:：]\z/.freeze
     LETTER = /\p{L}/.freeze
+    # Each Han or kana character counts as a word.
+    FEED_WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[[\p{L}\p{N}]&&[^\p{Han}\p{Hiragana}\p{Katakana}]]+/.freeze
+    MAX_FEED_WORDS = 8
     # What may follow a site footer: a copyright line, a back-to-top link.
     TAIL_SHARE = 0.1
     TAIL_CHARS = 100
@@ -90,6 +95,7 @@ module Nokodown
         remove_in_page_links(root)
         @mode == :article ? prune_article(root) : prune_page(root)
         remove_boilerplate_text(root)
+        remove_feed_footers(root)
         remove_calls_to_action(root)
         ReadMoreLinks.new(root).call
       end
@@ -666,6 +672,38 @@ module Nokodown
       return Tables.data_table?(table) if key.nil?
 
       @data_tables.fetch(key) { @data_tables[key] = Tables.data_table?(table) }
+    end
+
+    # A feed ends each post with a line naming it and the site it appeared on
+    # first, in the site's language ("The post <a>…</a> appeared first on
+    # <a>Site</a>."): a few words around two links, the second to the home
+    # page of the first one's site, and nothing after it.
+    def remove_feed_footers(root)
+      root.css("p").each { |node| remove(node) if feed_footer?(node) }
+    end
+
+    def feed_footer?(node)
+      links = node.css("a[href]")
+      return false unless links.size == 2
+
+      post, home = links.map { |link| web_address(link["href"]) }
+      return false unless post && home && post.host == home.host
+      return false unless home.path.to_s.delete("/").empty? && !post.path.to_s.delete("/").empty?
+
+      text = Dom.text(node)
+      outside = links.reduce(text) { |rest, link| rest.sub(Dom.text(link), " ") }
+      outside.scan(FEED_WORD).size <= MAX_FEED_WORDS && !text_after(text, Dom.text(links.last)).match?(LETTER)
+    end
+
+    def text_after(text, part)
+      text[(text.rindex(part) || 0) + part.length..].to_s
+    end
+
+    def web_address(href)
+      uri = URI.parse(href.to_s.strip)
+      uri if uri.is_a?(URI::HTTP) && uri.host
+    rescue URI::Error
+      nil
     end
 
     def remove_boilerplate_text(root)

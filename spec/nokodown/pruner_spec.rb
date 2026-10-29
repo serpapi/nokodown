@@ -498,6 +498,22 @@ RSpec.describe Nokodown::Pruner do
       ["Jo Pine", "Related reading", "How to choose", "Women"].each { |noise| text.should_not include(noise) }
     end
 
+    it "drops the line a feed adds naming the post and the site it appeared on first" do
+      footers = ["The post <a href='https://radio.example.com/news/missing-man/'>Man missing from unit</a> appeared " \
+                 "first on <a href='https://radio.example.com/'>Talking Canberra</a>.",
+                 "Сообщение <a href='https://news.example.ru/society/flu/'>Врач призвал привиться</a> появились сначала " \
+                 "на <a href='https://news.example.ru'>Новости</a>."]
+      kept = "<p>Read <a href='https://radio.example.com/news/bridge/'>the bridge report</a> and the notes on " \
+             "<a href='https://radio.example.com/'>our site</a> before the council meets again in May to vote.</p>"
+      root = content(story + footers.map { |footer| "<p>#{footer}</p>" }.join + kept)
+      described_class.new([root], :article, conditional: false).call
+      text = Nokodown::Dom.text(root)
+
+      text.should_not include("appeared first")
+      text.should_not include("сначала")
+      text.should include("the bridge report")
+    end
+
     it "drops links to other stories under a label in the page's language" do
       labels = ["Lea también:", "Читайте также:", "Baca juga:", "関連記事", "اقرأ أيضاً:"]
       boxes = labels.map { |label| "<p><strong>#{label}</strong> <a href='/news/9'>Ferry fares rise again in the spring</a></p>" }
