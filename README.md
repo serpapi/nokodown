@@ -194,7 +194,9 @@ region, or most of the page's text, is never removed because of its class name.
    bylines, datelines and inline boxes of links to other stories; on other
    pages, removal of leftover link clusters, with the heading over them, and
    of columns of links beside a column of prose in layout tables, unless the
-   table declares them the wider column or they hold the page title. An
+   table declares them the wider column or they hold the page title, and of
+   narrow grid columns ("col-md-4", "span4") or side-named cells that are
+   mostly links, beside a column of 7/12 or more that holds the title. An
    index page, whose link clusters hold most of its text, keeps them but for
    its menus: lists of links holding one to the page itself, the clusters
    above its title, and the side columns its table declares narrower. In
