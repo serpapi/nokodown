@@ -99,6 +99,12 @@ with `main_content: false`, `:none` for a document without a body.
   images came since the last copy, as in a logo strip shown twice. A line
   with several copies of one image, such as a row of rating stars, keeps
   them all.
+- Markup and server output that leak into the text, outside code: HTML
+  escaped into alt text (its text is kept), escaped elements written out
+  whole, PHP and Liquid error messages, and template placeholders and
+  shortcodes left unrendered. Email addresses hidden from harvesters, by
+  Cloudflare or by a decoy inside the address, are shown as readers see
+  them.
 
 Every structural rule is guarded: an element that contains the `<main>`
 region, or most of the page's text, is never removed because of its class name.
