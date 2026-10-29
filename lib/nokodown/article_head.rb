@@ -12,6 +12,8 @@ module Nokodown
     MAX_CHARS = 600
     MAX_LINK_DENSITY = 0.5
     TITLE_MATCH = 0.5
+    DIGIT = /\d/.freeze
+    LINK_LINE = 0.9
     # A body inside a list or a data table would be rendered as part of it,
     # and invalid nesting there, such as a list right inside a <dl>, is
     # dropped. Layout tables are unwrapped.
@@ -38,6 +40,7 @@ module Nokodown
       return @nodes unless short?(stretch) && !rival?(headline, stretch)
 
       cut(holder, headline)
+      stretch.drop(1).each { |node| drop_link_lines(node) if node.element? }
       [holder]
     end
 
@@ -103,6 +106,25 @@ module Nokodown
       later = parent.children.drop_while { |child| !(child.element? && kept.include?(Dom.key(child))) }
       later.each { |child| child.remove unless child.element? && kept.include?(Dom.key(child)) }
       path_to(parent, holder).each { |node| following(node).each(&:remove) }
+    end
+
+    # Lines of links between the headline and the body are section kickers,
+    # breadcrumbs, tags and calls to action ("Get a demo"), not the article.
+    # Dates link to the post, so lines with digits stay.
+    def drop_link_lines(node)
+      links = node.name == "a" ? [node] : node.css("a[href]").to_a
+      lines = links.filter_map do |link|
+        next if Dom.ancestors_named(link, *Dom::HEADINGS).any?
+
+        line = path_to(link, node).find { |step| Dom.block?(step) } || node
+        line if link_line?(line)
+      end
+      lines.uniq { |line| Dom.key(line) }.each(&:remove)
+    end
+
+    def link_line?(line)
+      text = Dom.text(line)
+      !text.empty? && !text.match?(DIGIT) && line.at_css(Dom::HEADING_SELECTOR).nil? && @stats.link_density(line) >= LINK_LINE
     end
 
     # The node and its ancestors below `top`.
