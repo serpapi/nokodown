@@ -13,6 +13,7 @@ module Nokodown
     SECTIONS_SHARE = 0.75
     SECTION_LINK_DENSITY = 0.25
     TOP_CANDIDATES = 5
+    TABLE_PARTS = Set.new(%w[tbody thead tfoot tr td th]).freeze
     COMMAS = /[,\u060C\uFE50\uFE10\uFE11\u2E41\u2E34\u2E32\uFF0C]/.freeze
 
     def self.class_weight(node)
@@ -60,7 +61,7 @@ module Nokodown
 
       @scores.each_key { |key| @scores[key] *= 1 - @stats.link_density(@nodes[key]) }
       ranked = @scores.keys.max_by(TOP_CANDIDATES) { |key| @scores[key] }.map { |key| @nodes[key] }
-      top = climb(shared_ancestor(ranked) || ranked.first)
+      top = whole_table(climb(shared_ancestor(ranked) || ranked.first))
       core = merge_siblings(top)
       Result.new(top, with_sections(top, core), score(top) || 0.0, core)
     end
@@ -203,6 +204,16 @@ module Nokodown
         last = parent_score
       end
       single_child_ancestor(top)
+    end
+
+    # A row of a data table, such as a search result with a long author list,
+    # is one record among several, and its cells mean nothing without the
+    # header row.
+    def whole_table(node)
+      return node unless TABLE_PARTS.include?(node.name)
+
+      table = Dom.ancestors_named(node, "table").first
+      table && within_root?(table) && Tables.data_table?(table) ? table : node
     end
 
     def single_child_ancestor(node)

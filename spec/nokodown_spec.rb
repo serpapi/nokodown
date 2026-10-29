@@ -455,6 +455,18 @@ RSpec.describe Nokodown do
 
       Nokodown.to_markdown(html).should_not include("subject to change")
     end
+
+    it "keeps the whole table of results when one row outscores the others" do
+      authors = Array.new(60) { |index| "Moretti#{index}, A." }.join("; ")
+      rows = [["Predicting kidney failure", authors], ["Preeclampsia before a biopsy", "Cabiddu, G."], ["Dialysis in older patients", "Rossi, M."]]
+      body = rows.map { |title, names| "<tr><td>#{title}</td><td>2022</td><td>#{names}</td></tr>" }.join
+      html = "<main><h1>Browse by journal</h1><table><thead><tr><th>Title</th><th>Date</th><th>Authors</th></tr></thead>" \
+             "<tbody>#{body}</tbody></table></main>"
+
+      markdown = Nokodown.to_markdown(html, title: false)
+      markdown.should include("| Title | Date | Authors |")
+      markdown.should include("| Preeclampsia before a biopsy | 2022 | Cabiddu, G. |")
+    end
   end
 
   describe "encodings" do
