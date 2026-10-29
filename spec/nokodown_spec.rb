@@ -343,7 +343,8 @@ RSpec.describe Nokodown do
 
   describe "title: false" do
     it "does not prepend the metadata title" do
-      markdown = Nokodown.to_markdown(fixture("article.html"), title: false)
+      paragraph = "<p>Tidal lagoons hold water behind a wall at high tide, then release it through turbines.</p>"
+      markdown = Nokodown.to_markdown("<title>Tides</title><body><article>#{paragraph * 4}</article></body>", title: false)
 
       markdown.should start_with("Tidal lagoons hold water")
     end
@@ -456,6 +457,21 @@ RSpec.describe Nokodown do
       html = "<title>Index funds</title><body><article><h1>Index funds</h1>#{paragraphs.join}#{disclaimer}</article></body>"
 
       Nokodown.to_markdown(html).should_not include("subject to change")
+    end
+
+    it "keeps the key facts between the headline and the body, and nothing after the body" do
+      facts = { "Price" => "525,000 €", "Rooms" => "2", "Floor area" => "72 m²" }.map do |label, value|
+        "<div class='fact'><div>#{label}</div><div>#{value}</div></div>"
+      end
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      html = "<main><div class='listing'><div class='crumbs-text'>Homes for sale</div>" \
+             "<div class='intro'><h1>Flat for sale in the Eixample</h1><div class='facts'>#{facts.join}</div></div>" \
+             "<div class='description'>#{prose}</div><div class='agent'><p>Call Ana on weekdays.</p></div></div></main>"
+
+      markdown = Nokodown.to_markdown(html)
+      markdown.should start_with("# Flat for sale in the Eixample\n\nPrice\n\n525,000 €")
+      markdown.should include("original tiles")
+      markdown.should_not include("Call Ana")
     end
 
     it "keeps the whole table of results when one row outscores the others" do
