@@ -671,6 +671,14 @@ RSpec.describe "Markdown conversion" do
         markdown.should include("| Plan 400 | ![](https://example.com/yes.png) | ![](https://example.com/no.png) |")
       end
 
+      it "drops the buttons of a layout table in a data table's cell" do
+        text = "Our shop sells leads, collars, beds and toys for dogs of every size, made by hand in our own workshop."
+        buttons = '<table><tr><td><a href="/profile/7"><img src="/icon_profile.gif" alt="View profile"></a></td></tr></table>'
+        html = "<main><h1>Shop</h1><p>#{text}</p><table><tr><th>Author</th><th>Message</th></tr>" \
+               "<tr><td>Sam</td><td>Great collars.</td></tr><tr><td>Top</td><td>#{buttons}</td></tr></table></main>"
+        extract(html).should == "# Shop\n\n#{text}\n\n| Author | Message |\n| --- | --- |\n| Sam | Great collars. |\n| Top | |"
+      end
+
       it "drops an image that names nothing although its alt text holds an escape" do
         text = "We sailed along the rocky coast for a whole week, stopping at small harbours, fish markets and quiet beaches on the way."
         extract("<main><h1>Trip</h1><p>#{text}</p><p><img src=\"/2.jpg\" alt=\"photo_ 2\"></p></main>").should == "# Trip\n\n#{text}"

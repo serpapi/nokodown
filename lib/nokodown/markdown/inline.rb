@@ -94,7 +94,7 @@ module Nokodown
         @in_heading = false
         @in_link = false
         @link_images = nil
-        @tick_cell = false
+        @tick_cell = nil
       end
 
       # Markup of every image written, for Cleanup to drop redundant images
@@ -123,7 +123,7 @@ module Nokodown
       # Renders a cell of a data table, where an image alone is a tick.
       def in_cell(cell)
         outer = @tick_cell
-        @tick_cell = !cell.at_css("img").nil? && Dom.text(cell).empty?
+        @tick_cell = Dom.key(cell) if cell.at_css("img") && Dom.text(cell).empty?
         yield
       ensure
         @tick_cell = outer
@@ -295,11 +295,17 @@ module Nokodown
         return "" if src.nil? || Image.decorative?(node, src, alt)
 
         markup = "![#{Text.link_text(Text.escape(alt))}](#{Text.destination(src)})"
-        record(markup, src, node, @main_content && !Image.content?(node, src, alt, @tick_cell))
+        record(markup, src, node, @main_content && !Image.content?(node, src, alt, tick?(node)))
         return markup unless @link_images
 
         @link_images << markup
         ""
+      end
+
+      # Only in the cell itself: a layout table nested in the cell holds
+      # forum buttons, not ticks.
+      def tick?(node)
+        !@tick_cell.nil? && Dom.key(Dom.ancestors_named(node, "td", "th").first) == @tick_cell
       end
 
       # An image is redundant only if every copy of it is. Targets are the
