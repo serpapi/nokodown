@@ -460,9 +460,10 @@ RSpec.describe Nokodown::Boilerplate do
     end
 
     it "keeps a category line after the title, as a product's or an event's category is one of its facts" do
-      meta = '<p>SKU: 212-3 <span class="posted_in">Category: <a href="/category/climbing/" rel="tag">Climbing</a></span></p>'
+      meta = '<p>SKU: 212-3 <span class="posted_in">Category: <a href="/product-category/climbing/" rel="tag">Climbing</a></span> ' \
+             'Kategorie <span><a href="/produkt/x/" rel="tag">Mosaik</a></span></p>'
 
-      article("https://example.com/2024/05/harbour/", meta).should include("SKU: 212-3 Category: Climbing")
+      article("https://example.com/2024/05/harbour/", meta).should include("SKU: 212-3 Category: Climbing Kategorie Mosaik")
     end
 
     it "keeps a product's facts linked to the filters of its category" do

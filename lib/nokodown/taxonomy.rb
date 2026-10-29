@@ -9,7 +9,8 @@ module Nokodown
   # an archive page such lines are its listing, so nothing goes there.
   module Taxonomy
     TAG_PATH = %r{/(?:tags?|labels?|topics)/[^/?#]}i.freeze
-    CATEGORY_PATH = %r{/categor(?:y|ies)/[^/?#]}i.freeze
+    # WooCommerce files products under "/product-category/".
+    CATEGORY_PATH = %r{[/_-]categor(?:y|ies)/[^/?#]}i.freeze
     TAG_QUERY = /[?&]tag=[^&#]/.freeze
     CATEGORY_QUERY = /[?&]cat=[^&#]/.freeze
     TAG_REL = /(?<![\w-])tag(?![\w-])/i.freeze
@@ -87,12 +88,15 @@ module Nokodown
       return if kinds.include?(nil)
 
       gaps = Breadcrumbs.gaps(node)
-      return unless label?(gaps.first) && gaps.drop(1).all? { |gap| gap.match?(BETWEEN) }
+      return unless gaps.drop(1).all? { |gap| gap.match?(BETWEEN) }
+      return unless gaps.first.empty? ? Dom.block?(node) : label?(gaps.first)
 
       kinds.include?(:category) ? :category : :tag
     end
 
     # "Tags:" leads a line of tags; "Price" before a filter's link is a fact.
+    # A line without a label is a block of its own: an inline one is the
+    # value of a label outside it.
     def label?(text)
       text.empty? || (text.length <= MAX_LABEL && text.match?(LABEL))
     end
