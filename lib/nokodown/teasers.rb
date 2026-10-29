@@ -5,8 +5,8 @@ require "uri"
 module Nokodown
   # Finds blocks of teasers for other pages of the site (related, latest,
   # popular, "more news") on a page that has content of its own. A teaser
-  # block is a run of items of the same shape, each a card leading to a
-  # different page of the same site, with a thumbnail, a date or a short
+  # block is an unbroken run of items of the same shape, each a card leading
+  # to a different page of the same site, with a thumbnail, a date or a short
   # excerpt, under a title of its own in any language. Class names do not
   # matter: Boilerplate has already removed the blocks named "related".
   #
@@ -32,6 +32,8 @@ module Nokodown
     SIBLING_SHARE = 0.6
     # What a block may hold besides its items and title: a "more" link.
     SLACK = 40
+    # Longer text between two items is not a separator ("|", "·").
+    SEPARATOR = 2
     MAX_TITLE = 60
     MAX_HEADING = 100
     MIN_BODY = 200
@@ -47,6 +49,8 @@ module Nokodown
     MEDIA = "img, picture, time"
     STRUCTURE = "ul, ol, dl, table, li, p + p"
     DATE = %r{\d{1,4}[./-]\d{1,2}[./-]\d{1,4}}.freeze
+    # A line ending a sentence is the content's, not a title over a block.
+    SENTENCE = /[^.][.!?]\z|[。！？؟।]\z/.freeze
     # Scripts written without spaces count a word per character.
     WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[\p{L}\p{N}]+/.freeze
     # Query values that differ between pages of one kind are ids; "lvl=categ_see"
@@ -199,19 +203,38 @@ module Nokodown
     def runs
       found = @body.css("*").flat_map do |parent|
         children = parent.element_children
-        children.size < MIN_ITEMS ? [] : shapes(children).values.filter_map { |items| run(parent, items) }
+        children.size < MIN_ITEMS ? [] : shapes(parent).filter_map { |items| run(parent, items) }
       end
       outer = found.flat_map { |run| run.parent.ancestors.map { |ancestor| Dom.key(ancestor) } }.compact.to_set
       found.reject { |run| outer.include?(Dom.key(run.parent)) }
     end
 
-    # Children grouped by tag and first class. A class no sibling shares
-    # marks a position ("first", "primeiro"), not another kind of item.
-    def shapes(children)
-      named = children.map { |child| [child, shape_of(child)] }
-      counts = named.map(&:last).tally
-      groups = named.group_by { |child, shape| counts[shape] > 1 ? shape : "#{child.name}." }
-      groups.transform_values { |pairs| pairs.map(&:first) }
+    # Children of the same tag and first class, in unbroken runs: text
+    # between two of them, as between the figures of an article, ends a run.
+    # A class no sibling shares marks a position ("first", "primeiro"), not
+    # another kind of item.
+    def shapes(parent)
+      counts = parent.element_children.map { |child| shape_of(child) }.tally
+      open = {}
+      done = []
+      breaks = 0
+      parent.children.each do |child|
+        if child.element?
+          shape = shape_of(child)
+          shape = "#{child.name}." if counts[shape] == 1
+          items, seen = open[shape]
+          if items.nil? || seen < breaks
+            done << items if items
+            items = []
+          end
+          items << child
+          breaks += 1 if @stats.chars(child) > SEPARATOR
+          open[shape] = [items, breaks]
+        elsif child.text? && Dom.char_count(child.content) > SEPARATOR
+          breaks += 1
+        end
+      end
+      done + open.values.map(&:first)
     end
 
     def shape_of(node)
@@ -382,7 +405,7 @@ module Nokodown
     end
 
     def label?(node, text)
-      return false if text.length > MAX_TITLE || node.at_css(STRUCTURE)
+      return false if text.length > MAX_TITLE || text.match?(SENTENCE) || node.at_css(STRUCTURE)
 
       links = node.css("a[href]")
       links.empty? || (links.size == 1 && Dom.text(links.first) == text)

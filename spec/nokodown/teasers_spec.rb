@@ -190,6 +190,20 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, "https://library.example.org/index.php?lvl=categ_see&id=83018", nil).should be_empty
   end
 
+  it "finds no block in the cards spread between the paragraphs of an article" do
+    figures = stories.map { |title| "#{cards([title], '/blog/')}#{story(1)}" }
+    html = "<h1>Bridge reopens</h1><div class='entry'>#{story(1)}<p>See our earlier report.</p>#{figures.join}</div>"
+
+    blocks(html, article_url).should be_empty
+  end
+
+  it "does not take a sentence before a list of cards for its title" do
+    grid = "<div class='grid'>#{cards(stories, '/blog/')}</div>"
+    html = "<h1>Bridge reopens</h1>#{story(3)}<p>See our earlier report.</p>#{grid}"
+
+    markdown(html, article_url, type: "article").should include("See our earlier report.")
+  end
+
   it "keeps a list of links in the prose" do
     items = stories.map { |title| "<li><a href='/docs/#{title.length}'>#{title}</a> explains the next step.</li>" }
 
