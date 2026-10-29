@@ -468,4 +468,11 @@ RSpec.describe Nokodown::Teasers do
     root.content.should include("cracked bearings")
     root.content.should_not include("School board")
   end
+
+  it "keeps a list under a title that the page's address names" do
+    html = "<h1>Bridge reopens</h1>#{story(1)}<section><h2>Harbor bridge news</h2>" \
+           "<div class='grid'>#{cards(stories, '/')}</div></section>"
+
+    blocks(html, "https://news.example.com/harbor-bridge-news/", :article).should be_empty
+  end
 end

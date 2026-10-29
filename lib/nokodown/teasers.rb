@@ -132,6 +132,7 @@ module Nokodown
       @body = body
       @urls = urls
       @page = parse(urls.resolve(url)) if url
+      @url_words = UrlWords.new(url)
       @declared = BODIES.include?(page_type)
       @discussion = ContentLocator::DISCUSSIONS.include?(page_type)
     end
@@ -190,9 +191,12 @@ module Nokodown
       list && list.chars >= @blocks.sum(&:chars) - list.chars
     end
 
-    # A list with no title of its own, or under the page's H1.
+    # A list with no title of its own, under the page's H1, or under a title
+    # the page's address names ("/maglia-jarrod-bowen" over "Maglia Jarrod
+    # Bowen").
     def own_list?(block)
-      block.title.nil? || block.title.name == "h1" || !block.title.at_css("h1").nil?
+      title = block.title
+      title.nil? || title.name == "h1" || !title.at_css("h1").nil? || @url_words.names?(Dom.text(title))
     end
 
     # Links to pages below this one are its own sections, and attachments are
