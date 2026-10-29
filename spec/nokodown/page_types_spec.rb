@@ -46,7 +46,7 @@ RSpec.describe "Main content of different kinds of pages" do
       markdown.should include("A waterproof leather boot")
       markdown.should include("- Weight: 540 g per boot")
       markdown.should include("**Materials and care**")
-      markdown.should include("- **Drop**: 12 mm")
+      markdown.should include("- Drop: 12 mm")
     end
 
     it "drops navigation, cart controls, other products and popups" do

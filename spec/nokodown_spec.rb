@@ -439,7 +439,7 @@ RSpec.describe Nokodown do
       markdown.should include("# KALLAX Shelf unit, [30x57](https://example.com/kallax?size=30x57)")
       markdown.should include("every week.1 And")
       markdown.should include("### [Elixir Observability Engineer](https://example.com/jobs/elixir)")
-      markdown.should include("- **Ingredients**: Sugar")
+      markdown.should include("- Ingredients: Sugar")
       markdown.should include("- [Alan Turing](https://example.com/authors/alan)")
     end
 

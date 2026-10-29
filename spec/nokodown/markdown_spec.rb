@@ -1000,14 +1000,14 @@ RSpec.describe "Markdown conversion" do
         "### Abigél\n\n12-14\n\nRegény\n\n- Categories\n\n- News\n- Sport"
     end
 
-    it "renders definition lists as term and definition pairs" do
+    it "renders definition lists as lines of a term and its definitions" do
       convert("<dl><dt>Weight</dt><dd>540 g</dd><dt>Colors</dt><dd>Brown</dd><dd>Black</dd></dl>").should ==
-        "- **Weight**: 540 g\n- **Colors**: Brown; Black"
+        "- Weight: 540 g\n- Colors: Brown; Black"
     end
 
     it "does not add a colon after a term that ends with one" do
       convert("<dl><dt>Material:</dt><dd>Leather</dd><dt>材料：</dt><dd>革</dd></dl>").should ==
-        "- **Material:** Leather\n- **材料：** 革"
+        "- Material: Leather\n- 材料： 革"
     end
 
     it "keeps a list or a table inside a definition under its term" do
@@ -1018,7 +1018,7 @@ RSpec.describe "Markdown conversion" do
 
     it "keeps the paragraphs and code of a longer definition under its term" do
       html = "<dl><dt>cache(f)</dt><dd><p>Caches results.</p><pre>cache(f)(1)</pre></dd><dt>Since</dt><dd>3.9</dd></dl>"
-      convert(html).should == "- **cache(f)**\n  Caches results.\n  ```\n  cache(f)(1)\n  ```\n- **Since**: 3.9"
+      convert(html).should == "- **cache(f)**\n  Caches results.\n  ```\n  cache(f)(1)\n  ```\n- Since: 3.9"
     end
   end
 
