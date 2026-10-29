@@ -108,6 +108,10 @@ RSpec.describe Nokodown::Metadata do
     metadata('<meta property="og:title" content="Trail Running Shoes for Women">', "<h1>Trail Running</h1>")[:title].should == "Trail Running Shoes for Women"
   end
 
+  it "does not cut at an underscore inside a file name" do
+    metadata("<title>install_guide_linux</title>", "<h1>install</h1>")[:title].should == "install_guide_linux"
+  end
+
   it "does not cut at a slash, which also joins words within a name" do
     metadata("<title>Rock / Pop Music Store Online</title>", "<h1>Rock</h1>")[:title]
       .should == "Rock / Pop Music Store Online"

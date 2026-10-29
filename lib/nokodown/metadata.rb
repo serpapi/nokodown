@@ -22,7 +22,7 @@ module Nokodown
     SITE_NAME_SEPARATOR = "[#{TITLE_SEPARATORS}:·•]"
     WORD = /[\p{L}\p{N}]+/.freeze
     CLOSING = /\A[?!.)\]"'”’）」』】》]*/.freeze
-    HEADING_END = /\A(?:\s[-–—]\s|\s*[|:·•,_])/.freeze
+    HEADING_END = /\G(?:\s[-–—]\s|\s*[|:·•,]|#{SiteName::UNDERSCORE})/.freeze
     HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?/?(?:index\.[a-z]+|[a-z]{2}(?:[-_][a-z]{2})?/?)?(?:[?#].*)?\z}i.freeze
     LOGO_NAME = /logo|brand|site[-_]?(?:title|name)/i.freeze
     SITE_LOGO_NAME = /logo|site[-_]?(?:title|name)/i.freeze
@@ -273,8 +273,8 @@ module Nokodown
 
         cut = matches[h1_words.size - 1].end(0)
         closing = title[cut..][CLOSING]
-        rest = title[(cut + closing.length)..]
-        return title[0, cut] + closing if rest.match?(HEADING_END) || site.ending?(rest)
+        from = cut + closing.length
+        return title[0, cut] + closing if title.match?(HEADING_END, from) || site.ending?(title[from..])
       end
       nil
     end

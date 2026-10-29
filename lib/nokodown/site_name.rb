@@ -7,7 +7,8 @@ module Nokodown
   class SiteName
     # An underscore separates only where it touches a space or a non-ASCII
     # letter ("标题_栏目_网站"); between ASCII letters it joins a file name.
-    PART_SEPARATOR = %r{\s+[|\-–—»>→/\\·•]+\s+|\s*\|\s*|\s_\s?|_\s|(?<=[^\x00-\x7F])_|_(?=[^\x00-\x7F])}.freeze
+    UNDERSCORE = '\s_\s?|_\s|(?<=[^\x00-\x7F])_|_(?=[^\x00-\x7F])'
+    PART_SEPARATOR = %r{\s+[|\-–—»>→/\\·•]+\s+|\s*\|\s*|#{UNDERSCORE}}.freeze
     BREADCRUMB = /[»>→\\]/.freeze
     URL = %r{\A[a-z][a-z\d+.-]*://(?:[^@/?#]*@)?([^/:?#]+)(?::\d+)?([^?#]*)}i.freeze
     HOME_PATH = %r{\A/?(?:index\.[a-z]+|[a-z]{2}(?:[-_][a-z]{2})?/?)?\z}i.freeze
