@@ -49,6 +49,9 @@ module Nokodown
     DATE = %r{\d{1,4}[./-]\d{1,2}[./-]\d{1,4}}.freeze
     # Scripts written without spaces count a word per character.
     WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[\p{L}\p{N}]+/.freeze
+    # Query values that differ between pages of one kind are ids; "lvl=categ_see"
+    # and "lvl=notice_display" are two kinds of page.
+    ID_VALUE = /\d/.freeze
     # The root, a language's root ("/en/", "/pt-br/") or its index file.
     HOME = %r{\A/*(?:[a-z]{2}(?:[-_][a-z]{2})?/*)?(?:index\.\w+)?\z}i.freeze
     FILE = /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|docx?|xlsx?|pptx?|mp[34])\z/i.freeze
@@ -285,16 +288,25 @@ module Nokodown
       @stats.chars(item) - headings.sum { |heading| @stats.chars(heading) }
     end
 
-    # Another page of this site, not a file on it.
+    # Another page of this site, not a file on it, nor a post further down
+    # this one ("viewtopic.php?p=12#p12").
     def target(href)
       href = href.to_s.strip
       return if href.empty? || href.start_with?("#")
 
       uri = parse(@urls.resolve(href))
       return unless uri && host(uri) == host(@page) && !uri.path.match?(FILE)
+      return if uri.path.chomp("/") == @page.path.chomp("/") && (uri.query == @page.query || anchor?(uri.fragment))
 
       uri.fragment = nil
-      uri unless uri.path.chomp("/") == @page.path.chomp("/") && uri.query == @page.query
+      uri
+    end
+
+    def anchor?(fragment)
+      return false if fragment.to_s.empty?
+
+      @anchors ||= @body.css("[id], a[name]").flat_map { |node| [node["id"], node["name"]] }.compact.to_set
+      @anchors.include?(fragment)
     end
 
     # The run's container, widened to wrappers holding nothing else but a
@@ -396,18 +408,27 @@ module Nokodown
       other.size > page.size && other.first(page.size) == page
     end
 
-    # A page like this one: the same script with other values for the same
+    # A page like this one: the same script with other ids for the same
     # query keys, or the same path but for the last segment and the same
     # query keys. "viewforum.php?f=2" lists the threads at "viewtopic.php?t=7".
     def sibling?(uri)
       page = segments(@page)
       other = segments(uri)
-      keys = query_keys(@page)
-      return false unless page.size == other.size && query_keys(uri) == keys
-      return !keys.empty? if page == other
+      return false unless page.size == other.size && query_keys(uri) == query_keys(@page)
+      return same_kind?(uri) if page == other
       return page[0..-2] == other[0..-2] if page.size > 1
 
       page.size == 1 && skeleton(page.first) == skeleton(other.first)
+    end
+
+    def same_kind?(uri)
+      own = params(@page).to_h
+      other = params(uri)
+      !other.empty? && other.all? { |key, value| value == own[key] || (id?(value) && id?(own[key])) }
+    end
+
+    def id?(value)
+      value.to_s.match?(ID_VALUE)
     end
 
     def segments(uri)
@@ -415,7 +436,15 @@ module Nokodown
     end
 
     def query_keys(uri)
-      uri.query.to_s.split("&").map { |pair| pair[/\A[^=]*/] }.reject(&:empty?).sort
+      params(uri).map(&:first).sort
+    end
+
+    def params(uri)
+      pairs = uri.query.to_s.split("&").map do |pair|
+        key, value = pair.split("=", 2)
+        [key.to_s, value.to_s]
+      end
+      pairs.reject { |key, _| key.empty? }
     end
 
     # Pages directly under the root share their first word and their form:

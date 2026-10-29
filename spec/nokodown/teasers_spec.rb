@@ -168,6 +168,28 @@ RSpec.describe Nokodown::Teasers do
     text.should_not include("Best flour for a rye starter")
   end
 
+  it "keeps the posts of a thread whose titles link to the posts themselves" do
+    posts = Array.new(5) do |index|
+      id = 657_618 + index
+      "<div class='post' id='p#{id}'><h3><a href='./viewtopic.php?p=#{id}#p#{id}'>Re: Door scripts</a></h3>" \
+        "<p>Reply #{index}: the script runs once the map loads, so the door opens after the first switch.</p></div>"
+    end.join
+    html = "<div class='topic'>#{story(1)}#{posts}</div>"
+
+    blocks(html, "https://forum.example.com/viewtopic.php?p=657618", :forum).should be_empty
+  end
+
+  it "keeps the records a catalogue lists on a category page" do
+    records = Array.new(4) do |index|
+      "<div class='record'><img src='/covers/#{index}.jpg' alt=''>" \
+        "<a href='index.php?lvl=notice_display&amp;id=#{4100 + index}'>Soil survey, volume #{index + 1}</a>" \
+        "<span>Report, 2019</span></div>"
+    end.join
+    html = "<div class='category'>#{story(1)}#{records}</div>"
+
+    blocks(html, "https://library.example.org/index.php?lvl=categ_see&id=83018", nil).should be_empty
+  end
+
   it "keeps a list of links in the prose" do
     items = stories.map { |title| "<li><a href='/docs/#{title.length}'>#{title}</a> explains the next step.</li>" }
 
