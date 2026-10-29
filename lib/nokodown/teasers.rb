@@ -476,28 +476,28 @@ module Nokodown
     end
 
     # The title link, or else the first link with text: an image link often
-    # comes first. An empty link that opens the card is stretched over it.
+    # comes first.
     def primary_link(card)
       return card.node if card.node.name == "a"
 
       links = card.node.css("a[href]")
       title = links.find { |link| heading_link?(link, card) } unless card.headings.empty?
-      title ||= links.first if links.first && cover?(links.first)
       title || links.find { |link| @stats.chars(link) > 1 } || links.first
     end
 
     def title_link?(link, card)
-      heading_link?(link, card) || cover?(link)
+      heading_link?(link, card) || cover?(link, card)
     end
 
     def heading_link?(link, card)
       card.title_links.include?(Dom.key(link)) || !link.at_css(HEADING).nil?
     end
 
-    # An empty link that a stylesheet stretches over the whole card links its
-    # title too.
-    def cover?(link)
-      @stats.chars(link).zero? && link.at_css(MEDIA).nil?
+    # An empty link right in a card is stretched over all of it, title and
+    # all, when the card has no link with text. One further down is a
+    # thumbnail whose image was dropped or is drawn by a stylesheet.
+    def cover?(link, card)
+      @stats.chars(link).zero? && link.at_css(MEDIA).nil? && Dom.key(link.parent) == Dom.key(card.node)
     end
 
     # A teaser shows a thumbnail or a date, or is a card: its title is a
@@ -510,7 +510,7 @@ module Nokodown
       return false if link.nil? || (!card.headings.empty? && !title_link?(link, card))
       return true if item.at_css(MEDIA)
 
-      whole = Dom.key(link) == Dom.key(item) || cover?(link)
+      whole = Dom.key(link) == Dom.key(item) || cover?(link, card)
       return false unless whole || !card.headings.empty? || Dom.text(item).match?(DATE)
 
       beside_title(card, whole) >= RICH_TEXT

@@ -352,6 +352,26 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, article_url).should_not be_empty
   end
 
+  it "does not take an empty link deep in a card for one stretched over it" do
+    services = %w[Architecture Decoration Joinery].map do |name|
+      "<div class='col'><h3>#{name}</h3><div class='image'><div class='hover'><a href='/#{name.downcase}-services/'>" \
+        "</a></div></div><p>We plan the #{name.downcase} of your home in every detail and keep to the budget.</p></div>"
+    end
+    html = "<h1>Interior architect</h1>#{story(3)}<h2>Our services</h2><div class='row'>#{services.join}</div>"
+
+    blocks(html, "https://studio.example.com/interior-architect/").should be_empty
+  end
+
+  it "takes a card's title link over an empty link that shows its thumbnail" do
+    news = stories.each_with_index.map do |title, index|
+      "<div class='news'><a href='/news/#{index}' style='background:url(/img/#{index}.jpg)'></a>" \
+        "<a href='/news/#{index}'>#{title}</a><span>12.04.2026</span></div>"
+    end
+    html = "<h1>Bridge reopens</h1>#{story(3)}<div class='more'><h3>On this topic</h3>#{news.join}</div>"
+
+    blocks(html, "https://news.example.com/news/9").should_not be_empty
+  end
+
   it "weighs each titled box, not all of them together, against the page's own text" do
     boxes = %w[popular latest picks].map do |name|
       "<div class='#{name}'><h3>#{name.capitalize}</h3>" \
