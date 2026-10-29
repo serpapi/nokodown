@@ -689,8 +689,9 @@ module Nokodown
       !other.empty? && other.all? { |key, value| value == own[key] || (id?(value) && id?(own[key])) }
     end
 
+    # "%20" in "key=Hardware%20--%20Catalogs" is no id.
     def id?(value)
-      value.to_s.match?(ID_VALUE)
+      decode(value.to_s).match?(ID_VALUE)
     end
 
     def segments(uri)

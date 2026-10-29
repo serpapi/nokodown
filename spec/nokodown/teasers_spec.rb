@@ -487,6 +487,14 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, "https://news.example.com/topic/headphones", nil).should be_empty
   end
 
+  it "does not take percent escapes in a query value for an id" do
+    terms = ["Building fittings -- Catalogs", "Cabinet hardware -- Catalogs", "Door fittings and locks -- Catalogs"]
+    items = terms.map { |term| "<li><a href='browse?type=lcsubc&amp;key=#{term.gsub(' ', '%20')}'>#{term}</a></li>" }
+    html = "<h1>Hardware -- Catalogs</h1>#{story(1)}<b>Narrower terms:</b><ul>#{items.join}</ul>"
+
+    blocks(html, "https://books.example.edu/browse?type=lcsubc&key=Hardware%20--%20Catalogs", nil).should be_empty
+  end
+
   it "keeps a category's products whose names end in a code of another kind" do
     products = stories.each_with_index.map do |title, index|
       "<div class='card'><img src='/img/#{index}.jpg' alt=''><h3><a href='/usb-hub-model-#{37_209 + index}.html'>" \
