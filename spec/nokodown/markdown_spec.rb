@@ -899,6 +899,12 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Specs\n\n| Key | Value |\n| --- | --- |\n| Weight | 3 kg |"
     end
 
+    it "keeps a header row whose other cells are blank" do
+      rows = %w[Apple Pear].map { |fruit| %(<tr><td>#{fruit}</td><td><a href="/buy/#{fruit}">Buy</a></td></tr>) }.join
+      convert("<table><tr><th>Item</th><th></th></tr>#{rows}</table>").should ==
+        "| Item |  |\n| --- | --- |\n| Apple | [Buy](https://example.com/buy/Apple) |\n| Pear | [Buy](https://example.com/buy/Pear) |"
+    end
+
     it "keeps cell values written as a sign" do
       html = "<table><tr><th>Module</th><th>Status</th><th>Note</th></tr><tr><td>mod_access</td><td>+</td><td>-</td></tr>" \
              "<tr><td>mod_dbm</td><td>?</td><td>&times;</td></tr></table>"

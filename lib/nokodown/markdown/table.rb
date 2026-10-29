@@ -16,8 +16,8 @@ module Nokodown
       def blocks
         return layout_blocks unless Tables.data_table?(@node)
 
-        grid = trimmed_grid
-        titles = title_rows(grid)
+        grid, spanning = trimmed_grid
+        titles = title_rows(grid, spanning)
         return layout_blocks if grid.size < 2 || grid.first.size < 2
 
         caption + titles + [Block.new(:table, gfm(grid))]
@@ -33,9 +33,10 @@ module Nokodown
 
       # A first row with one cell across the table is its title; the next row
       # holds the column names.
-      def title_rows(grid)
+      def title_rows(grid, spanning)
         titles = []
-        while grid.size > 2 && grid.first.count { |cell| !cell.empty? } == 1 && grid.first.first != ""
+        while grid.size > 2 && spanning.first && grid.first.first != ""
+          spanning.shift
           titles << Block.new(:paragraph, Text.escape_line_starts(grid.shift.first.gsub("\\|", "|")))
         end
         titles
@@ -47,25 +48,36 @@ module Nokodown
         text.empty? ? [] : [Block.new(:paragraph, text)]
       end
 
-      # Drops empty rows and columns and pads short rows.
+      # Drops empty rows and columns and pads short rows; and whether each
+      # row is one cell across the table.
       def trimmed_grid
-        grid = cell_grid.reject { |row| row.all?(&:empty?) }
+        grid, spanning = cell_grid
+        kept = grid.each_index.reject { |index| grid[index].all?(&:empty?) }
+        grid = grid.values_at(*kept)
         width = grid.map(&:size).max.to_i
         grid.each { |row| row.fill("", row.size...width) }
         columns = (0...width).select { |column| grid.any? { |row| !row[column].empty? } }
-        grid.map { |row| row.values_at(*columns) }
+        [grid.map { |row| row.values_at(*columns) }, spanning.values_at(*kept)]
       end
 
       # One value per row and column: a rowspan repeats its value in the rows
       # below, a colspan leaves the extra columns blank.
       def cell_grid
         spans = {}
-        Tables.rows(@node).map do |row|
+        rows = Tables.rows(@node)
+        grid = rows.map do |row|
           line = spans.transform_values(&:first)
-          spans = spans.transform_values { |text, rows| [text, rows - 1] }.reject { |_, (_, rows)| rows.zero? }
+          spans = spans.transform_values { |text, rows_left| [text, rows_left - 1] }.reject { |_, (_, rows_left)| rows_left.zero? }
           place_cells(row, line, spans)
           (0..(line.keys.max || -1)).map { |column| line.fetch(column, "") }
         end
+        width = grid.map(&:size).max.to_i
+        [grid, rows.map { |row| spanning?(row, width) }]
+      end
+
+      def spanning?(row, width)
+        cells = Tables.cells(row)
+        width > 1 && cells.size == 1 && span(cells.first, "colspan", MAX_COLSPAN) >= width
       end
 
       def place_cells(row, line, spans)
