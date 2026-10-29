@@ -48,6 +48,10 @@ RSpec.describe "Markdown conversion" do
       convert('<p>&#xE001; Next <i class="material-icons">arrow_forward</i></p>').should == "Next"
     end
 
+    it "keeps the text of an element named after an icon font" do
+      convert('<p><span class="material-icons-wrapper">Next steps</span> <i class="material-icons-outlined">home</i></p>').should == "Next steps"
+    end
+
     it "writes a label and its value, or a number and its unit, on one line" do
       html = "<p>Type:</p><p>Condo</p><p>Built:</p><p>1988</p><p>27<br>Nov</p><ul><li><p>Time:</p><p>17:00 - 19:00</p></li></ul>" \
              "<p>Ingredients:</p><p>Mix the flour and the eggs, then let the dough rest for an hour before baking.</p>" \

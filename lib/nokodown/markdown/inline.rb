@@ -53,7 +53,7 @@ module Nokodown
         [/\p{Nd}\z/, /\A#{CASED.source}{2}/]
       ].freeze
       # Material icon fonts draw a glyph from a ligature word ("arrow_forward").
-      ICON_FONT = /(?<![\w-])material-(?:icons|symbols)/.freeze
+      ICON_FONT = /(?<![\w-])material-(?:icons|symbols)(?:-(?:outlined|round|rounded|sharp|two-tone))?(?![\w-])/.freeze
       # Some CMSs write the caption's markup into the alt attribute.
       TAG = %r{</?[a-z][^<>]*>}i.freeze
       # Cloudflare hides addresses behind "[email protected]" and a link or a
