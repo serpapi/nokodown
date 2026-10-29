@@ -143,23 +143,24 @@ module Nokodown
       end
 
       # A button reads the same in every card, beside whatever else the card
-      # repeats. Texts that never share a card but follow each other through
-      # the same cards are values of one field, as a match's "Live" and
-      # "Starting soon" or a car's "Sold" and "Available", and keep their
-      # words; a section of their own does not make them values.
+      # repeats. Texts that never share a card but take turns among the same
+      # cards are values of one field, as a car's "Sold" among "Available",
+      # or a match's "Live" and "Starting soon" each over a run of cards;
+      # a section of their own, or links after the cards, are not.
       def buttons(cards)
         @shared = Hash.new { |all, text| all[text] = Set.new }
         places = Hash.new { |all, text| all[text] = [] }
         cards.each do |card, keeper|
-          texts = card.reject { |link| link.equal?(keeper) }.map(&:label).select { |text| repeat_text?(text) }.uniq
+          texts = card.reject { |link| link.equal?(keeper) }.map(&:label).select { |text| words?(text) }.uniq
           texts.each do |text|
             @shared[text].merge(texts)
             places[text] << card.first.card
           end
         end
         @spans = places.transform_values(&:minmax)
+        @runs = places.transform_values { |numbers| numbers.uniq.size }
         texts = @spans.keys
-        texts.reject { |text| texts.any? { |other| values?(text, other) } }.to_set
+        texts.select { |text| @generic.include?(text) }.reject { |text| texts.any? { |other| values?(text, other) } }.to_set
       end
 
       def values?(text, other)
@@ -167,11 +168,13 @@ module Nokodown
 
         first, last = @spans[text]
         other_first, other_last = @spans[other]
-        first <= other_last + 1 && other_first <= last + 1
+        return true if first <= other_last && other_first <= last
+
+        (last + 1 == other_first || other_last + 1 == first) && @runs[text] > 1 && @runs[other] > 1
       end
 
-      def repeat_text?(text)
-        @generic.include?(text) && !text.match?(/\d/) && text.match?(/\p{L}/)
+      def words?(text)
+        !text.match?(/\d/) && text.match?(/\p{L}/)
       end
 
       # Links to other sections of the title's page (#2 after #1) are not

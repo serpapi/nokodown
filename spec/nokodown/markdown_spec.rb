@@ -294,6 +294,22 @@ RSpec.describe "Markdown conversion" do
                                                   "- [Passat](https://example.com/car/3)\n  Sold\n- [Up](https://example.com/car/4)\n  Available"
     end
 
+    it "keeps a status repeated in most cards when one card has another" do
+      cars = [%w[1 Golf Sold], %w[2 Polo Available], %w[3 Passat Sold]].map do |id, name, status|
+        %(<li><h3><a href="/car/#{id}">#{name}</a></h3><p><a href="/car/#{id}">#{status}</a></p></li>)
+      end
+      convert("<ul>#{cars.join}</ul>").should == "- [Golf](https://example.com/car/1)\n  Sold\n- [Polo](https://example.com/car/2)\n  Available\n" \
+                                                  "- [Passat](https://example.com/car/3)\n  Sold"
+    end
+
+    it "drops the buttons of cards that links to other pages follow" do
+      cards = (1..3).map { |id| %(<li><h3><a href="/p/#{id}">Plate #{id}</a></h3><p><a href="/p/#{id}">Details</a></p></li>) }.join
+      tags = '<p><a href="/t/a">Alpha</a> <a href="/t/b">Beta</a></p><p><a href="/t/a">Tags</a>, <a href="/t/b">Tags</a> and more</p>'
+      convert("<ul>#{cards}</ul>#{tags}").should == "- [Plate 1](https://example.com/p/1)\n- [Plate 2](https://example.com/p/2)\n" \
+                                                     "- [Plate 3](https://example.com/p/3)\n\n[Alpha](https://example.com/t/a) " \
+                                                     "[Beta](https://example.com/t/b)\n\nTags, Tags and more"
+    end
+
     it "keeps a text the page links again and again to a few pages" do
       stores = %w[a a a a b]
       products = stores.each_with_index.map do |store, index|
