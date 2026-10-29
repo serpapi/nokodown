@@ -5,17 +5,21 @@ require "uri"
 module Nokodown
   # Finds blocks of teasers for other pages of the site (related, latest,
   # popular, "more news") on a page that has content of its own. A teaser
-  # block is an unbroken run of items of the same shape, each a card leading
-  # to a different page of the same site, with a thumbnail, a date or a short
-  # excerpt, under a title of its own in any language. Class names do not
-  # matter: Boilerplate has already removed the blocks named "related".
+  # block is an unbroken run of items of the same shape, each leading to a
+  # different page of the same site: cards with a thumbnail, a date or a
+  # short excerpt, or bare links under a title of their own ("See also").
+  # Class names do not matter: Boilerplate has already removed the blocks
+  # named "related".
   #
   # On listings, archives and hubs teasers are the content, so a block only
   # goes when its items are pages like this one (the same path but for its
   # last segment, with the same query keys) and a line of the page's own
-  # text comes before it, or, on a page that declares itself an article, a
-  # product or a thread, when it has a title of its own and the page keeps a
-  # body of text, or a list of its own, that outweighs the titled blocks.
+  # text comes before it; when they are posts named by their titles under
+  # the root, as this page is, beside its text; when its title calls it
+  # related, unless it holds most of the page; or, on a page that declares
+  # itself an article, a product or a thread, when it is a titled box of
+  # cards that the page's own text, or its own list, outweighs. Lists of
+  # bare links stay on listings and in indexes.
   #
   # Blocks are found once the content is located, but only dropped from it
   # once it is cleaned, so they weigh in pruning as before.
@@ -247,7 +251,8 @@ module Nokodown
       key = [Dom.key(parent), shape_of(node)]
       return @index[key] if @index.key?(key)
 
-      @index[key] = parent.element_children.count { |child| shape_of(child) == key.last && link_section?(child) } >= MIN_SECTIONS
+      sections = parent.element_children.count { |child| shape_of(child) == key.last && link_section?(child) }
+      @index[key] = sections >= MIN_SECTIONS
     end
 
     def link_section?(node)
