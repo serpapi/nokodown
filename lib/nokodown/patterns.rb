@@ -324,6 +324,11 @@ module Nokodown
       tutti\si\sdiritti\sriservati|todos\sos\sdireitos\sreservados|alle\srechten\svoorbehouden|
       все\sправа\sзащищены|wszelkie\sprawa\szastrzeżone|tüm\shakları\ssaklıdır|hak\scipta\sdilindungi|
       bản\squyền\sthuộc\svề|جميع\sالحقوق\sمحفوظة|版[权權]所有(?![者人权權])|
+      (?:کلیه|تمامی|همه)[\s‌]+(?:ی[\s‌]+)?حقوق[^.\n]{0,80}(?:محفوظ|متعلق)|(?:усі|всі)\sправа\sзахищені|
+      všechna\správa\svyhrazena|minden\sjog\sfenntartva|toate\sdrepturile\srezervate|alla\srättigheter\sförbehållna|
+      alle\srettigheder\sforbeholdes|alle\srettigheter\sreservert|kaikki\soikeudet\spidätetään|
+      όλα\sτα\sδικαιώματα\s(?:διατηρούνται|κατοχυρωμένα)|με\sεπιφύλαξη\sπαντός\sδικαιώματος|כל\sהזכויות\sשמורות|
+      สงวนลิขสิทธิ์|सर्वाधिकार\sसुरक्षित|모든\s권리\s보유|
       無断(?:転載|複製|転用|使用)[^。]{0,12}(?:禁|ご遠慮|お断り)|무단\s?전재[^.]{0,30}금지|
       ICP[备證证][\s:：]*\d|公[网網]安[备備][\s:：]*\d
     /xi.freeze

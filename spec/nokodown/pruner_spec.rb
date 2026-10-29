@@ -447,6 +447,15 @@ RSpec.describe Nokodown::Pruner do
       lines.each { |line| pruned(story + line).should end_with("dry weather.") }
     end
 
+    it "removes them in Persian, Ukrainian and the other languages of Europe" do
+      lines = [
+        "<p>کلیه حقوق مادی و معنوی این سایت برای <a href=\"/\">ملک مارکت</a> محفوظ می باشد.</p>",
+        "<p>Усі права захищені. Harbor Times, 2026</p>",
+        "<p>Všechna práva vyhrazena, Harbor Times</p>"
+      ]
+      lines.each { |line| pruned(story + line).should end_with("dry weather.") }
+    end
+
     it "keeps text about copyright and licence filings" do
       lines = [
         "<h2>ICP备案需要哪些材料？</h2>",
