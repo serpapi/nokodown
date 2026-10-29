@@ -102,7 +102,7 @@ module Nokodown
         when "code" then CodeBlock.render(node, node.content)
         when "table" then Table.new(self, node).blocks
         when "dl" then definition_list(node)
-        when "hr" then [Block.new(:rule, "---")]
+        when "hr" then []
         when "iframe" then embed(node)
         when "summary" then summary(node)
         when "a" then linked_blocks(node)

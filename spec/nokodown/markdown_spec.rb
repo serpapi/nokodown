@@ -629,8 +629,8 @@ RSpec.describe "Markdown conversion" do
       convert("<blockquote><p>One</p><p>Two</p></blockquote>").should == "> One\n>\n> Two"
     end
 
-    it "keeps one rule between blocks" do
-      convert("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "a\n\n---\n\nb"
+    it "drops horizontal rules" do
+      convert("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "a\n\nb"
     end
 
     it "renders details with a bold summary" do
