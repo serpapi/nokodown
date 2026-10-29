@@ -54,6 +54,10 @@ module Nokodown
     # entries, not other pages' titles.
     MIN_BARE_LABEL = 15
     MIN_SECTIONS = 3
+    # A section of an index is a heading over a list that is mostly links.
+    LISTS = "ul, ol"
+    SECTION_LINKS = 0.6
+    INDEX_LETTER = /\A\p{L}\z/.freeze
     MIN_WORDS_LEFT = 20
     BODIES = %i[article product forum qa].freeze
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
@@ -173,9 +177,11 @@ module Nokodown
     end
 
     # Titled blocks built alike, one after another, are the sections of a
-    # hub ("Audio", "Cameras", "Laptops"), not boxes beside its content.
+    # hub ("Audio", "Cameras", "Laptops"), not boxes beside its content. A
+    # list of bare links and a box of cards are not built alike, whatever
+    # the class of the widgets that hold them.
     def sections
-      groups = @blocks.select(&:title).group_by { |block| shape_of(block.nodes.first) }.values
+      groups = @blocks.select(&:title).group_by { |block| [shape_of(block.nodes.first), block.bare] }.values
       groups.select { |group| group.size >= MIN_SECTIONS }.flatten.map { |block| Dom.key(block.nodes.first) }.to_set
     end
 
@@ -197,7 +203,7 @@ module Nokodown
     # part of the post that holds them.
     def removable?(block, listing)
       return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
-      return false if block.bare && !list_title?(block.title)
+      return false if block.bare && (!list_title?(block.title) || dominant?(block) || index?(block))
       return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
       return true if related_title?(block.title) && !dominant?(block)
       return false if block.bare && listing
@@ -228,6 +234,27 @@ module Nokodown
       return false if title.nil?
 
       heading?(title) || (title.name != "a" && title.at_css("a[href]").nil?)
+    end
+
+    # A letter over a list ("A", "Б", "ت"), or one of three or more sections
+    # built alike, each a heading over a list of links, is part of an index:
+    # a category's members, a manual's site map.
+    def index?(block)
+      return true if Dom.text(block.title).match?(INDEX_LETTER)
+
+      node = block.nodes.first
+      parent = node.parent
+      return false unless parent&.element?
+
+      @index ||= {}
+      key = [Dom.key(parent), shape_of(node)]
+      return @index[key] if @index.key?(key)
+
+      @index[key] = parent.element_children.count { |child| shape_of(child) == key.last && link_section?(child) } >= MIN_SECTIONS
+    end
+
+    def link_section?(node)
+      !node.at_css(HEADING).nil? && !node.at_css(LISTS).nil? && @stats.link_density(node) >= SECTION_LINKS
     end
 
     # Not matches?, which Nokolexbor runs over the whole document.

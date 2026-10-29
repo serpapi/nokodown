@@ -392,9 +392,53 @@ RSpec.describe Nokodown::Teasers do
               "Sewing a bag from leftover fabric"]
     items = titles.each_with_index.map { |title, index| "<li><a href='/posts/#{4436 + index}-idea.html'>#{title}</a></li>" }
     html = "<h1>A simple idea for sewing women's trousers</h1><p>By lesorub, two months ago, liked 508 times.</p>" \
-           "<h3>Смотрите также</h3><ul>#{items.join}</ul>"
+           "<p>Cut the front and back from one piece of linen, then sew the side seams and turn the waistband over " \
+           "an elastic band.</p><h3>Смотрите также</h3><ul>#{items.join}</ul>"
 
     blocks(html, "https://crafts.example.com/posts/8449-idea.html", nil).should_not be_empty
+  end
+
+  it "keeps a list of bare links that holds most of the page" do
+    titles = ["Field survey of wetland birds", "Flood maps for the river basin", "Forest cover change since 1990",
+              "Fishing permits by district", "Fuel stations along the coast"]
+    items = titles.each_with_index.map { |title, index| "<li><a href='/wiki/Map_#{index}'>#{title}</a></li>" }
+    html = "<h1>Category: Maps</h1><p>The following 5 pages are in this category, out of 5 total.</p>" \
+           "<h2>Pages in this category</h2><ul>#{items.join}</ul>"
+
+    blocks(html, "https://maps.example.org/wiki/Category_Maps").should be_empty
+  end
+
+  it "keeps a list under a letter of an index" do
+    titles = ["Water quality of the lakes", "Weather stations of the region", "Wind farms planned until 2030"]
+    items = titles.each_with_index.map { |title, index| "<li><a href='/wiki/Map_#{index}'>#{title}</a></li>" }
+    html = "<h1>Category: Maps</h1>#{story(2)}<div class='group'><h3>W</h3><ul>#{items.join}</ul></div>"
+
+    blocks(html, "https://maps.example.org/wiki/Category_Maps").should be_empty
+  end
+
+  it "keeps the sections of a site map" do
+    sections = { "Release notes" => "", "Virtual hosts" => "vhosts/", "Rewriting addresses" => "rewrite/" }.map do |title, folder|
+      links = ["Upgrading from the last version", "New features of this release", "Compiling and installing"]
+      items = links.each_with_index.map { |link, index| "<li><a href='/docs/#{folder}page#{index}.html'>#{link}</a></li>" }
+      "<div class='section'><h2>#{title}</h2><ul>#{items.join}</ul></div>"
+    end
+    html = "<h1>Site map</h1><p>This page lists every document of the manual, grouped by subject.</p>#{sections.join}"
+
+    blocks(html, "https://docs.example.org/docs/sitemap.html", nil).should be_empty
+  end
+
+  it "does not take a list of bare links beside two boxes of cards for a hub's section" do
+    boxes = %w[Picks Highlights].map do |name|
+      "<div class='box #{name.downcase}'><h3>#{name}</h3>" \
+        "#{cards(stories.map { |title| "#{name}: #{title}" }, '/blog/', '<p>What changes, and for whom.</p>')}</div>"
+    end
+    links = stories.each_with_index.map { |title, index| "<li><a href='/2026/04/read-#{index}'>Read: #{title}</a></li>" }
+    html = "<h1>Bridge reopens</h1>#{story(2)}#{boxes.join}<div class='box'><h3>Reading</h3><ul>#{links.join}</ul></div>"
+    body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
+    Nokodown::Dom.assign_keys(body)
+
+    keys = described_class.new(body, article_url, Nokodown::UrlResolver.new(article_url), :article).call
+    keys.should include(Nokodown::Dom.key(body.at_css(".picks")), Nokodown::Dom.key(body.at_css(".highlights")))
   end
 
   it "keeps a list of short links, such as a product's options" do
@@ -406,7 +450,7 @@ RSpec.describe Nokodown::Teasers do
 
   it "keeps links set in a line of text" do
     links = stories.each_with_index.map { |title, index| "<a href='/blog/#{index}'>#{title}</a>" }
-    html = "<h1>Bridge reopens</h1>#{story(1)}<h4>Sources</h4><p>#{links.join(' and ')}</p>"
+    html = "<h1>Bridge reopens</h1>#{story(1)}<h4>Sources</h4><p>Sources: #{links.join(', ')}.</p>"
 
     blocks(html, "https://news.example.com/blog/9", nil).should be_empty
   end
