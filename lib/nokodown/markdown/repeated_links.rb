@@ -4,8 +4,9 @@ module Nokodown
   module Markdown
     # A card links its page from its title and again from a date, a price, a
     # button or the ellipsis of its excerpt. The title keeps the link. A
-    # button ("Read more", "Voir") alone on its line or after the excerpt
-    # only repeats it and goes; other repeats keep their text without the URL.
+    # button ("Read more", "Voir": a text the page uses for several links)
+    # alone on its line or after the excerpt only repeats it and goes, as
+    # does a second copy of the title; other repeats keep their text.
     class RepeatedLinks
       LINK = /(?<!!)\[((?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*)\]\(((?:[^()\s]|\([^()\s]*\))*)\)/.freeze
       ITEM = /^(?:[-*+]|\d+\.) /.freeze
@@ -14,10 +15,7 @@ module Nokodown
       AFTER_SENTENCE = /[.…!?。！？:)\]*]\s*\z/.freeze
       CARD_UNITS = 4
       SEPARATE = %i[list table].freeze
-      BUTTON_WORDS = 3
-      # Characters, a wide one (Chinese, Japanese, Korean) counting twice.
-      BUTTON_WIDTH = 20
-      WIDE = /[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]/.freeze
+      INITIALS = /\A\p{Lu}{1,4}\z/.freeze
 
       Link = Struct.new(:unit, :card, :block, :range, :text, :destination, :heading) do
         def page
@@ -98,12 +96,14 @@ module Nokodown
       end
 
       # The title is the heading, or the first link in words of its own; a
-      # date, a price or a count before it is not one. Links to other
+      # date, a price, a count or initials ("TFH") before it are not one.
+      # Without one, the longest text in words keeps the link. Links to other
       # sections of the title's page (#2 after #1) are not repeats.
       def plan(card)
         return if card.size < 2
 
-        keeper = card.find(&:heading) || card.find { |link| title?(link) } || card.first
+        keeper = card.find(&:heading) || card.find { |link| title?(link) } ||
+                 card.select { |link| label(link).match?(/\p{L}/) }.max_by { |link| label(link).length } || card.first
         (card - [keeper]).each do |link|
           next if link.fragment && keeper.fragment && link.fragment != keeper.fragment
 
@@ -113,19 +113,16 @@ module Nokodown
 
       def title?(link)
         text = label(link)
-        text.match?(/\p{L}/) && !text.match?(/\d/) && !@generic.include?(text)
+        return false if text.match?(/\d/) || @generic.include?(text) || Text.plain(link.text).match?(INITIALS)
+
+        text.match?(/\p{L}/)
       end
 
       def button?(link, keeper)
         text = label(link)
-        return false unless text.match?(/\p{L}/) && !text.match?(/\d/)
-        return false unless @generic.include?(text) || short?(text) || text == label(keeper)
+        return false unless text.match?(/\p{L}/) && (@generic.include?(text) || text == label(keeper))
 
         standalone?(@blocks[link.block].text, link.range)
-      end
-
-      def short?(text)
-        text.split.size <= BUTTON_WORDS && text.length + text.scan(WIDE).size <= BUTTON_WIDTH
       end
 
       def label(link)

@@ -252,10 +252,18 @@ RSpec.describe "Markdown conversion" do
 
     it "keeps a card's link on its title and drops the buttons that repeat it" do
       card = '<li><a href="/p/1">2 options</a><h3><a href="/p/1">Trail boot</a></h3><p>Leather for rocky ground <a href="/p/1">…</a> ' \
-             '<a href="/p/1/">Weiterlesen</a></p><p>Try <a href="/p/1">this one</a> today.</p></li>'
+             '<a href="/p/1/">Weiterlesen</a></p><p>Try <a href="/p/1">this one</a> today.</p></li>' \
+             '<li><h3><a href="/p/2">Ridge runner</a></h3><p>Mesh <a href="/p/2">Weiterlesen</a></p></li>'
       convert("<ul>#{card}</ul><h2>Edge</h2><p>7 octobre</p><p><a href=\"/e/edge\">Voir</a></p>").should ==
-        "- 2 options\n  [Trail boot](https://example.com/p/1)\n  Leather for rocky ground …\n  Try this one today.\n\n" \
-        "## Edge\n\n7 octobre\n\n[Voir](https://example.com/e/edge)"
+        "- 2 options\n  [Trail boot](https://example.com/p/1)\n  Leather for rocky ground …\n  Try this one today.\n" \
+        "- [Ridge runner](https://example.com/p/2)\n  Mesh Weiterlesen\n\n## Edge\n\n7 octobre\n\n[Voir](https://example.com/e/edge)"
+    end
+
+    it "keeps a card's link on its title when initials or a count come first" do
+      html = '<ul><li><a href="/w">J</a> <a href="/w">John Wick, Chapter 2</a><p>Foley artist</p></li>' \
+             '<li><a href="/h">TFH</a><h4><a href="/h">The Finest Hours</a></h4><p>Foley artist</p></li></ul>'
+      convert(html).should == "- J [John Wick, Chapter 2](https://example.com/w)\n  Foley artist\n" \
+                              "- TFH\n  [The Finest Hours](https://example.com/h)\n  Foley artist"
     end
 
     it "keeps the links to other sections of a page and spaces the links it unwraps" do
