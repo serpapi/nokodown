@@ -121,6 +121,37 @@ RSpec.describe Nokodown::Pruner do
       (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 3
     end
 
+    it "drops a narrow grid column of links beside the column that holds the title" do
+      %w[span4/span8 col-xs-12\ col-md-4/col-xs-12\ col-md-8 td-pb-span4/td-pb-span8].each do |pair|
+        side, main = pair.split("/")
+        root = content("<div class='row'><div class='#{main}'><h1>Bridge</h1>#{story}</div><div class='#{side}'>#{rail}</div></div>")
+
+        described_class.new([root], :page, urls: urls).call
+
+        Nokodown::Dom.text(root).should include("cracked bearings")
+        Nokodown::Dom.text(root).should_not include("Bisztynek")
+      end
+    end
+
+    it "drops the side-named cells of a portal's layout table" do
+      root = content("<table><tr><td class='side-border-left'>#{rail}</td><td class='main-bg'>#{story}</td></tr></table>")
+
+      described_class.new([root], :page, urls: urls).call
+
+      Nokodown::Dom.text(root).should_not include("Bisztynek")
+    end
+
+    it "keeps a narrow grid column with little link text, and a rail beside a wide column without the title" do
+      price = "<div class='col-md-4'><p>Price: 129 EUR, in stock, ships in two days.</p><a href='/cart'>Add to cart</a></div>"
+      root = content("<div class='row'><div class='col-md-8'><h1>Trail shoe</h1>#{story}</div>#{price}</div>")
+      described_class.new([root], :page, urls: urls).call
+      Nokodown::Dom.text(root).should include("Price: 129 EUR")
+
+      root = content("<div class='row'><div class='span8'>#{story}</div><div class='span4'><h1>Places</h1>#{rail}</div></div>")
+      described_class.new([root], :page, urls: urls).call
+      Nokodown::Dom.text(root).should include("Bisztynek")
+    end
+
     it "keeps a listing column that its layout table declares wider than the column beside it" do
       rows = %w[Vector Rapid Alpine Corsa Delta Falcon].map do |name|
         "<tr><td><a href='/wheels/#{name.downcase}'>#{name} R16 alloy wheel, 7J ET40</a></td><td>4,200 rub.</td></tr>"

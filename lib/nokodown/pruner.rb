@@ -33,6 +33,17 @@ module Nokodown
     MIN_TITLED_CONTENT = 200
     MIN_LEFT = 200
     MIN_PROSE_COLUMN = 100
+    GRID_CLASS = /\A(?:span|td-pb-span|col-(?:(xs|sm|md|lg|xl|xxl)-)?|(small|medium|large)-)(\d{1,2})\z/.freeze
+    BREAKPOINTS = [nil, "xs", "sm", "md", "lg", "xl", "xxl"].freeze
+    FOUNDATION = { "small" => "sm", "medium" => "md", "large" => "lg" }.freeze
+    SIDE_CELL = /\A(?:side-border-(?:left|right)|left-side|right-side)\z/.freeze
+    GRID_COLUMNS = "[class*=span], [class*=col-], [class*=large-], [class*=medium-], [class*=small-], [class*=side]"
+    SIDE_WIDTH = 3
+    FULL_WIDTH = 12
+    NOT_COLUMNS = %w[style script noscript template link meta].freeze
+    MIN_MAIN_WIDTH = 7
+    MAX_RAIL_WIDTH = 5
+    RAIL_LINK_SHARE = 0.5
     WIDTH = /\A\s*(\d+(?:\.\d+)?)\s*(%|px)?\s*\z/i.freeze
     STYLE_WIDTH = /(?:\A|;)\s*width\s*:\s*([^;]+)/i.freeze
     MAX_LABEL = 40
@@ -123,7 +134,7 @@ module Nokodown
     # stories in a column of links beside the column of prose. Says whether
     # any went.
     def remove_rail_columns(root, index)
-      rails = outermost(root.css("tr").flat_map { |row| rails_of(row, index) })
+      rails = outermost(root.css("tr").flat_map { |row| rails_of(row, index) } + grid_rails(root))
       return false if rails.empty? || Dom.text(root).length - rails.sum { |cell| Dom.text(cell).length } < MIN_LEFT
 
       rails.each { |cell| remove(cell) }
@@ -138,6 +149,48 @@ module Nokodown
       return [] if prose.empty? || in_data_table?(row)
 
       cells.select { |cell| rail_column?(cell) && side_column?(cell, prose, cells, index) }
+    end
+
+    # Grid frameworks give columns their width in twelfths ("col-md-4" beside
+    # "col-md-8", "td-pb-span4"), and old portals name their side cells. A
+    # side column of links goes beside the widest column when that one holds
+    # the title, or no column does; one with little link text, such as a price box or
+    # an event's date and place, stays. Beside side-named cells, the other
+    # cell is the main one.
+    def grid_rails(root)
+      parents = root.css(GRID_COLUMNS).map(&:parent).uniq { |parent| Dom.key(parent) }
+      parents.flat_map { |parent| side_rails(parent.element_children.to_a) }
+    end
+
+    def side_rails(children)
+      columns = children.reject { |child| NOT_COLUMNS.include?(child.name) }
+      return [] unless columns.size.between?(2, 3)
+
+      side_row = columns.any? { |column| side_cell?(column) }
+      widths = columns.map { |column| side_row ? (side_cell?(column) ? SIDE_WIDTH : FULL_WIDTH) : grid_width(column) }
+      return [] if widths.include?(nil)
+
+      main = widths.index(widths.max)
+      return [] unless widths[main] >= MIN_MAIN_WIDTH && (columns[main].at_css("h1") || columns.none? { |column| column.at_css("h1") })
+
+      columns.each_index.select { |index| index != main && rail?(columns[index], widths[index]) }.map { |index| columns[index] }
+    end
+
+    def rail?(column, width)
+      width <= MAX_RAIL_WIDTH && column.at_css("h1").nil? && link_density(column) >= RAIL_LINK_SHARE
+    end
+
+    def side_cell?(column)
+      column["class"].to_s.split.any? { |name| name.match?(SIDE_CELL) }
+    end
+
+    # Twelfths, from the widest breakpoint a class names.
+    def grid_width(column)
+      widths = column["class"].to_s.split.filter_map do |name|
+        match = name.match(GRID_CLASS)
+        [BREAKPOINTS.index(match[1] || FOUNDATION[match[2]]), match[3].to_i] if match
+      end
+      widths.max_by(&:first)&.last
     end
 
     # The widths a table declares tell a side column from the main one, which

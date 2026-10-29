@@ -203,19 +203,24 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    bylines, datelines and inline boxes of links to other stories; on other
    pages, removal of leftover link clusters, with the heading over them, and
    of columns of links beside a column of prose in layout tables, unless the
-   table declares them the wider column or they hold the page title. An index
-   page, whose link clusters hold most of its text, keeps them but for its
-   menus: lists of links holding one to the page itself, the clusters above
-   its title, and the side columns its table declares narrower. In both modes,
-   short links and boxes styled as buttons ("Add to cart", "Book a demo") are
-   removed, except for disclosure toggles, buttons inside a sentence and
-   titles or labels styled as buttons. If article cleaning removes almost
-   everything, it is undone and light cleaning, which treats link clusters and
-   menus as page pruning does, is used instead. Conditional cleaning leaves
-   alone the items of a listing of posts or products (alike blocks, each with
-   a linked title, that hold most of the text) and a featured post beside
-   them, since it would judge each item on its own. A teaser's linked title
-   with its date and author links is not a link cluster, however short.
+   table declares them the wider column or they hold the page title, and of
+   narrow grid columns ("col-md-4", "span4") or side-named cells that are
+   mostly links, beside a column of 7/12 or more that holds the title. An
+   index page, whose link clusters hold most of its text, keeps them but for
+   its menus: lists of links holding one to the page itself, the clusters
+   above its title, and the side columns its table declares narrower. In
+   both modes, short links and boxes styled as buttons ("Add to cart", "Book
+   a demo") are removed, except for disclosure toggles, buttons inside a
+   sentence and titles or labels styled as buttons. If article cleaning
+   keeps less than half of what it was given (unless what it removed from a
+   declared article was mostly links), it is undone and light cleaning,
+   which treats link clusters and menus as page pruning does, is used
+   instead; if it leaves almost nothing, the content is pruned as a page.
+   Once cleaning is known to stay, it leaves alone the items of a listing of
+   posts or products (alike blocks, each with a linked title, that hold most
+   of the text) and a featured post beside them, since it would judge each
+   item on its own. A teaser's linked title with its date and author links
+   is not a link cluster, however short.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data
