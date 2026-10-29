@@ -207,6 +207,7 @@ module Nokodown
       return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
       return false if block.bare && !list_title?(block.title)
       return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
+      return false if block.bare && listing
       return text_before(block) >= MIN_TEXT_BEFORE if block.alike
       return true if block.named && named_beside?(block)
 

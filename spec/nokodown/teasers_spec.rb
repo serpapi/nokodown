@@ -485,4 +485,14 @@ RSpec.describe Nokodown::Teasers do
 
     blocks(html, "https://shop.example.com/usb-a-hubs-for-laptops-g8893.html", nil).should be_empty
   end
+
+  it "keeps a listing's titled list of bare links to pages like it" do
+    areas = ["Addicks reservoir trails", "Buffalo Bayou park trails", "Cinco Ranch greenbelt trails"]
+    links = areas.each_with_index.map { |area, index| "<li><a href='/directory/80155#{index}/area'>#{area}</a></li>" }
+    routes = cards(stories, "/route/", "<p>9.4 mi, intermediate, rated four stars by riders.</p>")
+    html = "<h1>Houston</h1><p>Recommended routes near Houston for every kind of rider.</p>" \
+           "<div class='routes'>#{routes}</div><h3>Areas within Houston</h3><ul>#{links.join}</ul>"
+
+    blocks(html, "https://trails.example.com/directory/8010427/houston", nil).should be_empty
+  end
 end
