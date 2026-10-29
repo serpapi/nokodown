@@ -45,7 +45,8 @@ encoding of a page that declares none is told from its bytes. UTF-8 text that
 was once misread as Windows-1252 ("cafÃ©") is repaired, and invalid bytes are
 dropped. A body that is not a page at all, such as a PDF, an image or an
 archive served as HTML, or bytes made largely of control characters, gives
-empty Markdown and `mode` `:none`.
+empty Markdown and `mode` `:none`. Elements nested more than 256 levels deep,
+as unclosed tags on broken pages leave them, keep only their text.
 
 | Option | Default | |
 | --- | --- | --- |
