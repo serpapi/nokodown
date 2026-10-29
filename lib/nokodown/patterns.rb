@@ -122,6 +122,89 @@ module Nokodown
       publicit[eé]|publicidad|pubblicit[aà]|реклама|广告
     /xi.freeze
 
+    # Controls that reveal the rest of a text or list, in the major web
+    # languages, with the arrows and dots sites put before them.
+    READ_MORE_TEXT = /
+      [+»›>.…(]*\s?(?:
+      (?:read|view|see|show|load)\s(?:more|less)|continue\sreading|
+      leer\sm[aá]s|seguir\sleyendo|(?:ver|mostrar|cargar)\sm[aá]s|
+      leia\smais|ler\smais|continu(?:e|ar)\slendo|(?:ver|mostrar|carregar)\smais|
+      lire\s(?:la\ssuite|plus)|voir\s(?:plus|la\ssuite)|(?:afficher|charger)\splus|
+      weiterlesen|mehr\s(?:lesen|anzeigen|laden)|
+      leggi\s(?:tutto|di\spi[uù]|altro)|continua\sa\sleggere|(?:mostra|vedi)\s(?:di\s)?pi[uù]|
+      lees\s(?:meer|verder)|meer\s(?:lezen|weergeven|laden)|(?:toon|bekijk)\smeer|
+      читать\s(?:далее|дальше|полностью)|подробнее|показать\s(?:ещё|еще|больше)|загрузить\s(?:ещё|еще)|
+      читати\sдалі|детальніше|докладніше|показати\sбільше|
+      (?:prze)?czytaj\s(?:więcej|dalej)|(?:zobacz|pokaż)\swięcej|
+      devam[ıi]n[ıi]\soku(?:yun)?|daha\sfazla\sg[öo]ster|
+      続きを読む|もっと見る|もっと読む|詳細を見る|詳しく見る|さらに表示|記事を読む|
+      阅读更多|閱讀更多|查看更多|加载更多|載入更多|查看详情|查看詳情|阅读全文|閱讀全文|显示更多|顯示更多|
+      더\s?보기|자세히\s?보기|더\s읽기|계속\s읽기|
+      اقرأ\sالمزيد|قراءة\sالمزيد|عرض\sالمزيد|تابع\sالقراءة|
+      xem\sth[êe]m|đọc\s(?:tiếp|thêm)|xem\schi\sti[ếe]t|
+      baca\s(?:selengkapnya|lebih\slanjut)|lihat\s(?:selengkapnya|lebih\sbanyak)|muat\slebih\sbanyak|
+      č[ií]st\s(?:v[ií]ce|d[áa]le|cel[ée])|zobrazit\sv[ií]ce|
+      l[äæ]s\smere?|les\smer|visa\smer|vis\smer|tov[áa]bb|
+      קרא(?:ו)?\sעוד|อ่านต่อ|อ่านเพิ่มเติม|और\sपढ़ें
+      )
+    /xi.freeze
+
+    # Calls to action that a link inside a sentence can also say ("to learn
+    # more, see"), so they count only as the whole text of a block.
+    LEARN_MORE_TEXT = /
+      learn\smore|find\sout\smore|saber\sm[aá]s|saiba\smais|en\ssavoir\splus|(?:\+|plus)\sde\sd[ée]tails|
+      mehr\serfahren|erfahren\ssie\smehr|scopri\sdi\spi[uù]|meer\sinformatie|узнать\sбольше|
+      dowiedz\ssię\swięcej|daha\sfazla\sbilgi|了解更多|もっと知る|자세히\s알아보기|اعرف\sالمزيد|tìm\shiểu\sthêm|
+      pelajari\slebih\slanjut
+    /xi.freeze
+
+    # Shop controls in the major web languages besides English.
+    SHOP_CONTROL_TEXT = /
+      buy\snow|in\sden\swarenkorb|(?:zum\s)?warenkorb\shinzufügen|jetzt\skaufen|ajouter\sau\spanier|acheter\smaintenant|
+      a[ñn]adir\sal\scarrito|agregar\sal\scarrito|comprar\sahora|adicionar\sao\scarrinho|comprar\sagora|
+      aggiungi\sal\scarrello|acquista\sora|in\s(?:de\s)?winkelwagen|toevoegen\saan\swinkelwagen|nu\skopen|
+      (?:добавить\s)?в\sкорзину|купить\sв\s(?:один|1)\sклик|купить\sсейчас|dodaj\sdo\skoszyka|kup\steraz|
+      sepete\sekle|hemen\sal|カートに入れる|カートに追加|今すぐ購入|加入购物车|加入購物車|立即购买|立即購買|
+      장바구니\s?담기|바로\s?구매|أضف\sإلى\sالسلة|اشتر\sالآن|thêm\svào\sgiỏ(?:\shàng)?|mua\sngay|
+      (?:masukkan|tambah(?:kan)?\ske)\skeranjang|beli\ssekarang|
+      vista\sr[áa]pida|aper[çc]u\srapide|schnellansicht|visualizzazione\srapida|snel\sbekijken|быстрый\sпросмотр|
+      szybki\spodgl[ąa]d|h[ıi]zl[ıi]\sbak[ıi][şs]|クイックビュー|快速查看|빠른\s?보기|عرض\sسريع|xem\snhanh|lihat\scepat|
+      choix\sdes\soptions|s[ée]lectionner\sles\soptions|seleccionar\sopciones|selecione\sas\sop[çc][õo]es|
+      seleziona\s(?:le\s)?opzioni|opties\sselecteren|optionen\sausw[äa]hlen|выбрать\sопции
+    /xi.freeze
+
+    # A paragraph that is only the label of a control. Bare words such as
+    # "More", "Menu" or "Close" are content inside a sentence or as a
+    # heading, so this is matched against whole paragraphs only.
+    UI_LABEL = /
+      \A[\s+»›>.…(]*(?:
+        #{READ_MORE_TEXT}|#{LEARN_MORE_TEXT}|#{SHOP_CONTROL_TEXT}|
+        more|más|mehr|meer|più|więcej|ещё|еще|більше|v[ií]ce|devam[ıi]|selengkapnya|更多|もっと|المزيد|
+        loading|cargando|carregando|chargement(?:\sen\scours)?|wird\sgeladen|caricamento|ładowanie|wczytywanie|
+        загрузка|завантаження|yükleniyor|読み込み中|加载中|載入中|正在加载|로딩\s?중|불러오는\s중|جار[يی]?\sالتحميل|
+        đang\stải|memuat|
+        (?:back|go|return|scroll)\sto\s(?:the\s)?top|to\stop|top\sof\s(?:the\s)?page|bottom\sof\s(?:the\s)?page|page\stop|
+        (?:zurück\s)?nach\soben|haut\sde\spage|retour\sen\shaut|volver\sarriba|ir\sarriba|voltar\sao\stopo|
+        torna\s(?:su|in\salto)|(?:terug\s)?naar\sboven|наверх|вверх|do\sgóry|na\sgórę|yukarı\sçık|başa\sdön|
+        トップへ戻る|ページトップ|ページの先頭へ|ページ上部へ|返回顶部|回到顶部|返回頂部|맨\s위로|العودة\sللأعلى|
+        (?:lên|về)\sđầu\strang|kembali\ske\satas|
+        skip\sto\s(?:main\s)?(?:content|navigation|menu)|go\sto\s(?:main\s)?(?:content|menu)|
+        (?:direkt\s)?zum\s(?:haupt)?inhalt(?:\sspringen)?|(?:aller|passer)\sau\scontenu(?:\sprincipal)?|
+        (?:ir|saltar)\sal\scontenido(?:\sprincipal)?|(?:pular|ir)\spara\so\sconte[úu]do|(?:vai|salta)\sal\scontenuto|
+        (?:ga\s|direct\s)?naar\sde\sinhoud|перейти\sк\s(?:основному\s)?содержимому|przejdź\sdo\s(?:treści|zawartości)|
+        (?:ana\s)?içeriğe\sgeç|コンテンツへスキップ|本文へスキップ|本文へ移動|跳至内容|跳到主要内容|跳转到内容|
+        본문\s?바로가기|تخطي\sإلى\sالمحتوى|chuyển\sđến\snội\sdung|(?:langsung|lewati)\ske\skonten|
+        menu|menü|меню|菜单|選單|メニュー|메뉴|القائمة|
+        close|schlie(?:ß|ss)en|fermer|cerrar|fechar|chiudi|sluiten|закрыть|zamknij|kapat|閉じる|关闭|關閉|닫기|إغلاق|
+        search|suche|rechercher|buscar|pesquisar|ricerca|zoeken|поиск|szukaj|検索|搜索|搜尋|검색|tìm\skiếm|
+        filters?|filtern|filtres?|filtros?|filtri|фильтры?|filtry|filtrele|絞り込み|筛选|필터|bộ\slọc|
+        (?:sort\sby|ordenar\spor|trier\spar|sortieren\snach|ordina\sper|sorteer\sop|сортировать\sпо|sortuj\swedług|sırala)|
+        quantity|qty|количество|cantidad|quantidade|quantité|menge|anzahl|quantità|aantal|ilość|adet|miktar|
+        数量|수량|الكمية|số\slượng|
+        купить|kaufen|acheter|comprar|acquista|kopen|購入|购买|구매|شراء
+      )[\s.:：!…»›→➔>)\]]*\z
+    /xi.freeze
+
     # Whole-text matches for short blocks and links that carry no content.
     BOILERPLATE_TEXT = /
       \A(?:
@@ -130,7 +213,7 @@ module Nokodown
         share(?:\sthis)?(?:\s(?:article|story|post|page))?|share\son\s\w+|tweet(?:\sthis)?|pin\sit|
         email(?:\sthis)?|print(?:\sthis)?(?:\s(?:article|page))?|
         loading|loading(?:\s[\p{L}]+){1,2}(?=\s*(?:…|\.{3}))|back\sto\stop|scroll\sto\stop|copy\slink|link\scopied|copied|
-        (?:read|view|see|show|load)\s(?:more|less)|continue\sreading|click\sto\sexpand|
+        #{READ_MORE_TEXT}|#{LEARN_MORE_TEXT}|#{SHOP_CONTROL_TEXT}|click\sto\sexpand|
         (?:hide|show|toggle)\scaption|enlarge\sthis\simage|
         (?:image|photo|picture|slide)\s\d+\s(?:of|\/)\s\d+|\d*\s?comments?|
         (?:this\s\w+\srequires|please\senable|you\sneed\sto\senable)\sjavascript.*|
@@ -153,7 +236,7 @@ module Nokodown
     /xi.freeze
 
     LINK_NOISE_TEXT = /
-      \A(?:(?:read|view|see|show|load)\s(?:the\s)?(?:full\s)?(?:more|less|article|story|post)|continue\sreading|
+      \A(?:(?:read|view|see|show|load)\s(?:the\s)?(?:full\s)?(?:more|less|article|story|post)|#{READ_MORE_TEXT}|
       permalink|link\sto\sthis\s(?:heading|section)|copy\slink|edit(?:\sthis\s(?:page|section))?|
       ¶|§|\#|🔗)[\s.:!…»›→>]*\z
     /xi.freeze
