@@ -12,6 +12,7 @@ module Nokodown
     REL = /(?<![\w-])(?:tag|category)(?![\w-])/i.freeze
     ADDRESS = %r{\A(?:https?:)?//(?:www\.)?([^/?#:]+)[^/?#]*}i.freeze
     MAX_LABEL = 24
+    MIN_CARDS = 3
     # Separators, and the counts an archive widget puts after each link.
     BETWEEN = /\A(?:[\s,;|·•\/–—-]|\(\d+\))*\z/.freeze
     # A grid of category tiles, a titled box or a list of topics is a
@@ -21,19 +22,27 @@ module Nokodown
 
     module_function
 
-    # Keys of the outermost elements that hold only such a line.
+    # Keys of the outermost elements that hold only such a line. The same
+    # line in every card of a listing is part of the cards, and what
+    # selects the content weighs them with it.
     def blocks(body, url)
       page = url.to_s
       return Set.new if page.match?(PATH) || page.match?(QUERY)
 
       site = page[ADDRESS, 1]&.downcase || Breadcrumbs.site_host(body.css("a[href]"))
       judged = {}
-      body.css("a[href]").each_with_object(Set.new) do |link, keys|
-        next unless archive?(link, site)
+      lines = body.css("a[href]").filter_map { |link| outermost(link, site, judged) if archive?(link, site) }
+      lines = lines.uniq { |node| Dom.key(node) }
+      cards = lines.group_by { |node| shape(node) }.select { |_, alike| in_cards?(alike) }.keys
+      lines.reject { |node| cards.include?(shape(node)) }.map { |node| Dom.key(node) }.to_set
+    end
 
-        node = outermost(link, site, judged)
-        keys << Dom.key(node) if node
-      end
+    def shape(node)
+      "#{node.name}.#{Dom.signature(node)}"
+    end
+
+    def in_cards?(lines)
+      lines.map { |node| Dom.key(node.parent) }.uniq.size >= MIN_CARDS
     end
 
     def archive?(link, site)
