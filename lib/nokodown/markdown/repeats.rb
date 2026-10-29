@@ -28,7 +28,8 @@ module Nokodown
       # Headings and paragraphs that say only what the H1 says, wherever
       # they are; near the H1 also the parts of a "Page - Site" title. A
       # paragraph linking elsewhere, such as an embedded video named like
-      # the page, adds its destination.
+      # the page, adds its destination, and so does a linked heading away
+      # from the H1, such as a card for a variant of the same product.
       def drop_title_copies(blocks)
         index = blocks.index { |block| block.kind == :heading && block.level == 1 }
         return blocks unless index
@@ -39,18 +40,19 @@ module Nokodown
 
         parts = title_parts(heading)
         blocks.reject.with_index do |block, position|
-          text = position == index ? nil : title_text(block)
+          near = (position - index).abs <= TITLE_HEAD
+          text = position == index ? nil : title_text(block, near)
           next false if text.nil? || text.empty? || section_content?(blocks, position)
 
-          text == title || (block.kind == :paragraph && (position - index).abs <= TITLE_HEAD && parts.include?(text))
+          text == title || (block.kind == :paragraph && near && parts.include?(text))
         end
       end
 
-      def title_text(block)
-        case block.kind
-        when :heading then squash(Cleanup.heading_text(block))
-        when :paragraph then squash(block.text) unless block.text.include?("](")
-        end
+      def title_text(block, near)
+        return unless %i[heading paragraph].include?(block.kind)
+        return if block.text.include?("](") && (block.kind == :paragraph || !near)
+
+        squash(block.kind == :heading ? Cleanup.heading_text(block) : block.text)
       end
 
       def title_parts(heading)

@@ -19,6 +19,13 @@ RSpec.describe Nokodown::Markdown::Repeats do
         "# Central Asia - Travel Blog\n\n### Tag\n\nCentral Asia"
     end
 
+    it "keeps a linked heading named like the title away from it" do
+      notes = ["Pitted.", "Store cool.", "Serve chilled.", "Keeps a month.", "From Puglia.", "Since 1950.", "Organic.", "Hand picked."]
+      html = "<h1>Green olives, 1 kg jar</h1>#{notes.map { |note| "<p>#{note}</p>" }.join}" \
+             "<h3><a href='/olives-2'>Green olives, 1 kg jar</a></h3><p>In brine.</p>"
+      convert(html).should end_with("### [Green olives, 1 kg jar](https://example.com/olives-2)\n\nIn brine.")
+    end
+
     it "keeps a paragraph that repeats the title as a link to another page" do
       html = "<h1>Stove review</h1>#{intro}<iframe src='https://www.youtube.com/embed/dQw4w9WgXcQ' title='Stove review'></iframe>"
       convert(html).should end_with("[Stove review](https://www.youtube.com/watch?v=dQw4w9WgXcQ)")
