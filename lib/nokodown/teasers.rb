@@ -41,6 +41,10 @@ module Nokodown
     MIN_BODY = 200
     DOMINANT_SHARE = 0.4
     MIN_TEXT_BEFORE = 60
+    DATA_COLUMNS = 4
+    CONTROLS = "select, input"
+    CONTROL_TAGS = %w[form select option button].freeze
+    CONTROL_LABEL = /[:：]\z/.freeze
     MIN_SECTIONS = 3
     MIN_WORDS_LEFT = 20
     BODIES = %i[article product forum qa].freeze
@@ -58,6 +62,7 @@ module Nokodown
     # Query values that differ between pages of one kind are ids; "lvl=categ_see"
     # and "lvl=notice_display" are two kinds of page.
     ID_VALUE = /\d/.freeze
+    DIGITS = /\A\d+\z/.freeze
     # The root, a language's root ("/en/", "/pt-br/") or its index file.
     HOME = %r{\A/*(?:[a-z]{2}(?:[-_][a-z]{2})?/*)?(?:index\.\w+)?\z}i.freeze
     FILE = /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|docx?|xlsx?|pptx?|mp[34])\z/i.freeze
@@ -303,7 +308,7 @@ module Nokodown
     end
 
     def run(parent, items)
-      return if items.size < MIN_ITEMS
+      return if items.size < MIN_ITEMS || data_rows?(items.first)
 
       chars = items.sum { |item| @stats.chars(item) }
       return if chars > MAX_ITEM_CHARS * items.size
@@ -314,6 +319,15 @@ module Nokodown
 
       targets = links.map { |link| link && target(link["href"]) }
       Run.new(parent, items, targets, chars) if distinct_targets?(targets.compact, items.size)
+    end
+
+    # Rows under a header row, or of four or more columns, are records
+    # (versions, holdings), not cards.
+    def data_rows?(item)
+      return false unless item.name == "tr"
+
+      table = Dom.ancestors_named(item, "table").first
+      item.css("td, th").size >= DATA_COLUMNS || !table&.at_css("thead, th").nil?
     end
 
     def card(item)
@@ -449,10 +463,11 @@ module Nokodown
     end
 
     # The first title before the items, however deep: old layouts put it in
-    # the first row of a table around them.
+    # the first row of a table around them. Nokolexbor's css("*") is over ten
+    # times slower than this XPath, which walks in the same order.
     def title_in(node, run)
       items = run.items.map { |item| Dom.key(item) }.to_set
-      node.css("*").each do |descendant|
+      node.xpath(".//*").each do |descendant|
         return nil if items.include?(Dom.key(descendant))
         return descendant if title?(descendant)
       end
@@ -485,10 +500,19 @@ module Nokodown
     end
 
     def label?(node, text)
-      return false if text.length > MAX_TITLE || text.match?(SENTENCE) || node.at_css(STRUCTURE)
+      return false if text.length > MAX_TITLE || text.match?(SENTENCE) || node.at_css(STRUCTURE) || control?(node)
 
       links = node.css("a[href]")
       links.empty? || (links.size == 1 && Dom.text(links.first) == text)
+    end
+
+    # A sort or filter control, its options, or its label ("Sort by:") name
+    # the control, not the list below it.
+    def control?(node)
+      return true if CONTROL_TAGS.include?(node.name) || node.at_css(CONTROLS)
+      return true if Dom.ancestors_named(node, *CONTROL_TAGS).any?
+
+      Dom.text(node).match?(CONTROL_LABEL) && !node.parent&.at_css(CONTROLS).nil?
     end
 
     def in_data_table?(node)
@@ -519,9 +543,14 @@ module Nokodown
       other = segments(uri)
       return false unless page.size == other.size && query_keys(uri) == query_keys(@page)
       return same_kind?(uri) if page == other
-      return page[0..-2] == other[0..-2] if page.size > 1
+      return folders(page) == folders(other) if page.size > 1
 
       page.size == 1 && skeleton(page.first) == skeleton(other.first)
+    end
+
+    # Dated permalinks differ in their date folders ("/2023/4/30/news/").
+    def folders(segments)
+      segments[0..-2].map { |segment| segment.match?(DIGITS) ? "0" : segment }
     end
 
     def same_kind?(uri)
@@ -551,9 +580,10 @@ module Nokodown
     end
 
     # Pages directly under the root share their first word and their form:
-    # "prod-123.html" and "prod-456.html".
+    # "prod-123.html" and "prod-456.html", or "fq146100.html" and
+    # "fq074100.html".
     def skeleton(segment)
-      [segment[/\A[^-_.]*/], segment.gsub(/\d+/, "0").gsub(/[^\W\d_]+/, "a")]
+      [segment[/\A[^-_.\d]*/], segment.gsub(/\d+/, "0").gsub(/[^\W\d_]+/, "a")]
     end
 
     def host(uri)

@@ -457,4 +457,33 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should == "Heat pumps"
     end
   end
+
+  describe "taxonomy lines" do
+    def article(url, meta)
+      html = "<html><body><div class=\"entry\"><div><a href=\"/category/news/\">News</a></div><h1>Harbour</h1>" \
+             "<p>By <a href=\"/author/ann/\">Ann</a> on 3 May</p>#{prose('The harbour', 3)}#{meta}</div></body></html>"
+      Nokodown.to_markdown(html, url: url, title: false)
+    end
+
+    it "removes lines of links to the site's tag and category archives" do
+      meta = '<p>Tags: <a href="/tag/boats/">boats</a>, <a href="https://www.example.com/tag/tides/">tides</a></p>' \
+             '<p><span>Labels: <a href="/search/label/Sea" rel="tag">Sea</a></span></p>'
+      markdown = article("https://example.com/2024/05/harbour/", meta)
+
+      markdown.should start_with("# Harbour\n\nBy Ann on 3 May")
+      %w[News boats tides Sea].each { |word| markdown.should_not include(word) }
+    end
+
+    it "keeps a line with other text, other links or another site's tags, and the lines of an archive itself" do
+      meta = '<p>Filed in <a href="/category/news/">News</a> on 3 May by Ann</p>' \
+             '<p>Tags: <a href="/tag/boats/">boats</a>, <a href="/boats-guide/">guide</a></p>' \
+             '<p>See <a href="https://other.example/tag/tides/">tides</a></p>'
+      markdown = article("https://example.com/2024/05/harbour/", meta)
+      markdown.should include("Filed in News on 3 May by Ann")
+      markdown.should include("boats")
+      markdown.should include("tides")
+
+      article("https://example.com/category/news/", "").should include("News")
+    end
+  end
 end

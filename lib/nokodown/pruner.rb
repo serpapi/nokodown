@@ -41,7 +41,7 @@ module Nokodown
     MAX_LABEL = 40
     HEADLINE_WIDTH = 30
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
-    SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
+    SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ").freeze
     MIN_SERIES = 3
     MEDIA = %w[img picture iframe].freeze
     MEDIA_SELECTOR = MEDIA.join(", ")
@@ -71,10 +71,14 @@ module Nokodown
       @conditional_seen = 0
       @conditional_kept = 0
       @conditional_removed_links = 0
+      @data_tables = {}
     end
 
     def call
       @nodes.each do |root|
+        # Before the index decision, which a long pager would sway.
+        Pagers.find(root).each { |node| remove_with_label(node, root, Set.new) }
+        remove_in_page_links(root)
         @mode == :article ? prune_article(root) : prune_page(root)
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
@@ -98,6 +102,13 @@ module Nokodown
     end
 
     private
+
+    def remove_in_page_links(root)
+      @anchors ||= InPageLinks.anchors(root.document)
+      links = InPageLinks.new(root, @anchors, @urls)
+      links.contents.each { |node| remove_with_label(node, root, Set.new) }
+      links.back_links.each { |link| remove(link) }
+    end
 
     # A page whose side columns made it look like an index is judged again
     # without them, but no page becomes an index by losing them.
@@ -578,7 +589,15 @@ module Nokodown
 
     def in_data_table?(node)
       tables = node.name == "table" ? [node] : []
-      (tables + Dom.ancestors_named(node, "table")).any? { |table| Tables.data_table?(table) }
+      (tables + Dom.ancestors_named(node, "table")).any? { |table| data_table?(table) }
+    end
+
+    # Each row, cell and cluster of a long table asks about the same table.
+    def data_table?(table)
+      key = Dom.key(table)
+      return Tables.data_table?(table) if key.nil?
+
+      @data_tables.fetch(key) { @data_tables[key] = Tables.data_table?(table) }
     end
 
     def remove_boilerplate_text(root)

@@ -10,6 +10,11 @@ module Nokodown
   class UrlResolver
     TRACKING_PARAM = /\A(?:utm_[a-z_]+|fbclid|gclid|gclsrc|dclid|gbraid|wbraid|msclkid|yclid|igshid|mc_cid|mc_eid|_hsenc|_hsmi|mkt_tok|__s|
                        _gl|_ga|srsltid|trk|icid|cmpid|hsCtaTracking|ref_|pd_rd_[a-z]+|pf_rd_[a-z]+)\z/ix.freeze
+    # Session ids that servers write into every link when cookies are off.
+    # Only a long token is one: "s=search+words" and "sid=12" are not.
+    SESSION_PARAM = /\A(?:phpsessid|sid|s|oscsid|zenid|sessionid|session_id|sessid|cfid|cftoken)\z/i.freeze
+    SESSION_TOKEN = /\A(?=[a-z]*\d)[a-z\d]{20,}\z/i.freeze
+    SESSION_PATH = /;jsessionid=[^\/?;#]*/i.freeze
     # Amazon session, search-rank and affiliate parameters; on other sites
     # these names can matter (Microsoft fwlinks need linkid).
     AMAZON_PARAM = /\A(?:ref|qid|sr|th|smid|psc|crid|dib|dib_tag|spLa|sprefix|linkCode|linkId|ascsubtag|camp|creative)\z/.freeze
@@ -64,6 +69,10 @@ module Nokodown
       @base = @url
       href = base_href.to_s.strip
       @base = join(@base, href) || @base if !href.empty? && !href.start_with?("javascript:")
+    end
+
+    def page_url
+      @base
     end
 
     def resolve(href)
@@ -144,7 +153,19 @@ module Nokodown
     end
 
     def strip_tracking(uri)
-      reject_params(uri) { |key, _| key.match?(TRACKING_PARAM) }
+      reject_params(without_session_path(uri)) { |key, value| tracking?(key, value) }
+    end
+
+    def tracking?(key, value)
+      key.match?(TRACKING_PARAM) || (key.match?(SESSION_PARAM) && value.match?(SESSION_TOKEN))
+    end
+
+    def without_session_path(uri)
+      return uri unless uri.path.to_s.match?(SESSION_PATH)
+
+      uri = uri.dup
+      uri.path = uri.path.gsub(SESSION_PATH, "")
+      uri
     end
 
     def redirect_target(uri)
@@ -194,8 +215,9 @@ module Nokodown
     end
 
     def strip_presentation(uri)
+      uri = without_session_path(uri)
       extension = uri.path.to_s.match?(EXTENSION)
-      reject_params(uri) { |key, value| key.match?(TRACKING_PARAM) || presentation?(key, value, extension) }
+      reject_params(uri) { |key, value| tracking?(key, value) || presentation?(key, value, extension) }
     end
 
     # Twitter media has no file extension and is a 404 without its format.

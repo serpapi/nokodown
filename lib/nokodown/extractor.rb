@@ -55,7 +55,7 @@ module Nokodown
       return [[body], :full] unless @main_content
 
       attribution = PostAttribution.new(body).call if ContentLocator::DISCUSSIONS.include?(page_type)
-      Boilerplate.new(body).call
+      Boilerplate.new(body, url: @url).call
       ProductReviews.new(body).call if product_page
       selection = ContentLocator.new(body, page_type: page_type, title: metadata[:title]).call
       # Writing the attributions numbers the elements anew.

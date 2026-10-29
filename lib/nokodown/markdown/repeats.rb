@@ -76,7 +76,6 @@ module Nokodown
 
       def own_section?(blocks, index)
         following = blocks[index + 1]
-        following = blocks[index + 2] if following&.kind == :rule
         !following.nil? && !(following.kind == :heading && following.level <= blocks[index].level)
       end
 
@@ -126,7 +125,6 @@ module Nokodown
       # or deeper is that section's content.
       def repeats_heading_below?(blocks, index, text)
         following = blocks[index + 1]
-        following = blocks[index + 2] if following&.kind == :rule
         return false unless following&.kind == :heading && !squash(text).empty?
 
         previous = index.positive? ? blocks[index - 1] : nil

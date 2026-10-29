@@ -125,6 +125,19 @@ RSpec.describe Nokodown::Pruner do
       (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
     end
 
+    it "judges a long table once, however many of its rows hold prose beside links" do
+      prose = "A long sentence of prose that describes the item in some detail and goes on for a while."
+      rows = (1..2000).map do |number|
+        "<tr><td>#{prose} #{number}</td><td><a href='/a#{number}'>x</a> <a href='/b#{number}'>y</a> <a href='/c#{number}'>z</a></td></tr>"
+      end
+      root = content("<table>#{rows.join}</table>")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+      described_class.new([root], :page, urls: urls).call
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 3
+    end
+
     it "keeps a listing column that its layout table declares wider than the column beside it" do
       rows = %w[Vector Rapid Alpine Corsa Delta Falcon].map do |name|
         "<tr><td><a href='/wheels/#{name.downcase}'>#{name} R16 alloy wheel, 7J ET40</a></td><td>4,200 rub.</td></tr>"
@@ -234,6 +247,84 @@ RSpec.describe Nokodown::Pruner do
 
         pruned("<div><h4>#{title}</h4><div>#{tags}</div></div><h2>次の記事</h2>").inner_html.should include(title)
       end
+    end
+  end
+
+  describe "pagers and calendars" do
+    it "drops page numbers whose current number is plain text, on any page" do
+      numbers = (1..47).map { |number| number == 3 ? "<b>3</b>" : "<a href='/list?page=#{number}'>#{number}</a>" }
+      pager = "<div class='nav'>Pages: <a href='/list?page=2'>«</a> #{numbers.join(' ')} <a href='/list?page=4'>Next ›</a></div>"
+      %i[page article].each do |mode|
+        root = content("#{story}#{pager}")
+
+        described_class.new([root], mode).call
+
+        Nokodown::Dom.text(root).should_not include("Pages")
+        Nokodown::Dom.text(root).should include("cracked bearings")
+      end
+    end
+
+    it "drops an archive calendar of day links" do
+      weeks = (1..30).each_slice(7).map { |days| "<tr>#{days.map { |day| day.odd? ? "<td><a href='/2026/04/#{day}'>#{day}</a></td>" : "<td>#{day}</td>" }.join}</tr>" }
+      calendar = "<table><caption>April 2026</caption><tr>#{%w[Mo Tu We Th Fr Sa Su].map { |day| "<th>#{day}</th>" }.join}</tr>" \
+                 "#{weeks.join}<tfoot><tr><td><a href='/2026/03'>« March</a></td></tr></tfoot></table>"
+      root = content("#{story}#{calendar}")
+
+      described_class.new([root], :page).call
+
+      Nokodown::Dom.text(root).should_not include("April")
+    end
+
+    it "keeps numbers in a sentence, footnote marks and a short run" do
+      notes = (1..6).map { |number| "<a href='#fn#{number}'>#{number}</a>" }.join(" ")
+      html = "#{story}<p>See notes #{notes} below.</p><p><a href='/p/1'>1</a> <a href='/p/2'>2</a> <a href='/p/3'>3</a></p>"
+      root = content(html)
+
+      described_class.new([root], :page).call
+
+      Nokodown::Dom.text(root).should include("See notes 1 2 3 4 5 6 below.")
+      Nokodown::Dom.text(root).should end_with("1 2 3")
+    end
+  end
+
+  describe "links within the page" do
+    let(:faq) do
+      questions = ["How do I register?", "Can I change my name?", "Why was my post removed?"]
+      toc = questions.each_with_index.map { |question, index| "<li><a href='#q#{index}'>#{question}</a></li>" }.join
+      answers = questions.each_with_index.map do |question, index|
+        "<h3 id='q#{index}'>#{question}</h3><p>Answer #{index}: the forum explains this at length in a paragraph.</p>" \
+          "<p><a href='#faqtop'>Back to top</a></p>"
+      end
+      "<a name='faqtop'></a><h2>Contents</h2><ul>#{toc}</ul>#{answers.join}"
+    end
+
+    it "drops a table of contents and the links back to the top" do
+      %i[page article].each do |mode|
+        root = content("#{story}#{faq}")
+
+        described_class.new([root], mode).call
+
+        text = Nokodown::Dom.text(root)
+        text.scan("How do I register?").size.should == 1
+        text.should include("Answer 2")
+        text.should_not include("Back to top")
+        text.should_not include("Contents")
+      end
+    end
+
+    it "keeps footnote marks, back-references and questions that open their answers" do
+      notes = "<p>The bridge reopened.<sup><a href='#n1'>1</a></sup> Crews worked fast.<sup><a href='#n2'>2</a></sup></p>" \
+              "<ol><li id='n1'><a href='#r1'>↑</a> City press release, May 2026.</li>" \
+              "<li id='n2'><a href='#r2'>↑</a> Interview with the site manager.</li></ol>"
+      accordion = "<div id='a1'><a href='#a1'>Opening hours</a><div>From six to ten every day.</div></div>"
+      root = content("#{story}#{notes}#{accordion}")
+
+      described_class.new([root], :page).call
+
+      text = Nokodown::Dom.text(root)
+      text.should include("reopened.1")
+      text.should include("↑ City press release")
+      text.should include("Opening hours")
     end
   end
 

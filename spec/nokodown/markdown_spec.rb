@@ -194,6 +194,34 @@ RSpec.describe "Markdown conversion" do
       convert('<p><a href="https://shop.example/p?id=7&_ga=2.1.2-3&srsltid=AfmBOx">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
     end
 
+    it "writes archive links in a byline or meta line as their text" do
+      html = '<p>By <a href="/author/ann/" rel="author">Ann</a> on <a href="/2024/05/03/">May 3</a> in ' \
+             '<a href="/?cat=3">Letters</a>, <a href="https://other.example/tag/x/">X</a></p>' \
+             '<ul><li><a href="/category/news/">News</a></li><li><a href="/2024/05/">May 2024</a></li></ul>' \
+             '<p>Read <a href="/2024/05/03/harbour/">the harbour post</a>.</p>'
+      convert(html).should == "By Ann on May 3 in Letters, [X](https://other.example/tag/x/)\n\n" \
+                              "- [News](https://example.com/category/news/)\n- [May 2024](https://example.com/2024/05/)\n\n" \
+                              "Read [the harbour post](https://example.com/2024/05/03/harbour/)."
+    end
+
+    it "writes encoded letters of other scripts in a destination as letters" do
+      html = '<p><a href="/tag/%D8%A7%D8%AE%D8%A8%D8%A7%D8%B1">News</a> <a href="/новости/спорт">Sport</a> ' \
+             '<a href="/a%20b%C2%A0c%E2%80%8Bd%E9">Odd</a> <img src="/%E5%9C%B0%E5%9B%BE.png" alt="Map"></p>'
+      convert(html).should == "[News](https://example.com/tag/اخبار) [Sport](https://example.com/новости/спорт) " \
+                              "[Odd](https://example.com/a%20b%C2%A0c%E2%80%8Bd%E9) ![Map](https://example.com/地图.png)"
+    end
+
+    it "strips session ids from links and images" do
+      html = '<p><a href="/forum/topic;jsessionid=652BF224C9E98AE30B1B7D9D747F7D8D?id=4">Topic</a> ' \
+             '<a href="/viewtopic.php?f=2&sid=65ac1f0e7d1c0e3b9a4f2c7d8e9a0b1c">Post</a> ' \
+             '<a href="/cal.php?day=3&PHPSESSID=8a5hq2vk0l7n3c9r1t6m4b2d0e">3</a> ' \
+             '<a href="/?s=wordpress+tutorials">Search</a> <a href="/list.php?sid=12">List</a> ' \
+             '<img src="/img/a.jpg;jsessionid=652BF224C9E98AE30B1B7D9D747F7D8D" alt="Map"></p>'
+      convert(html).should == "[Topic](https://example.com/forum/topic?id=4) [Post](https://example.com/viewtopic.php?f=2) " \
+                              "[3](https://example.com/cal.php?day=3) [Search](https://example.com/?s=wordpress+tutorials) " \
+                              "[List](https://example.com/list.php?sid=12) ![Map](https://example.com/img/a.jpg)"
+    end
+
     it "shortens Amazon links to the product or the search" do
       product = "https://www.amazon.com/Trail-Boot/dp/B000O3LUEI/ref=sr_1_1?crid=2X&dib=eyJ2IjoiMSJ9.abc&qid=1&sr=8-1&tag=site-20&linkCode=ll1"
       convert(%(<p><a href="#{product}">Boot</a></p>)).should == "[Boot](https://www.amazon.com/Trail-Boot/dp/B000O3LUEI?tag=site-20)"
@@ -250,6 +278,12 @@ RSpec.describe "Markdown conversion" do
       product = "https://www.amazon.com/Trail-Boot/dp/B000O3LUEI/ref=sr_1_1?qid=1&sr=8-1"
       html = '<body><p>Read <a href="#customerReviews">reviews</a>.</p></body>'
       Nokodown.to_markdown(html, url: product, main_content: false, title: false).should == "Read reviews."
+    end
+
+    it "keeps only the text of links to the page itself" do
+      html = '<body><h1><a href="/2024/05/harbour/">Harbour</a></h1><p>Posted <a href="https://www.example.com/2024/05/harbour">May 3</a>.</p></body>'
+      Nokodown.to_markdown(html, url: "https://example.com/2024/05/harbour/", main_content: false, title: false)
+        .should == "# Harbour\n\nPosted May 3."
     end
 
     it "keeps only the text of in-page anchors, scripts and phone links" do
