@@ -1,29 +1,43 @@
 # frozen_string_literal: true
 
+require "strscan"
+
 module Nokodown
   module Markdown
     # A card links its page from its title and again from a date, a price, a
     # button or the ellipsis of its excerpt. The title keeps the link. A
-    # button ("Read more", "Voir": a text the page uses for several links)
-    # alone on its line or after the excerpt only repeats it and goes, as
-    # does a second copy of the title; other repeats keep their text.
+    # button ("Read more", "Voir") alone on its line or after the excerpt
+    # only repeats it and goes, as does a second copy of the title; other
+    # repeats keep their text.
     class RepeatedLinks
-      LINK = /(?<!!)\[((?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*)\]\(((?:[^()\s]|\([^()\s]*\))*)\)/.freeze
-      ITEM = /^(?:[-*+]|\d+\.) /.freeze
-      MARKERS = /\A\s*(?:(?:[-*+]|\d+\.)\s+)*\z/.freeze
+      LINK = /\[((?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*)\]\(((?:[^()\s]|\([^()\s]*\))*)\)/.freeze
+      # Escapes, image openers and code spans are text, so neither an escaped
+      # bracket, an image nor a link written in code is read as a link.
+      PLAIN = /\\.|!\[|[^\\!\[`]+/.freeze
+      CODE_SPAN = /(`+)(?>[^`]+|(?!\1(?!`))`+)*+\1(?!`)/.freeze
+      ITEM = /\A(?:[-*+]|\d+\.) /.freeze
+      MARKERS = /\A\s*(?:(?:[-*+]|\d+\.)(?:\s+|\z))*\z/.freeze
       # A button follows the end of a sentence or of another link.
       AFTER_SENTENCE = /[.…!?。！？:)\]*]\s*\z/.freeze
       CARD_UNITS = 4
       SEPARATE = %i[list table].freeze
       INITIALS = /\A\p{Lu}{1,4}\z/.freeze
+      WORD_START = /\A[*_~`]*[\p{L}\p{N}]/.freeze
+      WORD_END = /[\p{L}\p{N}][*_~`]*\z/.freeze
 
-      Link = Struct.new(:unit, :card, :block, :range, :text, :destination, :heading) do
+      # segment: the link's index among the pieces of its line, which
+      # alternate text and links.
+      Link = Struct.new(:unit, :card, :block, :line, :segment, :text, :destination, :heading) do
         def page
           RedundantImages.page(destination)
         end
 
         def fragment
           destination[/#.*/m]
+        end
+
+        def label
+          @label ||= Text.plain(text).downcase
         end
       end
 
@@ -32,16 +46,21 @@ module Nokodown
       end
 
       def call
-        @edits = Hash.new { |edits, block| edits[block] = [] }
+        @lines = {}
+        @segments = {}
+        @edits = Hash.new { |edits, block| edits[block] = Hash.new { |lines, line| lines[line] = {} } }
         pages = links.group_by(&:page)
         @generic = generic_texts(pages)
-        pages.each_value { |occurrences| cards(occurrences).each { |card| plan(card) } }
+        cards = pages.each_value.flat_map { |occurrences| cards(occurrences) }.select { |card| card.size > 1 }
+        keepers = cards.map { |card| keeper(card) }
+        @buttons = buttons(cards.zip(keepers))
+        cards.zip(keepers).each { |card, keeper| plan(card, keeper) }
         return @blocks if @edits.empty?
 
         @blocks.each_with_index.filter_map do |block, index|
           next block unless @edits.key?(index)
 
-          block.text = edited(block.text, @edits[index])
+          block.text = edited(index)
           block if block.text.match?(/[\p{L}\p{N}]/)
         end
       end
@@ -58,61 +77,115 @@ module Nokodown
           previous = block.kind
           next [] if block.kind == :code
 
-          pieces(block).each_with_index.flat_map do |range, piece|
-            card += 1 if piece.positive?
-            block_links(block, index, range, unit += 1, card)
+          unit += 1
+          lines = @lines[index] = block.text.split("\n", -1)
+          code = CodeBlock.nested_code_lines(lines)
+          lines.each_with_index.flat_map do |line, number|
+            if number.positive? && piece?(block.kind, line)
+              unit += 1
+              card += 1
+            end
+            next [] if code[number] || !line.include?("](")
+
+            line_links(line, [unit, card, index, number], block.kind == :heading)
           end
         end
       end
 
-      def pieces(block)
-        text = block.text
-        starts = case block.kind
-                 when :list then text.enum_for(:scan, ITEM).map { Regexp.last_match.begin(0) }
-                 when :table then text.enum_for(:scan, /^/).map { Regexp.last_match.begin(0) }
-                 else [0]
-                 end
-        starts = [0] | starts
-        starts.each_with_index.map { |start, index| start...(starts[index + 1] || text.length) }
+      def piece?(kind, line)
+        kind == :table || (kind == :list && line.match?(ITEM))
       end
 
-      def block_links(block, index, range, unit, card)
-        block.text[range].enum_for(:scan, LINK).map do
-          match = Regexp.last_match
-          offset = range.first + match.begin(0)
-          Link.new(unit, card, index, offset...(range.first + match.end(0)), match[1], match[2], block.kind == :heading)
+      def line_links(line, place, heading)
+        parts, found = segments(line)
+        @segments[place.last(2)] = parts unless found.empty?
+        found.map { |segment, text, destination| Link.new(*place, segment, text, destination, heading) }
+      end
+
+      # The line split into text and links in turn, and each link's segment,
+      # text and destination. Offsets into a long line of non-ASCII text
+      # cost as much as the line, so the line is cut up once.
+      def segments(line)
+        scanner = StringScanner.new(line)
+        parts = [+""]
+        found = []
+        until scanner.eos?
+          if scanner.scan(LINK)
+            found << [parts.size, scanner[1], scanner[2]]
+            parts << scanner.matched << +""
+          else
+            parts[-1] << (scanner.scan(PLAIN) || scanner.scan(CODE_SPAN) || scanner.getch)
+          end
         end
+        [parts, found]
       end
 
       # Occurrences close together in one card.
       def cards(occurrences)
-        occurrences.slice_when { |a, b| a.card != b.card || b.unit - a.unit >= CARD_UNITS }
+        occurrences.slice_when { |a, b| a.card != b.card || b.unit - a.unit >= CARD_UNITS }.to_a
       end
 
-      # Link texts used for several pages: "Read more", "Voir", "View details".
+      # Link texts used for several pages, about once each: "Read more",
+      # "Voir", "View details". A text used again and again for a few pages,
+      # as a store's location in each of its products, belongs to them.
       def generic_texts(pages)
-        texts = pages.flat_map { |_, occurrences| occurrences.map { |link| label(link) }.uniq }
-        texts.tally.select { |_, count| count > 1 }.keys.to_set
+        uses = pages.each_value.flat_map { |occurrences| occurrences.map(&:label) }.tally
+        pages = pages.each_value.flat_map { |occurrences| occurrences.map(&:label).uniq }.tally
+        pages.select { |text, count| count > 1 && count * 2 >= uses[text] }.keys.to_set
       end
 
       # The title is the heading, or the first link in words of its own; a
       # date, a price, a count or initials ("TFH") before it are not one.
-      # Without one, the longest text in words keeps the link. Links to other
-      # sections of the title's page (#2 after #1) are not repeats.
-      def plan(card)
-        return if card.size < 2
+      # Without one, the longest text in words keeps the link.
+      def keeper(card)
+        card.find(&:heading) || card.find { |link| title?(link) } ||
+          card.select { |link| link.label.match?(/\p{L}/) }.max_by { |link| link.label.length } || card.first
+      end
 
-        keeper = card.find(&:heading) || card.find { |link| title?(link) } ||
-                 card.select { |link| label(link).match?(/\p{L}/) }.max_by { |link| label(link).length } || card.first
-        (card - [keeper]).each do |link|
-          next if link.fragment && keeper.fragment && link.fragment != keeper.fragment
+      # A button reads the same in every card, beside whatever else the card
+      # repeats. Texts that never share a card but follow each other through
+      # the same cards are values of one field, as a match's "Live" and
+      # "Starting soon" or a car's "Sold" and "Available", and keep their
+      # words; a section of their own does not make them values.
+      def buttons(cards)
+        @shared = Hash.new { |all, text| all[text] = Set.new }
+        places = Hash.new { |all, text| all[text] = [] }
+        cards.each do |card, keeper|
+          texts = card.reject { |link| link.equal?(keeper) }.map(&:label).select { |text| repeat_text?(text) }.uniq
+          texts.each do |text|
+            @shared[text].merge(texts)
+            places[text] << card.first.card
+          end
+        end
+        @spans = places.transform_values(&:minmax)
+        texts = @spans.keys
+        texts.reject { |text| texts.any? { |other| values?(text, other) } }.to_set
+      end
 
-          @edits[link.block] << [link.range, button?(link, keeper) ? "" : link.text]
+      def values?(text, other)
+        return false if @shared[text].include?(other)
+
+        first, last = @spans[text]
+        other_first, other_last = @spans[other]
+        first <= other_last + 1 && other_first <= last + 1
+      end
+
+      def repeat_text?(text)
+        @generic.include?(text) && !text.match?(/\d/) && text.match?(/\p{L}/)
+      end
+
+      # Links to other sections of the title's page (#2 after #1) are not
+      # repeats.
+      def plan(card, keeper)
+        card.each do |link|
+          next if link.equal?(keeper) || (link.fragment && keeper.fragment && link.fragment != keeper.fragment)
+
+          @edits[link.block][link.line][link.segment] = button?(link, keeper) ? "" : link.text
         end
       end
 
       def title?(link)
-        text = label(link)
+        text = link.label
         return false if text.match?(/\d/) || @generic.include?(text) || Text.plain(link.text).match?(INITIALS)
 
         text.match?(/\p{L}/)
@@ -120,50 +193,65 @@ module Nokodown
 
       # Dates and counts say something even when every card has the same one.
       def button?(link, keeper)
-        text = label(link)
+        text = link.label
         return false if text.match?(/\d/) || !text.match?(/\p{L}/)
-        return false unless @generic.include?(text) || text == label(keeper)
+        return false unless @buttons.include?(text) || text == keeper.label
 
-        standalone?(@blocks[link.block].text, link.range)
-      end
-
-      def label(link)
-        Text.plain(link.text).downcase
+        standalone?(link)
       end
 
       # The link ends its line, alone or after a sentence, and does not open
       # an item whose other lines would lose their marker.
-      def standalone?(text, range)
-        line_start = range.first.zero? ? 0 : text.rindex("\n", range.first - 1)&.succ.to_i
-        line_stop = text.index("\n", range.last) || text.length
-        return false unless text[range.last...line_stop].strip.empty?
+      def standalone?(link)
+        parts = @segments[[link.block, link.line]]
+        return false unless link.segment == parts.size - 2 && parts.last.strip.empty?
 
-        before = text[line_start...range.first]
+        before = parts.first(link.segment).join
         return before.match?(AFTER_SENTENCE) unless before.match?(MARKERS)
 
-        before.strip.empty? || !text[line_stop..].to_s.match?(/\A\n +\S/)
+        before.strip.empty? || !@lines[link.block][link.line + 1].to_s.match?(/\A +\S/)
       end
 
-      # Links set side by side were told apart by their brackets; their text
-      # needs a space instead.
-      def spaced(text, before, after)
+      # Lines the edits leave with only list markers go.
+      def edited(index)
+        lines = @lines[index]
+        edits = @edits[index]
+        lines.each_with_index.filter_map do |line, number|
+          next line unless edits.key?(number)
+
+          result = edited_line(@segments[[index, number]], edits[number])
+          result unless result.match?(MARKERS) && !line.match?(MARKERS)
+        end.join("\n")
+      end
+
+      def edited_line(parts, replacements)
+        replacements.each { |segment, text| parts[segment - 1] = parts[segment - 1].sub(/ +\z/, "") if text.empty? }
+        parts.each_with_index.map do |part, segment|
+          text = replacements[segment]
+          text ? spaced(text, parts, replacements, segment) : part
+        end.join
+      end
+
+      # Links set side by side were told apart by their brackets; a text
+      # that would run into the words of the link beside it needs a space.
+      # A text after it puts in its own.
+      def spaced(text, parts, replacements, segment)
         return text if text.empty?
 
-        "#{' ' if before.match?(/[)\]]/)}#{text}#{' ' if after.match?(/[\[!]/)}"
+        before = parts[segment - 1]
+        after = parts[segment + 1]
+        left = replacements.fetch(segment - 2) { link_text(parts, segment - 2) }
+        right = replacements.key?(segment + 2) ? "" : link_text(parts, segment + 2)
+        "#{' ' if before.empty? ? beside?(left, text) : before.match?(/[)\]]\z/)}#{text}" \
+          "#{' ' if after.empty? ? beside?(text, right) : after.match?(/\A[\[!]/)}"
       end
 
-      # Lines the edits leave with only list markers go; links never span
-      # lines, so the lines before and after the edits pair up.
-      def edited(text, edits)
-        result = edits.sort_by { |range, _| -range.first }.reduce(text.dup) do |out, (range, replacement)|
-          start = range.first
-          start -= 1 while replacement.empty? && start.positive? && out[start - 1] == " "
-          out[start...range.last] = spaced(replacement, start.positive? ? out[start - 1] : "", out[range.last].to_s)
-          out
-        end
-        before = text.split("\n", -1)
-        lines = result.split("\n", -1)
-        lines.reject.with_index { |line, index| line.match?(MARKERS) && !before[index].match?(MARKERS) }.join("\n")
+      def beside?(left, right)
+        left.match?(WORD_END) && right.match?(WORD_START)
+      end
+
+      def link_text(parts, segment)
+        segment.between?(1, parts.size - 1) ? parts[segment][LINK, 1] : ""
       end
     end
   end

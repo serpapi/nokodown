@@ -84,9 +84,12 @@ with `main_content: false`, `:none` for a document without a body.
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators
   between links and at line ends, lines of only punctuation, icon-font
-  glyphs, code-language labels and copy buttons, a card's repeated links to
-  its own page (its title keeps the link), and escapes that cannot change
-  the rendering.
+  glyphs, code-language labels and copy buttons, and escapes that cannot
+  change the rendering. A card's repeated links to its own page keep their
+  text without the URL (its title keeps the link), and a button such as
+  "Read more", a text the page uses once for each of several pages, goes when
+  it ends its line; texts that take turns from card to card ("Sold",
+  "Available") are values and stay.
 - In the main content, images whose alt text does not say what they show: no
   alt text, a file or camera name ("IMG_6175.JPG"), a hash, or a word for
   "image" ("photo", "foto", "画像"); icons, logos and avatars, told by their

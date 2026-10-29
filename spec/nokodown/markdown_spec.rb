@@ -268,6 +268,46 @@ RSpec.describe "Markdown conversion" do
       convert(cards).should == "## [Post A](https://example.com/a)\n\nMay 30, 2018\n\n## [Post B](https://example.com/b)\n\nMay 30, 2018"
     end
 
+    it "keeps the texts that differ from card to card, as values" do
+      cars = [%w[1 Golf Sold], %w[2 Polo Available], %w[3 Passat Sold], %w[4 Up Available]].map do |id, name, status|
+        %(<li><h3><a href="/car/#{id}">#{name}</a></h3><p><a href="/car/#{id}">#{status}</a></p><p><a href="/car/#{id}">Details</a></p></li>)
+      end
+      convert("<ul>#{cars.join}</ul>").should == "- [Golf](https://example.com/car/1)\n  Sold\n- [Polo](https://example.com/car/2)\n  Available\n" \
+                                                  "- [Passat](https://example.com/car/3)\n  Sold\n- [Up](https://example.com/car/4)\n  Available"
+    end
+
+    it "keeps a text the page links again and again to a few pages" do
+      stores = %w[a a a a b]
+      products = stores.each_with_index.map do |store, index|
+        %(<li><a href="/p/#{index}">Boiler #{index}</a><p><a href="/s/#{store}">Shop #{store}</a></p><p><a href="/s/#{store}">Henan/Zhoukou</a></p></li>)
+      end
+      expected = stores.each_with_index.map do |store, index|
+        "- [Boiler #{index}](https://example.com/p/#{index})\n  [Shop #{store}](https://example.com/s/#{store})\n  Henan/Zhoukou"
+      end
+      convert("<ul>#{products.join}</ul>").should == expected.join("\n")
+    end
+
+    it "leaves links written in code alone" do
+      html = "<ol><li><p>Call the handler:</p><pre><code>handlers[name](event);\nhandlers[type](event);</code></pre></li></ol>" \
+             "<p><code>[text](https://example.com/docs)</code> or <code>[the docs](https://example.com/docs)</code></p>"
+      convert(html).should == "1. Call the handler:\n   ```\n   handlers[name](event);\n   handlers[type](event);\n   ```\n\n" \
+                              "`[text](https://example.com/docs)` or `[the docs](https://example.com/docs)`"
+    end
+
+    it "drops the list marker a dropped button leaves" do
+      html = '<ul><li><a href="/d/1">Rainfall</a><ul><li><a href="/d/1">CSV</a></li></ul></li>' \
+             '<li><a href="/d/2">Rivers</a><ul><li><a href="/d/2">CSV</a></li></ul></li></ul>'
+      convert(html).should == "- [Rainfall](https://example.com/d/1)\n- [Rivers](https://example.com/d/2)"
+    end
+
+    it "finds repeated links on a long line of non-ASCII text in linear time" do
+      line = (1..3000).map { |i| "[新闻标题第#{i}条](https://example.com/p/#{i}) [详情](https://example.com/p/#{i})" }.join(" ")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = Nokodown::Markdown::RepeatedLinks.new([Nokodown::Markdown::Block.new(:paragraph, line)]).call.first.text
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      text.should_not include("[详情]")
+    end
+
     it "keeps a card's link on its title when initials or a count come first" do
       html = '<ul><li><a href="/w">J</a> <a href="/w">John Wick, Chapter 2</a><p>Foley artist</p></li>' \
              '<li><a href="/h">TFH</a><h4><a href="/h">The Finest Hours</a></h4><p>Foley artist</p></li></ul>'
@@ -280,6 +320,12 @@ RSpec.describe "Markdown conversion" do
              'and more on <a href="/a">apples</a>.</p>'
       convert(html).should == "[One](https://example.com/g#1) [Two](https://example.com/g#2)\n\n" \
                               "[apples](https://example.com/a)[pears](https://example.com/b) fruit and more on apples."
+    end
+
+    it "does not space the parts of an address split over links" do
+      html = '<p><a href="mailto:info@agios.org">info</a><a href="mailto:info@agios.org">@</a><a href="mailto:info@agios.org">agios</a>' \
+             '<a href="mailto:info@agios.org">.</a><a href="mailto:info@agios.org">org</a></p>'
+      convert(html).should == "[info](mailto:info@agios.org)@agios.org"
     end
 
     it "writes a mail link that shows its address as text" do
