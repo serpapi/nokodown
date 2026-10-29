@@ -53,6 +53,12 @@ RSpec.describe Nokodown::RepeatedLinks do
     text_after(html).should == "The harbor bridge reopens"
   end
 
+  it "keeps the entries of a breadcrumb or a table of contents" do
+    html = "<nav><a href='/guide/intro'>A quick guide to building apps</a><ol><li><a href='/guide/intro'>Intro</a></li>" \
+           "<li><a href='/guide/setup'>Setup</a></li><li><a href='/guide/basics'>Basics</a></li></ol></nav>"
+    text_after(html).should == "A quick guide to building appsIntroSetupBasics"
+  end
+
   it "keeps a source's domain and a dataset's format after the title" do
     html = card("The harbor bridge reopens", "<p><a href='/posts/25'>vice.com</a></p>") +
            card("Crews finish early", "<ul><li><a href='/posts/18' data-format='csv'>CSV</a></li></ul>")

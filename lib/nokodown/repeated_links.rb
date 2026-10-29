@@ -18,6 +18,7 @@ module Nokodown
     # ones that can share a card with the label.
     NEAREST = 2
     NEAREST_SCAN = 10
+    MENU_ENTRIES = 3
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th caption figcaption].freeze
     MEDIA = %w[img picture video audio iframe svg object embed].freeze
     MEDIA_SELECTOR = MEDIA.join(", ").freeze
@@ -42,7 +43,7 @@ module Nokodown
         next unless label?(link)
 
         holder = holder(link)
-        holder if standalone?(holder) && named_in_card?(link, holder, namers[link.page])
+        holder if standalone?(holder) && !menu_entry?(holder) && named_in_card?(link, holder, namers[link.page])
       end
       holders.each { |holder| holder.remove unless Dom.in_code?(holder) }
     end
@@ -110,6 +111,12 @@ module Nokodown
       return false unless Dom.text(node).empty?
 
       !node.element? || !(MEDIA.include?(node.name) || node.at_css(MEDIA_SELECTOR))
+    end
+
+    # A link alone in an item of a list is an entry of a menu, a breadcrumb
+    # or a table of contents, whose other entries lead elsewhere.
+    def menu_entry?(holder)
+      holder.name == "li" && holder.parent.element_children.count { |child| child.name == "li" } >= MENU_ENTRIES
     end
 
     # On a line of its own, at the end of an excerpt or in a row of
