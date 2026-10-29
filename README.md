@@ -38,8 +38,12 @@ result.mode           # :article, :page, :full or :none
 Nokodown.to_markdown(html, url: "https://example.com/post") # just the Markdown
 ```
 
-`html` is a string in any encoding. Binary strings are decoded using their
-`<meta charset>`, and invalid bytes are dropped.
+`html` is a string in any encoding. Binary strings are decoded the way a
+browser reads them, by their `<meta charset>` or XML declaration, except that
+bytes which read as UTF-8 are UTF-8 whatever the page declares, and the
+encoding of a page that declares none is told from its bytes. UTF-8 text that
+was once misread as Windows-1252 ("cafÃ©") is repaired, and invalid bytes are
+dropped.
 
 | Option | Default | |
 | --- | --- | --- |
@@ -102,6 +106,8 @@ region, or most of the page's text, is never removed because of its class name.
 ## How it works
 
 1. **Charset**: transcode to UTF-8; Lexbor itself ignores `<meta charset>`.
+   The bytes decide when they disagree with the declared charset or when
+   there is none.
 2. **Metadata**: JSON-LD, Open Graph and other `<meta>` tags, then the
    document, in Readability's order of preference.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
