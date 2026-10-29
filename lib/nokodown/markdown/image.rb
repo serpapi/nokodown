@@ -12,8 +12,8 @@ module Nokodown
       # a word for "image" or for "loading" in the major web languages.
       FILE_NAME = /\A\S+\.(?:jpe?g|png|gif|webp|svg|avif|bmp|tiff?|heic|ico)\z/i.freeze
       CAMERA_NAME = /
-        \A(?:(?:img|dsc[nf]?|dcim|pxl|mvimg|screenshot|scan|photo|image)[\s_-]?\d{3,}[\d\s_.:()~-]*(?:at[\d\s_.:()-]+)?|
-        [0-9a-f-]{12,})\z
+        \A(?:(?:img|dsc[nf]?|dcim|pxl|mvimg|screenshot|scan|photo|image)[\s_-]?\d{3,}
+        (?:[\w.~()-]*|[\d\s_.:()~-]*(?:at[\d\s_.:()-]+(?:[ap]m)?)?)|[0-9a-f-]{12,})\z
       /xi.freeze
       GENERIC_ALT = /
         \A(?:image|img|photo|picture|pic|thumbnail|thumb|banner|untitled|default|featured\simage|no\simage|
