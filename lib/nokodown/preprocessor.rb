@@ -29,13 +29,12 @@ module Nokodown
     STREAMED_LINK_SHARE = 0.5
 
     UTILITY_FORM_TEXT = 300
-    FORM_TITLE = 120
-    TITLE_HOLDERS = %w[body main article].freeze
-    MAIN_REGIONS = %w[main article].freeze
+    # Set on a main region once its text besides headings is measured.
+    REGION_TEXT = "data-nokodown-region-text"
+    SENDER_INPUTS = ["", "text", "email"].freeze
+    QUANTITY = /qty|quantity/i.freeze
+    FORM_CONTENT = "h1, main, article, [role=main], video, iframe"
     FORM_PAGE_TEXT = 100
-    BEYOND_FORM_TITLE = "a[href], img, picture, video, iframe, table, ul, ol, dl"
-    FORM_TITLE_PIECES = 3
-    TEXT_PIECES = ".//text()[normalize-space()]"
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
@@ -73,13 +72,13 @@ module Nokodown
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
       restore_picture_sources
-      message_forms = @body.css("form").select { |form| form.at_css("textarea") }
+      mark_message_forms
       @body.css(JUNK).each(&:remove)
       LeakedMarkup.clean(@body)
       @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
-      remove_message_forms(message_forms)
+      keep_message_marks
       remove_form_controls
       HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
@@ -213,7 +212,7 @@ module Nokodown
 
     def remove_hidden
       total = Dom.char_count(@body.content)
-      @panel_ids = @body.css("[aria-controls]").flat_map { |control| control["aria-controls"].split }.to_set
+      @panel_ids = panel_ids
       @body.css(HIDDEN_CANDIDATES).each do |node|
         next unless hidden?(node)
         # A hidden wrapper around most of the page is an anti-flicker snippet
@@ -222,6 +221,10 @@ module Nokodown
 
         node.remove
       end
+    end
+
+    def panel_ids
+      @body.css("[aria-controls]").flat_map { |control| control["aria-controls"].split }.to_set
     end
 
     def page_like?(node)
@@ -277,25 +280,65 @@ module Nokodown
       disclosure?(node) && (node.key?("aria-labelledby") || @panel_ids.include?(node["id"]))
     end
 
+    # A message form that goes stays as an empty mark for MessageForms, which
+    # takes the title above it once the content is chosen.
     def remove_form_controls
-      @body.css("form").each { |form| form.remove if utility_form?(form) }
+      @body.css("form").each { |form| drop_form(form) if utility_form?(form) }
       @body.css("input").each { |input| input.remove unless task_checkbox?(input) }
       @body.css("button").each { |button| disclosure_button?(button) ? button.replace(button.children) : button.remove }
       @body.css("label").each { |label| label.remove if label["for"] || Dom.ancestors_named(label, "form").any? }
-      @body.css("form").each { |form| form.remove if leftover_form?(form) }
+      @body.css("form").each { |form| drop_form(form) if leftover_form?(form) }
     end
 
-    # Comment, review and contact forms ask for a message in a text box (gone
-    # with the other controls by now), under a title such as "Leave a Reply"
-    # or "Be the first to review" in any language. A page wrapped in one form
-    # (ASP.NET) holds far more text. Forms inside hidden boxes went with them.
-    def remove_message_forms(forms)
-      forms.each do |form|
-        next if form.ancestors.none? { |ancestor| ancestor.name == "body" }
-        next if Dom.char_count(form.content) >= UTILITY_FORM_TEXT || page_form?(form)
+    def drop_form(form)
+      form.key?(MessageForms::MARK) ? form.children.each(&:remove) : form.remove
+    end
 
-        titled_form(form).remove
+    # Text boxes go with the junk, so the forms that ask for a message in a
+    # box readers can see are marked first.
+    def mark_message_forms
+      @panel_ids = panel_ids
+      @body.css("form").each do |form|
+        form[MessageForms::MARK] = "" if form.css("textarea").any? { |box| shown?(box) }
       end
+    end
+
+    # Hidden itself or by a wrapper inside the form; a hidden form goes whole.
+    def shown?(box)
+      node = box
+      until node.nil? || node.name == "form"
+        return false if hidden?(node)
+
+        node = node.parent
+      end
+      true
+    end
+
+    # Comment, review and contact forms ask who writes as well as what.
+    def keep_message_marks
+      @body.css("form[#{MessageForms::MARK}]").each do |form|
+        form.remove_attribute(MessageForms::MARK) unless message_form?(form)
+      end
+    end
+
+    # A message form holds a few labels and notes; its pictures are a
+    # captcha, smileys or rating stars. The form ASP.NET wraps a page in, or
+    # one holding the page's title, main region or the address to write to,
+    # holds the page. One that asks how many orders something, with a note
+    # for the cake or the engraving.
+    def message_form?(form)
+      return false if form.parent&.name == "body" || form.at_css(FORM_CONTENT)
+      return false if Dom.char_count(form.content) >= UTILITY_FORM_TEXT
+      return false if form.content.match?(MessageForms::CONTACT_DETAIL)
+
+      inputs = form.css("input")
+      return false if inputs.none? { |input| SENDER_INPUTS.include?(input["type"].to_s.downcase) }
+
+      inputs.none? { |input| quantity?(input) } && !page_form?(form)
+    end
+
+    def quantity?(input)
+      input["type"].to_s.casecmp?("number") || input["name"].to_s.match?(QUANTITY)
     end
 
     # On an application or sign-up page the form is what the main region
@@ -306,38 +349,25 @@ module Nokodown
       holder = holder.parent while holder&.element? && !main_region?(holder) && !comment_area?(holder)
       return false unless holder&.element? && main_region?(holder)
 
-      headings = holder.css(Dom::HEADING_SELECTOR).sum { |heading| Dom.char_count(heading.content) }
-      Dom.char_count(holder.content) - Dom.char_count(form.content) - headings < FORM_PAGE_TEXT
+      region_text(holder) - (Dom.char_count(form.content) - heading_chars(form)) < FORM_PAGE_TEXT
+    end
+
+    # A thread's replies share their region, which is measured once.
+    def region_text(holder)
+      holder[REGION_TEXT] ||= (Dom.char_count(holder.content) - heading_chars(holder)).to_s
+      holder[REGION_TEXT].to_i
+    end
+
+    def heading_chars(node)
+      node.css(Dom::HEADING_SELECTOR).sum { |heading| Dom.char_count(heading.content) }
     end
 
     def main_region?(node)
-      MAIN_REGIONS.include?(node.name) || node["role"] == "main"
+      Boilerplate::CONTENT_ANCESTORS.include?(node.name) || node["role"] == "main"
     end
 
     def comment_area?(node)
       Dom.signature(node).match?(Patterns::SECONDARY)
-    end
-
-    # The form with the wrappers that add only a short title or note to it.
-    def titled_form(form)
-      own = [Dom.char_count(form.content), form.xpath(TEXT_PIECES).size, form.css(Dom::HEADING_SELECTOR).size,
-             form.css(BEYOND_FORM_TITLE).size]
-      node = form
-      node = node.parent while node.parent&.element? && form_title?(node.parent, own)
-      node
-    end
-
-    # A few short lines under one heading, not the page's title or main
-    # region, nor links, pictures, tables or lists. The details beside a
-    # contact form, or the other tabs beside a review form, are more.
-    def form_title?(wrapper, own)
-      chars, pieces, headings, beyond = own
-      return false if TITLE_HOLDERS.include?(wrapper.name) || wrapper["role"] == "main" || wrapper.at_css("h1")
-      return false if Dom.char_count(wrapper.content) - chars > FORM_TITLE
-      return false if wrapper.xpath(TEXT_PIECES).size - pieces > FORM_TITLE_PIECES
-      return false if wrapper.css(Dom::HEADING_SELECTOR).size - headings > 1
-
-      wrapper.css(BEYOND_FORM_TITLE).size == beyond
     end
 
     # Only a prompt such as "Search:" is left once the controls are gone.

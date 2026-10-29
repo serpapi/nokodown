@@ -80,11 +80,15 @@ with `main_content: false`, `:none` for a document without a body.
   登录 | 注册", "View Cart (0)", "Subscribe to: Posts (Atom)") by where they
   point, unless a sentence runs on around them or they are items of a
   larger menu, and copyright and licence lines in the major web languages.
+- Once the content is chosen and pruned, so that they cannot sway either,
+  comment, review and contact forms (a visible text box, a name or e-mail
+  field and little text) with the title and notes above them in any
+  language. A form stays when it wraps the page (ASP.NET), holds its title
+  or main region, holds an e-mail address or a phone number, asks how many
+  (an order with a note), or is all an application or sign-up page's main
+  region holds, and none goes when it is all the content holds.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
-  links by where they point, comment, review and contact forms (a form with
-  a text box and little text) with the title and notes around them in any
-  language, unless the form is all an application or sign-up page's main
-  region holds, modals, chat widgets, "related", "recommended"
+  links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
   continuing the paragraph before it, or the footnote to a mark just above),
   and, next to an article, its comment thread.
@@ -195,7 +199,8 @@ own, and a cookie banner without headings (a cookie policy has them).
    shows it, and gives way to an `<h1>` that the page's URL names when the
    title does not.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
-   `<noscript>` copies), drop scripts, invisible elements and form controls.
+   `<noscript>` copies), drop scripts, invisible elements and form controls,
+   and mark the forms that ask for a message while their controls are there.
 4. **Boilerplate**: remove page chrome and noise widgets across the whole page.
 5. **ContentLocator**: score paragraphs with Readability's algorithm. When one
    candidate holds most of the page's prose the content is narrowed to it
@@ -237,7 +242,8 @@ own, and a cookie banner without headings (a cookie policy has them).
    posts or products (alike blocks, each with a linked title, that hold most
    of the text) and a featured post beside them, since it would judge each
    item on its own. A teaser's linked title with its date and author links
-   is not a link cluster, however short.
+   is not a link cluster, however short. Then **MessageForms** removes the
+   marked forms left in the content.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data

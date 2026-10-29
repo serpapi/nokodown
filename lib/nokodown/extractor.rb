@@ -65,10 +65,26 @@ module Nokodown
       attribution&.write(selection.nodes)
       teasers = Teasers.new(body, @url, urls, page_type).call
       nodes = selection.nodes
-      return [Teasers.strip(cleaned_article(nodes, page_type, urls), teasers), :article] if selection.mode == :article
+      if selection.mode == :article
+        nodes = cleaned_article(nodes, page_type, urls)
+      else
+        Pruner.new(nodes, :page, urls: urls).call
+      end
+      remove_site_lines(nodes)
+      [Teasers.strip(nodes, teasers), selection.mode]
+    end
 
-      Pruner.new(nodes, :page, urls: urls).call
-      [Teasers.strip(nodes, teasers), :page]
+    # Message forms go once the content is chosen and pruned, so that their
+    # few lines sway neither, but never all of it: a contact page may hold
+    # nothing but its form.
+    def remove_site_lines(nodes)
+      lines = MessageForms.blocks(nodes)
+      lines.each(&:remove) if leaves_content?(nodes, lines)
+    end
+
+    def leaves_content?(nodes, lines)
+      text = nodes.sum { |node| Dom.char_count(node.content) } - lines.sum { |line| Dom.char_count(line.content) }
+      text.positive? || nodes.sum { |node| node.css("img").size } > lines.sum { |line| line.css("img").size }
     end
 
     # Like Readability, fall back to lighter cleaning when conditional cleaning
