@@ -83,6 +83,12 @@ RSpec.describe Nokodown::Metadata do
     metadata(%(<script type="application/ld+json">#{JSON.generate(json)}</script>))[:title].should == "Lot B, Kitchener: MLS® #1038 – Café <3"
   end
 
+  it "decodes only entities that end with a semicolon" do
+    json = { "@type" => "Article", "headline" => "Search?q=tea&copy=1 &ndash; Shop" }
+
+    metadata(%(<script type="application/ld+json">#{JSON.generate(json)}</script>))[:title].should == "Search?q=tea&copy=1 – Shop"
+  end
+
   it "removes the site name from the title" do
     metadata(%(<title>Release notes | Example</title><meta property="og:site_name" content="Example">))[:title].should == "Release notes"
   end

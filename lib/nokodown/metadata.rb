@@ -27,7 +27,9 @@ module Nokodown
     LOGO_NAME = /logo|brand|site[-_]?(?:title|name)/i.freeze
     SITE_LOGO_NAME = /logo|site[-_]?(?:title|name)/i.freeze
     SCRIPT_QUERY = /index\.[a-z]+\?/i.freeze
-    ENTITY = /&(?:#\d+|#x\h+|[a-z][a-z\d]*);/i.freeze
+    ENTITY_NAME = '(?:#\d+|#x\h+|[a-z][a-z\d]*);'
+    ENTITY = /&#{ENTITY_NAME}/i.freeze
+    BARE_AMPERSAND = /&(?!#{ENTITY_NAME})/i.freeze
 
     TITLE_KEYS = %w[dc:title dcterm:title og:title weibo:article:title weibo:webpage:title title twitter:title parsely-title].freeze
     BYLINE_KEYS = %w[dc:creator dcterm:creator author parsely-author].freeze
@@ -357,9 +359,11 @@ module Nokodown
 
     # JSON-LD strings and twice-escaped attributes keep their entities
     # ("MLS&reg;"). Lexbor decodes every HTML entity in a textarea's text,
-    # which it does not parse for tags.
+    # which it does not parse for tags. Other ampersands are escaped, since
+    # it would also read some names without their semicolon ("&copy").
     def unescape(value)
-      Nokolexbor::HTML("<textarea>#{value.gsub("<", "&lt;")}</textarea>").at_css("textarea").text
+      escaped = value.gsub("<", "&lt;").gsub(BARE_AMPERSAND, "&amp;")
+      Nokolexbor::HTML("<textarea>#{escaped}</textarea>").at_css("textarea").text
     end
   end
 end
