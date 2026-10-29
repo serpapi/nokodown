@@ -138,6 +138,19 @@ RSpec.describe Nokodown::Teasers do
     text.should_not include("Trail shoe model 3")
   end
 
+  it "takes dated permalinks and coded product pages for pages like this one" do
+    rows = lambda do |href|
+      stories.each_with_index.map do |title, index|
+        "<div class='row'><b>12.08.2026</b> <a href='#{href.call(index)}'>#{title}</a> <span>A short summary.</span></div>"
+      end.join
+    end
+    dated = rows.call(->(index) { "/2026/4/#{index + 2}/port/#{575_500 + index}.html" })
+    coded = rows.call(->(index) { "/fq0#{index}4100.html" })
+
+    blocks("<div class='news'>#{story(2)}#{dated}</div>", "https://news.example.com/2026/4/30/port/575431.html").should_not be_empty
+    blocks("<div class='news'>#{story(2)}#{coded}</div>", "https://shop.example.com/fq146100.html").should_not be_empty
+  end
+
   it "keeps a listing whose address looks like its items' when its list comes first" do
     products = Array.new(6) do |index|
       "<li class='item'><a href='/san-pham/tra-sam-#{index}'><img src='/img/#{index}.jpg' alt=''>" \
