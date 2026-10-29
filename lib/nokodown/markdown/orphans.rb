@@ -18,11 +18,12 @@ module Nokodown
       module_function
 
       def call(blocks)
+        empty = empty_labels(blocks)
         blocks.reject.with_index do |block, index|
+          next true if empty.include?(index)
           next false unless block.kind == :paragraph && !block.text.include?("](")
 
-          text = Text.plain(block.text)
-          counter?(blocks, index, text) || empty_label?(blocks, index, text)
+          counter?(blocks, index, Text.plain(block.text))
         end
       end
 
@@ -37,15 +38,13 @@ module Nokodown
       # "Tags:" whose tags are, end the page or a section. A lone label over
       # a heading may name it, and labels followed by text may be a template
       # a post sets out for readers to fill in.
-      def empty_label?(blocks, index, text)
-        return false unless colon_label?(text)
-
-        last = index
-        last += 1 while blocks[last + 1] && colon_label_block?(blocks[last + 1])
-        first = index
-        first -= 1 while first.positive? && colon_label_block?(blocks[first - 1])
-        following = blocks[last + 1]
-        following.nil? || (following.kind == :heading && last > first)
+      def empty_labels(blocks)
+        labels = blocks.map { |block| colon_label_block?(block) }
+        runs = blocks.each_index.chunk_while { |a, b| labels[a] && labels[b] }.select { |run| labels[run.first] }
+        runs.select do |run|
+          following = blocks[run.last + 1]
+          following.nil? || (following.kind == :heading && run.size > 1)
+        end.flatten.to_set
       end
 
       def colon_label_block?(block)
