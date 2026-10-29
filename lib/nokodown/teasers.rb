@@ -77,6 +77,8 @@ module Nokodown
     WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[[\p{L}\p{N}]&&[^\p{Han}\p{Hiragana}\p{Katakana}]]+/.freeze
     DIGIT = /\d/.freeze
     DIGITS = /\A\d+\z/.freeze
+    NUMBER = /\d+/.freeze
+    NAME_PARTS = /[-_]/.freeze
     # A post's title: "andrea-jeremiah-latest-photos", "kak_sdelat_ramku.html".
     SLUG = /\A[\p{L}\p{N}%]+(?:[-_][\p{L}\p{N}%]+){2,}(?:\.[a-z]+)?\z/i.freeze
     EXTENSION = /\.[a-z]+\z/i.freeze
@@ -130,7 +132,7 @@ module Nokodown
     def initialize(body, url, urls, page_type)
       @body = body
       @urls = urls
-      @page = parse(urls.resolve(url)) if url
+      @page = UrlResolver.web_address(urls.resolve(url)) if url
       @url_words = UrlWords.new(url)
       @declared = BODIES.include?(page_type)
       @discussion = ContentLocator::DISCUSSIONS.include?(page_type)
@@ -540,7 +542,7 @@ module Nokodown
     def site_page(href)
       return if href.empty? || href.start_with?("#")
 
-      uri = parse(@urls.resolve(href))
+      uri = UrlResolver.web_address(@urls.resolve(href))
       return unless uri && host(uri) == host(@page) && !uri.path.match?(FILE)
       return if uri.path.chomp("/") == @page.path.chomp("/") && (uri.query == @page.query || anchor?(uri.fragment))
 
@@ -681,8 +683,10 @@ module Nokodown
       page = page_segments
       other = segments(uri)
       return unless query_keys(uri) == page_keys
-      return (:sibling if same_kind?(uri)) if page == other
-      return (:sibling if other.size == page.size && folders(page) == folders(other)) if page.size > 1
+      if page == other || page.size > 1
+        same = page == other ? same_kind?(uri) : other.size == page.size && folders(page) == folders(other)
+        return same ? :sibling : nil
+      end
       return unless page.size == 1 && other.size == 1
       return :sibling if skeleton(page.first) == skeleton(other.first)
 
@@ -693,10 +697,10 @@ module Nokodown
     # category's "-g8893.html" or "_c890317" beside a product's "-37209.html"
     # or "_p9367731".
     def same_code?(page, other)
-      codes = [page, other].map { |name| UrlWords.decode(name).sub(EXTENSION, "").split(/[-_]/).last.to_s }
+      codes = [page, other].map { |name| UrlWords.decode(name).sub(EXTENSION, "").split(NAME_PARTS).last.to_s }
       return true unless codes.all? { |code| code.match?(DIGIT) }
 
-      codes.map { |code| code.gsub(/\d+/, "0") }.uniq.size == 1
+      codes.map { |code| code.gsub(NUMBER, "0") }.uniq.size == 1
     end
 
     # Dated permalinks differ in their date folders ("/2023/4/30/news/").
@@ -750,13 +754,6 @@ module Nokodown
 
     def host(uri)
       uri.host.to_s.downcase.sub(/\A(?:www\d?|m)\./, "")
-    end
-
-    def parse(url)
-      uri = URI.parse(url.to_s)
-      uri if uri.is_a?(URI::HTTP) && uri.host
-    rescue URI::Error, ArgumentError
-      nil
     end
   end
 end
