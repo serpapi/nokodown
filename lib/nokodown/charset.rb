@@ -14,8 +14,10 @@ module Nokodown
     SAMPLE = 262_144
     HIGH_RUN_BEFORE_LETTER = /[\x80-\xFF]+(?=([A-Za-z])?)/n.freeze
     LEAD_BYTE = /\A[\xC2-\xF4]/n.freeze
+    HIGH_BYTE = /[\x80-\xFF]/n.freeze
     DOUBLE_BYTE_RUN = /[\x80-\xFF](?:[\x40-\x7E]?[\x80-\xFF])*/n.freeze
     UTF8_BOM = "\xEF\xBB\xBF".b.freeze
+    BOM_OR_REPLACEMENT = /\xEF(?:\xBB\xBF|\xBF\xBD)/n.freeze
     UTF16_BOMS = { "\xFF\xFE".b => Encoding::UTF_16LE, "\xFE\xFF".b => Encoding::UTF_16BE }.freeze
 
     # Browsers read these labels as the superset encoding, as the WHATWG
@@ -61,16 +63,22 @@ module Nokodown
     # reads as a C1 control, a Windows-1252 sign, or itself where
     # Windows-1252 leaves it undefined. Only the lead bytes of common scripts
     # (Â to Å, Æ, Î Ï, Ð Ñ, × to Û, à to ð) count, since a letter such as ß
-    # or É before a no-break space also reads back as UTF-8.
+    # or É before a no-break space also reads back as UTF-8, and each must
+    # be followed by as many continuations as it leads: "í”" in Vietnamese
+    # or "áš" in Slovak is two letters.
     SINGLE_BYTES = (0x80..0xFF).each_with_object({}) do |byte, bytes|
       bytes[byte.chr(Encoding::UTF_8)] = byte.chr
       char = byte.chr.force_encoding(Encoding::Windows_1252).encode(Encoding::UTF_8, undef: :replace, replace: "")
       bytes[char] = byte.chr unless char.empty?
     end.freeze
-    DOUBLE_ENCODED_CHAR = '\xC3[\x82-\x86\x8E-\x91\x97-\x9B\xA0-\xB0]' \
-                          '(?:[\xC2\xC5\xC6\xCB][\x80-\xBF]|\xE2[\x80-\x84][\x80-\xBF]|[\x81\x8D\x8F\x90\x9D])+'
-    DOUBLE_ENCODED = /#{DOUBLE_ENCODED_CHAR}/n.freeze
+    CONTINUATION = '(?:[\xC2\xC5\xC6\xCB][\x80-\xBF]|\xE2[\x80-\x84][\x80-\xBF]|[\x81\x8D\x8F\x90\x9D])'
+    DOUBLE_ENCODED_TAIL = "(?:[\\x82-\\x86\\x8E-\\x91\\x97-\\x9B]#{CONTINUATION}|" \
+                          "[\\xA0-\\xAF]#{CONTINUATION}{2}|\\xB0#{CONTINUATION}{3})"
+    DOUBLE_ENCODED_CHAR = "\\xC3#{DOUBLE_ENCODED_TAIL}"
     DOUBLE_ENCODED_RUN = /\A(?:#{DOUBLE_ENCODED_CHAR})+\z/n.freeze
+    # The look-behind comes after the lead byte, which the search can then
+    # skip to.
+    DOUBLE_ENCODED = /\xC3(?<![\x80-\xFF]\xC3)#{DOUBLE_ENCODED_TAIL}(?:#{DOUBLE_ENCODED_CHAR})*(?![\x80-\xFF])/n.freeze
     C1_CONTROL = /[\u0080-\u009F]/.freeze
     ONLY_C1_CONTROLS = /\A[\u0080-\u009F]+\z/.freeze
     SINGLE_CHARACTER = /\A[\u00A0-\u017F\u0370-\u04FF\u0600-\u06FF\u2000-\u214F\uFEFF]\z/.freeze
@@ -81,7 +89,7 @@ module Nokodown
       html = decode(html.b) if html.encoding == Encoding::BINARY
       html = transcoded(html) if html.encoding != Encoding::UTF_8
       html = html.scrub("") unless html.valid_encoding?
-      html.delete("\uFEFF\uFFFD")
+      html.b.match?(BOM_OR_REPLACEMENT) ? html.delete("\uFEFF\uFFFD") : html
     end
 
     def transcoded(html)
@@ -90,14 +98,22 @@ module Nokodown
       html.force_encoding(Encoding::UTF_8)
     end
 
+    # Bytes that read as UTF-8 are UTF-8 whatever the <meta> says: the
+    # server's Content-Type, which wins over it, must have said so. ASCII
+    # reads the same in any encoding but the 7-bit ones (ISO-2022-JP).
     def decode(bytes)
       UTF16_BOMS.each { |bom, encoding| return bytes.byteslice(2..).force_encoding(encoding) if bytes.start_with?(bom) }
+      utf8 = bytes.delete_prefix(UTF8_BOM).force_encoding(Encoding::UTF_8)
       declared = declared(bytes)
+      return redecoded_runs(utf8) if utf8.valid_encoding? && (!utf8.ascii_only? || declared.nil? || declared.ascii_compatible?)
+
       declared = nil if declared == Encoding::UTF_8
-      encoding = declared || detected(bytes) unless reads_as_utf8?(bytes, declared ? DECLARED_UTF8_SHARE : UTF8_SHARE)
+      return mixed(bytes, latin: declared == Encoding::Windows_1252) if reads_as_utf8?(bytes, declared ? DECLARED_UTF8_SHARE : UTF8_SHARE)
+
+      encoding = declared || detected(bytes)
       return bytes.force_encoding(encoding) unless encoding.nil? || encoding == Encoding::Windows_1252
 
-      mixed(bytes, latin: (encoding || declared) == Encoding::Windows_1252)
+      mixed(bytes, latin: !encoding.nil?)
     end
 
     def declared(html)
@@ -116,6 +132,7 @@ module Nokodown
     # double-byte encodings interleave with ASCII trail bytes.
     def detected(bytes)
       runs = bytes.scan(DOUBLE_BYTE_RUN)
+      return if runs.empty?
       return Encoding::Windows_1252 if runs.count { |run| run.bytesize == 1 } > runs.size * WESTERN_SHARE
 
       sample = bytes.byteslice(0, SAMPLE)
@@ -123,16 +140,16 @@ module Nokodown
       found || (Encoding::Windows_1252 if runs.count { |run| run.bytesize <= 2 } > runs.size * WESTERN_SHARE)
     end
 
-    # Bytes that read as UTF-8 are UTF-8 whatever the <meta> says: the
-    # server's Content-Type, which wins over it, must have said so. Text in
-    # a legacy encoding reads as UTF-8 here and there by chance, so a page
-    # that declares one must read almost entirely as UTF-8.
+    # Text in a legacy encoding reads as UTF-8 here and there by chance, so
+    # a page that declares one must read almost entirely as UTF-8. The text
+    # from the first high byte on tells, as it does for detection.
     def reads_as_utf8?(bytes, share)
-      high = bytes.bytesize - bytes.count("\x00-\x7F")
-      utf8 = bytes.dup.force_encoding(Encoding::UTF_8)
-      return high.positive? if utf8.valid_encoding?
+      start = bytes.index(HIGH_BYTE)
+      return false unless start
 
-      utf8.scrub("").bytesize - bytes.bytesize + high >= high * share
+      sample = bytes.byteslice(start, SAMPLE)
+      high = sample.bytesize - sample.count("\x00-\x7F")
+      sample.force_encoding(Encoding::UTF_8).scrub("").bytesize - sample.bytesize + high >= high * share
     end
 
     def reads_as?(sample, encoding, script, share)
@@ -146,12 +163,18 @@ module Nokodown
     # and a lone lead byte only inside a word: before anything else it is
     # what is left of a character cut off ("przekaza\xC4...").
     def mixed(bytes, latin:)
-      bytes = bytes.delete_prefix(UTF8_BOM)
-      utf8 = bytes.dup.force_encoding(Encoding::UTF_8)
-      return utf8 if utf8.valid_encoding? && !bytes.match?(DOUBLE_ENCODED)
+      bytes.delete_prefix(UTF8_BOM).gsub(HIGH_RUN_BEFORE_LETTER) do |run|
+        mixed_run(run, latin || stray?(run, Regexp.last_match(1)))
+      end.force_encoding(Encoding::UTF_8)
+    end
 
-      bytes.gsub(HIGH_RUN_BEFORE_LETTER) { |run| mixed_run(run, latin || stray?(run, Regexp.last_match(1))) }
-           .force_encoding(Encoding::UTF_8)
+    # Valid UTF-8 only changes where it was decoded twice over, which most
+    # pages never were.
+    def redecoded_runs(utf8)
+      bytes = utf8.b
+      return utf8 if utf8.ascii_only? || !bytes.match?(DOUBLE_ENCODED)
+
+      bytes.gsub(DOUBLE_ENCODED) { |run| redecoded(run) || run }.force_encoding(Encoding::UTF_8)
     end
 
     def stray?(run, letter)

@@ -611,6 +611,15 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html, title: false).should == "Spaß an der « identité » und 2×–3×"
     end
 
+    it "reads valid UTF-8 quickly when its letters come before signs" do
+      text = "phí” lệ, áš " * 200_000
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      html = Nokodown::Charset.utf8("<p>#{text}</p>".b)
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 0.3
+      html.should == "<p>#{text}</p>"
+    end
+
     it "drops byte order marks and replacement characters" do
       Nokodown.to_markdown("\uFEFF<p>a\uFEFFb\uFFFDc</p>".b, title: false).should == "abc"
     end
