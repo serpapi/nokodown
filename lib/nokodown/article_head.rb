@@ -16,7 +16,6 @@ module Nokodown
     # and invalid nesting there, such as a list right inside a <dl>, is
     # dropped. Layout tables are unwrapped.
     LISTS = Set.new(%w[ul ol menu dl li dt dd]).freeze
-    HEADINGS = "h1, h2, h3, h4, h5, h6"
 
     def initialize(root, nodes, stats, title = nil)
       @root = root
@@ -64,7 +63,7 @@ module Nokodown
 
       own = match(Dom.text(headline)).min
       below = (stretch.drop(1) + @nodes).select(&:element?)
-      headings = below.flat_map { |node| Dom.heading?(node) ? [node] : node.css(HEADINGS).to_a }
+      headings = below.flat_map { |node| Dom.heading?(node) ? [node] : node.css(Dom::HEADING_SELECTOR).to_a }
       headings.any? { |heading| (rival = match(Dom.text(heading)).min) >= TITLE_MATCH && rival > own }
     end
 

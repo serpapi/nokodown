@@ -11,6 +11,7 @@ module Nokodown
     ]).freeze
 
     HEADINGS = Set.new(%w[h1 h2 h3 h4 h5 h6]).freeze
+    HEADING_SELECTOR = HEADINGS.to_a.join(", ").freeze
 
     # Elements that stop Readability from treating a div as a paragraph.
     PARAGRAPH_BREAKERS = Set.new(%w[blockquote dl div img ol p pre table ul]).freeze

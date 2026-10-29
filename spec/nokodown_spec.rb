@@ -109,6 +109,16 @@ RSpec.describe Nokodown do
       titles.each_with_index { |title, index| markdown.should include("## [#{title}](https://example.com/posts/#{index})") }
     end
 
+    it "still cleans what sits around a listing's posts" do
+      posts = Array.new(3) do |index|
+        "<div class='post-item'><h2><a href='/posts/#{index}'>Post #{index}</a></h2>" \
+          "<p>#{'Our gardeners explain the method step by step, with photos of each stage and the tools they use. ' * 2}</p></div>"
+      end
+      promo = "<div class='promo-box'><p>Join the club for weekly tips</p><a href='/join'>Join</a></div>"
+
+      extract("<main><h1>Blog</h1><div class='posts'>#{posts.join}</div>#{promo}</main>").should_not include("weekly tips")
+    end
+
     it "drops the few menu links left in a content area that holds almost nothing else" do
       html = '<main><a href="#content">Skip to content</a><div><a href="/shop">Shop all products</a> ' \
              '<a href="/help">Help and contact</a> <a href="/account">Your account</a></div><p>Sold out.</p></main>'

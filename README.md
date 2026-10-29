@@ -136,9 +136,11 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    buttons ("Add to cart", "Book a demo") are removed, except for disclosure
    toggles, buttons inside a sentence and titles or labels styled as buttons.
    If article cleaning removes almost everything, it is undone and light
-   cleaning is used instead, as it is on a listing of posts or products, whose
-   items conditional cleaning would judge one by one. A teaser's linked title
-   with its date and author links is not a link cluster, however short.
+   cleaning is used instead. Conditional cleaning leaves alone the items of a
+   listing of posts or products (alike blocks, each with a linked title, that
+   hold most of the text) and a featured post beside them, since it would
+   judge each item on its own. A teaser's linked title with its date and author
+   links is not a link cluster, however short.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data

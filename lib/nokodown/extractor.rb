@@ -68,12 +68,12 @@ module Nokodown
     # pruned like a page. Cleaning runs on a copy so it can be undone.
     def cleaned_article(nodes, page_type)
       copies = nodes.map(&:dup)
-      pruner = Pruner.new(copies, :article).call
+      pruner = Pruner.new(copies, :article, keep: listed(nodes, page_type)).call
       if almost_nothing_kept?(copies, nodes)
         Pruner.new(nodes, :page).call
         return nodes
       end
-      return copies if keep_conditional_cleaning?(pruner, page_type, nodes)
+      return copies if keep_conditional_cleaning?(pruner, page_type)
 
       Pruner.new(nodes, :article, conditional: false).call
       nodes
@@ -81,17 +81,18 @@ module Nokodown
 
     # When what conditional cleaning removed from a declared article is mostly
     # links, it was a grid of teasers for other stories, not the article. On
-    # listings and hubs the same teasers are the content. A listing whose
-    # items mostly survive still loses those whose titles make them linky.
-    def keep_conditional_cleaning?(pruner, page_type, nodes)
-      kept = pruner.conditional_share >= CONDITIONAL_SHARE ||
-             (page_type == :article && pruner.removed_link_share > REMOVED_LINK_SHARE)
-      kept && !listing?(nodes, page_type)
+    # listings and hubs the same teasers are the content.
+    def keep_conditional_cleaning?(pruner, page_type)
+      return true if pruner.conditional_share >= CONDITIONAL_SHARE
+
+      page_type == :article && pruner.removed_link_share > REMOVED_LINK_SHARE
     end
 
-    # A thread's posts have rules of their own in conditional cleaning.
-    def listing?(nodes, page_type)
-      !ContentLocator::DISCUSSIONS.include?(page_type) && nodes.any? { |node| Listing.listing?(node) }
+    # Conditional cleaning judges a listing's items one by one, and drops
+    # those whose titles and prices make them linky. A thread's posts have
+    # rules of their own.
+    def listed(nodes, page_type)
+      ContentLocator::DISCUSSIONS.include?(page_type) ? Set.new : Listing.keys(nodes)
     end
 
     def almost_nothing_kept?(copies, nodes)

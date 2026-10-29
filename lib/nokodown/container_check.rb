@@ -5,7 +5,7 @@ module Nokodown
   # density, images per paragraph, inputs, embeds) decides whether it is prose
   # or page furniture.
   class ContainerCheck
-    HEADINGS = "h1, h2, h3, h4, h5, h6"
+    HEADINGS = Dom::HEADING_SELECTOR
     TEXTISH = "span, li, td, blockquote, dl, div, img, ol, p, pre, table, ul"
     AD_WORDS = /\A(?:ad(?:vertising|vertisement)?|pub(?:licité)?|werb(?:ung)?|广告|Реклама|Anuncio)\z/i.freeze
     LOADING_WORDS = /\A(?:(?:loading|正在加载|Загрузка|chargement|cargando)(?:…|\.\.\.)?)\z/i.freeze

@@ -19,7 +19,6 @@ module Nokodown
     BUTTON_WORD = /btn|button|cta/.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
-    HEADINGS = "h1, h2, h3, h4, h5, h6"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
@@ -29,10 +28,11 @@ module Nokodown
     CODE_HOLDERS = "pre, code, kbd, samp"
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
-    def initialize(nodes, mode, conditional: true)
+    def initialize(nodes, mode, conditional: true, keep: Set.new)
       @nodes = nodes
       @mode = mode
       @conditional = conditional
+      @keep = keep
       @conditional_seen = 0
       @conditional_kept = 0
       @conditional_removed_links = 0
@@ -129,9 +129,12 @@ module Nokodown
     end
 
     # Readability drops footers, asides and share widgets inside the article;
-    # asides holding real prose (side notes) stay.
+    # asides holding real prose (side notes) stay. A listing item's footer
+    # holds its date, price or cooking time.
     def remove_article_furniture(root, content_length)
-      root.css("footer").each { |node| remove(node) if Dom.text(node).length <= content_length * 0.5 }
+      root.css("footer").each do |node|
+        remove(node) if Dom.text(node).length <= content_length * 0.5 && !@keep.include?(Dom.key(node))
+      end
       root.css("aside").each do |node|
         remove(node) if Dom.text(node).length < 200 || ContainerCheck.new(node, content_length, Set.new).remove?
       end
@@ -158,12 +161,17 @@ module Nokodown
       memo = { root: root }
       ["form, fieldset", "table", "ul", "div"].each do |selector|
         root.css(selector).reverse_each do |node|
-          next if paragraph_keys.include?(Dom.key(node)) || !ContainerCheck.new(node, content_length, paragraph_keys, memo).remove?
+          next if kept?(node, paragraph_keys) || !ContainerCheck.new(node, content_length, paragraph_keys, memo).remove?
 
           ContainerCheck.forget(memo, node)
           remove(node)
         end
       end
+    end
+
+    def kept?(node, paragraph_keys)
+      key = Dom.key(node)
+      paragraph_keys.include?(key) || @keep.include?(key)
     end
 
     # A forum's thread is content.
@@ -212,7 +220,7 @@ module Nokodown
     end
 
     def headline?(link)
-      Dom.ancestors_named(link, *Dom::HEADINGS).any? || !link.at_css(HEADINGS).nil?
+      Dom.ancestors_named(link, *Dom::HEADINGS).any? || !link.at_css(Dom::HEADING_SELECTOR).nil?
     end
 
     # On an index page (an A-Z list, a category grid) the clusters are the
