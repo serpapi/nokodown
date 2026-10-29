@@ -331,17 +331,29 @@ module Nokodown
     end
 
     # A list of links holding one to the page itself shows the reader where
-    # they are: a menu, a breadcrumb trail, a pager.
+    # they are: a menu, a breadcrumb trail, a pager. Links in one list share
+    # a holder, which is judged once.
     def current_page_menus(root)
       return [] unless @urls
 
-      links = root.css("a[href]").select { |link| @urls.current_page?(link["href"]) }
-      links.filter_map { |link| menu_of(link, root) }
+      link_counts = {}
+      holders = root.css("a[href]").filter_map do |link|
+        link_holder(link, root, link_counts) if @urls.current_page?(link["href"])
+      end
+      holders.uniq { |holder| Dom.key(holder) }.select { |holder| !in_data_table?(holder) && menu_entries?(holder) }
     end
 
-    def menu_of(link, root)
-      holder = link.ancestors.find { |ancestor| !ancestor.element? || ancestor.css("a[href]").size >= 3 }
-      holder if holder&.element? && inside?(holder, root) && menu_entries?(holder) && !in_data_table?(holder)
+    # The nearest ancestor below the root that holds three links or more.
+    def link_holder(link, root, link_counts)
+      root_key = Dom.key(root)
+      link.ancestors.each do |ancestor|
+        return unless ancestor.element?
+
+        key = Dom.key(ancestor)
+        return if key == root_key
+        return ancestor if (link_counts[key] ||= ancestor.css("a[href]").size) >= 3
+      end
+      nil
     end
 
     # Alike entries of one link each, perhaps with a count beside it, and

@@ -75,6 +75,16 @@ RSpec.describe Nokodown::Pruner do
       ["Coastal engineering", "Tide", "Sea"].each { |noise| Nokodown::Dom.text(root).should_not include(noise) }
     end
 
+    it "judges a list once however many of its links lead to the page itself" do
+      entries = (1..500).map { |number| "<li><a href='/page'>Item #{number}</a> (#{number})</li>" }.join
+      root = content("#{story}<ul>#{entries}</ul>")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+      described_class.new([root], :page, urls: urls).call
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+    end
+
     it "keeps a listing column that its layout table declares wider than the column beside it" do
       rows = %w[Vector Rapid Alpine Corsa Delta Falcon].map do |name|
         "<tr><td><a href='/wheels/#{name.downcase}'>#{name} R16 alloy wheel, 7J ET40</a></td><td>4,200 rub.</td></tr>"
