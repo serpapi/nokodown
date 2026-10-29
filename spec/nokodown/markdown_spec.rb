@@ -236,8 +236,25 @@ RSpec.describe "Markdown conversion" do
                               "[Voir](https://example.com/v) [«Rycari 2017»](https://example.com/q)"
     end
 
+    it "writes a mail link that shows its address as text" do
+      convert('<p><a href="mailto:info@g-stroot.de">E-Mail info@g-stroot.de</a>, <a href="mailto:a@b.co">Write us</a></p>').should ==
+        "E-Mail info@g-stroot.de, [Write us](mailto:a@b.co)"
+    end
+
+    it "decodes addresses Cloudflare hides" do
+      html = '<p><a href="/cdn-cgi/l/email-protection#5a33343c351a3f223b372a363f74393537">[email&#160;protected]</a>, ' \
+             '<span class="__cf_email__" data-cfemail="5a33343c351a3f223b372a363f74393537">[email&#160;protected]</span></p>'
+      convert(html).should == "info@example.com, info@example.com"
+    end
+
     it "writes a link whose text is its URL as a bare URL" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
+    end
+
+    it "writes a link whose text is a whole address as that address" do
+      html = '<p><a href="https://track.example.net/ct?url=x&amp;id=9">https://www.bar.example/</a> ' \
+             '<a href="https://example.org/a/very/long/path">https://example.org/a/very/…</a></p>'
+      convert(html).should == "https://www.bar.example/ [https://example.org/a/very/…](https://example.org/a/very/long/path)"
     end
 
     it "puts images out of link text" do

@@ -54,9 +54,22 @@ module Nokodown
       ICON_FONT = /(?<![\w-])material-(?:icons|symbols)/.freeze
       # Some CMSs write the caption's markup into the alt attribute.
       TAG = %r{</?[a-z][^<>]*>}i.freeze
+      # Cloudflare hides addresses behind "[email protected]" and a link or a
+      # data-cfemail attribute that holds them encoded.
+      CLOUDFLARE_EMAIL = %r{/cdn-cgi/l/email-protection#([0-9a-f]{6,})\z}i.freeze
+      EMAIL_PLACEHOLDER = "[email protected]"
+      # Link text that shows a whole address, not a shortened one.
+      URL_TEXT = %r{\A(?:https?://|www\.)[^\s…]+\z}i.freeze
 
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
+      def self.cloudflare_email(hex)
+        bytes = [hex].pack("H*").bytes
+        key = bytes.shift
+        email = bytes.map { |byte| byte ^ key }.pack("C*").force_encoding(Encoding::UTF_8)
+        email if email.valid_encoding? && email.match?(/\A[^@\s]+@[^@\s]+\z/)
+      end
+
       def self.link_url(href, urls)
         href = href.strip
         return if href.empty? || href.start_with?("#") || href.match?(UNSAFE_SCHEME)
@@ -133,6 +146,10 @@ module Nokodown
       def element_text(node)
         name = node.name
         return "" if node["class"].to_s.match?(ICON_FONT)
+
+        email = node["data-cfemail"] && Inline.cloudflare_email(node["data-cfemail"])
+        return Text.escape(email) if email
+
         return emphasis(node, EMPHASIS[name]) if EMPHASIS.key?(name)
         return code_span(node) if CODE.include?(name)
 
@@ -188,6 +205,8 @@ module Nokodown
       end
 
       def link_markup(text, href)
+        email = href[CLOUDFLARE_EMAIL, 1] && Inline.cloudflare_email(href[CLOUDFLARE_EMAIL, 1])
+        text, href = [text.gsub(EMAIL_PLACEHOLDER, Text.escape(email)), "mailto:#{email}"] if email
         text = Separators.link_text(text)
         return "" if text.empty? || text.match?(Patterns::LINK_NOISE_TEXT)
         return text if !@links || @in_link
@@ -196,9 +215,18 @@ module Nokodown
         return text unless url
 
         text = Emphasis.unwrap(text)
+        return text if shown?(text, url)
         return url if same_as_url?(text, url)
+        return text if text.delete("\\").match?(URL_TEXT)
 
         "[#{Text.link_text(text)}](#{Text.destination(url)})"
+      end
+
+      # Text that names the address a mail link writes to says everything the
+      # link would.
+      def shown?(text, url)
+        address = url[/\Amailto:([^?]+)/i, 1]
+        !address.nil? && text.delete("\\").downcase.include?(address.downcase)
       end
 
       def same_as_url?(text, url)
