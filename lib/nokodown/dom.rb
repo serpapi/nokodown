@@ -17,6 +17,8 @@ module Nokodown
 
     CODE = %w[pre code].freeze
 
+    INLINE_STYLE = /(?:\A|;)\s*display\s*:\s*inline\s*(?:!important\s*)?(?:;|\z)/i.freeze
+
     NBSP = "\u00A0"
     WHITESPACE = " \t\n\r\f\u00A0"
 
@@ -96,6 +98,12 @@ module Nokodown
 
     def block?(node)
       node.element? && BLOCK.include?(node.name)
+    end
+
+    # DITA and some page builders wrap every phrase in <div style="display:
+    # inline">, which flows with the text around it.
+    def inline_div?(node)
+      node.name == "div" && node["style"].to_s.match?(INLINE_STYLE)
     end
 
     def heading?(node)

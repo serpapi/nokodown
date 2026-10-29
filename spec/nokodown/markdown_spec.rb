@@ -84,6 +84,12 @@ RSpec.describe "Markdown conversion" do
              "1<sup>o</sup> piso, 30<sup>o</sup>C, Acme<sup>TM</sup>, Bar<sup>tm</sup></p>"
       convert(html).should == "le 1er mai, le XIXe siècle, Mme Roux, the 21st, 1º piso, 30°C, Acme™, Bar™"
     end
+
+    it "keeps divs styled display: inline in the line of text around them" do
+      html = '<ol><li><div style="display: inline;">In <b><div style="display: inline;">Organizer</div></b>, ' \
+             'select <b><div style="display:inline">States</div></b>.</div></li></ol>'
+      convert(html).should == "1. In **Organizer**, select **States**."
+    end
   end
 
   describe "emphasis" do

@@ -105,7 +105,7 @@ module Nokodown
         when "input" then node.key?("checked") ? "[x] " : "[ ] "
         else
           text = render(node.children)
-          Dom::BLOCK.include?(name) ? " #{text} " : text
+          Dom::BLOCK.include?(name) && !Dom.inline_div?(node) ? " #{text} " : text
         end
       end
 

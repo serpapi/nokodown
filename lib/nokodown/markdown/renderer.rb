@@ -64,7 +64,7 @@ module Nokodown
 
       def block_level?(node)
         return false unless node.element?
-        return true if Dom::BLOCK.include?(node.name)
+        return true if block_element?(node)
         return CodeBlock.standalone?(node) if node.name == "code"
 
         contains_block?(node)
@@ -74,12 +74,16 @@ module Nokodown
         key = Dom.key(node)
         return @contains_block[key] if key && @contains_block.key?(key)
 
-        found = node.element_children.any? { |child| Dom::BLOCK.include?(child.name) || contains_block?(child) }
+        found = node.element_children.any? { |child| block_element?(child) || contains_block?(child) }
         @contains_block[key] = found if key
         found
       end
 
       private
+
+      def block_element?(node)
+        Dom::BLOCK.include?(node.name) && !Dom.inline_div?(node)
+      end
 
       def block(node)
         return paragraphs([node]) if @depth > MAX_DEPTH
