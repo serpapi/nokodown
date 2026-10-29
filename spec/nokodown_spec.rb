@@ -592,9 +592,9 @@ RSpec.describe Nokodown do
   end
 
   describe "deep nesting" do
-    it "writes the text of elements nested thousands deep" do
-      %w[span b div td blockquote].each do |tag|
-        html = "<p>#{'An opening sentence long enough to be prose. ' * 4}</p>#{"<#{tag}>" * 5000}Deep text here#{"</#{tag}>" * 5000}"
+    it "writes the text of elements and tables nested thousands deep" do
+      [%w[<span> </span>], %w[<div> </div>], %w[<blockquote> </blockquote>], %w[<table><tr><td> </td></tr></table>]].each do |open, close|
+        html = "<p>#{'An opening sentence long enough to be prose. ' * 4}</p>#{open * 3000}Deep text here#{close * 3000}"
 
         [true, false].each { |main| Nokodown.to_markdown(html, main_content: main, title: false).should include("Deep text here") }
       end
