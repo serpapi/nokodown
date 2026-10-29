@@ -14,6 +14,12 @@ RSpec.describe Nokodown::Markdown::Repeats do
         "# Trail Stove 2 - Camp Shop\n\nFits a one litre pot and boils water in three minutes."
     end
 
+    it "keeps a part of the title away from the top" do
+      notes = ["Pitted.", "Store cool.", "Serve chilled.", "Keeps a month.", "From Puglia.", "Since 1950.", "Organic.", "Hand picked."]
+      html = "<h1>Green olives - Camp Shop</h1>#{notes.map { |note| "<p>#{note}</p>" }.join}<p>Camp Shop</p>"
+      convert(html).should end_with("Hand picked.\n\nCamp Shop")
+    end
+
     it "keeps the first line of a poem that gives the poem its name" do
       convert("<h1>The aesthete</h1><p>The aesthete,</p><p>the aesthete</p><p>turns left at once</p>").should ==
         "# The aesthete\n\nThe aesthete,\n\nthe aesthete\n\nturns left at once"
