@@ -746,7 +746,7 @@ RSpec.describe "Markdown conversion" do
 
       it "drops images whose alt text names nothing" do
         alts = ["IMG_6175.JPG", "DSC_0264", "DSC08251s", "Screenshot 2025-10-31 at 5.19.44 PM", "image", "Foto 2", "描述", "صورة",
-                "9f86d081884c7d65", "Cargando..."]
+                "9f86d081884c7d65", "Cargando...", "Siegel dunkel.tiff", "https://example.org/workshop", "Andrea%2BJeremiah%2B%25281%2529"]
         images = alts.map.with_index { |alt, index| %(<img src="/#{index}.jpg" alt="#{alt}">) }.join
         text = "We sailed along the rocky coast for a whole week, stopping at small harbours, fish markets and quiet beaches on the way."
         extract("<main><h1>Trip</h1><p>#{text}</p><p>#{images}<img src=\"/sea.jpg\" alt=\"Boats in the harbour\"></p></main>").should ==

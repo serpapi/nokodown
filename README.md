@@ -140,9 +140,10 @@ with `main_content: false`, `:none` for a document without a body.
   "Available") are values and stay.
 - In the main content, images whose alt text does not say what they show, at
   any size and in any wrapper (a figure keeps its caption): no alt text, a
-  file or camera name ("IMG_6175.JPG"), a hash, or a word for "image" or
-  "loading" ("photo", "foto", "画像"); icons, logos and avatars, told by their
-  file name ("QDLogoBlue.gif"), folder (`/icons/`), class or alt text. An image
+  file or camera name ("IMG_6175.JPG", "Siegel dunkel.tiff"), an address, a
+  hash, or a word for "image" or "loading" ("photo", "foto", "画像"); icons,
+  logos and avatars, told by their file name ("QDLogoBlue.gif"), folder
+  (`/icons/`), class or alt text. An image
   alone in a text-free cell of a data table, such as a tick in a comparison
   table, stays, and so do all images of a page with fewer than 20 words
   besides them. An image with alt text that is marked decorative
