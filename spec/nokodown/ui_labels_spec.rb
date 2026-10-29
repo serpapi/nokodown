@@ -16,6 +16,11 @@ RSpec.describe "UI labels" do
     convert(lines.map { |line| "<p>#{line}</p>" }.join + text).should == "The stove boils a litre in three minutes."
   end
 
+  it "keeps a line of counters that ends in words" do
+    line = "#{'조회 1 ' * 15}and more"
+    convert("<p>#{line}</p>").should == line
+  end
+
   it "keeps a count that is part of a sentence" do
     convert("<p>The video passed 2362 views in a day.</p><p>Rated 4.5 out of 5</p>").should ==
       "The video passed 2362 views in a day.\n\nRated 4.5 out of 5"

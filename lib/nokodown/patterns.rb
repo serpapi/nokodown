@@ -151,7 +151,7 @@ module Nokodown
       pelajari\slebih\slanjut
     /xi.freeze
 
-    # Shop controls in the major web languages besides English.
+    # Shop controls in the major web languages.
     SHOP_CONTROL_TEXT = /
       buy\snow|in\sden\swarenkorb|(?:zum\s)?warenkorb\shinzufügen|jetzt\skaufen|ajouter\sau\spanier|acheter\smaintenant|
       a[ñn]adir\sal\scarrito|agregar\sal\scarrito|comprar\sahora|adicionar\sao\scarrinho|comprar\sagora|
@@ -220,11 +220,17 @@ module Nokodown
       عدد\s(?:القراءات|المشاهدات|الزيارات)|مشاهدات?|تعليقات|lượt\s(?:xem|tải)|bình\sluận|(?:kali\s)?dilihat|komentar
     /xi.freeze
 
+    # A number written with spaces or separators ("1 915", "1.064"). It is
+    # atomic so that a line of counters that fails at its end is not split
+    # again every other way.
+    COUNT = /(?>\d(?:[\d.,\s]*\d)?)/.freeze
+
     # A counter on its own ("2362 views", "Views: 1,915", "点击：571"), or
     # the line a comment or review widget shows when there are none.
     COUNTER_TEXT = /
       \A[\s|(]*(?:
-        (?:(?:[\d.,\s]*\d[kmкм]?\s?(?:#{COUNTED})|(?:#{COUNTED})\s?[:：(]?\s?[\d.,\s]*\d[kmкм]?\)?)[\s|·•,]*)+|
+        (?:(?:#{COUNT}[kmкм]?\s?(?:#{COUNTED})|(?:#{COUNTED})\s?(?:[:：(]\s?)?#{COUNT}[kmкм]?\)?)[\s|·•,]*)+|
+        (?:#{COUNTED})\s?#{COUNT}\s?(?:#{COUNTED})|
         0(?:[.,]0)?\s?(?:out\sof|of|von|de|sur|su|из|na|\/)\s?5|
         comments\s(?:are\s)?(?:closed|off)|both\scomments\sand\strackbacks\sare\s(?:currently\s)?closed|
         no\scomments(?:\syet)?|(?:there\sare\s)?no\sreviews\syet|no\sratings?\syet|be\sthe\sfirst\sto\s(?:review|comment).*|
