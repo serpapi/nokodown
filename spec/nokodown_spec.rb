@@ -396,12 +396,14 @@ RSpec.describe Nokodown do
       markdown.should_not include("Jane wrote")
     end
 
-    it "keeps the wide-screen copy of a block shown at some screen sizes and drops the narrow one" do
-      markdown = story('<div class="hidden sm:block"><p>Wide screen copy of the steps.</p></div><div class="md:hidden"><p>Narrow screen copy of the steps.</p></div>')
+    it "keeps the wide-screen copy of a block laid out twice, but not a block shown only on wide screens" do
+      pair = '<div><div class="hidden sm:block"><p>Wide screen copy of the steps.</p></div><div class="md:hidden"><p>Narrow screen copy of the steps.</p></div></div>'
+      markdown = story("#{pair}<div class='hidden lg:block'><p>A rail of brand stories.</p></div>")
 
       markdown.should include("modest maintenance costs.")
       markdown.should include("Wide screen copy of the steps.")
       markdown.should_not include("Narrow screen copy")
+      markdown.should_not include("brand stories")
     end
   end
 

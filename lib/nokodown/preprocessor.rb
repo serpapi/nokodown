@@ -24,6 +24,8 @@ module Nokodown
     # Utility classes that make a "hidden" element visible again at some breakpoint.
     RESPONSIVE_SHOW = /\A(?:(?:sm|md|lg|xl|2xl):(?:block|flex|grid|inline|inline-block|inline-flex|table|contents)|d-(?:sm|md|lg|xl|xxl)-(?:block|flex|grid|inline|inline-block|inline-flex|table))\z/.freeze
 
+    NARROW_COPY = /\A[a-z\d]+:hidden\z/.freeze
+
     STREAMED_LINK_SHARE = 0.5
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
@@ -54,6 +56,7 @@ module Nokodown
       @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
+      mark_wide_copies
       remove_form_controls
       HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
@@ -199,6 +202,19 @@ module Nokodown
 
     def page_like?(node)
       node.css("h1").size == @body.css("h1").size
+    end
+
+    # Page builders lay a block out twice, "hidden md:grid" for wide screens
+    # beside "md:hidden" for narrow ones. The wide copy is marked so that
+    # conditional cleaning, which weighs "hidden" against both, keeps one.
+    def mark_wide_copies
+      @body.css(".hidden").each do |node|
+        node[Dom::WIDE_COPY] = "" if node.parent.element_children.any? { |sibling| narrow_copy?(sibling) }
+      end
+    end
+
+    def narrow_copy?(node)
+      node["class"].to_s.split.any? { |token| token.match?(NARROW_COPY) }
     end
 
     def hidden?(node)

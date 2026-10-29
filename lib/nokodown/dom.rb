@@ -40,6 +40,9 @@ module Nokodown
     # Set by HeadingAnchors on elements whose id is made from their heading.
     ANCHOR = "data-nokodown-anchor"
 
+    # Set by Preprocessor on the wide-screen copy of a block laid out twice.
+    WIDE_COPY = "data-nokodown-wide-copy"
+
     module_function
 
     def assign_keys(root)

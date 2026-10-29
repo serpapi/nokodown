@@ -21,22 +21,21 @@ module Nokodown
     end
 
     # Conditional cleaning deletes whatever weighs negative, so it ignores CSS
-    # utility tokens and heading anchors ("media" in "h-social-media-tips").
+    # utility tokens, heading anchors ("media" in "h-social-media-tips") and
+    # the "hidden" of the copy of a block laid out twice that has to stay.
     # Candidate scoring keeps Readability's weight, which some pages need to
     # pick the right candidate.
     def self.cleaning_weight(node)
+      wide_copy = node.key?(Dom::WIDE_COPY)
       [node["class"], Dom.name_id(node)].sum do |value|
-        tokens = value.to_s.downcase.split.reject { |token| utility_class?(token) }
+        tokens = value.to_s.downcase.split.reject { |token| utility_class?(token) || (wide_copy && token == "hidden") }
         words_weight(tokens.join(" "))
       end
     end
 
-    # "lg:overflow-hidden" is judged without its variant prefix. Bare
-    # "hidden" is left only on a copy that a breakpoint shows ("hidden
-    # md:block"), the wide-screen one; its narrow twin ("md:hidden") counts,
-    # so one copy of the pair stays.
+    # "lg:overflow-hidden" is judged without its variant prefix.
     def self.utility_class?(token)
-      token == "hidden" || token.rpartition(":").last.match?(Patterns::UTILITY_CLASS)
+      token.rpartition(":").last.match?(Patterns::UTILITY_CLASS)
     end
 
     def self.words_weight(value)

@@ -99,8 +99,8 @@ module Nokodown
     # Class tokens where "hidden" or "scroll" names a CSS value or a widget
     # state, not page furniture: overflow-hidden, scroll-mt-20, quick-add-hidden,
     # field--label-hidden. Elements that are really hidden are gone by the time
-    # this is used. A variant's "hidden", as in "md:hidden", is not one: it
-    # marks the narrow-screen copy of a block.
+    # this is used. Bare "hidden", as in "hidden md:block", is not one: it marks
+    # a responsive duplicate.
     UTILITY_CLASS = /
       \A-?(?:overflow|overscroll|scroll|snap)(?:-[\w.\[\]]+)*\z|.-+hidden\z|
       scroll-(?:m[trblxy]?|p[trblxy]?|margin|padding)(?![a-z])
