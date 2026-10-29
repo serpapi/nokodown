@@ -15,6 +15,9 @@ module Nokodown
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     SIDE_FURNITURE = /sidebar|#{Patterns::WORD_START}footer#{Patterns::WORD_END}/.freeze
+    # A BEM modifier names a variant of the block: "catalog-grid--sidebar" is
+    # the grid laid out beside a sidebar.
+    BEM_MODIFIER = /--[\w-]+/.freeze
     TITLED_TEXT = 20
     CONSENT_MANAGER = /onetrust|didomi|cookiebot|usercentrics/.freeze
     # What a banner is, said in the same name as the cookies ("cookie-notice",
@@ -379,7 +382,7 @@ module Nokodown
     # block, as an archive's record title heads the fields its theme puts in
     # a "sidebar".
     def beside_title?(node)
-      return false unless @title && @names[Dom.signature(node)].match?(SIDE_FURNITURE)
+      return false unless @title && @names[Dom.signature(node)].gsub(BEM_MODIFIER, " ").match?(SIDE_FURNITURE)
       return false unless node.at_css("h1").nil? && !prose_lines?(node)
 
       branch = title_branch(node)

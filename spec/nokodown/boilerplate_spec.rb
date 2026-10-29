@@ -348,6 +348,16 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should include("Monday 9:00")
     end
 
+    it "keeps a block laid out beside a sidebar" do
+      products = Array.new(6) do |index|
+        "<li><a href=\"/disc-#{index}\">Diamond disc #{index + 1}25 mm</a> Segmented rim for granite and concrete, #{index + 3}50 UAH</li>"
+      end
+      html = "<div class=\"main\"><h1>Diamond discs</h1><p>Cutting discs for stone.</p></div>" \
+             "<ul class=\"catalog-grid catalog-grid--m catalog-grid--sidebar\">#{products.join}</ul>"
+
+      remaining(html).should include("Segmented rim")
+    end
+
     it "keeps a sidebar or footer that holds prose, in paragraphs or in other blocks" do
       descriptions = %w[Acupuncture Massage Cupping].map do |treatment|
         "<div class=\"service\"><h3>#{treatment}</h3><div class=\"description\">#{treatment} eases the pain in the back " \
