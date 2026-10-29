@@ -350,9 +350,9 @@ module Nokodown
       \A(?:
       related(?:\s\p{L}+){0,2}|see\salso|recommended(?:\sfor\syou)?|read\s(?:next|also)|also\sread|don'?t\smiss|
       you\s(?:may|might|will)\s(?:also\s)?(?:like|love|enjoy|be\sinterested\sin)(?:\s\p{L}+){0,3}|
-      (?:recommended|similar|popular|trending|latest|recent|other|more)\s(?:\p{L}+\s)?
+      (?:recommended|similar|popular|trending|other)\s(?:\p{L}+\s)?
       (?:products|items|posts|articles|stories|news|videos|recipes|listings|guides|courses|projects|properties|tours|services)|
-      more\s(?:from|in|like)\s.{1,60}|(?:customers|people)\s(?:also|who)\s.{1,60}|most\s(?:read|popular|viewed|shared)|
+      (?:customers|people)\s(?:also|who)\s.{1,60}|most\s(?:read|popular|viewed|shared)|
       (?:artículos|productos|noticias|entradas|publicaciones|artigos|produtos|notícias|posts|vídeos|videos)\s
       (?:relacionad[oa]s|similares|recomendad[oa]s|populares)|(?:también\s)?te\s(?:puede|podría)\s(?:interesar|gustar)|
       le[ae]\stambién|ver\stambién|lo\smás\s(?:leído|visto)|más\s(?:leídas|vistas|leídos|vistos)|

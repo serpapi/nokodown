@@ -478,6 +478,15 @@ RSpec.describe Nokodown::Teasers do
     blocks("<h1>What is digital marketing</h1>#{story(3)}#{box}", "https://example.org/what-is-digital-marketing/").should_not be_empty
   end
 
+  it "keeps a hub's lists of the latest and more posts" do
+    lists = ["Latest news", "More headphone posts"].map do |title|
+      "<section class='#{title.split.first.downcase}'><h2>#{title}</h2>#{cards(stories.map { |story| "#{title}: #{story}" }, '/articles/')}</section>"
+    end
+    html = "<h1>Headphones</h1><p>Everything we write about headphones, from earbuds to studio cans.</p>#{lists.join}"
+
+    blocks(html, "https://news.example.com/topic/headphones", nil).should be_empty
+  end
+
   it "keeps a category's products whose names end in a code of another kind" do
     products = stories.each_with_index.map do |title, index|
       "<div class='card'><img src='/img/#{index}.jpg' alt=''><h3><a href='/usb-hub-model-#{37_209 + index}.html'>" \
