@@ -12,8 +12,8 @@ module Nokodown
       # ("・送料無料").
       CLOSE_BULLETS = "・･·•●○◆◇■□▪★☆▶►"
       GLYPH = /
-        \A(\\\*|[#{Renderer::GLYPHS}◽◾]|#{Headings::SYMBOL})\uFE0F?
-        (?:\s+|(?<=[#{CLOSE_BULLETS}])(?=[^\s\p{So}\p{Sm}#{CLOSE_BULLETS}]))
+        \A(\\\*|[#{Renderer::GLYPHS}◽◾]|#{Text::PICTOGRAPH})\uFE0F?
+        (?:\s+|(?<=[#{CLOSE_BULLETS}])(?=[^\s\p{So}\p{Sm}・･·•]))
       /x.freeze
       NUMBER = /^(\d+)\. /.freeze
       FIRST_NUMBER = /\A(\d+)\. /.freeze

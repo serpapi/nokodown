@@ -152,7 +152,7 @@ module Nokodown
 
       # A heading's markers mean nothing in a cell.
       def cell_text(blocks)
-        blocks.map { |block| block.kind == :heading ? block.text.sub(/\A#+ /, "") : block.text }.join(" ")
+        blocks.map(&:content).join(" ")
       end
 
       def span(cell, attribute, limit)

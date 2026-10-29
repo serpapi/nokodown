@@ -7,15 +7,12 @@ module Nokodown
     # "- Forum"), and text that names no section, such as a date, a price
     # or a sentence a site set large.
     module Headings
-      # Pictographs, dingbats, arrows and shapes, but not the signs that are
-      # part of a name or a value (©, №, °, ℃).
-      SYMBOL = "[\\p{So}\u2190-\u21FF\u25B7\u25C1\u27F0-\u27FF\u2900-\u297F\uFE0F\u200D&&[^\u00A9\u00AE\u2122\u2120\u2117\u00B0\u2100-\u214F]]"
       # A sign before a number, a lowercase word or a bracket belongs to it
       # ("+ de 300 modèles", "- (subtraction)"). A dash before the text marks
       # a quote in Nordic news ("– Problemene er løst"), unless another
       # closes the text as a frame ("— Blog —").
       SIGN = "[-+](?!\\s+[\\p{Ll}\\p{N}(\\[])"
-      DECORATION = "#{SYMBOL}|[|·•;,/~=]"
+      DECORATION = "#{Text::PICTOGRAPH}|[|·•;,/~=]"
       LEADING = /\A(?:(?:#{DECORATION}|[:»›]|#{SIGN}|\\[*_])+\s+)+/.freeze
       # Matched on the reversed text. A colon stays, as French sets one apart,
       # and so does a closing guillemet when an opening one pairs with it.
@@ -30,7 +27,7 @@ module Nokodown
       SENTENCE_CHARACTERS = 50
       UNSPACED = /[\p{Han}\p{Hiragana}\p{Katakana}\p{Thai}]/.freeze
       YEARS = /\A\d{4}(?:\s?[-–\/]\s?\d{2,4})?\z/.freeze
-      LINK = /\A\[[^\n]*\]\([^()\s]*\)\z/.freeze
+      LINK = /\A\[#{Text::LINK_TEXT}\]\(#{Text::DESTINATION}\)\z/.freeze
 
       module_function
 
@@ -51,7 +48,7 @@ module Nokodown
         blocks.map do |block|
           next block unless block.kind == :heading && block.level > 1
 
-          text = block.text.sub(/\A#+ /, "")
+          text = block.content
           paragraph?(text) ? Block.new(:paragraph, Text.escape_line_starts(text)) : block
         end
       end

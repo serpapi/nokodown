@@ -2,7 +2,12 @@
 
 module Nokodown
   module Markdown
-    Block = Struct.new(:kind, :text, :level)
+    Block = Struct.new(:kind, :text, :level) do
+      # The text without a heading's markers.
+      def content
+        kind == :heading ? text.sub(/\A#+ /, "") : text
+      end
+    end
 
     # Turns DOM nodes into Markdown blocks. Runs of inline content become
     # paragraphs; block elements are rendered by tag.
@@ -215,7 +220,7 @@ module Nokodown
 
         blocks.each_with_index.map do |block, index|
           if block.kind == :heading
-            item_paragraph(block.text.sub(/\A#+ /, ""))
+            item_paragraph(block.content)
           elsif index.zero? && blocks.size > 1 && bulleted_list?(block) && !block.text.include?("\n")
             item_paragraph(block.text.delete_prefix("- "))
           else
