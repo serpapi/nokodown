@@ -131,9 +131,11 @@ with `main_content: false`, `:none` for a document without a body.
   between links and at line ends, lines of only punctuation, icon-font
   glyphs, code-language labels and copy buttons, and escapes that cannot
   change the rendering. Emoji, arrows and separators around a heading's
-  text go ("📱 Benefits", "- Forum"), and a heading of only signs goes.
-  A list of one item is a line of text, and lists of one item side by side
-  are one list. A card's repeated links to its own page keep their
+  text go ("📱 Benefits", "- Forum"), but not a quote's marks, a rating or
+  a sign before a number ("+ de 300"), and a heading of only signs goes.
+  Lists of one item side by side are one list, and a list of one item
+  beside no other list is a line of text, unless the text would open a
+  list or a task. A card's repeated links to its own page keep their
   text without the URL (its title keeps the link), and a button such as
   "Read more", a text the page uses once for each of several pages, goes when
   it ends its line (judged across all cards, in any language); texts that take turns from card to card ("Sold",
@@ -233,21 +235,22 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    highlighter's classes, GFM tables (rowspans and colspans filled in, a
    heading in a cell as its text, and a row across the end of the table, such
    as a note, below it) for data tables while layout tables are unwrapped,
-   and a list of "name: value" lines
-   for a two-column table without column names, definition lists, details,
-   TeX from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
-   other scripts as 2^(n-1) and a_n. A `<pre>` whose lines are set with `<br>`
+   and a list of "name: value" lines for a two-column table without column
+   names, definition lists, details, TeX from MathML, superscript and
+   subscript digits as Unicode (10⁶, H₂O) and other scripts as 2^(n-1) and
+   a_n. A `<pre>` whose lines are set with `<br>`
    or `<p>` and read as sentences, as site builders write product
    descriptions, is text, not code. A label and its value, or a number and
    its unit, set in sibling elements share a line ("Type: Condo"), and words,
    numbers and dates that adjacent elements run together are spaced
    ("20.07 2026"). Below the headline, a heading without letters (a date, a
-   price, a phone number, but not a year) or holding a long sentence, unless
-   it is a card's title, is a paragraph. Lines typed with a bullet, a
-   pictograph or an asterisk ("• Fast", "🔹 Age", "・送料無料") are a
-   list, below the line that introduces them (without a glyph of its own),
-   and paragraphs that count up ("1、", "2、") are a numbered list. Text is
-   escaped only where it would otherwise change meaning.
+   price, a phone number, but not a year or a counter) or holding a long
+   sentence, unless it is a card's title, is a paragraph. Lines typed with
+   a bullet, a pictograph or an asterisk ("• Fast", "🔹 Age", "・送料無料"),
+   but not a cross, are a list, below the line that introduces them, whose
+   own glyph goes, and paragraphs that count up ("1、", "2、") are a
+   numbered list. Text is escaped only where it would otherwise change
+   meaning.
 
 ## Quality
 
