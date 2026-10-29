@@ -23,6 +23,8 @@ module Nokodown
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
+    # A counter or label a script never filled in: "{{options.likeCount}}".
+    UNRENDERED_TEMPLATE = /\A(?:\{\{[^{}]*\}\}\s*)+\z/.freeze
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
     def initialize(nodes, mode, conditional: true)
@@ -243,7 +245,7 @@ module Nokodown
 
         boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
         copyright = text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
-        remove(node) if boilerplate || copyright
+        remove(node) if boilerplate || copyright || text.match?(UNRENDERED_TEMPLATE)
       end
     end
 

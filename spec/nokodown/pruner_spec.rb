@@ -55,6 +55,13 @@ RSpec.describe Nokodown::Pruner do
       text.should include("ショップが新しくなりました2021年03月09日 micasa")
       text.should_not include("Women")
     end
+
+    it "drops counters a script never filled in" do
+      root = content("#{story}<div class='like-icon'><a href=''>{{options.likeCount}}</a> <span>{{ options.likeCount }}</span></div>")
+      described_class.new([root], :page).call
+
+      Nokodown::Dom.text(root).should_not include("likeCount")
+    end
   end
 
   describe "article pruning with conditional cleaning off" do
