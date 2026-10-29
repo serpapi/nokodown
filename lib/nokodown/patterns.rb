@@ -261,6 +261,9 @@ module Nokodown
       )[\s.:!…»›→>]*\z
     /xi.freeze
 
+    # A paragraph that is all furniture, a control's label or a counter.
+    PARAGRAPH_NOISE = Regexp.union(BOILERPLATE_TEXT, UI_LABEL, COUNTER_TEXT)
+
     # Labels that introduce a box of links to other stories.
     RELATED_LABEL = /
       \A(?:read\smore|more|related(?:\s(?:stories|articles|posts|content|coverage|reading))?|see\salso|

@@ -38,7 +38,7 @@ module Nokodown
         return true unless text.match?(/[\p{L}\p{N}]/) || text.include?("](")
 
         plain = text.gsub(/[*_`~]/, "").strip
-        plain.length <= 80 && [Patterns::BOILERPLATE_TEXT, Patterns::UI_LABEL, Patterns::COUNTER_TEXT].any? { |rx| plain.match?(rx) }
+        plain.length <= 80 && plain.match?(Patterns::PARAGRAPH_NOISE)
       end
 
       # Responsive and "enlarge" variants repeat an image (and its caption) a
