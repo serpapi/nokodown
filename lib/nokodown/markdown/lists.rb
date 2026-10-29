@@ -19,9 +19,14 @@ module Nokodown
       FIRST_NUMBER = /\A(\d+)\. /.freeze
       # "1.", "1)" and the "1、" of Chinese and Japanese pages.
       TYPED_NUMBER = /\A(\d{1,3})(?:[.)．]\s+|、\s*)/.freeze
+      # A cross or a no-entry sign says what a line is not.
+      NEGATIVE = /[❌❎✕✖✗✘🚫⛔]/.freeze
       LABEL = /[:：]\z/.freeze
-      # An item's text that would open a list of its own at a line's start.
-      MARKED_TEXT = /\A- (?:\d{1,9}[.)]|[-+*])(?:\s|\z)/.freeze
+      MARKER = "\\d{1,9}[.)]|[-+*]"
+      # Text that opens a list item at a line's start.
+      LIST_ITEM = /\A(?:#{MARKER})(?:\s|\z)/.freeze
+      # An item's text that would open a list of its own, or a task.
+      MARKED_TEXT = /\A- (?:#{MARKER}|\[[ xX]\])(?:\s|\z)/.freeze
 
       module_function
 
@@ -42,9 +47,10 @@ module Nokodown
         end
       end
 
-      # A glyph before a label ("■ Features:") only decorates it.
+      # A glyph before a label ("■ Features:") only decorates it; a typed
+      # asterisk marks a footnote.
       def bare_label(block)
-        return block unless glyph(block) && label?(block)
+        return block unless glyph(block) && glyph(block) != "\\*" && label?(block)
 
         Block.new(:paragraph, Text.escape_line_starts(block.text.sub(GLYPH, "")))
       end
@@ -54,7 +60,8 @@ module Nokodown
       end
 
       def typed_list?(run, neighbours)
-        return false if glyph(run.first).nil? || neighbours.any? { |block| glyph(block) && !label?(block) }
+        return false if glyph(run.first).nil? || glyph(run.first).match?(NEGATIVE)
+        return false if neighbours.any? { |block| glyph(block) && !label?(block) }
 
         run.sum { |block| block.text.count("\n") + 1 } > 1
       end
@@ -90,7 +97,7 @@ module Nokodown
         return unless block.kind == :paragraph
 
         numbers = block.text.split("\n").map { |line| line[TYPED_NUMBER, 1]&.to_i }
-        numbers if numbers.all? && numbers.each_cons(2).all? { |a, b| b == a + 1 }
+        numbers if numbers.any? && numbers.all? && numbers.each_cons(2).all? { |a, b| b == a + 1 }
       end
 
       def numbered_list(lines)
@@ -130,10 +137,10 @@ module Nokodown
 
       # Sites wrap a date or a tag in a list of its own, and each entry of a
       # directory in one. A blank line between items of one groups nothing,
-      # so side by side they are one list, and alone, beside no other list,
-      # the item is a line of text, unless its text would read as a list
-      # item there ("1. Read it aloud."). Runs last, once the cards CardLinks
-      # reads are settled.
+      # so side by side they are one list, and alone, beside no other list
+      # or text that opens one, the item is a line of text, unless its text
+      # would read as a list item or a task there ("1. Read it aloud.").
+      # Runs last, once the cards CardLinks reads are settled.
       def single_items(blocks)
         runs = blocks.each_index.chunk_while { |a, b| single_item?(blocks[a]) && single_item?(blocks[b]) }
         runs.flat_map do |run|
@@ -151,7 +158,9 @@ module Nokodown
       end
 
       def beside_list?(blocks, index)
-        [index.positive? ? blocks[index - 1] : nil, blocks[index + 1]].any? { |block| block&.kind == :list }
+        [index.positive? ? blocks[index - 1] : nil, blocks[index + 1]].compact.any? do |block|
+          block.kind == :list || (block.kind == :paragraph && block.text.match?(LIST_ITEM))
+        end
       end
     end
   end

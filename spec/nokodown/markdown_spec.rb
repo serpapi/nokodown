@@ -1010,6 +1010,21 @@ RSpec.describe "Markdown conversion" do
         "- \u7EAF\u6A61\u80F6\u5BC6\u5C01\u6761\n- \u7845\u80F6\u5BC6\u5C01\u6761\n\n\u203B\u8A73\u3057\u304F\u306F\n\n\u203B\u3054\u5165\u529B\n\n\u2605\u2605\u2605\u2605\u26054.4\n\n\u2605\u2605\u2605\u2605\u26063.2"
     end
 
+    it "keeps lines marked with a cross as they are" do
+      convert("<p>✅ Wash cold<br>✅ Line dry</p><p>Never:</p><p>❌ Tumble dry<br>❌ Bleach</p>").should ==
+        "- Wash cold\n- Line dry\n\nNever:\n\n❌ Tumble dry\n❌ Bleach"
+    end
+
+    it "keeps the asterisk that ties a footnote's label to its mark" do
+      note = "Les frais de port sont calculés à la commande selon le poids du colis et la destination."
+      convert("<p>Prix : 99 €*</p><p>* Prix TTC hors frais de port:</p><p>#{note}</p>").should == "Prix : 99 €*\n\n\\* Prix TTC hors frais de port:\n\n#{note}"
+    end
+
+    it "skips an empty paragraph before paragraphs that count up" do
+      blocks = [Nokodown::Markdown::Block.new(:paragraph, ""), Nokodown::Markdown::Block.new(:paragraph, "1. a\n2. b")]
+      Nokodown::Markdown::Lists.call(blocks).map(&:text).should == ["", "1. a\n2. b"]
+    end
+
     it "writes paragraphs that count up as a numbered list" do
       convert("<p>Standards:</p><p>1、GB12002</p><p>2、GB320</p><p>Steps</p><p>1) Mix<br>2) Bake</p><p>Notes</p><p>3. Third</p><p>5. Fifth</p>").should ==
         "Standards:\n\n1. GB12002\n2. GB320\n\nSteps\n\n1. Mix\n2. Bake\n\nNotes\n\n3. Third\n\n5. Fifth"
@@ -1030,8 +1045,13 @@ RSpec.describe "Markdown conversion" do
         "- a\n- b\n\n- c\n- d\n\n1. one\n2. two\n\n1. again"
     end
 
-    it "keeps a one-item list whose text would open a list as a line" do
-      convert("<ul><li>1. Read it aloud.</li></ul><p>Then</p><ul><li>- Breathe</li></ul>").should == "- 1. Read it aloud.\n\nThen\n\n- - Breathe"
+    it "keeps a one-item list whose text would open a list or a task as a line" do
+      html = '<ul><li>1. Read it aloud.</li></ul><p>Then</p><ul><li>- Breathe</li></ul><p>Done</p><ul><li><input type="checkbox" disabled checked> Ship</li></ul>'
+      convert(html).should == "- 1. Read it aloud.\n\nThen\n\n- - Breathe\n\nDone\n\n- [x] Ship"
+    end
+
+    it "keeps a one-item list beside text that opens a list" do
+      convert("<p>Factors</p><p>1. Costs rose.</p><ul><li>Rules changed.</li></ul>").should == "Factors\n\n1. Costs rose.\n\n- Rules changed."
     end
 
     it "joins one-item lists side by side into one list" do
