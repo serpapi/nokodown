@@ -31,10 +31,7 @@ module Nokodown
       end
 
       # Headings and paragraphs that say only what the H1 says, wherever
-      # they are; near the H1 also the parts of a "Page - Site" title. A
-      # paragraph linking elsewhere, such as an embedded video named like
-      # the page, adds its destination, and so does a linked heading away
-      # from the H1, such as a card for a variant of the same product.
+      # they are; near the H1 also the parts of a "Page - Site" title.
       def drop_title_copies(blocks)
         index = blocks.index { |block| block.kind == :heading && block.level == 1 }
         return blocks unless index
@@ -46,18 +43,31 @@ module Nokodown
         parts = title_parts(heading)
         blocks.reject.with_index do |block, position|
           near = (position - index).abs <= TITLE_HEAD
-          text = position == index ? nil : title_text(block, near)
+          text = position == index ? nil : title_text(blocks, position, near)
           next false if text.nil? || text.empty? || section_content?(blocks, position) || runs_on?(blocks, position)
 
           text == title || (block.kind == :paragraph && near && parts.include?(text))
         end
       end
 
-      def title_text(block, near)
+      # A paragraph linking elsewhere, such as an embedded video named like
+      # the page, adds its destination, and so does a linked heading away
+      # from the H1, such as a card for a variant of the same product. A
+      # heading away from it over a section of its own, such as the table of
+      # specifications, names that section.
+      def title_text(blocks, position, near)
+        block = blocks[position]
         return unless %i[heading paragraph].include?(block.kind)
         return if block.text.include?("](") && (block.kind == :paragraph || !near)
+        return if block.kind == :heading && !near && own_section?(blocks, position)
 
         squash(block.kind == :heading ? Cleanup.heading_text(block) : block.text)
+      end
+
+      def own_section?(blocks, index)
+        following = blocks[index + 1]
+        following = blocks[index + 2] if following&.kind == :rule
+        !following.nil? && !(following.kind == :heading && following.level <= blocks[index].level)
       end
 
       def title_parts(heading)

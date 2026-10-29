@@ -31,6 +31,13 @@ RSpec.describe Nokodown::Markdown::Repeats do
       convert(html).should end_with("### [Green olives, 1 kg jar](https://example.com/olives-2)\n\nIn brine.")
     end
 
+    it "keeps a heading named like the title away from it over a section of its own" do
+      notes = ["Pitted.", "Store cool.", "Serve chilled.", "Keeps a month.", "From Puglia.", "Since 1950.", "Organic.", "Hand picked."]
+      html = "<h1>Green olives</h1>#{notes.map { |note| "<p>#{note}</p>" }.join}<h2>Shipping</h2><p>Two days.</p>" \
+             "<h2>Green olives</h2><p>Weight: 1 kg.</p>"
+      convert(html).should end_with("## Shipping\n\nTwo days.\n\n## Green olives\n\nWeight: 1 kg.")
+    end
+
     it "keeps a heading that differs from the title by a vowel sign" do
       convert("<h1>किताबें</h1>#{intro}<h2>किताब</h2><p>एक किताब के बारे में।</p>").should include("## किताब")
     end
