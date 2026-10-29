@@ -70,8 +70,10 @@ with `main_content: false`, `:none` for a document without a body.
   path but for its last segment, with the same query keys), or, on a page
   that declares itself an article, a product or a thread, when the page's
   own text, or its own list, outweighs them. They stay on home pages, in hubs
-  of sections built alike, when they link to pages below this one, and when
-  the content would be left with fewer than 20 words.
+  of sections built alike, when they link to pages below this one, when they
+  outweigh the page and come before any text of its own (a listing whose
+  address looks like its items'), and when the content would be left with
+  fewer than 20 words outside headings.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
