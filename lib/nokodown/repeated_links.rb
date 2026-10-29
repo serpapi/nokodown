@@ -52,13 +52,14 @@ module Nokodown
     end
 
     # Scripts written without spaces fit a sentence in MAX_LABEL characters.
-    # In a data table a link is a cell's value, and a menu item over a
-    # submenu names it.
+    # A file's format names the download, in a data table a link is a
+    # cell's value, and a menu item over a submenu names it.
     def label?(link)
       text = link.text
       return false if text.empty? || text.length > MAX_LABEL || text.match?(/\d/)
       return false if text.include?(" ") ? text.split.size > MAX_WORDS : text.length > MAX_UNSPACED
       return false if link.node.at_css("img") || Dom.ancestors_named(link.node, *LABEL_HOLDERS).any?
+      return false if link.page.sub(/[?#].*/m, "").match?(Pruner::DOWNLOAD)
       return false if Dom.ancestors_named(link.node, "li").first&.at_css("ul, ol")
 
       Dom.ancestors_named(link.node, "table").none? { |table| Tables.data_table?(table) }
@@ -93,8 +94,12 @@ module Nokodown
       node.element? && (%w[a br].include?(node.name) || Dom.block?(node))
     end
 
+    # Controls follow what they act on; a badge before a title ("HD",
+    # "New") is a fact about the item.
     def named_in_card?(label, holder, links)
-      longer = links.select { |link| link.text.length > label.text.length && link.text.match?(/\p{L}/) }
+      longer = links.select do |link|
+        link.position < label.position && link.text.length > label.text.length && link.text.match?(/\p{L}/)
+      end
       longer.min_by(NEAREST) { |link| (link.position - label.position).abs }.any? { |link| same_card?(holder, link.node) }
     end
 
