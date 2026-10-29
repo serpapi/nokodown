@@ -30,9 +30,12 @@ module Nokodown
       end
     end
 
-    # "lg:overflow-hidden" is judged without its variant prefix.
+    # "lg:overflow-hidden" is judged without its variant prefix. Bare
+    # "hidden" is left only on a copy that a breakpoint shows ("hidden
+    # md:block"), the wide-screen one; its narrow twin ("md:hidden") counts,
+    # so one copy of the pair stays.
     def self.utility_class?(token)
-      token.rpartition(":").last.match?(Patterns::UTILITY_CLASS)
+      token == "hidden" || token.rpartition(":").last.match?(Patterns::UTILITY_CLASS)
     end
 
     def self.words_weight(value)
