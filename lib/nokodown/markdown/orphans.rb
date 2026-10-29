@@ -34,16 +34,18 @@ module Nokodown
       end
 
       # The fields of a form whose inputs are gone ("Name:", "E-mail:"), or a
-      # "Tags:" whose tags are: nothing follows the label but another label
-      # or the end of the page. The last field of a form may be followed by
-      # the next section; a lone label over a heading may name it.
+      # "Tags:" whose tags are, end the page or a section. A lone label over
+      # a heading may name it, and labels followed by text may be a template
+      # a post sets out for readers to fill in.
       def empty_label?(blocks, index, text)
         return false unless colon_label?(text)
 
-        following = blocks[index + 1]
-        return true if following.nil? || colon_label_block?(following)
-
-        following.kind == :heading && index.positive? && colon_label_block?(blocks[index - 1])
+        last = index
+        last += 1 while blocks[last + 1] && colon_label_block?(blocks[last + 1])
+        first = index
+        first -= 1 while first.positive? && colon_label_block?(blocks[first - 1])
+        following = blocks[last + 1]
+        following.nil? || (following.kind == :heading && last > first)
       end
 
       def colon_label_block?(block)

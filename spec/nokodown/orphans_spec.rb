@@ -31,4 +31,9 @@ RSpec.describe Nokodown::Markdown::Orphans do
     html = "<p>Price:</p><p>$40</p><p>Reviewed article:</p><h2>Weaving in ancient Greece</h2><p>Sizes:</p><ul><li>S</li><li>M</li></ul>"
     convert(html).should == "Price:\n\n$40\n\nReviewed article:\n\n## Weaving in ancient Greece\n\nSizes:\n\n- S\n- M"
   end
+
+  it "keeps labels followed by text, as in a template a post sets out" do
+    convert("<p>Copy this:</p><p><b>Your nickname:</b></p><p><b>Your district:</b></p><p>See you soon!</p>").should ==
+      "Copy this:\n\n**Your nickname:**\n\n**Your district:**\n\nSee you soon!"
+  end
 end
