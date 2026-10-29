@@ -10,10 +10,7 @@ module Nokodown
       EMOJI = /\A[\p{So}\p{Sk}\p{Mn}\p{Cf}]+\z/.freeze
       # Alt text that names nothing: a file name, a camera's numbering, a hash,
       # a word for "image" or for "loading" in the major web languages.
-      FILE_NAME = /\A[^\n]{1,200}\.(?:jpe?g|png|gif|webp|svg|avif|bmp|tiff?|heic|ico)\z/i.freeze
-      # An address, or a file name in an address's encoding
-      # ("Andrea%2BJeremiah%2B%25281%2529").
-      ADDRESS = %r{\A(?:https?://|www\.)\S+\z|\A\S*%\h\h\S*%\h\h\S*\z}i.freeze
+      FILE_NAME = /\A\S+\.(?:jpe?g|png|gif|webp|svg|avif|bmp|tiff?|heic|ico)\z/i.freeze
       CAMERA_NAME = /
         \A(?:(?:img|dsc[nf]?|dcim|pxl|mvimg|screenshot|scan|photo|image)[\s_-]?\d{3,}
         (?:[\w.~()-]*|[\d\s_.:()~-]*(?:at[\d\s_.:()-]+(?:[ap]m)?)?)|[0-9a-f-]{12,})\z
@@ -101,7 +98,7 @@ module Nokodown
       end
 
       def names?(alt)
-        alt.match?(/\p{L}/) && [FILE_NAME, CAMERA_NAME, GENERIC_ALT, ADDRESS].none? { |name| alt.match?(name) }
+        alt.match?(/\p{L}/) && !alt.match?(FILE_NAME) && !alt.match?(CAMERA_NAME) && !alt.match?(GENERIC_ALT)
       end
 
       def icon?(node, src, alt)
