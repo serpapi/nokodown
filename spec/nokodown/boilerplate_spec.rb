@@ -449,5 +449,14 @@ RSpec.describe Nokodown::Boilerplate do
 
       article("https://example.com/category/news/", "").should include("News")
     end
+
+    it "keeps the category line of every card in a listing" do
+      cards = %w[Bouldern Eisklettern Klettersteig].map do |name|
+        "<div class='card'><h3><a href='/angebote/#{name.downcase}/'>#{name} course, two days</a></h3>" \
+          "<p class='post-meta'><a href='/category/#{name.downcase}/' rel='tag'>#{name}</a></p><p>From 150 EUR</p></div>"
+      end
+
+      remaining("<h1>Courses</h1><div class='grid'>#{cards.join}</div>").should include("Eisklettern course, two daysEisklettern")
+    end
   end
 end
