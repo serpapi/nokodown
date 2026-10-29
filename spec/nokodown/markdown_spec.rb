@@ -18,6 +18,18 @@ RSpec.describe "Markdown conversion" do
       convert("<p># not a heading</p><p>&gt; not a quote</p>").should == "\\# not a heading\n\n\\> not a quote"
     end
 
+    it "spaces words that adjacent elements run together" do
+      html = '<p><a href="/t/1">Song for Wife</a><a href="/t/2">Personalized Song</a></p><p><a href="/u/admin">admin</a>24/04/2022</p>' \
+             "<p><b>20h30</b><b>vendredi</b>, i<b>NP</b>ut, j<b>ährlich</b>, 2024<span>年</span>, Model<span>3</span></p>"
+      convert(html).should == "[Song for Wife](https://example.com/t/1) [Personalized Song](https://example.com/t/2)\n\n" \
+                              "[admin](https://example.com/u/admin) 24/04/2022\n\n**20h30 vendredi**, i**NP**ut, j**ährlich**, 2024年, Model 3"
+    end
+
+    it "drops joiners outside words and emoji" do
+      convert("<p>\u200D<b>Rights</b></p><p>\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 \u{1F468 200D 1F469}</p>").should ==
+        "**Rights**\n\n\u0645\u06CC\u200C\u062E\u0648\u0627\u0647\u0645 \u{1F468 200D 1F469}"
+    end
+
     it "drops decorative separator lines" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
     end

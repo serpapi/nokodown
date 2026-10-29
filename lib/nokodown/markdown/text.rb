@@ -5,7 +5,12 @@ module Nokodown
     # Escaping and whitespace rules. Escapes only what would otherwise change
     # meaning, so prose stays free of backslashes.
     module Text
-      INVISIBLE = /[\u00AD\u200B\u2060\uFEFF]/.freeze
+      # Joiners count only between letters or emoji (Persian words, family
+      # emoji).
+      INVISIBLE = /
+        [\u00AD\u200B\u2060\uFEFF]|
+        (?<![\p{L}\p{M}\p{So}\p{Sk}])[\u200C\u200D]|[\u200C\u200D](?![\p{L}\p{M}\p{So}\p{Sk}])
+      /x.freeze
 
       module_function
 

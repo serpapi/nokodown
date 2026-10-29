@@ -38,6 +38,19 @@ module Nokodown
       WORD_START = /\A[\p{L}\p{N}]/.freeze
       WORD_END = /[\p{L}\p{N}]\z/.freeze
       LINK_ONLY = /\A!?\[(?:\\.|[^\\\]])*\]\([^\s]*\)\z/.freeze
+      # Markup around the first and last visible characters of a piece.
+      TRAILING_MARKUP = /(?:[*~`]|\]\([^()\s]*(?:\([^()\s]*\)[^()\s]*)*\))+\z/.freeze
+      LEADING_MARKUP = /\A[*~`]*(?:\[(?=(?:\\.|[^\]\\\n])*\]\())?[*~`]*/.freeze
+      CASED = /[\p{Latin}\p{Greek}\p{Cyrillic}\p{Armenian}]/.freeze
+      # Where two words meet without a space: a lowercase word before a
+      # capitalised one ("WifePersonalized"), or a word before a number and a
+      # number before a word ("admin24/04/2022", "20h30vendredi"). Scripts
+      # written without spaces and numbers with counters (2024年) never match.
+      GLUED = [
+        [/\p{Ll}\p{Ll}\z/, /\A\p{Lu}\p{Ll}/],
+        [/#{CASED.source}\z/, /\A\p{Nd}/],
+        [/\p{Nd}\z/, /\A#{CASED.source}{2}/]
+      ].freeze
 
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
@@ -69,7 +82,7 @@ module Nokodown
       def render(nodes, heading: false)
         outer = @in_heading
         @in_heading ||= heading
-        nodes.map { |node| node_text(node) }.join
+        nodes.each_with_object(+"") { |node, out| append(out, node_text(node), node) }
       ensure
         @in_heading = outer
       end
@@ -79,6 +92,30 @@ module Nokodown
       end
 
       private
+
+      # Sites set tags, labels and dates in elements of their own and space
+      # them with CSS, so their words would run together. Raised and lowered
+      # text decides its own spacing.
+      def append(out, piece, node)
+        out << " " if glued?(out, piece) && !script?(node)
+        out << piece
+      end
+
+      def script?(node)
+        return false unless node.element?
+        return true if node.name == "sup" || node.name == "sub"
+
+        children = node.children.reject { |child| child.text? && child.content.strip.empty? }
+        children.size == 1 && script?(children.first)
+      end
+
+      def glued?(left, right)
+        return false if left.empty? || right.empty?
+
+        last = (left.length > 400 ? left[-400..] : left).sub(TRAILING_MARKUP, "")
+        first = right[0, 200].sub(LEADING_MARKUP, "")
+        GLUED.any? { |before, after| last.match?(before) && first.match?(after) }
+      end
 
       def node_text(node)
         if node.text? || node.cdata?
