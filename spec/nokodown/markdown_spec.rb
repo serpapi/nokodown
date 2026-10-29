@@ -98,6 +98,23 @@ RSpec.describe "Markdown conversion" do
     it "skips empty emphasis" do
       convert("<p>x<b> </b>y<i></i></p>").should == "x y"
     end
+
+    it "joins runs a page split in two" do
+      convert("<p>a <b>tw</b><b>o</b> <b>three</b> <b>four</b> <i>five</i> <i>six</i></p>").should == "a **two three four** *five six*"
+    end
+
+    it "drops emphasis around a whole paragraph but keeps a bold label" do
+      html = "<p><i>The whole paragraph is set in italics.</i></p><p><b>Ingredients</b></p><p><b>Mix the flour and the eggs.</b></p>" \
+             "<p><i><b>Note:</b> it rises.</i></p><p><b><i>Serves</i></b></p>"
+      convert(html).should == "The whole paragraph is set in italics.\n\n**Ingredients**\n\nMix the flour and the eggs.\n\n**Note:** it rises.\n\n**Serves**"
+    end
+
+    it "drops emphasis around a whole list item, table cell, heading or link text" do
+      html = "<ul><li><b>Bold item</b></li></ul><table><tr><th><b>Key</b></th><th>Value</th></tr><tr><td><b>a</b></td><td><i>1</i></td></tr></table>" \
+             '<h2><i>Title</i></h2><p>See <b><a href="/a">this</a></b> and <a href="/b"><i>that</i></a>.</p>'
+      convert(html).should == "- Bold item\n\n| Key | Value |\n| --- | --- |\n| a | 1 |\n\n## Title\n\n" \
+                              "See [this](https://example.com/a) and [that](https://example.com/b)."
+    end
   end
 
   describe "links" do
@@ -677,8 +694,8 @@ RSpec.describe "Markdown conversion" do
     it "closes the bold a shortened quote cuts through" do
       post = "The stove boils a full litre of water in three minutes on a canister. It is a bit slower in the cold, " \
              "and the piezo lighter fails above 3000 metres, so carry matches."
-      convert("<p><b>#{post}</b></p><blockquote><p><b>#{post}</b></p></blockquote>").should ==
-        "**#{post}**\n\n> **The stove boils a full litre of water in three minutes on a canister.** …"
+      convert("<p>Tip: <b>#{post}</b></p><blockquote><p>Tip: <b>#{post}</b></p></blockquote>").should ==
+        "Tip: **#{post}**\n\n> Tip: **The stove boils a full litre of water in three minutes on a canister.** …"
     end
 
     it "keeps a quote that repeats another quote" do

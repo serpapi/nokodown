@@ -50,7 +50,7 @@ module Nokodown
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
           chunk = Text.tidy(chunk).lines.reject { |line| line.match?(SEPARATOR_LINE) }.join.strip
-          Block.new(:paragraph, Text.escape_line_starts(chunk)) unless chunk.empty?
+          Block.new(:paragraph, Text.escape_line_starts(Emphasis.paragraph(chunk))) unless chunk.empty?
         end
       end
 
@@ -112,7 +112,7 @@ module Nokodown
 
       # Text that long is a paragraph some site wrapped in a heading tag.
       def heading(node)
-        text = Text.single_line(@inline.render(node.children, heading: true))
+        text = Emphasis.unwrap(Text.single_line(@inline.render(node.children, heading: true)))
         return [] if text.empty?
         return [Block.new(:paragraph, text)] if text.length > 300
 
@@ -179,8 +179,11 @@ module Nokodown
       end
 
       # Card grids put each title in a heading; in a list item the marker
-      # already sets it apart.
+      # already sets it apart, as it does an item set in bold throughout.
       def unheaded(blocks)
+        first = blocks.first
+        return [Block.new(:paragraph, Text.escape_line_starts(Emphasis.unwrap(first.text)))] if blocks.size == 1 && first.kind == :paragraph
+
         blocks.map do |block|
           block.kind == :heading ? Block.new(:paragraph, Text.escape_line_starts(block.text.sub(/\A#+ /, ""))) : block
         end

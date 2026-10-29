@@ -37,6 +37,7 @@ module Nokodown
       ATTACHED = /[\p{L}\p{N})\]]\z/.freeze
       WORD_START = /\A[\p{L}\p{N}]/.freeze
       WORD_END = /[\p{L}\p{N}]\z/.freeze
+      LINK_ONLY = /\A!?\[(?:\\.|[^\\\]])*\]\([^\s]*\)\z/.freeze
 
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
@@ -117,7 +118,7 @@ module Nokodown
         content = render(node.children)
         @emphasis[marker] -= 1
         core = content.strip
-        return content if core.empty? || core.match?(/\A[^\p{L}\p{N}]*\z/)
+        return content if core.empty? || core.match?(/\A[^\p{L}\p{N}]*\z/) || core.match?(LINK_ONLY)
 
         "#{content[/\A\s*/]}#{marker}#{core}#{marker}#{content[/\s*\z/]}"
       end
@@ -151,6 +152,8 @@ module Nokodown
 
         url = link_url(href)
         return text unless url
+
+        text = Emphasis.unwrap(text)
         return url if same_as_url?(text, url)
 
         "[#{Text.link_text(text)}](#{Text.destination(url)})"
