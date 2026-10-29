@@ -184,6 +184,11 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "- Bold item\n\n| Key | Value |\n| --- | --- |\n| a | 1 |\n\n## Title\n\n" \
                               "See [this](https://example.com/a) and [that](https://example.com/b)."
     end
+
+    it "marks emphasis that spans paragraphs in each paragraph" do
+      convert("<p>Meanings: <i>1. To work in vain.<br><br>2. A <b>pointless</b> task.</i></p>").should ==
+        "Meanings: *1. To work in vain.*\n\n2. A **pointless** task."
+    end
   end
 
   describe "links" do

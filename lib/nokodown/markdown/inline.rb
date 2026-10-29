@@ -38,6 +38,7 @@ module Nokodown
       WORD_START = /\A[\p{L}\p{N}]/.freeze
       WORD_END = /[\p{L}\p{N}]\z/.freeze
       TAIL_BYTES = 1600
+      PARAGRAPH_BREAK = /(\s*\n\s*\n\s*)/.freeze
       LINK_ONLY = /\A!?\[(?:\\.|[^\\\]])*\]\([^\s]*\)\z/.freeze
       # Markup around the first and last visible characters of a piece.
       TRAILING_MARKUP = /(?:[*~`]|\]\([^()\s]*(?:\([^()\s]*\)[^()\s]*)*\))+\z/.freeze
@@ -222,9 +223,14 @@ module Nokodown
         content = render(node.children)
         @emphasis[marker] -= 1
         core = content.strip
-        return content if core.empty? || core.match?(/\A[^\p{L}\p{N}]*\z/) || core.match?(LINK_ONLY)
+        marked = core.split(PARAGRAPH_BREAK, -1).map { |paragraph| marked(paragraph, marker) }.join
+        "#{content[/\A\s*/]}#{marked}#{content[/\s*\z/]}"
+      end
 
-        "#{content[/\A\s*/]}#{marker}#{core}#{marker}#{content[/\s*\z/]}"
+      def marked(text, marker)
+        return text if text.match?(PARAGRAPH_BREAK) || text.empty? || text.match?(/\A[^\p{L}\p{N}]*\z/) || text.match?(LINK_ONLY)
+
+        "#{marker}#{text}#{marker}"
       end
 
       def code_span(node)
