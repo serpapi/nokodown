@@ -619,6 +619,24 @@ RSpec.describe Nokodown do
       end
     end
 
+    it "decides whether to keep it before it protects a listing's items" do
+      papers = ["Lagoon walls under storm surge", "Sediment behind barrages", "Fish passage through turbines", "Grid timing of output",
+                "Costs of the La Rance overhaul", "Pumping at high tide", "Bird life on lagoon walls", "Tidal range and siting"]
+      items = papers.each_with_index.map do |title, index|
+        "<div class='entry'><h3><a href='/papers/#{index}'>#{title}</a></h3><p>#{'A study of the wall and the water behind it. ' * 3}</p>" \
+          "<div class='meta'><a href='/authors/a#{index}'>Ana Lima</a>, <a href='/authors/b#{index}'>Rui Costa</a></div></div>"
+      end
+      protected_runs = []
+      Nokodown::Pruner.stub(:new).and_wrap_original do |original, nodes, mode, **options|
+        protected_runs << !options[:keep].to_a.empty? if mode == :article && options.fetch(:conditional, true)
+        original.call(nodes, mode, **options)
+      end
+
+      story("<h2>Papers</h2><div class='list'>#{items.join}</div>")
+
+      protected_runs.should == [false, true]
+    end
+
     it "keeps a heading whose anchor holds a negative class word" do
       markdown = story('<h2 id="h-media-coverage-of-tidal-lagoons">Media coverage of tidal lagoons</h2><p>Newspapers mostly covered the cost.</p>')
 

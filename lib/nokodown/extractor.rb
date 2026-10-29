@@ -73,17 +73,30 @@ module Nokodown
     # (React apps, card grids) trips it, and a short intro would otherwise pass
     # for the article. When almost nothing is left at all, the content is
     # pruned like a page. Cleaning runs on a copy so it can be undone.
+    #
+    # A listing's items are kept only once cleaning is known to stay: kept,
+    # they would count as text cleaning kept and hide that it removed most
+    # of the rest.
     def cleaned_article(nodes, page_type, urls)
       copies = nodes.map(&:dup)
-      pruner = Pruner.new(copies, :article, keep: listed(nodes, page_type)).call
+      pruner = Pruner.new(copies, :article).call
       if almost_nothing_kept?(copies, nodes)
         Pruner.new(nodes, :page, urls: urls).call
         return nodes
       end
-      return copies if keep_conditional_cleaning?(pruner, page_type)
+      return listed_copies(nodes, page_type) || copies if keep_conditional_cleaning?(pruner, page_type)
 
       Pruner.new(nodes, :article, conditional: false, urls: urls).call
       nodes
+    end
+
+    def listed_copies(nodes, page_type)
+      keep = listed(nodes, page_type)
+      return if keep.empty?
+
+      copies = nodes.map(&:dup)
+      Pruner.new(copies, :article, keep: keep).call
+      copies
     end
 
     # When what conditional cleaning removed from a declared article is mostly
