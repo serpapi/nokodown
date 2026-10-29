@@ -47,17 +47,19 @@ module Nokodown
     # recursive walks after parsing can follow.
     MAX_DEPTH = 256
     UNRENDERED = Set.new(%w[script style template noscript]).freeze
+    # Text set straight in these is not in any of their cells or items.
+    FRAMES = Set.new(%w[table thead tbody tfoot tr ul ol dl menu dir]).freeze
 
     module_function
 
-    # Below MAX_DEPTH levels an element keeps only its text, with a space
-    # where a block or a line break parted it.
+    # Below MAX_DEPTH levels the first element that can hold text keeps
+    # only its text, with a space where a block or a line break parted it.
     def flatten_deep(root)
       stack = [[root, 0]]
       until stack.empty?
         node, depth = stack.pop
         children = node.element_children
-        if depth < MAX_DEPTH
+        if depth < MAX_DEPTH || FRAMES.include?(node.name)
           children.each { |child| stack << [child, depth + 1] }
         elsif !children.empty?
           node.content = flat_text(node)
