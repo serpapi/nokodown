@@ -1155,6 +1155,11 @@ RSpec.describe "Markdown conversion" do
         "[Demo video](https://www.youtube.com/watch?v=dQw4w9WgXcQ)"
     end
 
+    it "writes an embedded video with the player's generic title as its address" do
+      convert('<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="YouTube video player"></iframe>').should ==
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    end
+
     it "uses the TeX source of MathML" do
       math = '<math><semantics><mi>x</mi><annotation encoding="application/x-tex">x^2</annotation></semantics></math>'
       convert("<p>Area #{math}</p>").should == "Area $x^2$"
