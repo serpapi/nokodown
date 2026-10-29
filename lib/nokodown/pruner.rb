@@ -31,6 +31,7 @@ module Nokodown
     MIN_INDEX_LENGTH = 80
     MIN_TITLED_CONTENT = 200
     MIN_LEFT = 200
+    SENTENCE_TEXT = 20
     MIN_PROSE_COLUMN = 100
     GRID_CLASS = /\A(?:span|td-pb-span|col-(?:(xs|sm|md|lg|xl|xxl)-)?|(small|medium|large)-)(\d{1,2})\z/.freeze
     BREAKPOINTS = [nil, "xs", "sm", "md", "lg", "xl", "xxl"].freeze
@@ -618,7 +619,16 @@ module Nokodown
 
       text_length = Dom.text(node).length
       lengths = links.map { |link| Dom.text(link).length }
-      text_length.positive? && lengths.max < 30 && lengths.sum.fdiv(text_length) >= 0.7
+      text_length.positive? && lengths.max < 30 && lengths.sum.fdiv(text_length) >= 0.7 && !in_sentence?(node)
+    end
+
+    # Links that a sentence names ("Become a member by purchasing
+    # <span><a>Standard</a>, <a>Premium</a></span>!") are part of it.
+    def in_sentence?(node)
+      parent = node.parent
+      return false if Dom.block?(node) || !parent&.element?
+
+      parent.children.sum { |child| child.text? ? Dom.char_count(child.content) : 0 } >= SENTENCE_TEXT
     end
 
     def in_data_table?(node)

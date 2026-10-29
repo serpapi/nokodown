@@ -64,6 +64,15 @@ RSpec.describe Nokodown::Pruner do
       Nokodown::Dom.text(root).should include("Ben Ode, Cy Cole, Dee Fox")
     end
 
+    it "keeps links that a sentence names" do
+      plans = "<span><a href='/plans/standard'>Standard</a>, <a href='/plans/premium'>Premium</a> or <a href='/plans/gold'>Gold</a></span>"
+      root = content(story + "<div>Want a discount? Become a member by purchasing #{plans}!</div>")
+
+      described_class.new([root], :page, urls: urls).call
+
+      Nokodown::Dom.text(root).should include("purchasing Standard, Premium or Gold!")
+    end
+
     it "drops the whole box of links around a menu that links to the page itself" do
       tags = "Tagged: <a href='/tags/tide'>Tide</a>, <a href='/page'>Energy</a>, <a href='/tags/sea'>Sea</a>"
       meta = "<div><a href='/c/coast'>Coastal engineering</a> <a href='/c/power'>Renewable power</a> <span>#{tags}</span></div>"
