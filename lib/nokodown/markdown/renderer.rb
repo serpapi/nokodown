@@ -295,9 +295,8 @@ module Nokodown
       end
 
       # Definitions of one paragraph each go on their term's line, so spec
-      # sheets stay one line per row and the colon sets the term apart, as in
-      # a table of names and values; longer ones keep their paragraphs, lists
-      # and code under the term in bold.
+      # sheets stay one line per row; longer ones keep their paragraphs, lists
+      # and code under the term.
       def definition_list(node)
         entries = definition_groups(node).map do |term, definitions|
           compact?(definitions) ? definition_line(term, definitions) : list_entry("- ", definition_item(term, definitions))
@@ -330,9 +329,9 @@ module Nokodown
       def definition_line(term, definitions)
         text = definitions.map { |blocks| Text.single_line(blocks.first.text) }.join("; ")
         return "- #{text}" if term.nil?
-        return "- #{term}" if text.empty?
+        return "- **#{term}**" if text.empty?
 
-        term.match?(/[:：]\z/) ? "- #{term} #{text}" : "- #{term}: #{text}"
+        term.match?(/[:：]\z/) ? "- **#{term}** #{text}" : "- **#{term}**: #{text}"
       end
 
       def definition_item(term, definitions)
