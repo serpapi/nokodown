@@ -25,7 +25,8 @@ module Nokodown
 
       # images: the Renderer's rendered_images.
       def call(blocks, images = {})
-        blocks = Labels.blocks(Lists.call(CodeBlock.without_labels(blocks.reject { |block| noise?(block) })))
+        blocks = CodeBlock.without_labels(blocks.reject { |block| noise?(block) })
+        blocks = Labels.blocks(Lists.call(blocks))
         blocks = dedupe(blocks)
         blocks = drop_repeated_runs(blocks)
         blocks = shorten_repeated_quotes(blocks)

@@ -31,8 +31,8 @@ module Nokodown
         lines.join("\n")
       end
 
-      # A first row with a single cell spanning the table titles it ("| Specs |
-      # | |"); the next row holds the column names.
+      # A first row with one cell across the table is its title; the next row
+      # holds the column names.
       def title_rows(grid)
         titles = []
         while grid.size > 2 && grid.first.count { |cell| !cell.empty? } == 1 && grid.first.first != ""

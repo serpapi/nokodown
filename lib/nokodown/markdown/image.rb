@@ -8,8 +8,8 @@ module Nokodown
       BADGE = %r{//(?:img\.shields\.io|badge\.fury\.io|badgen\.net)/|badge\.svg(?:[?#]|\z)|/badges?/[^?#]*\.svg}i.freeze
       # Emoji, including skin-tone modifiers, variation selectors and joiners.
       EMOJI = /\A[\p{So}\p{Sk}\p{Mn}\p{Cf}]+\z/.freeze
-      # Alt text that names nothing: a file name, a camera's or a hash, or a
-      # word for "image" in the major web languages.
+      # Alt text that names nothing: a file name, a camera's numbering, a hash,
+      # or a word for "image" in the major web languages.
       FILE_NAME = /\A\S+\.(?:jpe?g|png|gif|webp|svg|avif|bmp|tiff?|heic|ico)\z/i.freeze
       CAMERA_NAME = /\A(?:img|dsc[nf]?|dcim|pxl|mvimg|screenshot|scan|photo|image)[\s_-]?\d{3,}|\A[0-9a-f-]{12,}\z/i.freeze
       GENERIC_ALT = /
@@ -53,7 +53,6 @@ module Nokodown
       # Icons, spacers, tracking pixels, placeholders and badges.
       def decorative?(node, src, alt)
         return true if placeholder?(src)
-
         return true if alt.empty? && src.match?(/\.svg(?:[?#]|\z)/i)
 
         width = pixels(node["width"])
