@@ -212,6 +212,11 @@ RSpec.describe "Markdown conversion" do
                               "See [this](https://example.com/a) and [that](https://example.com/b)."
     end
 
+    it "puts images that open an emphasis run before its marker" do
+      convert('<p><strong><a href="/poster.png"><img src="/poster-s.png" alt="Fair poster"></a>Milano Food City is the food week.</strong></p>').should ==
+        "![Fair poster](https://example.com/poster-s.png) **Milano Food City is the food week.**"
+    end
+
     it "marks emphasis that spans paragraphs in each paragraph" do
       convert("<p>Meanings: <i>1. To work in vain.<br><br>2. A <b>pointless</b> task.</i></p>").should ==
         "Meanings: *1. To work in vain.*\n\n2. A **pointless** task."
