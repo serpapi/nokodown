@@ -140,6 +140,19 @@ RSpec.describe Nokodown do
       ["Party", "Bedding", "All Books"].each { |noise| markdown.should_not include(noise) }
     end
 
+    it "drops a column of links beside the column of prose in a layout table" do
+      news = ["Pool season opens with a new water system", "We are hiring installers for the summer",
+              "How we rebuilt the city pool in three weeks", "A sauna for every home: our new range"]
+      rail = news.map { |headline| "<p><a href=\"/news/#{headline.length}\">#{headline}</a></p>" }.join
+      product = "<h2>Whirlpool bath M-2056A</h2><p>Made in China by Monalisa, 1860 x 830 x 730 mm, " \
+                "with six jets, a heater and a headrest.</p>"
+
+      markdown = extract("<table><tr><td>#{product}</td><td>#{rail}</td></tr></table>")
+
+      markdown.should include("with six jets, a heater and a headrest.")
+      markdown.should_not include("We are hiring")
+    end
+
     it "keeps cards whose tags link to the page itself" do
       tags = '<div><a href="/tags/tide">tide</a> <a href="/page">energy</a> <a href="/tags/coast">coast</a></div>'
       card = "<article><h2><a href=\"/notes/lagoon\">The lagoon wall opens</a></h2>#{tags}</article>"

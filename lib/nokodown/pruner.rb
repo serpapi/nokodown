@@ -24,6 +24,7 @@ module Nokodown
     MIN_INDEX_LENGTH = 80
     MIN_TITLED_CONTENT = 200
     MIN_LEFT = 200
+    MIN_PROSE_COLUMN = 100
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
     SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
     LETTER = /\p{L}/.freeze
@@ -41,7 +42,7 @@ module Nokodown
 
     def call
       @nodes.each do |root|
-        @mode == :article ? prune_article(root) : remove_link_clusters(root)
+        @mode == :article ? prune_article(root) : prune_page(root)
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
       end
@@ -60,6 +61,31 @@ module Nokodown
     end
 
     private
+
+    def prune_page(root)
+      remove_rail_columns(root)
+      remove_link_clusters(root)
+    end
+
+    # Pages laid out in table columns put the site's menu or a rail of other
+    # stories in a column of links beside the column of prose.
+    def remove_rail_columns(root)
+      root.css("tr").each do |row|
+        cells = Tables.cells(row)
+        next if cells.size < 2 || cells.none? { |cell| prose_column?(cell) } || in_data_table?(row)
+
+        cells.each { |cell| remove(cell) if rail_column?(cell) }
+      end
+    end
+
+    def prose_column?(cell)
+      Dom.text(cell).length >= MIN_PROSE_COLUMN && link_density(cell) < 0.3
+    end
+
+    # Preformatted listings link each of their entries too.
+    def rail_column?(cell)
+      cell.css("a[href]").size >= 3 && link_density(cell) >= 0.6 && !cell.at_css("pre")
+    end
 
     def prune_article(root)
       content_length = Dom.text(root).length
