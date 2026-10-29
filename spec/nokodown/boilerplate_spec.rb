@@ -114,6 +114,10 @@ RSpec.describe Nokodown::Boilerplate do
       ["Grinding coffee", "Brewing", "Storing beans", "House blend"].each { |content| text.should include(content) }
       text.should_not include("Archive")
     end
+
+    it "still reads no-print as a name" do
+      remaining("#{prose('Grinding coffee', 3)}<div class='no-print'><a href='?print=1'>Print this page</a></div>").should_not include("Print this")
+    end
   end
 
   describe "chrome elements around the content" do

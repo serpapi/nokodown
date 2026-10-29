@@ -16,8 +16,9 @@ module Nokodown
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     # What a wrapper has, lacks or allows does not name it: "has-sidebar",
-    # "with-navigation", "content-and-menu", "sidebar-enabled--true".
-    # "no-print" names what is left out of print, so it stays.
+    # "with-navigation", "content-and-menu", "sidebar-enabled--true". The
+    # head of a compound names the wrapper, so "menu-and-content" stays a
+    # menu. "no-print" names what is left out of print, so it stays too.
     MODIFIER = /
       (?:(?<![\w-])(?:has|with|without|no(?!-?print))|-(?:and|with|without))-[\w-]+|
       (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])

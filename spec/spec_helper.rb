@@ -2,6 +2,9 @@
 
 require "nokodown"
 
+# Fixtures and expectations are UTF-8 whatever the shell's locale.
+Encoding.default_external = Encoding::UTF_8
+
 RSpec.configure do |config|
   config.expect_with(:rspec) { |expectations| expectations.syntax = :should }
   config.mock_with(:rspec) { |mocks| mocks.syntax = :should }
