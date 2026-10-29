@@ -15,6 +15,13 @@ module Nokodown
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
+    # What a wrapper has, lacks or allows does not name it: "has-sidebar",
+    # "with-navigation", "content-and-menu", "sidebar-enabled--true".
+    # "no-print" names what is left out of print, so it stays.
+    MODIFIER = /
+      (?:(?<![\w-])(?:has|with|without|no(?!-?print))|-(?:and|with|without))-[\w-]+|
+      (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])
+    /x.freeze
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
@@ -33,7 +40,8 @@ module Nokodown
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
       # Card grids repeat the same class list hundreds of times.
-      @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
+      @names = Hash.new { |cache, signature| cache[signature] = signature.gsub(MODIFIER, " ") }
+      @furniture = Hash.new { |cache, signature| cache[signature] = @names[signature].match?(Patterns::PAGE_FURNITURE) }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
       @notes = Set.new
       @prose_blocks = Set.new
@@ -205,8 +213,8 @@ module Nokodown
       return false if signature.empty?
 
       chrome = @furniture[signature]
-      return site_header?(node) if !chrome && signature.match?(Patterns::HEADER)
-      return @stats.link_density(node) > 0.5 if !chrome && signature.match?(Patterns::MENU)
+      return site_header?(node) if !chrome && @names[signature].match?(Patterns::HEADER)
+      return @stats.link_density(node) > 0.5 if !chrome && @names[signature].match?(Patterns::MENU)
       return false unless chrome
       return false if prose_section?(node, signature)
       return true if signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE)
@@ -252,7 +260,7 @@ module Nokodown
 
     def furniture_name?(classes)
       signature = Dom.signature_of("#{classes} ")
-      @furniture[signature] || signature.match?(Patterns::HEADER) || signature.match?(Patterns::MENU)
+      @furniture[signature] || @names[signature].match?(Patterns::HEADER) || @names[signature].match?(Patterns::MENU)
     end
 
     # Menus repeat their items too, so a run named after a place is never

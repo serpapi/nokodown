@@ -100,6 +100,22 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "modifier class names" do
+    it "keeps wrappers named for what they have or allow, not for what they are" do
+      html = <<~HTML
+        <div class="content-container has-sidebar">#{prose('Grinding coffee', 1)}</div>
+        <div class="clearfix with-navigation">#{prose('Brewing', 1)}</div>
+        <div class="td-content-and-menu">#{prose('Storing beans', 1)}</div>
+        <div class="product-grid sidebar-enabled--true"><a href="/p/1">House blend</a> <a href="/p/2">Dark roast</a></div>
+        <div class="sidebar"><p>Archive of older posts</p></div>
+      HTML
+
+      text = remaining(html)
+      ["Grinding coffee", "Brewing", "Storing beans", "House blend"].each { |content| text.should include(content) }
+      text.should_not include("Archive")
+    end
+  end
+
   describe "noise names" do
     it "removes a related block even when its classes also name content" do
       html = "<article>#{prose('Sizing', 8)}</article><div class=\"related-posts entry-related\">#{prose('Another heat pump story', 2)}</div>"
