@@ -889,6 +889,17 @@ RSpec.describe Nokodown do
       convert(body).should == "Rooms with a view of the lake. {Christmas}"
     end
 
+    it "drops counters a script never filled in" do
+      convert("<p>The stove boils a litre in three minutes.</p><div class='like-icon'><a href=''>{{options.likeCount}}</a> " \
+              "<span>{{ options.likeCount }}</span></div>").should == "The stove boils a litre in three minutes."
+    end
+
+    it "keeps template syntax in a code block" do
+      block = "<div class='language-liquid highlighter-rouge'><div class='highlight'><pre><code>{{ page.title }}</code></pre></div></div>"
+
+      convert("#{block}<p><code>{{ site.url }}</code></p>").should == "```liquid\n{{ page.title }}\n```\n\n`{{ site.url }}`"
+    end
+
     it "keeps template placeholders written as code" do
       body = "<p>{{ page.title }}</p><p>Use <kbd>{{ page.title }}</kbd>, <samp>{{ site.url }}</samp> and " \
              "<tt>{{ content }}</tt> in the layout.</p>"

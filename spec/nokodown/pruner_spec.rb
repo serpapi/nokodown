@@ -44,6 +44,16 @@ RSpec.describe Nokodown::Pruner do
   end
 
   describe "page pruning" do
+    let(:urls) { Nokodown::UrlResolver.new("https://example.com/page") }
+    let(:rail) do
+      places = %w[
+        Bagienice Barczewko Barczewo Barkweda Bartag Bartazek Bartolty Bezled Biskupiec Bisztynek Blanki Boguchwaly
+        Bredynki Brzeznica Bukwald Butryny Cerkiewnik Czarny Dadaj Dobre Dorotowo Dywity Gady Gietrzwald Gradki
+        Jeziorany Jonkowo Kaplityny Klebark Kolno Lamkowo Lelkowo Lidzbark Lukta Majdy Mragowo Naterki Olsztynek
+      ]
+      places.map { |place| "<a href='/places/#{place.downcase}'>#{place}</a><br>" }.join
+    end
+
     it "keeps a teaser's short linked title with its date and author links, not a menu of linked headings" do
       teaser = "<header><h2><a href='/archives/42822'>ショップが新しくなりました</a></h2>" \
                "<a href='/archives/42822'>2021年03月09日</a> <a href='/author/micasa'>micasa</a></header>"
@@ -65,33 +75,6 @@ RSpec.describe Nokodown::Pruner do
 
       text.should_not include("Women")
       text.should_not include("Login")
-    end
-
-    it "drops counters a script never filled in" do
-      root = content("#{story}<div class='like-icon'><a href=''>{{options.likeCount}}</a> <span>{{ options.likeCount }}</span></div>")
-      described_class.new([root], :page).call
-
-      Nokodown::Dom.text(root).should_not include("likeCount")
-    end
-
-    it "keeps template syntax shown as code" do
-      block = "<div class='language-liquid highlighter-rouge'><div class='highlight'><pre><code>{{ page.title }}</code></pre></div></div>"
-      root = content("#{story}#{block}<p><code>{{ site.url }}</code></p><ul><li><code>{{ content }}</code></li></ul>")
-      described_class.new([root], :page).call
-
-      %w[page.title site.url content].each { |name| Nokodown::Dom.text(root).should include("{{ #{name} }}") }
-    end
-  end
-
-  describe "page pruning" do
-    let(:urls) { Nokodown::UrlResolver.new("https://example.com/page") }
-    let(:rail) do
-      places = %w[
-        Bagienice Barczewko Barczewo Barkweda Bartag Bartazek Bartolty Bezled Biskupiec Bisztynek Blanki Boguchwaly
-        Bredynki Brzeznica Bukwald Butryny Cerkiewnik Czarny Dadaj Dobre Dorotowo Dywity Gady Gietrzwald Gradki
-        Jeziorany Jonkowo Kaplityny Klebark Kolno Lamkowo Lelkowo Lidzbark Lukta Majdy Mragowo Naterki Olsztynek
-      ]
-      places.map { |place| "<a href='/places/#{place.downcase}'>#{place}</a><br>" }.join
     end
 
     it "keeps a line of names that links to the page itself among names without links" do

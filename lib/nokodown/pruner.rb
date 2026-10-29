@@ -30,9 +30,6 @@ module Nokodown
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
     MAX_TEASER_HEAD_LINKS = 4
-    # A counter or label a script never filled in: "{{options.likeCount}}".
-    UNRENDERED_TEMPLATE = /\A(?:\{\{[^{}]*\}\}\s*)+\z/.freeze
-    CODE_HOLDERS = "pre, code, kbd, samp"
     MIN_TITLED_CONTENT = 200
     MIN_LEFT = 200
     MIN_PROSE_COLUMN = 100
@@ -606,7 +603,7 @@ module Nokodown
         text = Dom.text(node)
         next if text.empty? || text.length > MAX_NOTICE
 
-        if (text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)) || unrendered_template?(node, text)
+        if text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
           remove(node)
         elsif copyright?(node, text)
           notices << node
@@ -645,12 +642,6 @@ module Nokodown
 
         text_outside(child, skipped)
       end
-    end
-
-    # A template's own syntax shown as code, on the docs of Liquid or Vue, is
-    # content.
-    def unrendered_template?(node, text)
-      text.match?(UNRENDERED_TEMPLATE) && node.at_css(CODE_HOLDERS).nil?
     end
 
     # Links and boxes styled as buttons ("Add to cart", "Book a demo") are
