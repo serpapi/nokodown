@@ -838,8 +838,10 @@ RSpec.describe "Markdown conversion" do
 
   describe "headings" do
     it "drops emoji, arrows and separators around the heading's text" do
-      convert("<h2>📱 Benefícios do Canal</h2><p>a</p><h3>☛ Такси</h3><p>b</p><h2>- Forum</h2><p>c</p><h2>***** Fest *****</h2><p>d</p><h2>👍🏽 Tips</h2><p>e</p>").should ==
-        "## Benefícios do Canal\n\na\n\n### Такси\n\nb\n\n## Forum\n\nc\n\n## Fest\n\nd\n\n## Tips\n\ne"
+      html = "<h2>📱 Benefícios do Canal</h2><p>a</p><h3>☛ Такси</h3><p>b</p><h2>- Forum</h2><p>c</p><h2>***** Fest *****</h2><p>d</p>" \
+             "<h2>👍🏽 Tips</h2><p>e</p><h2>--- 1 Terzo Posto</h2><p>f</p><h3>—— 自粘土工布</h3><p>g</p>"
+      convert(html).should == "## Benefícios do Canal\n\na\n\n### Такси\n\nb\n\n## Forum\n\nc\n\n## Fest\n\nd\n\n## Tips\n\ne\n\n" \
+                              "## 1 Terzo Posto\n\nf\n\n### 自粘土工布\n\ng"
     end
 
     it "keeps signs that are part of the heading's text" do
@@ -870,8 +872,8 @@ RSpec.describe "Markdown conversion" do
         "★★★★☆\n\nGreat\n\n## Value for Money – 22/25 ⭐️⭐️⭐️\n\nb"
     end
 
-    it "keeps a counter set as a heading over a section" do
-      convert("<h2>01.</h2><h4>Trust</h4><p>a</p><h6>02</h6><h4>Care</h4><p>b</p>").should == "## 01.\n\n#### Trust\n\na\n\n###### 02\n\n#### Care\n\nb"
+    it "keeps a counter set as a heading over a section, unless it is a bare number" do
+      convert("<h2>01.</h2><h4>Trust</h4><p>a</p><h6>02</h6><h4>Care</h4><p>b</p>").should == "## 01.\n\n#### Trust\n\na\n\n02\n\n#### Care\n\nb"
     end
 
     it "writes a date, a price or a number set as a heading below the headline as a paragraph, but keeps a year" do

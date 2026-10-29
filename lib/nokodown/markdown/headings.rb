@@ -9,10 +9,10 @@ module Nokodown
     module Headings
       STAR = "[★☆⭐✩✪✫✬✭✮✯]"
       # A sign before a number, a lowercase word or a bracket belongs to it
-      # ("+ de 300 modèles", "- (subtraction)"). A dash before the text marks
-      # a quote in Nordic news ("– Problemene er løst"), unless another
-      # closes the text as a frame ("— Blog —").
-      SIGN = "[-+](?!\\s+[\\p{Ll}\\p{N}(\\[])"
+      # ("+ de 300 modèles", "- (subtraction)"), and a dash before the text
+      # marks a quote in Nordic news ("– Problemene er løst"), unless another
+      # closes the text as a frame ("— Blog —"); a run of them decorates.
+      SIGN = "[-+–—]{2,}|[-+](?!\\s+[\\p{Ll}\\p{N}(\\[])"
       DECORATION = "#{Text::PICTOGRAPH}|[|·•;,/~=]"
       # Two stars or more are a rating.
       LEADING = /\A(?:(?!#{STAR}\uFE0F?#{STAR})(?:#{DECORATION}|[:»›]|#{SIGN}|\\[*_])+\s+)+/.freeze
@@ -29,8 +29,9 @@ module Nokodown
       # Scripts written without spaces between words.
       SENTENCE_CHARACTERS = 50
       UNSPACED = /[\p{Han}\p{Hiragana}\p{Katakana}\p{Thai}]/.freeze
-      # A year names a period, and a counter numbers the section below it.
-      NUMBERING = /\A(?:\d{4}(?:\s?[-–\/]\s?\d{2,4})?|\d{1,3}[.)]?)\z/.freeze
+      # A year names a period, and a counter numbers the section below it; as
+      # a paragraph, "02." would open an empty list item.
+      NUMBERING = /\A(?:\d{4}(?:\s?[-–\/]\s?\d{2,4})?|\d{1,3}[.)])\z/.freeze
       LINK = /\A\[#{Text::LINK_TEXT}\]\(#{Text::DESTINATION}\)\z/.freeze
 
       module_function
