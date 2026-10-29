@@ -8,7 +8,7 @@ module Nokodown
     # one string. Line breaks from <br> are kept as "\n".
     class Inline
       EMPHASIS = { "strong" => "**", "b" => "**", "em" => "*", "i" => "*", "del" => "~~", "s" => "~~", "strike" => "~~" }.freeze
-      CODE = Set.new(%w[code kbd samp tt]).freeze
+      CODE = Set.new(Dom::INLINE_CODE).freeze
       UNSAFE_SCHEME = /\A\s*(?:javascript|vbscript|data|tel|sms):/i.freeze
       FOOTNOTE_MARKER = /\A\s*(?:\[[^\]]{1,8}\]|[*†‡§]+)\s*\z/.freeze
       # Exponents are often written with the minus sign "−", not "-".
