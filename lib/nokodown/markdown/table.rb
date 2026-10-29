@@ -7,6 +7,9 @@ module Nokodown
     class Table
       MAX_COLSPAN = 50
       MAX_ROWSPAN = 500
+      MAX_NAME = 80
+      NAMED_ROWS = 0.8
+      LINK_OR_IMAGE = /\A!?\[/.freeze
 
       def initialize(renderer, node)
         @renderer = renderer
@@ -17,7 +20,7 @@ module Nokodown
         return layout_blocks unless Tables.data_table?(@node)
 
         grid, spanning = trimmed_grid
-        return caption + [Block.new(:list, name_values(grid))] if grid.size >= 2 && grid.first.size == 2 && !header_row?
+        return caption + [Block.new(:list, name_values(grid))] if grid.size >= 2 && names?(grid) && !header_row?
 
         titles = title_rows(grid, spanning)
         return layout_blocks if grid.size < 2 || grid.first.size < 2
@@ -49,7 +52,16 @@ module Nokodown
       # of the list instead, and a row across the table, which names the
       # rows below it, stays in its place.
       def name_values(grid)
-        grid.map { |row| "- #{name_value(*row.map { |cell| cell.gsub("\\|", "|").strip })}" }.join("\n")
+        grid.map { |row| "- #{name_value(*row.map { |cell| Dom.squish(cell.gsub("\\|", "|")) })}" }.join("\n")
+      end
+
+      # Names are short text, not pictures or links: two columns of those
+      # are a grid.
+      def names?(grid)
+        return false unless grid.first.size == 2
+
+        names = grid.map(&:first).reject(&:empty?)
+        names.size >= grid.size * NAMED_ROWS && names.all? { |name| name.length <= MAX_NAME && !name.match?(LINK_OR_IMAGE) }
       end
 
       def name_value(name, value)
