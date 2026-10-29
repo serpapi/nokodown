@@ -85,7 +85,8 @@ with `main_content: false`, `:none` for a document without a body.
   without a label (view and comment counts, FAQ and step badges, slide
   numbers, a player's "0:00"), and form labels left without their fields.
   A read-more link that is the only way to its page, a number a label
-  explains and a fact repeated on every card ("In stock") stay.
+  explains or that sits in a row of numbers, and a fact repeated on every
+  card ("In stock") stay.
 - Tracking pixels, spacers, icons, placeholders, README badges, click-tracking
   URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,
   "Read more" links, code line numbers, and repeated responsive copies of the
