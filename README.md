@@ -75,7 +75,8 @@ with `main_content: false`, `:none` for a document without a body.
   tab panels and FAQ answers. Content that React streams into hidden
   containers at the end of the page is put back where the page shows it,
   unless it is mostly links, as carousels of recommended products are.
-- Sections rendered twice, such as a desktop and a mobile copy.
+- Sections rendered twice, such as a desktop and a mobile copy: the mobile
+  copy goes and the desktop one stays.
 - Tracking pixels, spacers, icons, placeholders, README badges, click-tracking
   URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,
   "Read more" links, code line numbers, and repeated responsive copies of the
@@ -97,7 +98,10 @@ with `main_content: false`, `:none` for a document without a body.
   them all.
 
 Every structural rule is guarded: an element that contains the `<main>`
-region, or most of the page's text, is never removed because of its class name.
+region, or most of the page's text, is never removed because of its class name,
+and neither is one named for what it has or allows (`has-sidebar`,
+`with-navigation`, `sidebar-enabled`). A `<footer>` or complementary pane that
+holds the page's only `<h1>` and a fair share of its text is the content.
 
 ## How it works
 
@@ -111,7 +115,10 @@ region, or most of the page's text, is never removed because of its class name.
    candidate holds most of the page's prose the content is narrowed to it
    (`:article`); otherwise the whole main region is kept (`:page`), because a
    listing or a product page spreads its content over many small blocks. The
-   share required depends on the page type its metadata declares. On forum
+   share required depends on the page type its metadata declares. A row of a
+   data table stands for the whole table. When a short stretch that is not a
+   list of links (a standfirst, key facts, a price) sits between the page's
+   `<h1>` and the article, the article reaches up to the headline. On forum
    threads (schema.org types or the forum software's generator tag) replies
    are content even in comment-named containers, and on forums and Q&A pages
    where no single post holds the page, the whole main region is cleaned as an
@@ -127,7 +134,9 @@ region, or most of the page's text, is never removed because of its class name.
    buttons ("Add to cart", "Book a demo") are removed, except for disclosure
    toggles, buttons inside a sentence and titles or labels styled as buttons.
    If article cleaning removes almost everything, it is undone and light
-   cleaning is used instead.
+   cleaning is used instead, as it is on a listing of posts or products, whose
+   items conditional cleaning would judge one by one. A teaser's linked title
+   with its date and author links is not a link cluster, however short.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data
