@@ -126,6 +126,20 @@ RSpec.describe Nokodown::Teasers do
     blocks(article, article_url, nil).should_not be_empty
   end
 
+  it "takes a Turkish title in title case for one that calls teasers related" do
+    html = "<h1>Bridge reopens</h1>#{story(3)}<section><h2>Bunlar da İlginizi Çekebilir</h2>" \
+           "<div class='grid'>#{cards(stories, '/blog/')}</div></section>"
+
+    blocks(html, article_url, nil).should_not be_empty
+  end
+
+  it "does not take a title that names questions for one that calls teasers related" do
+    html = "<h1>Bridge reopens</h1>#{story(3)}<section><h2>Популярные вопросы</h2>" \
+           "<div class='grid'>#{cards(stories, '/blog/')}</div></section>"
+
+    blocks(html, article_url, nil).should be_empty
+  end
+
   it "keeps teasers for pages below this one" do
     grid = "<section><h2>Our services</h2><div class='grid'>#{cards(stories, '/services/security/')}</div></section>"
 
