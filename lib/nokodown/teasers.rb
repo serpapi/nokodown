@@ -258,9 +258,10 @@ module Nokodown
     end
 
     # Children of the same tag and first class, in unbroken runs: text
-    # between two of them, as between the figures of an article, ends a run.
-    # A class no sibling shares marks a position ("first", "primeiro"), not
-    # another kind of item.
+    # between two of them, as between the figures of an article, ends a run,
+    # but a heading does not: it titles the items after it, as in a column of
+    # widgets. A class no sibling shares marks a position ("first",
+    # "primeiro"), not another kind of item.
     def shapes(parent)
       counts = parent.element_children.map { |child| shape_of(child) }.tally
       open = {}
@@ -276,13 +277,20 @@ module Nokodown
             items = []
           end
           items << child
-          breaks += 1 if @stats.chars(child) > SEPARATOR
+          breaks += 1 if @stats.chars(child) > SEPARATOR && !heading_line?(child)
           open[shape] = [items, breaks]
         elsif child.text? && Dom.char_count(child.content) > SEPARATOR
           breaks += 1
         end
       end
       done + open.values.map(&:first)
+    end
+
+    def heading_line?(node)
+      return true if Dom.heading?(node) || node["role"] == "heading"
+
+      inner = node.element_children
+      inner.size == 1 && Dom.heading?(inner.first)
     end
 
     def shape_of(node)
@@ -390,8 +398,10 @@ module Nokodown
       uri
     end
 
+    # A post's anchor carries its number ("p12", "post-12"); "#a" or
+    # "#comments" can be on every page of a site.
     def anchor?(fragment)
-      return false if fragment.to_s.empty?
+      return false unless fragment.to_s.match?(/\d/)
 
       @anchors ||= @body.css("[id], a[name]").flat_map { |node| [node["id"], node["name"]] }.compact.to_set
       @anchors.include?(fragment)

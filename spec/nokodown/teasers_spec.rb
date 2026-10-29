@@ -243,6 +243,15 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, "https://forum.example.com/viewtopic.php?p=657618", :forum).should be_empty
   end
 
+  it "finds pages like this one that link to an anchor every such page has" do
+    items = Array.new(4) do |index|
+      "<div class='col'><a href='producto.php?id=#{480 + index}#a'><img src='/img/#{index}.jpg' alt=''></a></div>"
+    end.join
+    html = "<a name='a'></a><h1>Drain cleaning</h1>#{story(1)}<h3>Other services</h3><div class='row'>#{items}</div>"
+
+    blocks(html, "https://plumber.example.com/producto.php?id=566", nil).should_not be_empty
+  end
+
   it "keeps the records a catalogue lists on a category page" do
     records = Array.new(4) do |index|
       "<div class='record'><img src='/covers/#{index}.jpg' alt=''>" \
@@ -259,6 +268,13 @@ RSpec.describe Nokodown::Teasers do
     html = "<h1>Bridge reopens</h1><div class='entry'>#{story(1)}<p>See our earlier report.</p>#{figures.join}</div>"
 
     blocks(html, article_url).should be_empty
+  end
+
+  it "finds one block in a column of widgets, each a title over a card" do
+    widgets = stories.map { |title| "<h2>#{title.split.first}</h2>#{cards([title], '/blog/')}" }
+    html = "<h1>Bridge reopens</h1>#{story(3)}<div class='column'>#{widgets.join}</div>"
+
+    blocks(html, article_url).should_not be_empty
   end
 
   it "does not take a sentence before a list of cards for its title" do
