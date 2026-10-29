@@ -54,6 +54,13 @@ RSpec.describe Nokodown::Markdown::Repeats do
     end
   end
 
+  it "drops a gallery's thumbnail strip whose alt texts are file names" do
+    photos = %w[a b].map { |name| "<p><img src='/photos/#{name}.jpg' alt=''></p>" }.join
+    thumbs = %w[a b].map { |name| "<img src='/photos/#{name}.jpg' alt='#{name}.jpg'>" }.join(" ")
+    convert("#{photos}<p>Self portraits in oil.</p><p>#{thumbs}</p>").should ==
+      "![](https://example.com/photos/a.jpg)\n\n![](https://example.com/photos/b.jpg)\n\nSelf portraits in oil."
+  end
+
   it "drops a block that follows its own copy" do
     blocks = [Nokodown::Markdown::Block.new(:paragraph, "Provo Bench"), Nokodown::Markdown::Block.new(:paragraph, "Provo Bench")]
     described_class.call(blocks).map(&:text).should == ["Provo Bench"]

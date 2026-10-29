@@ -12,6 +12,7 @@ module Nokodown
       # rare URL with nested parentheses is not matched, so its image stays.
       IMAGE = /!\[(?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*\]\((?:[^()\s]|\([^()\s]*\))*\)/.freeze
       DESTINATION = /\]\(((?:[^()\s]|\([^()\s]*\))*)\)/.freeze
+      UNNAMED = /\A!\[(?:[\w\\.-]+\.(?:jpe?g|png|gif|webp|avif|bmp|tiff?))?\]/i.freeze
       # A line with nothing but list or quote markers, nested lists included.
       BARE_LINE = /\A(?:\s|>|[-*+]|\d+\.)*\z/.freeze
       LIST_MARKER = /\A *(?:[-*+]|\d+\.) /.freeze
@@ -103,7 +104,8 @@ module Nokodown
       end
 
       # A line with several copies of one image is a count, such as a row of
-      # rating stars, and keeps them all. Otherwise a copy without alt text
+      # rating stars, and keeps them all. Otherwise a copy without alt text,
+      # or whose alt is only a file name as in a gallery's thumbnail strip,
       # adds nothing. One with alt text can mark its own item (an award, a
       # verified tick), so it goes only when nothing but images came since
       # the last copy, as in a logo strip shown twice.
@@ -113,7 +115,7 @@ module Nokodown
 
         content.select do |markup|
           seen = @seen[@images[markup].url]
-          seen && (markup.start_with?("![]") || seen == @text_lines)
+          seen && (markup.match?(UNNAMED) || seen == @text_lines)
         end
       end
 
