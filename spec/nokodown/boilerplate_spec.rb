@@ -172,6 +172,17 @@ RSpec.describe Nokodown::Boilerplate do
 
       remaining(html).should include("Robotic mower KR500")
     end
+
+    it "keeps the largest guessed block when a cookie banner that outweighs it goes" do
+      products = Array.new(6) { |index| "<a href=\"/mower-#{index}\">Robotic mower KR#{index}00 for lawns up to #{index + 1} acres</a>" }
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 6
+      html = "<h1>Mowers</h1><section class=\"related-product\">#{products.join}</section>" \
+             "<div class=\"cmplz-cookiebanner-container\"><div class=\"cmplz-cookiebanner\">#{notice}</div></div>"
+
+      text = remaining(html)
+      text.should include("Robotic mower KR500")
+      text.should_not include("Google Analytics")
+    end
   end
 
   describe "disclaimers" do
@@ -337,6 +348,16 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should include("Monday 9:00")
     end
 
+    it "keeps a block laid out beside a sidebar" do
+      products = Array.new(6) do |index|
+        "<li><a href=\"/disc-#{index}\">Diamond disc #{index + 1}25 mm</a> Segmented rim for granite and concrete, #{index + 3}50 UAH</li>"
+      end
+      html = "<div class=\"main\"><h1>Diamond discs</h1><p>Cutting discs for stone.</p></div>" \
+             "<ul class=\"catalog-grid catalog-grid--m catalog-grid--sidebar\">#{products.join}</ul>"
+
+      remaining(html).should include("Segmented rim")
+    end
+
     it "keeps a sidebar or footer that holds prose, in paragraphs or in other blocks" do
       descriptions = %w[Acupuncture Massage Cupping].map do |treatment|
         "<div class=\"service\"><h3>#{treatment}</h3><div class=\"description\">#{treatment} eases the pain in the back " \
@@ -375,6 +396,26 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(policy).should include("Refusing them")
       remaining(page, url: "https://wordsforlife.org.uk/cookies/").should include("Google Analytics")
       remaining(form).should include("Google Analytics")
+    end
+
+    it "keeps a product whose tags name cookies and a bar" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+      product = "<div class=\"product type-product product_tag-buy-girl-scout-cookies-online product_tag-bar-harbor\">#{notice}</div>"
+
+      remaining("<h1>Super Silver Haze</h1>#{product}").should include("Google Analytics")
+    end
+
+    it "keeps a block named for consent alone" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+
+      remaining("<h1>Study</h1><div class=\"consent-text\">#{notice}</div>").should include("Google Analytics")
+      remaining("<h1>Study</h1><div class=\"entry informed-consent\">#{notice}</div>").should include("Google Analytics")
+    end
+
+    it "keeps a block named as a cookie notice that holds the page's title" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+
+      remaining("<div class=\"cookie-notice-container page\"><h1>Lake at dawn</h1>#{notice}</div>").should include("Google Analytics")
     end
   end
 

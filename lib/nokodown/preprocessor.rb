@@ -29,7 +29,8 @@ module Nokodown
     STREAMED_LINK_SHARE = 0.5
 
     UTILITY_FORM_TEXT = 300
-    # Set on a main region once its text besides headings is measured.
+    # Set on a main region once its text besides headings is measured, and
+    # taken off once the forms are marked.
     REGION_TEXT = "data-nokodown-region-text"
     SENDER_INPUTS = ["", "text", "email"].freeze
     QUANTITY = /qty|quantity/i.freeze
@@ -212,7 +213,6 @@ module Nokodown
 
     def remove_hidden
       total = Dom.char_count(@body.content)
-      @panel_ids = panel_ids
       @body.css(HIDDEN_CANDIDATES).each do |node|
         next unless hidden?(node)
         # A hidden wrapper around most of the page is an anti-flicker snippet
@@ -224,7 +224,7 @@ module Nokodown
     end
 
     def panel_ids
-      @body.css("[aria-controls]").flat_map { |control| control["aria-controls"].split }.to_set
+      @panel_ids ||= @body.css("[aria-controls]").flat_map { |control| control["aria-controls"].split }.to_set
     end
 
     def page_like?(node)
@@ -270,14 +270,14 @@ module Nokodown
     end
 
     def accordion_panel?(node)
-      @panel_ids.include?(node["id"]) && (node.key?("aria-labelledby") || node["role"] == "region")
+      panel_ids.include?(node["id"]) && (node.key?("aria-labelledby") || node["role"] == "region")
     end
 
     # Accordions and tabs mark closed panels aria-hidden, but icons and the
     # full text behind "read more" are aria-hidden too, so a panel only counts
     # when a control on the page opens it or a tab labels it.
     def closed_panel?(node)
-      disclosure?(node) && (node.key?("aria-labelledby") || @panel_ids.include?(node["id"]))
+      disclosure?(node) && (node.key?("aria-labelledby") || panel_ids.include?(node["id"]))
     end
 
     def remove_form_controls
@@ -291,7 +291,6 @@ module Nokodown
     # Text boxes go with the junk, so the forms that ask for a message in a
     # box readers can see are marked first.
     def mark_message_forms
-      @panel_ids = panel_ids
       @body.css("form").each do |form|
         form[MessageForms::MARK] = "" if form.css("textarea").any? { |box| shown?(box) }
       end
@@ -313,6 +312,7 @@ module Nokodown
     # may go before the content is chosen, and the content may start inside
     # them.
     def mark_titled_forms
+      @regions = []
       @body.css("form[#{MessageForms::MARK}]").each do |form|
         if message_form?(form)
           MessageForms.title_wrappers(form).each { |wrapper| wrapper[MessageForms::MARK] = "" }
@@ -320,6 +320,7 @@ module Nokodown
           form.remove_attribute(MessageForms::MARK)
         end
       end
+      @regions.each { |region| region.remove_attribute(REGION_TEXT) }
     end
 
     # A message form holds a few labels and notes; its pictures are a
@@ -355,7 +356,10 @@ module Nokodown
 
     # A thread's replies share their region, which is measured once.
     def region_text(holder)
-      holder[REGION_TEXT] ||= (Dom.char_count(holder.content) - heading_chars(holder)).to_s
+      unless holder.key?(REGION_TEXT)
+        holder[REGION_TEXT] = (Dom.char_count(holder.content) - heading_chars(holder)).to_s
+        @regions << holder
+      end
       holder[REGION_TEXT].to_i
     end
 

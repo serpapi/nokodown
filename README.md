@@ -204,9 +204,12 @@ furniture (`dialog-off-canvas-main-canvas`) that also holds prose, unless it
 is named as a breadcrumb trail or a menu.
 Three kinds of named furniture go however much of a short page they hold: a
 site header above the title, a sidebar or footer without prose beside a title
-that has text of its own, and a cookie banner named for what it is (a banner,
-a bar, a dialog, a consent manager) or laid over the page, unless the page is
-about cookies. Prose here is two sentences' worth of lines of 80 characters or
+that has text of its own (not a block whose BEM modifier names its layout,
+`catalog-grid--sidebar`), and a cookie banner that one of its names calls a
+banner, a bar or a dialog along with the cookies (`cookie-notice`,
+`cmplz-cookiebanner`), or a consent manager, or that is laid over the page,
+unless it holds the page's `<h1>` or the page is about cookies. A shop's or a
+blog's tags (`product_tag-cookies`) name what it lists, not the block. Prose here is two sentences' worth of lines of 80 characters or
 more in any block, not counting link text or what an `<address>` holds:
 opening hours and contact details are lines, not prose.
 

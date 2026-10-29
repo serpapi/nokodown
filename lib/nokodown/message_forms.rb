@@ -22,7 +22,7 @@ module Nokodown
 
     module_function
 
-    # The outermost marked blocks inside the content.
+    # A marked wrapper holds its form, which goes with it.
     def blocks(roots)
       marked = roots.flat_map { |root| root.css("[#{MARK}]").to_a }
       keys = marked.map { |node| Dom.key(node) }.to_set
