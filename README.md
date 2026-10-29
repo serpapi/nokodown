@@ -95,16 +95,27 @@ with `main_content: false`, `:none` for a document without a body.
   continuing the paragraph before it, or the footnote to a mark just above),
   and, next to an article, its comment thread.
 - Blocks of teasers for other pages of the same site whatever their class
-  names: a run of cards, each a title link with a thumbnail, a date or an
-  excerpt, under a title of its own in any language ("Flere Nyheder",
-  "Похожие товары"). They go when they list pages like this one (the same
-  path but for its last segment, with the same query keys and ids for the
-  values that differ) after a line of the page's own text, or, on a page that
-  declares itself an article, a product or a thread, when the page's own
-  text, or its own list, outweighs them. They stay on home pages, in hubs of
-  sections built alike, in forum posts (attachments), when they link to pages
-  below this one, and when the content would be left with fewer than 20 words
-  outside headings.
+  names: a run of cards (a title link with a thumbnail, a date or an
+  excerpt) or a titled list of bare links ("Смотрите также"). A block goes
+  when:
+  - it lists pages like this one (the same path but for its last segment,
+    the same query keys, ids for the values that differ) after a line of
+    the page's own text;
+  - it lists posts named by their titles under the root, as this page is,
+    under a heading after a line of text, or after a body of text on a
+    page that declares itself an article, a product or a thread;
+  - its title calls it related in the major web languages ("You may also
+    like", "Похожие товары", "猜你喜欢"), unless it holds most of the page;
+  - on a page that declares itself an article, a product or a thread, it is
+    a titled box of cards that the page's own text, or its own list,
+    outweighs.
+
+  Blocks stay on home pages, in hubs of sections built alike, in forum posts,
+  under a title the page's address names, when they link below this page,
+  and when the content would be left with fewer than 20 words outside
+  headings. Lists of bare links also stay on listings, under a letter of an
+  index, among three or more headed lists of links (a site map), and when
+  they hold most of the page.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
@@ -229,7 +240,9 @@ opening hours and contact details are lines, not prose.
    slot and goes. **Teasers** then finds the blocks of teasers for other
    pages, which are dropped from the content once it is cleaned.
 6. **Pruner**: in articles, Readability's conditional cleaning plus removal of
-   bylines, datelines and inline boxes of links to other stories; on other
+   bylines, datelines and inline boxes of links to other stories, under a
+   label in the major web languages ("Read also", "Lea también", "Читайте
+   также", "Baca juga") or none; on other
    pages, removal of leftover link clusters, with the heading over them, and
    of columns of links beside a column of prose in layout tables, unless the
    table declares them the wider column or they hold the page title, and of
@@ -240,7 +253,10 @@ opening hours and contact details are lines, not prose.
    above its title, and the side columns its table declares narrower. In
    both modes, short links and boxes styled as buttons ("Add to cart", "Book
    a demo") are removed, except for disclosure toggles, buttons inside a
-   sentence and titles or labels styled as buttons. If article cleaning
+   sentence and titles or labels styled as buttons, and so is the line a
+   feed adds after a post ("The post … appeared first on …", in any
+   language): a few words around a link to the post the page shows, by its
+   title, and one to its site's home page. If article cleaning
    keeps less than half of what it was given (unless what it removed from a
    declared article was mostly links), it is undone and light cleaning,
    which treats link clusters and menus as page pruning does, is used

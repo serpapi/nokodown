@@ -117,7 +117,27 @@ RSpec.describe Nokodown::Teasers do
   end
 
   it "keeps titled teasers on a page that declares no article or product" do
-    blocks(article, article_url, nil).should be_empty
+    html = "<h1>Bridge reopens</h1>#{story(3)}<section><h2>Harbor</h2><div class='grid'>#{cards(stories, '/blog/')}</div></section>"
+
+    blocks(html, article_url, nil).should be_empty
+  end
+
+  it "removes teasers under a title that calls them related on any page" do
+    blocks(article, article_url, nil).should_not be_empty
+  end
+
+  it "takes a Turkish title in title case for one that calls teasers related" do
+    html = "<h1>Bridge reopens</h1>#{story(3)}<section><h2>Bunlar da İlginizi Çekebilir</h2>" \
+           "<div class='grid'>#{cards(stories, '/blog/')}</div></section>"
+
+    blocks(html, article_url, nil).should_not be_empty
+  end
+
+  it "does not take a title that names questions for one that calls teasers related" do
+    html = "<h1>Bridge reopens</h1>#{story(3)}<section><h2>Популярные вопросы</h2>" \
+           "<div class='grid'>#{cards(stories, '/blog/')}</div></section>"
+
+    blocks(html, article_url, nil).should be_empty
   end
 
   it "keeps teasers for pages below this one" do
@@ -334,5 +354,240 @@ RSpec.describe Nokodown::Teasers do
   it "finds no teaser blocks on a site's home page" do
     blocks(article, article_url).should_not be_empty
     blocks(article, "https://news.example.com/en/").should be_empty
+  end
+
+  it "takes an empty link that opens a card for the link of its title" do
+    overlaid = stories.map do |title|
+      slug = title.downcase.delete("^a-z ").tr(" ", "-")
+      "<div class='card'><a href='/blog/#{slug}'></a><img src='/img/#{slug}.jpg' alt=''><h3>#{title}</h3></div>"
+    end
+    html = "<h1>Bridge reopens</h1>#{story(3)}<section><h2>Leia também</h2><div class='grid'>#{overlaid.join}</div></section>"
+
+    blocks(html, article_url).should_not be_empty
+  end
+
+  it "does not take an empty link deep in a card for one stretched over it" do
+    services = %w[Architecture Decoration Joinery].map do |name|
+      "<div class='col'><h3>#{name}</h3><div class='image'><div class='hover'><a href='/#{name.downcase}-services/'>" \
+        "</a></div></div><p>We plan the #{name.downcase} of your home in every detail and keep to the budget.</p></div>"
+    end
+    html = "<h1>Interior architect</h1>#{story(3)}<h2>Our services</h2><div class='row'>#{services.join}</div>"
+
+    blocks(html, "https://studio.example.com/interior-architect/").should be_empty
+  end
+
+  it "takes a card's title link over an empty link that shows its thumbnail" do
+    news = stories.each_with_index.map do |title, index|
+      "<div class='news'><a href='/news/#{index}' style='background:url(/img/#{index}.jpg)'></a>" \
+        "<a href='/news/#{index}'>#{title}</a><span>12.04.2026</span></div>"
+    end
+    html = "<h1>Bridge reopens</h1>#{story(3)}<div class='more'><h3>On this topic</h3>#{news.join}</div>"
+
+    blocks(html, "https://news.example.com/news/9").should_not be_empty
+  end
+
+  it "weighs each titled box, not all of them together, against the page's own text" do
+    boxes = %w[popular latest picks].map do |name|
+      "<div class='#{name}'><h3>#{name.capitalize}</h3>" \
+        "#{cards(stories.map { |title| "#{name.capitalize}: #{title}" }, '/blog/', '<p>What changes, and for whom.</p>')}</div>"
+    end
+    html = "<h1>Bridge reopens</h1>#{story(2)}#{boxes.join}"
+
+    blocks(html, article_url).size.should == 6
+  end
+
+  it "keeps a category's products that sit in a folder of their own" do
+    products = Array.new(4) do |index|
+      "<li class='item'><a href='/fr-fr/gate-feeders/gfh0#{index}'><img src='/img/#{index}.jpg' alt=''>" \
+        "<h3>Hay feeder GFH0#{index}</h3><span>Item number GFH0#{index}</span></a></li>"
+    end
+    html = "<h1>Calf hay feeders</h1><p>Feeders that keep hay off the ground and dry for calves.</p>" \
+           "<div class='sort'>Sort by:</div><ul class='items'>#{products.join}</ul>"
+
+    blocks(html, "https://store.example.com/fr-fr/calf-hay-feeders/", nil).should be_empty
+  end
+
+  it "takes posts named by their titles under the root for pages like this one under a heading" do
+    html = "<h1>Bridge reopens</h1>#{story(1)}<section><h2>Beach days</h2>" \
+           "<div class='grid'>#{cards(stories, '/')}</div></section>"
+
+    blocks(html, "https://blog.example.com/bridge-reopens-after-repairs/", nil).should_not be_empty
+  end
+
+  it "takes a list of posts named by their titles under the root for pages like this one below an article" do
+    links = stories.map { |title| "<li><a href='/#{title.downcase.tr(' ', '-')}/'>#{title}</a></li>" }
+    html = "<h1>Bridge reopens</h1>#{story(1)}<div class='label'>Beach days</div><ul>#{links.join}</ul>"
+
+    blocks(html, "https://blog.example.com/bridge-reopens-after-repairs/").should_not be_empty
+  end
+
+  it "keeps a shop's products named by their titles under a label of the page's own" do
+    html = "<h1>Olive oil tin cans</h1><p>Tin cans for olive oil.</p><div class='name'>All olive oil cans</div>" \
+           "<div class='grid'>#{cards(stories, '/')}</div>"
+
+    blocks(html, "https://cans.example.com/supplier-4760341-olive-oil-tin-cans", :product).should be_empty
+  end
+
+  it "removes a titled list of bare links to pages like this one" do
+    titles = ["Another simple idea for sewing trousers", "A great idea for decorating at home",
+              "Sewing a bag from leftover fabric"]
+    items = titles.each_with_index.map { |title, index| "<li><a href='/posts/#{4436 + index}-idea.html'>#{title}</a></li>" }
+    html = "<h1>A simple idea for sewing women's trousers</h1><p>By lesorub, two months ago, liked 508 times.</p>" \
+           "<p>Cut the front and back from one piece of linen, then sew the side seams and turn the waistband over " \
+           "an elastic band.</p><h3>Смотрите также</h3><ul>#{items.join}</ul>"
+
+    blocks(html, "https://crafts.example.com/posts/8449-idea.html", nil).should_not be_empty
+  end
+
+  it "keeps a list of bare links that holds most of the page" do
+    titles = ["Field survey of wetland birds", "Flood maps for the river basin", "Forest cover change since 1990",
+              "Fishing permits by district", "Fuel stations along the coast"]
+    items = titles.each_with_index.map { |title, index| "<li><a href='/wiki/Map_#{index}'>#{title}</a></li>" }
+    html = "<h1>Category: Maps</h1><p>The following 5 pages are in this category, out of 5 total.</p>" \
+           "<h2>Pages in this category</h2><ul>#{items.join}</ul>"
+
+    blocks(html, "https://maps.example.org/wiki/Category_Maps").should be_empty
+  end
+
+  it "keeps a list under a letter of an index" do
+    titles = ["Water quality of the lakes", "Weather stations of the region", "Wind farms planned until 2030"]
+    items = titles.each_with_index.map { |title, index| "<li><a href='/wiki/Map_#{index}'>#{title}</a></li>" }
+    html = "<h1>Category: Maps</h1>#{story(2)}<div class='group'><h3>W</h3><ul>#{items.join}</ul></div>"
+
+    blocks(html, "https://maps.example.org/wiki/Category_Maps").should be_empty
+  end
+
+  it "keeps the sections of a site map" do
+    sections = { "Release notes" => "", "Virtual hosts" => "vhosts/", "Rewriting addresses" => "rewrite/" }.map do |title, folder|
+      links = ["Upgrading from the last version", "New features of this release", "Compiling and installing"]
+      items = links.each_with_index.map { |link, index| "<li><a href='/docs/#{folder}page#{index}.html'>#{link}</a></li>" }
+      "<div class='section'><h2>#{title}</h2><ul>#{items.join}</ul></div>"
+    end
+    html = "<h1>Site map</h1><p>This page lists every document of the manual, grouped by subject.</p>#{sections.join}"
+
+    blocks(html, "https://docs.example.org/docs/sitemap.html", nil).should be_empty
+  end
+
+  it "does not take a list of bare links beside two boxes of cards for a hub's section" do
+    boxes = %w[Picks Highlights].map do |name|
+      "<div class='box #{name.downcase}'><h3>#{name}</h3>" \
+        "#{cards(stories.map { |title| "#{name}: #{title}" }, '/blog/', '<p>What changes, and for whom.</p>')}</div>"
+    end
+    links = stories.each_with_index.map { |title, index| "<li><a href='/2026/04/read-#{index}'>Read: #{title}</a></li>" }
+    html = "<h1>Bridge reopens</h1>#{story(2)}#{boxes.join}<div class='box'><h3>Reading</h3><ul>#{links.join}</ul></div>"
+    body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
+    Nokodown::Dom.assign_keys(body)
+
+    keys = described_class.new(body, article_url, Nokodown::UrlResolver.new(article_url), :article).call
+    keys.should include(Nokodown::Dom.key(body.at_css(".picks")), Nokodown::Dom.key(body.at_css(".highlights")))
+  end
+
+  it "weighs Chinese characters as words in the titles of a list of bare links" do
+    titles = %w[港口大桥重新开放 学校董事会批准预算 渔季提前两周开放]
+    items = titles.each_with_index.map { |title, index| "<li><a href='/news/#{index}.html'>#{title}</a></li>" }
+    html = "<h1>大桥重新开放</h1>#{story(2)}<h3>相关文章</h3><ul>#{items.join}</ul>"
+
+    blocks(html, "https://news.example.cn/news/9.html", nil).should_not be_empty
+  end
+
+  it "finds teasers whose cards each hold a list of links to pages like this one" do
+    grid = stories.each_with_index.map do |title, index|
+      topics = ["Harbor bridge news", "Ferry timetable changes", "Road closures this week"].each_with_index.map do |topic, other|
+        "<li><a href='/2026/04/topic-#{index}-#{other}'>#{topic}</a></li>"
+      end
+      "<div class='card'><img src='/img/#{index}.jpg' alt=''><h3><a href='/blog/story-#{index}'>#{title}</a></h3>" \
+        "<ul>#{topics.join}</ul></div>"
+    end
+    html = "<h1>Bridge reopens</h1>#{story(3)}<section><h2>Leia também</h2><div class='grid'>#{grid.join}</div></section>"
+    body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
+    Nokodown::Dom.assign_keys(body)
+
+    keys = described_class.new(body, article_url, Nokodown::UrlResolver.new(article_url), :article).call
+    keys.should include(Nokodown::Dom.key(body.at_css("section")))
+  end
+
+  it "keeps a list of short links, such as a product's options" do
+    sizes = %w[60x110 80x150 120x170].map { |size| "<li><a href='/p/rug-#{size}'>#{size}</a></li>" }
+    html = "<h1>Round rug</h1>#{story(1)}<h4>Diameter (mm)</h4><ul>#{sizes.join}</ul>"
+
+    blocks(html, "https://shop.example.com/p/rug-40x60", :product).should be_empty
+  end
+
+  it "keeps links set in a line of text" do
+    links = stories.each_with_index.map { |title, index| "<a href='/blog/#{index}'>#{title}</a>" }
+    html = "<h1>Bridge reopens</h1>#{story(1)}<h4>Sources</h4><p>Sources: #{links.join(', ')}.</p>"
+
+    blocks(html, "https://news.example.com/blog/9", nil).should be_empty
+  end
+
+  it "does not take the first entry of a menu for the title of a list of bare links" do
+    entries = ["Opening hours of the shop", "Parking near the shop", "How to reach the shop by train"]
+    items = entries.each_with_index.map { |entry, index| "<li class='entry'><a href='/info/#{index}'>#{entry}</a></li>" }
+    html = "<h1>Autumn sale</h1>#{story(1)}<ul><li class='home'><a href='/'>Home</a></li>#{items.join}</ul>"
+
+    blocks(html, "https://shop.example.com/info/9", nil).should be_empty
+  end
+
+  it "keeps a list under a title that the page's address names" do
+    html = "<h1>Bridge reopens</h1>#{story(1)}<section><h2>Harbor bridge news</h2>" \
+           "<div class='grid'>#{cards(stories, '/')}</div></section>"
+
+    blocks(html, "https://news.example.com/harbor-bridge-news/", :article).should be_empty
+  end
+
+  it "does not take a longer title that uses the address's words for the page's name" do
+    box = "<section><h2>Refresh your digital marketing skills</h2><div class='grid'>#{cards(stories, '/courses/')}</div></section>"
+
+    blocks("<h1>What is digital marketing</h1>#{story(3)}#{box}", "https://example.org/what-is-digital-marketing/").should_not be_empty
+  end
+
+  it "does not take a title that has the address's words among many others for the page's name" do
+    box = "<section><h2>Digital marketing strategy courses for small business owners</h2>" \
+          "<div class='grid'>#{cards(stories, '/courses/')}</div></section>"
+
+    blocks("<h1>Digital marketing strategy</h1>#{story(3)}#{box}", "https://example.org/digital-marketing-strategy/").should_not be_empty
+  end
+
+  it "does not take a title that leaves out some of the address's words for the page's name" do
+    box = "<section><h2>Digital marketing strategy</h2><div class='grid'>#{cards(stories, '/news/')}</div></section>"
+
+    blocks("<h1>What is digital marketing</h1>#{story(3)}#{box}", "https://example.org/what-is-digital-marketing/").should_not be_empty
+  end
+
+  it "keeps a hub's lists of the latest and more posts" do
+    lists = ["Latest news", "More headphone posts"].map do |title|
+      "<section class='#{title.split.first.downcase}'><h2>#{title}</h2>#{cards(stories.map { |story| "#{title}: #{story}" }, '/articles/')}</section>"
+    end
+    html = "<h1>Headphones</h1><p>Everything we write about headphones, from earbuds to studio cans.</p>#{lists.join}"
+
+    blocks(html, "https://news.example.com/topic/headphones", nil).should be_empty
+  end
+
+  it "does not take percent escapes in a query value for an id" do
+    terms = ["Building fittings -- Catalogs", "Cabinet hardware -- Catalogs", "Door fittings and locks -- Catalogs"]
+    items = terms.map { |term| "<li><a href='browse?type=lcsubc&amp;key=#{term.gsub(' ', '%20')}'>#{term}</a></li>" }
+    html = "<h1>Hardware -- Catalogs</h1>#{story(1)}<b>Narrower terms:</b><ul>#{items.join}</ul>"
+
+    blocks(html, "https://books.example.edu/browse?type=lcsubc&key=Hardware%20--%20Catalogs", nil).should be_empty
+  end
+
+  it "keeps a category's products whose names end in a code of another kind" do
+    products = stories.each_with_index.map do |title, index|
+      "<div class='card'><img src='/img/#{index}.jpg' alt=''><h3><a href='/usb-hub-model-#{37_209 + index}.html'>" \
+        "#{title}</a></h3><span>319 kr</span></div>"
+    end
+    html = "<h1>USB hubs for laptops</h1>#{story(1)}<h3>Popular picks</h3><div class='grid'>#{products.join}</div>"
+
+    blocks(html, "https://shop.example.com/usb-a-hubs-for-laptops-g8893.html", nil).should be_empty
+  end
+
+  it "keeps a listing's titled list of bare links to pages like it" do
+    areas = ["Addicks reservoir trails", "Buffalo Bayou park trails", "Cinco Ranch greenbelt trails"]
+    links = areas.each_with_index.map { |area, index| "<li><a href='/directory/80155#{index}/area'>#{area}</a></li>" }
+    routes = cards(stories, "/route/", "<p>9.4 mi, intermediate, rated four stars by riders.</p>")
+    html = "<h1>Houston</h1><p>Recommended routes near Houston for every kind of rider.</p>" \
+           "<div class='routes'>#{routes}</div><h3>Areas within Houston</h3><ul>#{links.join}</ul>"
+
+    blocks(html, "https://trails.example.com/directory/8010427/houston", nil).should be_empty
   end
 end

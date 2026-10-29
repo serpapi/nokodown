@@ -295,10 +295,23 @@ module Nokodown
     # A paragraph that is all furniture, a control's label or a counter.
     PARAGRAPH_NOISE = Regexp.union(BOILERPLATE_TEXT, UI_LABEL, COUNTER_TEXT).freeze
 
-    # Labels that introduce a box of links to other stories.
+    # Labels that introduce a box of links to other stories, in the major web
+    # languages. Case folding leaves Turkish dotted and dotless i apart.
     RELATED_LABEL = /
       \A(?:read\smore|more|related(?:\s(?:stories|articles|posts|content|coverage|reading))?|see\salso|
-      also\sread|don'?t\smiss|recommended|must\sread|more\son\sthis|watch|trending|popular)\b[\s:|]*
+      also\sread|read\salso|don'?t\smiss|recommended|must\sread|more\son\sthis|watch|trending|popular|
+      le[ae]\stambién|ver\stambién|te\spuede\sinteresar|artículos\srelacionados|noticias\srelacionadas|
+      leia\stambém|veja\stambém|(?:posts|artigos|notícias)\srelacionad[oa]s|
+      (?:à\s)?lire\saussi|(?:à\s)?voir\saussi|sur\sle\smême\ssujet|articles\ssimilaires|
+      lesen\ssie\sauch|siehe\sauch|auch\sinteressant|mehr\szum\sthema|ähnliche\sartikel|
+      leggi\sanche|vedi\sanche|articoli\scorrelati|lees\sook|zie\sook|
+      читайте\sтакже|смотрите\sтакже|см\.\sтакже|читайте\sещё|читайте\sеще|
+      czytaj\s(?:także|też)|zobacz\s(?:także|też)|przeczytaj\s(?:także|też)|
+      ayr[ıI]ca\soku(?:yun)?|[iİ]lg[iİ]l[iİ]\shaberler|benzer\shaberler|
+      あわせて読みたい|関連記事|相关阅读|相关文章|延伸阅读|推荐阅读|相關閱讀|相關文章|延伸閱讀|관련\s?기사|
+      اقرأ\s(?:أيضاً|أيضا|ايضا)|مقالات\sذات\sصلة|
+      xem\sthêm|đọc\sthêm|bài\sviết\sliên\squan|tin\sliên\squan|baca\sjuga|artikel\sterkait|berita\sterkait|
+      بیشتر\sبخوانید|مطالب\sمرتبط)(?![\p{L}\p{N}])[\s:|]*
     /xi.freeze
 
     # Short lines that are page furniture inside an article body.
@@ -338,6 +351,47 @@ module Nokodown
       advertisement|newsletter|follow\sus|subscribe(?:\s\w+)?|popular(?:\s\w+)?|trending(?:\s\w+)?|
       recommended(?:\s\w+)?|more\sfrom\s.+|you\smay\salso\slike|you\smight\salso\slike|read\snext|
       read\smore|tags|categories|about\sthe\sauthor|sign\sup.*|most\s(?:read|popular|viewed))[\s:]*\z
+    /xi.freeze
+
+    # Titles of boxes of other pages of a site, in the major web languages.
+    # Case folding leaves Turkish dotted and dotless i apart.
+    RELATED_TITLE = /
+      \A(?:
+      related(?:\s\p{L}+){0,2}|see\salso|recommended(?:\sfor\syou)?|read\s(?:next|also)|also\sread|don'?t\smiss|
+      you\s(?:may|might|will)\s(?:also\s)?(?:like|love|enjoy|be\sinterested\sin)(?:\s\p{L}+){0,3}|
+      (?:recommended|similar|popular|trending|other)\s(?:\p{L}+\s)?
+      (?:products|items|posts|articles|stories|news|videos|recipes|listings|guides|courses|projects|properties|tours|services)|
+      (?:customers|people)\s(?:also|who)\s.{1,60}|most\s(?:read|popular|viewed|shared)|
+      (?:artículos|productos|noticias|entradas|publicaciones|artigos|produtos|notícias|posts|vídeos|videos)\s
+      (?:relacionad[oa]s|similares|recomendad[oa]s|populares)|(?:también\s)?te\s(?:puede|podría)\s(?:interesar|gustar)|
+      le[ae]\stambién|ver\stambién|lo\smás\s(?:leído|visto)|más\s(?:leídas|vistas|leídos|vistos)|
+      você\s(?:também\s)?pode\s(?:gostar|se\sinteressar)|veja\stambém|leia\stambém|mais\s(?:lidas|vistas|lidos)|
+      (?:articles|produits|actualités)\s(?:similaires|associés|liés|connexes|recommandés|populaires)|produits\sconnexes|
+      vous\s(?:aimerez\saussi|pourriez\s(?:aussi\saimer|aimer\saussi))|(?:à\s)?(?:lire|voir)\saussi|sur\sle\smême\s(?:sujet|thème)|
+      les\splus\s(?:lus|populaires)|ça\speut\svous\sintéresser|.{1,40}pourrai(?:en)?t\s(?:également|aussi)\svous\sintéresser|
+      (?:ähnliche|verwandte|empfohlene|beliebte|weitere)\s(?:artikel|produkte|beiträge|nachrichten|meldungen|videos)(?:\s.{1,60})?|
+      das\skönnte\s(?:sie|dich)\s(?:auch\s)?interessieren|meistgelesen|siehe\sauch|lesen\ssie\sauch|mehr\szum\sthema|
+      (?:gerelateerde|vergelijkbare|aanbevolen|populaire)\s(?:artikelen|producten|berichten)|
+      .{1,30}zou\sje\sook\s(?:kunnen\s)?interesseren|lees\sook|zie\sook|
+      (?:articoli|prodotti|notizie|post)\s(?:correlati|simili|consigliati|popolari)|
+      (?:ti\s)?potrebbe(?:ro)?\s(?:interessarti|interessare|piacere)(?:\sanche)?|(?:leggi|vedi)\sanche|
+      (?:похожие|популярные|рекомендуемые|другие|связанные)\s(?:\p{L}+\s)?
+      (?:статьи|новости|товары|записи|публикации|материалы|видео|объявления|посты|рецепты|услуги|продукты|работы|проекты|курсы|туры)
+      (?:\s\p{L}+){0,2}|похожее|смотрите\sтакже|читайте\sтакже|
+      вам\sмо(?:жет|гут)\sпонрави(?:ться|тся)(?:\s\p{L}+){0,2}|рекомендуем|
+      polecane|(?:podobne|powiązane|polecane|popularne)\s(?:\p{L}+\s)?
+      (?:artykuły|wpisy|posty|produkty|wiadomości|teksty|filmy|przepisy|oferty|ogłoszenia|materiały|tematy)
+      (?:\s\p{L}+){0,2}|(?:czytaj|zobacz)\s(?:także|też|również)|
+      może\scię\szainteresować|(?:další|podobné|související)\s(?:články|produkty|zboží)(?:\s.{1,40})?|
+      (?:benzer|[iİ]lg[iİ]l[iİ]|popüler|d[iİ]ğer|öner[iİ]len)\s(?:ürünler|ürünler[iİ]m[iİ]z|haberler|yaz[ıI]lar|v[iİ]deolar|[iİ]çer[iİ]kler)|
+      (?:bunlar\sda\s)?[iİ]lg[iİ]n[iİ]z[iİ]\sçekeb[iİ]l[iİ]r|ayr[ıI]ca\sbak[ıI]n[ıI]z|
+      関連(?:記事|商品|情報)|おすすめ(?:記事|商品)?|人気(?:記事|商品)|こちらもおすすめ|あわせて読みたい|
+      相[关關](?:推荐|推薦|文章|阅读|閱讀|产品|產品|新闻|新聞)|推荐(?:阅读|产品|文章)|推薦(?:閱讀|產品|文章)|猜你喜[欢歡]|
+      [热熱]门推[荐薦]|延伸[阅閱][读讀]|관련\s?(?:기사|글|상품|제품)|추천\s?(?:기사|글|상품)|인기\s?(?:기사|글|상품)|
+      (?:مقالات|مواضيع|منتجات|أخبار)\s(?:ذات\sصلة|مشابهة|مقترحة)|قد\sيعجبك\s(?:أيضاً|أيضا|ايضا)|(?:مطالب|محصولات)\s(?:مرتبط|مشابه)|نوشته(?:\s|\u200c)?های\s(?:مشابه|مرتبط)|
+      (?:bài\sviết|sản\sphẩm|tin\stức|tin)\s(?:liên\squan|tương\stự)|có\sthể\sbạn\s(?:quan\stâm|thích)|
+      (?:artikel|berita|produk)\s(?:terkait|serupa|lainnya)|mungkin\sanda\s(?:suka|tertarik)|baca\sjuga
+      )[\s:：.!?…»›]*\z
     /xi.freeze
   end
 end

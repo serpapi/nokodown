@@ -5,24 +5,31 @@ require "uri"
 module Nokodown
   # Finds blocks of teasers for other pages of the site (related, latest,
   # popular, "more news") on a page that has content of its own. A teaser
-  # block is an unbroken run of items of the same shape, each a card leading
-  # to a different page of the same site, with a thumbnail, a date or a short
-  # excerpt, under a title of its own in any language. Class names do not
-  # matter: Boilerplate has already removed the blocks named "related".
+  # block is an unbroken run of items of the same shape, each leading to a
+  # different page of the same site: cards with a thumbnail, a date or a
+  # short excerpt, or bare links under a title of their own ("See also").
+  # Class names do not matter: Boilerplate has already removed the blocks
+  # named "related".
   #
   # On listings, archives and hubs teasers are the content, so a block only
   # goes when its items are pages like this one (the same path but for its
   # last segment, with the same query keys) and a line of the page's own
-  # text comes before it, or, on a page that declares itself an article, a
-  # product or a thread, when it has a title of its own and the page keeps a
-  # body of text, or a list of its own, that outweighs the titled blocks.
+  # text comes before it; when they are posts named by their titles under
+  # the root, as this page is, beside its text; when its title calls it
+  # related, unless it holds most of the page; or, on a page that declares
+  # itself an article, a product or a thread, when it is a titled box of
+  # cards that the page's own text, or its own list, outweighs. Lists of
+  # bare links stay on listings and in indexes.
   #
   # Blocks are found once the content is located, but only dropped from it
   # once it is cleaned, so they weigh in pruning as before.
   class Teasers
-    Run = Struct.new(:parent, :items, :targets, :chars)
-    # alike: the items are pages like this one; below: pages under it.
-    Block = Struct.new(:nodes, :title, :alike, :below, :chars)
+    # kinds: how each target is kin to this page; bare: each item is a link
+    # and nothing else.
+    Run = Struct.new(:parent, :items, :targets, :kinds, :chars, :bare)
+    # alike: the items are pages like this one; named: posts under the root
+    # named by their titles, as this one is; below: pages under it.
+    Block = Struct.new(:nodes, :title, :alike, :named, :below, :chars, :bare)
     # An item with its headings and the keys of the links in them.
     Card = Struct.new(:node, :headings, :title_links)
 
@@ -45,7 +52,16 @@ module Nokodown
     CONTROLS = "select, input"
     CONTROL_TAGS = %w[form select option button].freeze
     CONTROL_LABEL = /[:：]\z/.freeze
+    LETTER = /\p{L}/.freeze
+    WIDE = /[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]/.freeze
+    # Shorter links name options of this page ("XL", "60x110") or menu
+    # entries, not other pages' titles.
+    MIN_BARE_LABEL = 15
     MIN_SECTIONS = 3
+    # A section of an index is a heading over a list that is mostly links.
+    LISTS = "ul, ol"
+    SECTION_LINKS = 0.6
+    INDEX_LETTER = /\A\p{L}\z/.freeze
     MIN_WORDS_LEFT = 20
     BODIES = %i[article product forum qa].freeze
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
@@ -59,10 +75,11 @@ module Nokodown
     # Chinese and Japanese are written without spaces, so each Han or kana
     # character counts as a word.
     WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[[\p{L}\p{N}]&&[^\p{Han}\p{Hiragana}\p{Katakana}]]+/.freeze
-    # Query values that differ between pages of one kind are ids; "lvl=categ_see"
-    # and "lvl=notice_display" are two kinds of page.
-    ID_VALUE = /\d/.freeze
+    DIGIT = /\d/.freeze
     DIGITS = /\A\d+\z/.freeze
+    # A post's title: "andrea-jeremiah-latest-photos", "kak_sdelat_ramku.html".
+    SLUG = /\A[\p{L}\p{N}%]+(?:[-_][\p{L}\p{N}%]+){2,}(?:\.[a-z]+)?\z/i.freeze
+    EXTENSION = /\.[a-z]+\z/i.freeze
     # The root, a language's root ("/en/", "/pt-br/") or its index file.
     HOME = %r{\A/*(?:[a-z]{2}(?:[-_][a-z]{2})?/*)?(?:index\.\w+)?\z}i.freeze
     FILE = /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|docx?|xlsx?|pptx?|mp[34])\z/i.freeze
@@ -114,6 +131,7 @@ module Nokodown
       @body = body
       @urls = urls
       @page = parse(urls.resolve(url)) if url
+      @url_words = UrlWords.new(url)
       @declared = BODIES.include?(page_type)
       @discussion = ContentLocator::DISCUSSIONS.include?(page_type)
     end
@@ -126,9 +144,10 @@ module Nokodown
       @total = @stats.chars(@body)
       @blocks = blocks
       hub = sections
-      body = body?
+      @own_text = @stats.text_chars(@body) - @blocks.sum { |block| text_of(block) }
+      listing = listing?
       @blocks.each_with_object(Set.new) do |block, keys|
-        next if hub.include?(Dom.key(block.nodes.first)) || !removable?(block, body)
+        next if hub.include?(Dom.key(block.nodes.first)) || !removable?(block, listing)
 
         (block.nodes + [block.title]).compact.each { |node| keys << Dom.key(node) unless Dom.in_code?(node) }
       end
@@ -146,22 +165,24 @@ module Nokodown
       found = runs.map { |run| block(run) }.group_by { |block| block.nodes.map { |node| Dom.key(node) } }
       found.values.map do |same|
         first = same.first
-        Block.new(first.nodes, first.title, same.all?(&:alike), same.any?(&:below), same.sum(&:chars))
+        Block.new(first.nodes, first.title, same.all?(&:alike), same.all?(&:named), same.any?(&:below),
+                  same.sum(&:chars), same.all?(&:bare))
       end
     end
 
-    # Text of the page's own that outweighs the titled boxes, as an article
-    # does its sidebars; a hub of titled sections has a line of intro at most.
-    def body?
-      own_text = @stats.text_chars(@body) - @blocks.sum { |block| text_of(block) }
-      boxes = @blocks.select { |block| block.title && !block.alike }.sum(&:chars)
-      (own_text >= MIN_BODY && own_text >= boxes) || listing?
+    # Text of the page's own that outweighs a titled box, as an article does
+    # each of its sidebars; a hub of titled sections has a line of intro at
+    # most.
+    def body_beside?(block)
+      @own_text >= MIN_BODY && @own_text >= block.chars
     end
 
     # Titled blocks built alike, one after another, are the sections of a
-    # hub ("Audio", "Cameras", "Laptops"), not boxes beside its content.
+    # hub ("Audio", "Cameras", "Laptops"), not boxes beside its content. A
+    # list of bare links and a box of cards are not built alike, whatever
+    # the class of the widgets that hold them.
     def sections
-      groups = @blocks.select(&:title).group_by { |block| shape_of(block.nodes.first) }.values
+      groups = @blocks.select(&:title).group_by { |block| [shape_of(block.nodes.first), block.bare] }.values
       groups.select { |group| group.size >= MIN_SECTIONS }.flatten.map { |block| Dom.key(block.nodes.first) }.to_set
     end
 
@@ -171,19 +192,71 @@ module Nokodown
       list && list.chars >= @blocks.sum(&:chars) - list.chars
     end
 
-    # A list with no title of its own, or under the page's H1.
+    # A list with no title of its own, under the page's H1, or under a title
+    # the page's address names ("/maglia-jarrod-bowen" over "Maglia Jarrod
+    # Bowen").
     def own_list?(block)
-      block.title.nil? || block.title.name == "h1" || !block.title.at_css("h1").nil?
+      title = block.title
+      title.nil? || title.name == "h1" || !title.at_css("h1").nil? || @url_words.same_name?(Dom.text(title))
     end
 
     # Links to pages below this one are its own sections, and attachments are
     # part of the post that holds them.
-    def removable?(block, body)
+    def removable?(block, listing)
       return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
+      return false if block.bare && (!list_title?(block.title) || dominant?(block) || index?(block))
       return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
+      return true if related_title?(block.title) && !dominant?(block)
+      return false if block.bare && listing
       return text_before(block) >= MIN_TEXT_BEFORE if block.alike
+      return true if block.named && named_beside?(block)
 
-      @declared && body && !dominant?(block)
+      !block.bare && @declared && !dominant?(block) && (listing || body_beside?(block))
+    end
+
+    # Posts are named by their titles under the root of many sites, and so
+    # are a shop's pages of products and of categories. A box of them stands
+    # beside a post under a heading of its own, or below a body of text on a
+    # page that declares itself an article, a product or a thread.
+    def named_beside?(block)
+      before = text_before(block)
+      (heading?(block.title) && before >= MIN_TEXT_BEFORE) || (@declared && before >= MIN_BODY)
+    end
+
+    # "Related posts", "Похожие товары", "猜你喜欢": a box that says it holds
+    # other pages goes on any page, unless it holds most of it.
+    def related_title?(title)
+      !title.nil? && Dom.text(title).match?(Patterns::RELATED_TITLE)
+    end
+
+    # A list of bare links needs a heading or a label of its own over it: the
+    # first entry of a menu can pass for a label too.
+    def list_title?(title)
+      return false if title.nil?
+
+      heading?(title) || (title.name != "a" && title.at_css("a[href]").nil?)
+    end
+
+    # A letter over a list ("A", "Б", "ت"), or one of three or more sections
+    # built alike, each a heading over a list of links, is part of an index:
+    # a category's members, a manual's site map.
+    def index?(block)
+      return true if Dom.text(block.title).match?(INDEX_LETTER)
+
+      node = block.nodes.first
+      parent = node.parent
+      return false unless parent&.element?
+
+      @index ||= {}
+      key = [Dom.key(parent), shape_of(node)]
+      return @index[key] if @index.key?(key)
+
+      sections = parent.element_children.count { |child| shape_of(child) == key.last && link_section?(child) }
+      @index[key] = sections >= MIN_SECTIONS
+    end
+
+    def link_section?(node)
+      !node.at_css(HEADING).nil? && !node.at_css(LISTS).nil? && @stats.link_density(node) >= SECTION_LINKS
     end
 
     # Not matches?, which Nokolexbor runs over the whole document.
@@ -241,7 +314,8 @@ module Nokodown
     end
 
     # Columns of a layout can pass for teasers too, so a run holding another
-    # one is the layout around it. Children come before their parents.
+    # one is the layout around it, but not one holding a card's list of bare
+    # links. Children come before their parents.
     def runs
       found = []
       holding = Set.new
@@ -257,7 +331,7 @@ module Nokodown
 
         here = shapes(node).filter_map { |items| run(node, items) }
         found.concat(here)
-        holding << Dom.key(node) unless here.empty?
+        holding << Dom.key(node) unless here.all?(&:bare)
       end
       found
     end
@@ -315,10 +389,48 @@ module Nokodown
 
       cards = items.map { |item| card(item) }
       links = primary_links(cards)
-      return if links.nil? || !rich?(cards, links)
+      return if links.nil?
 
+      rich = rich?(cards, links)
+      return unless rich || bare?(parent, cards, links)
+
+      # Resolving every link is the costly part, so it waits for the shape.
       targets = links.map { |link| link && target(link["href"]) }
-      Run.new(parent, items, targets, chars) if distinct_targets?(targets.compact, items.size)
+      return unless distinct_targets?(targets.compact, items.size)
+
+      kinds = targets.compact.map { |uri| kinship(uri) }
+      return Run.new(parent, items, targets, kinds, chars, false) if rich
+
+      Run.new(parent, items, targets, kinds, chars, true) if alike?(kinds, items.size) || named?(kinds, items.size)
+    end
+
+    # Items that are each a link and nothing else, as in a "See also" list,
+    # not links in a line of text.
+    def bare?(parent, cards, links)
+      return false if in_text?(parent)
+
+      labels = cards.zip(links).map do |card, link|
+        label = link && Dom.text(link)
+        return false if label.to_s.empty? || Dom.text(card.node).sub(label, "").match?(LETTER)
+
+        label
+      end
+      labels.sum { |label| width(label) } >= MIN_BARE_LABEL * labels.size
+    end
+
+    # A flat list can hold thousands of items and many runs, so each parent
+    # is read once.
+    def in_text?(parent)
+      @in_text ||= {}
+      key = Dom.key(parent)
+      return @in_text[key] if @in_text.key?(key)
+
+      @in_text[key] = parent.children.any? { |child| child.text? && !Dom.squish(child.content).empty? }
+    end
+
+    # A CJK character says about as much as a short word.
+    def width(text)
+      text.length + text.scan(WIDE).size * 2
     end
 
     # Rows under a header row, or of four or more columns, are records
@@ -371,12 +483,23 @@ module Nokodown
       return card.node if card.node.name == "a"
 
       links = card.node.css("a[href]")
-      title = links.find { |link| title_link?(link, card) } unless card.headings.empty?
+      title = links.find { |link| heading_link?(link, card) } unless card.headings.empty?
       title || links.find { |link| @stats.chars(link) > 1 } || links.first
     end
 
     def title_link?(link, card)
+      heading_link?(link, card) || cover?(link, card)
+    end
+
+    def heading_link?(link, card)
       card.title_links.include?(Dom.key(link)) || !link.at_css(HEADING).nil?
+    end
+
+    # An empty link right in a card is stretched over all of it, title and
+    # all, when the card has no link with text. One further down is a
+    # thumbnail whose image was dropped or is drawn by a stylesheet.
+    def cover?(link, card)
+      @stats.chars(link).zero? && link.at_css(MEDIA).nil? && Dom.key(link.parent) == Dom.key(card.node)
     end
 
     # A teaser shows a thumbnail or a date, or is a card: its title is a
@@ -389,7 +512,7 @@ module Nokodown
       return false if link.nil? || (!card.headings.empty? && !title_link?(link, card))
       return true if item.at_css(MEDIA)
 
-      whole = Dom.key(link) == Dom.key(item)
+      whole = Dom.key(link) == Dom.key(item) || cover?(link, card)
       return false unless whole || !card.headings.empty? || Dom.text(item).match?(DATE)
 
       beside_title(card, whole) >= RICH_TEXT
@@ -403,10 +526,18 @@ module Nokodown
       @stats.chars(card.node) - card.headings.sum { |heading| @stats.chars(heading) }
     end
 
-    # Another page of this site, not a file on it, nor a post further down
-    # this one ("viewtopic.php?p=12#p12").
+    # Lists and menus link the same pages over and over.
     def target(href)
       href = href.to_s.strip
+      @targets ||= {}
+      return @targets[href] if @targets.key?(href)
+
+      @targets[href] = site_page(href)
+    end
+
+    # Another page of this site, not a file on it, nor a post further down
+    # this one ("viewtopic.php?p=12#p12").
+    def site_page(href)
       return if href.empty? || href.start_with?("#")
 
       uri = parse(@urls.resolve(href))
@@ -433,7 +564,11 @@ module Nokodown
       title = title_in(run.parent, run) unless holds_more?(run.parent, run, MAX_HEADING)
       nodes, title = holds_more?(run.parent, run, length(title)) ? [run.items, nil] : widen(run, title)
       title ||= title_before(nodes.first)
-      Block.new(nodes, title, share?(run) { |uri| sibling?(uri) }, share?(run) { |uri| child?(uri) }, run.chars)
+      size = run.items.size
+      kinds = run.kinds
+      alike = alike?(kinds, size)
+      below = run.targets.compact.count { |uri| child?(uri) } >= size * SIBLING_SHARE
+      Block.new(nodes, title, alike, !alike && named?(kinds, size), below, run.chars, run.bare)
     end
 
     # Looking for a title only where even the longest one would leave no
@@ -525,12 +660,16 @@ module Nokodown
       node.css(HEADING).any? { |heading| Dom.text(heading) == Dom.text(node) }
     end
 
-    def share?(run, &test)
-      run.targets.compact.count(&test) >= run.items.size * SIBLING_SHARE
+    def alike?(kinds, size)
+      kinds.count(:sibling) >= size * SIBLING_SHARE
+    end
+
+    def named?(kinds, size)
+      kinds.count { |kind| %i[sibling named].include?(kind) } >= size * SIBLING_SHARE
     end
 
     def child?(uri)
-      page = segments(@page)
+      page = page_segments
       other = segments(uri)
       other.size > page.size && other.first(page.size) == page
     end
@@ -538,14 +677,26 @@ module Nokodown
     # A page like this one: the same script with other ids for the same
     # query keys, or the same path but for the last segment and the same
     # query keys. "viewforum.php?f=2" lists the threads at "viewtopic.php?t=7".
-    def sibling?(uri)
-      page = segments(@page)
+    def kinship(uri)
+      page = page_segments
       other = segments(uri)
-      return false unless page.size == other.size && query_keys(uri) == query_keys(@page)
-      return same_kind?(uri) if page == other
-      return folders(page) == folders(other) if page.size > 1
+      return unless query_keys(uri) == page_keys
+      return (:sibling if same_kind?(uri)) if page == other
+      return (:sibling if other.size == page.size && folders(page) == folders(other)) if page.size > 1
+      return unless page.size == 1 && other.size == 1
+      return :sibling if skeleton(page.first) == skeleton(other.first)
 
-      page.size == 1 && skeleton(page.first) == skeleton(other.first)
+      :named if page.first.match?(SLUG) && other.first.match?(SLUG) && same_code?(page.first, other.first)
+    end
+
+    # A shop codes its kinds of page in the last part of their names: a
+    # category's "-g8893.html" or "_c890317" beside a product's "-37209.html"
+    # or "_p9367731".
+    def same_code?(page, other)
+      codes = [page, other].map { |name| UrlWords.decode(name).sub(EXTENSION, "").split(/[-_]/).last.to_s }
+      return true unless codes.all? { |code| code.match?(DIGIT) }
+
+      codes.map { |code| code.gsub(/\d+/, "0") }.uniq.size == 1
     end
 
     # Dated permalinks differ in their date folders ("/2023/4/30/news/").
@@ -554,21 +705,32 @@ module Nokodown
     end
 
     def same_kind?(uri)
-      own = params(@page).to_h
+      own = @page_params ||= params(@page).to_h
       other = params(uri)
       !other.empty? && other.all? { |key, value| value == own[key] || (id?(value) && id?(own[key])) }
     end
 
+    # Query values that differ between pages of one kind are ids; "lvl=categ_see"
+    # and "lvl=notice_display" are two kinds of page, and the "%20" in
+    # "key=Hardware%20--%20Catalogs" is no id.
     def id?(value)
-      value.to_s.match?(ID_VALUE)
+      UrlWords.decode(value.to_s).match?(DIGIT)
     end
 
     def segments(uri)
       uri.path.to_s.split("/").reject(&:empty?)
     end
 
+    def page_segments
+      @page_segments ||= segments(@page)
+    end
+
     def query_keys(uri)
       params(uri).map(&:first).sort
+    end
+
+    def page_keys
+      @page_keys ||= query_keys(@page)
     end
 
     def params(uri)
