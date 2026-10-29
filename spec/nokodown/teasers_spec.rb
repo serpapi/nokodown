@@ -412,4 +412,36 @@ RSpec.describe Nokodown::Teasers do
 
     blocks(html, "https://cans.example.com/supplier-4760341-olive-oil-tin-cans", :product).should be_empty
   end
+
+  it "removes a titled list of bare links to pages like this one" do
+    titles = ["Another simple idea for sewing trousers", "A great idea for decorating at home",
+              "Sewing a bag from leftover fabric"]
+    items = titles.each_with_index.map { |title, index| "<li><a href='/posts/#{4436 + index}-idea.html'>#{title}</a></li>" }
+    html = "<h1>A simple idea for sewing women's trousers</h1><p>By lesorub, two months ago, liked 508 times.</p>" \
+           "<h3>Смотрите также</h3><ul>#{items.join}</ul>"
+
+    blocks(html, "https://crafts.example.com/posts/8449-idea.html", nil).should_not be_empty
+  end
+
+  it "keeps a list of short links, such as a product's options" do
+    sizes = %w[60x110 80x150 120x170].map { |size| "<li><a href='/p/rug-#{size}'>#{size}</a></li>" }
+    html = "<h1>Round rug</h1>#{story(1)}<h4>Diameter (mm)</h4><ul>#{sizes.join}</ul>"
+
+    blocks(html, "https://shop.example.com/p/rug-40x60", :product).should be_empty
+  end
+
+  it "keeps links set in a line of text" do
+    links = stories.each_with_index.map { |title, index| "<a href='/blog/#{index}'>#{title}</a>" }
+    html = "<h1>Bridge reopens</h1>#{story(1)}<h4>Sources</h4><p>#{links.join(' and ')}</p>"
+
+    blocks(html, "https://news.example.com/blog/9", nil).should be_empty
+  end
+
+  it "does not take the first entry of a menu for the title of a list of bare links" do
+    entries = ["Opening hours of the shop", "Parking near the shop", "How to reach the shop by train"]
+    items = entries.each_with_index.map { |entry, index| "<li class='entry'><a href='/info/#{index}'>#{entry}</a></li>" }
+    html = "<h1>Autumn sale</h1>#{story(1)}<ul><li class='home'><a href='/'>Home</a></li>#{items.join}</ul>"
+
+    blocks(html, "https://shop.example.com/info/9", nil).should be_empty
+  end
 end

@@ -20,10 +20,11 @@ module Nokodown
   # Blocks are found once the content is located, but only dropped from it
   # once it is cleaned, so they weigh in pruning as before.
   class Teasers
-    Run = Struct.new(:parent, :items, :targets, :chars)
+    # bare: each item is a link and nothing else.
+    Run = Struct.new(:parent, :items, :targets, :chars, :bare)
     # alike: the items are pages like this one; named: posts under the root
     # named by their titles, as this one is; below: pages under it.
-    Block = Struct.new(:nodes, :title, :alike, :named, :below, :chars)
+    Block = Struct.new(:nodes, :title, :alike, :named, :below, :chars, :bare)
     # An item with its headings and the keys of the links in them.
     Card = Struct.new(:node, :headings, :title_links)
 
@@ -46,6 +47,11 @@ module Nokodown
     CONTROLS = "select, input"
     CONTROL_TAGS = %w[form select option button].freeze
     CONTROL_LABEL = /[:：]\z/.freeze
+    LETTER = /\p{L}/.freeze
+    WIDE = /[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]/.freeze
+    # Shorter links name options of this page ("XL", "60x110") or menu
+    # entries, not other pages' titles.
+    MIN_BARE_LABEL = 15
     MIN_SECTIONS = 3
     MIN_WORDS_LEFT = 20
     BODIES = %i[article product forum qa].freeze
@@ -152,7 +158,7 @@ module Nokodown
       found.values.map do |same|
         first = same.first
         Block.new(first.nodes, first.title, same.all?(&:alike), same.all?(&:named), same.any?(&:below),
-                  same.sum(&:chars))
+                  same.sum(&:chars), same.all?(&:bare))
       end
     end
 
@@ -185,11 +191,12 @@ module Nokodown
     # part of the post that holds them.
     def removable?(block, listing)
       return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
+      return false if block.bare && !list_title?(block.title)
       return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
       return text_before(block) >= MIN_TEXT_BEFORE if block.alike
       return true if block.named && named_beside?(block)
 
-      @declared && !dominant?(block) && (listing || body_beside?(block))
+      !block.bare && @declared && !dominant?(block) && (listing || body_beside?(block))
     end
 
     # Posts are named by their titles under the root of many sites, and so
@@ -199,6 +206,14 @@ module Nokodown
     def named_beside?(block)
       before = text_before(block)
       (heading?(block.title) && before >= MIN_TEXT_BEFORE) || (@declared && before >= MIN_BODY)
+    end
+
+    # A list of bare links needs a heading or a label of its own over it: the
+    # first entry of a menu can pass for a label too.
+    def list_title?(title)
+      return false if title.nil?
+
+      heading?(title) || (title.name != "a" && title.at_css("a[href]").nil?)
     end
 
     # Not matches?, which Nokolexbor runs over the whole document.
@@ -256,7 +271,8 @@ module Nokodown
     end
 
     # Columns of a layout can pass for teasers too, so a run holding another
-    # one is the layout around it. Children come before their parents.
+    # one is the layout around it, but not one holding a card's list of bare
+    # links. Children come before their parents.
     def runs
       found = []
       holding = Set.new
@@ -272,7 +288,7 @@ module Nokodown
 
         here = shapes(node).filter_map { |items| run(node, items) }
         found.concat(here)
-        holding << Dom.key(node) unless here.empty?
+        holding << Dom.key(node) unless here.all?(&:bare)
       end
       found
     end
@@ -330,10 +346,35 @@ module Nokodown
 
       cards = items.map { |item| card(item) }
       links = primary_links(cards)
-      return if links.nil? || !rich?(cards, links)
+      return if links.nil?
 
       targets = links.map { |link| link && target(link["href"]) }
-      Run.new(parent, items, targets, chars) if distinct_targets?(targets.compact, items.size)
+      return unless distinct_targets?(targets.compact, items.size)
+      return Run.new(parent, items, targets, chars, false) if rich?(cards, links)
+
+      return unless bare?(parent, cards, links)
+
+      kinds = kinds(targets)
+      Run.new(parent, items, targets, chars, true) if alike?(kinds, items.size) || named?(kinds, items.size)
+    end
+
+    # Items that are each a link and nothing else, as in a "See also" list,
+    # not links in a line of text.
+    def bare?(parent, cards, links)
+      return false if parent.children.any? { |child| child.text? && !Dom.squish(child.content).empty? }
+
+      labels = cards.zip(links).map do |card, link|
+        label = link && Dom.text(link)
+        return false if label.to_s.empty? || Dom.text(card.node).sub(label, "").match?(LETTER)
+
+        label
+      end
+      labels.sum { |label| width(label) } >= MIN_BARE_LABEL * labels.size
+    end
+
+    # A CJK character says about as much as a short word.
+    def width(text)
+      text.length + text.scan(WIDE).size * 2
     end
 
     # Rows under a header row, or of four or more columns, are records
@@ -463,7 +504,7 @@ module Nokodown
       kinds = kinds(run.targets)
       alike = alike?(kinds, size)
       below = run.targets.compact.count { |uri| child?(uri) } >= size * SIBLING_SHARE
-      Block.new(nodes, title, alike, !alike && named?(kinds, size), below, run.chars)
+      Block.new(nodes, title, alike, !alike && named?(kinds, size), below, run.chars, run.bare)
     end
 
     # Looking for a title only where even the longest one would leave no
