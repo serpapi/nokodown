@@ -31,9 +31,10 @@ module Nokodown
     THREAD_SHARE = 0.25
     THREAD_RUN_SHARE = 0.5
 
-    def initialize(body, page_type: nil)
+    def initialize(body, page_type: nil, title: nil)
       @body = body
       @page_type = page_type
+      @title = title
     end
 
     def call
@@ -42,7 +43,7 @@ module Nokodown
       mark_thread(root, stats) if @page_type == :forum
       result = Scorer.new(root, stats).call
       article = result && article?(result, root, stats)
-      return Selection.new(ArticleHead.new(root, result.nodes, stats).call, :article) if article
+      return Selection.new(ArticleHead.new(root, result.nodes, stats, @title).call, :article) if article
 
       # A thread's posts score alike, so no candidate holds it, and the replies'
       # container alone would leave out the question. Cleaning the whole region

@@ -26,7 +26,7 @@ module Nokodown
 
       product_page = @main_content && ProductReviews.product_page?(doc, metadata[:page_type])
       Preprocessor.new(body).call
-      nodes, mode = select_content(body, metadata[:page_type], product_page)
+      nodes, mode = select_content(body, metadata[:page_type], product_page, metadata[:title])
       blocks = render(nodes, mode, urls)
       blocks = with_title(blocks, metadata[:title]) if @title
       result(blocks, metadata, mode)
@@ -47,13 +47,13 @@ module Nokodown
       Markdown::RedundantImages.new(nodes, mode, urls).call
     end
 
-    def select_content(body, page_type, product_page)
+    def select_content(body, page_type, product_page, title)
       return [[body], :full] unless @main_content
 
       attribution = PostAttribution.new(body).call if ContentLocator::DISCUSSIONS.include?(page_type)
       Boilerplate.new(body).call
       ProductReviews.new(body).call if product_page
-      selection = ContentLocator.new(body, page_type: page_type).call
+      selection = ContentLocator.new(body, page_type: page_type, title: title).call
       attribution&.write(selection.nodes)
       return [cleaned_article(selection.nodes, page_type), :article] if selection.mode == :article
 

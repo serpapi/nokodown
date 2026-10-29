@@ -474,6 +474,36 @@ RSpec.describe Nokodown do
       markdown.should_not include("Call Ana")
     end
 
+    context "with an H1 above the body that does not name the page" do
+      let(:prose) { "<p>The tour opened in Ohio with a set of songs the band had not played in thirty years, to a full hall.</p>" * 4 }
+
+      def blog(title, logo)
+        "<title>#{title}</title><body><div class='header-outer'><div class='titlewrapper'><h1 class='title'>#{logo}</h1></div>" \
+          "<div class='descriptionwrapper'><p class='description'>Thoughts from a small allotment in the north.</p></div></div>" \
+          "<div class='main-outer'><div class='date-outer'><h2 class='date-header'>Wednesday, April 25, 2026</h2>" \
+          "<div class='post hentry'><h3 class='post-title'>Pruning roses in spring</h3><div class='post-body entry-content'>#{prose}</div>" \
+          "<div class='post-footer'>Posted by Ann at 10:02</div></div></div></div></body>"
+      end
+
+      it "leaves out a blog's name linked to its home page" do
+        html = blog("Garden Notes", "<a href='https://garden.example.com/'>Garden Notes</a>")
+
+        Nokodown.to_markdown(html, url: "https://garden.example.com/2026/04/roses.html").should start_with("# Garden Notes\n\nThe tour opened")
+      end
+
+      it "leaves out a section label when a heading below names the post better" do
+        Nokodown.to_markdown(blog("Pruning roses in spring", "Roses")).should start_with("# Pruning roses in spring\n\nThe tour opened")
+      end
+
+      it "leaves out a journal's name above a paper titled in the metadata" do
+        html = "<title>Effects of propolis mouthwash on Candida albicans</title><body><main><div class='issue-wrap'>" \
+               "<div class='journal-info'><h1>Journal of Advanced Biomedical Sciences</h1><div class='issue'>Volume 11, Issue 4</div></div>" \
+               "<div class='abstract'>#{prose}</div><div class='cite'><p>Cite as JABS 11(4).</p></div></div></main></body>"
+
+        Nokodown.to_markdown(html).should start_with("# Effects of propolis mouthwash on Candida albicans\n\nThe tour opened")
+      end
+    end
+
     it "keeps the whole table of results when one row outscores the others" do
       authors = Array.new(60) { |index| "Moretti#{index}, A." }.join("; ")
       rows = [["Predicting kidney failure", authors], ["Preeclampsia before a biopsy", "Cabiddu, G."], ["Dialysis in older patients", "Rossi, M."]]
