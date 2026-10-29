@@ -55,6 +55,17 @@ RSpec.describe Nokodown::Pruner do
 
       Nokodown::Dom.text(root).should include("Ben Ode, Cy Cole, Dee Fox")
     end
+
+    it "drops the whole box of links around a menu that links to the page itself" do
+      tags = "Tagged: <a href='/tags/tide'>Tide</a>, <a href='/page'>Energy</a>, <a href='/tags/sea'>Sea</a>"
+      meta = "<div><a href='/c/coast'>Coastal engineering</a> <a href='/c/power'>Renewable power</a> <span>#{tags}</span></div>"
+      root = content((story + meta) * 3)
+
+      described_class.new([root], :page, urls: urls).call
+
+      Nokodown::Dom.text(root).should include("The harbor bridge reopened")
+      Nokodown::Dom.text(root).should_not include("Coastal engineering")
+    end
   end
 
   describe "article pruning with conditional cleaning off" do

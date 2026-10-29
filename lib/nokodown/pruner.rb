@@ -221,24 +221,34 @@ module Nokodown
     # Navigation that survived as unlabeled markup: several links, almost no
     # other text, and no link long enough to be a headline. An index page
     # keeps its clusters, which are its content, but not its menus.
+    #
+    # Elsewhere menus go after the clusters, so a menu does not split the
+    # cluster around it ("Posted in News | Tagged a, b | Comment") and leave
+    # pieces of it behind, and the list a submenu hung from is judged again.
     def remove_link_clusters(root)
       clusters = link_clusters(root)
-      index = !clusters.empty? && clusters_dominate?(root, clusters)
-      remove_menus(root, index ? clusters_above_title(root, clusters) : [])
-      # Removal can only start at a cluster, so none means nothing to remove.
-      return if index || clusters.empty?
+      if !clusters.empty? && clusters_dominate?(root, clusters)
+        remove_menus(root, clusters_above_title(root, clusters))
+      else
+        # Removal can only start at a cluster, so none means nothing to remove.
+        remove_clusters(root) unless clusters.empty?
+        remove_clusters(root) if remove_menus(root, [])
+      end
+    end
 
+    def remove_clusters(root)
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
         remove_with_label(node, root) if link_cluster?(node) && !in_data_table?(node)
       end
     end
 
-    # Menus stay when they are nearly all the page holds.
+    # Menus stay when they are nearly all the page holds. Says whether any went.
     def remove_menus(root, menus)
       menus = outermost((menus + current_page_menus(root)).uniq { |menu| Dom.key(menu) })
-      return if menus.empty? || Dom.text(root).length - menus.sum { |menu| Dom.text(menu).length } < MIN_LEFT
+      return false if menus.empty? || Dom.text(root).length - menus.sum { |menu| Dom.text(menu).length } < MIN_LEFT
 
       menus.each { |menu| remove_with_label(menu, root) }
+      true
     end
 
     def link_clusters(root)
