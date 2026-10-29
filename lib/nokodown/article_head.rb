@@ -50,13 +50,9 @@ module Nokodown
     # "News" or "Blog", is an H1 above the article that does not name it.
     def page_headline?(headline)
       text = Dom.text(headline)
-      return false if text.empty? || headline.css("a[href]").any? { |link| home_link?(link["href"].strip) }
+      return false if text.empty? || headline.css("a[href]").any? { |link| Metadata.home_link?(link["href"].strip) }
 
       @title.nil? || match(text).max >= TITLE_MATCH
-    end
-
-    def home_link?(href)
-      !href.empty? && !href.start_with?("#", "?") && href.match?(Metadata::HOME_LINK)
     end
 
     # A heading below that names the page better is the article's own, and
