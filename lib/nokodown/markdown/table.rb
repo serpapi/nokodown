@@ -24,9 +24,9 @@ module Nokodown
 
         titles = title_rows(grid, spanning)
         notes = note_rows(grid, spanning)
-        return layout_blocks if grid.size < 2 || grid.first.size < 2
+        return caption + titles + [Block.new(:table, gfm(grid))] + notes if grid.size >= 2 && grid.first.size >= 2
 
-        caption + titles + [Block.new(:table, gfm(grid))] + notes
+        notes.empty? ? layout_blocks : caption + titles + row_lines(grid) + notes
       end
 
       private
@@ -59,6 +59,16 @@ module Nokodown
           notes.unshift(*spanning.pop.map { |block| unmarked(block) })
         end
         notes
+      end
+
+      # What is left above the notes is too small for a table. Its cells are
+      # already rendered, and rendering them again for the layout would
+      # double the work at each level of nested tables.
+      def row_lines(grid)
+        grid.filter_map do |row|
+          line = row.reject(&:empty?).join(" ").gsub("\\|", "|")
+          Block.new(:paragraph, Text.escape_line_starts(line)) unless line.empty?
+        end
       end
 
       def unmarked(block)

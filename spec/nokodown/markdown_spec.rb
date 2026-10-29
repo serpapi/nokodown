@@ -1199,6 +1199,15 @@ RSpec.describe "Markdown conversion" do
                               "Notice\n\nDate 2021-09-01 Type Info\n\nHello.\n\nPlease update."
     end
 
+    it "renders the cells of nested tables with closing rows once" do
+      html = "Leaf"
+      20.times { |level| html = "<table><tr><th>Name #{level}</th><th>Value</th></tr><tr><td colspan=\"2\">#{html}</td></tr></table>" }
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert(html)
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      markdown.should == (0...20).map { |level| "Name #{19 - level} Value\n\n" }.join + "Leaf"
+    end
+
     it "keeps rows across a table of names and values in their place" do
       html = '<table><tr><td colspan="2">Acme Films</td></tr><tr><th>Website:</th><td>acme.org</td></tr>' \
              '<tr><td colspan="2">Film Festival</td></tr><tr><th>Website:</th><td>festival.org</td></tr></table>'
