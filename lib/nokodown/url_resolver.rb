@@ -56,6 +56,8 @@ module Nokodown
     PRIVATE_BUCKET = /\Abucketeer-/i.freeze
     WEB_URL = %r{\Ahttps?://}i.freeze
     UNSAFE = %r{[^A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]}.freeze
+    # The lookbehind keeps a long run of slashes from backtracking on Ruby 2.7.
+    TRAILING_SLASHES = %r{(?<!/)/+\z}.freeze
 
     def initialize(url, base_href = nil)
       @url = parse(url)
@@ -99,8 +101,9 @@ module Nokodown
     # Scheme, a "www." host, a trailing slash and the case of escapes rarely
     # tell two pages apart.
     def address(uri)
-      path = uri.path.to_s.sub(%r{/+\z}, "")
-      "#{uri.host.downcase.delete_prefix("www.")}#{path}?#{uri.query}".gsub(/%\h\h/, &:upcase)
+      path = uri.path.to_s.sub(TRAILING_SLASHES, "")
+      port = ":#{uri.port}" unless uri.port == uri.default_port
+      "#{uri.host.downcase.delete_prefix("www.")}#{port}#{path}?#{uri.query}".gsub(/%\h\h/, &:upcase)
     end
 
     def absolute(href)
