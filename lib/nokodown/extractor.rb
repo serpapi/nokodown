@@ -97,8 +97,8 @@ module Nokodown
     end
 
     # One H1 at the top: the page's own if the content opens with one,
-    # otherwise the metadata title, replacing a near-duplicate heading, or a
-    # line that only repeats it, right below it.
+    # otherwise the metadata title, replacing a near-duplicate heading right
+    # below it. Lines that repeat it are left to Markdown::Repeats.
     # Nothing found stays empty, so a script-rendered shell or a bot wall does
     # not pass for a page; Result#title still has the title. A title that
     # only names the site does not head content that has its own heading,
@@ -115,15 +115,11 @@ module Nokodown
       return demote_h1s(blocks, first_h1) if first_h1 && (title.nil? || page_heading?(blocks, first_h1, title, metadata[:url_words]))
       return blocks if title.nil? || (site_title && blocks.first(TITLE_BLOCKS).any? { |block| block.kind == :heading })
 
-      duplicate = blocks.first(TITLE_BLOCKS).find { |block| repeats_title?(block, title) }
+      duplicate = blocks.first(TITLE_BLOCKS).find do |block|
+        block.kind == :heading && Dom.similarity(title, Markdown::Cleanup.heading_text(block)) > TITLE_SIMILARITY
+      end
       rest = demote_h1s(blocks.reject { |block| block.equal?(duplicate) }, nil)
       [Markdown::Block.new(:heading, "# #{Markdown::Text.escape(title)}", 1)] + rest
-    end
-
-    def repeats_title?(block, title)
-      return Dom.similarity(title, Markdown::Cleanup.heading_text(block)) > TITLE_SIMILARITY if block.kind == :heading
-
-      block.kind == :paragraph && Markdown::Text.plain(block.text).casecmp?(title)
     end
 
     def without_site_heading(blocks, site)
