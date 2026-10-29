@@ -856,8 +856,17 @@ RSpec.describe "Markdown conversion" do
         "## + de 300 modèles\n\na\n\n### - (subtraction)\n\nb\n\n### + 5 kg\n\nc\n\n### How to embed\n\nd"
     end
 
-    it "drops a heading with neither letters nor digits" do
-      convert("<h1>Title</h1><h2>-</h2><p>a</p><h3>★★★</h3><p>b</p>").should == "# Title\n\na\n\nb"
+    it "drops a heading with neither letters nor digits nor a rating" do
+      convert("<h1>Title</h1><h2>-</h2><p>a</p><h3>✦ ♡ ★</h3><p>b</p>").should == "# Title\n\na\n\nb"
+    end
+
+    it "keeps a rating set as a heading or after its text" do
+      convert("<h3>★★★★☆</h3><p>Great</p><h2>Value for Money – 22/25 ⭐️⭐️⭐️</h2><p>b</p>").should ==
+        "★★★★☆\n\nGreat\n\n## Value for Money – 22/25 ⭐️⭐️⭐️\n\nb"
+    end
+
+    it "keeps a counter set as a heading over a section" do
+      convert("<h2>01.</h2><h4>Trust</h4><p>a</p><h6>02</h6><h4>Care</h4><p>b</p>").should == "## 01.\n\n#### Trust\n\na\n\n###### 02\n\n#### Care\n\nb"
     end
 
     it "writes a date, a price or a number set as a heading below the headline as a paragraph, but keeps a year" do
@@ -880,18 +889,20 @@ RSpec.describe "Markdown conversion" do
       convert("<p>Intro</p><h3>28/01/2023</h3><p>12</p>").should == "Intro\n\n28/01/2023\n\n12"
     end
 
-    it "writes a sentence set as a heading as a paragraph, but keeps a tagline, a question and a card's title" do
+    it "writes a sentence set as a heading as a paragraph, but keeps a tagline, a question, an exclamation in Japanese and a card's title" do
       html = "<h5>Legrand offers an array of products that provide power, data and charging connections where it is needed in offices.</h5>" \
              "<p>Read on</p><h2>Emergency response available 24 hours a day, 7 days a week.</h2><p>Call</p>" \
              "<h3>What is a salary loan and how does it work for you, and when should you take one out?</h3><p>Answer</p>" \
              '<a href="/q/1"><h3>Can an employer move me to another job and to another schedule without my consent at all.</h3><p>Labour law</p></a>' \
-             "<h4>この会は以下のようなことを目的として毎月第三土曜日に開催しています。参加費は無料で、どなたでもお気軽にご参加いただけます。</h4><p>c</p>"
+             "<h4>この会は以下のようなことを目的として毎月第三土曜日に開催しています。参加費は無料で、どなたでもお気軽にご参加いただけます。</h4><p>c</p>" \
+             "<h2>ドリーミンのサイトを確認して料金やサービスの内容と実際の評判を徹底的に調査してみましたので結果をご紹介します！</h2><p>d</p>"
       convert(html).should == "Legrand offers an array of products that provide power, data and charging connections where it is needed in offices.\n\n" \
                               "Read on\n\n## Emergency response available 24 hours a day, 7 days a week.\n\nCall\n\n" \
                               "### What is a salary loan and how does it work for you, and when should you take one out?\n\nAnswer\n\n" \
                               "### [Can an employer move me to another job and to another schedule without my consent at all.](https://example.com/q/1)\n\n" \
                               "Labour law\n\n" \
-                              "この会は以下のようなことを目的として毎月第三土曜日に開催しています。参加費は無料で、どなたでもお気軽にご参加いただけます。\n\nc"
+                              "この会は以下のようなことを目的として毎月第三土曜日に開催しています。参加費は無料で、どなたでもお気軽にご参加いただけます。\n\nc\n\n" \
+                              "## ドリーミンのサイトを確認して料金やサービスの内容と実際の評判を徹底的に調査してみましたので結果をご紹介します！\n\nd"
     end
   end
 

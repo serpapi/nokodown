@@ -146,7 +146,7 @@ module Nokodown
       def heading(node)
         text = Emphasis.unwrap(Text.single_line(@inline.render(node.children, heading: true)))
         text = Headings.undecorated(Text.unescape_lone(text.gsub(PERMALINK, "")))
-        return [] unless Text.plain(text).match?(/[\p{L}\p{N}]/)
+        return [] unless Headings.content?(text)
         return [Block.new(:paragraph, text)] if text.length > 300
 
         level = node.name[1].to_i
