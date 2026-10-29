@@ -539,18 +539,26 @@ RSpec.describe "Markdown conversion" do
         markdown.should_not include(".png")
       end
 
+      it "keeps the images of a page that has hardly any text" do
+        extract('<main><h1>Gallery</h1><p><img src="/IMG_1.jpg"><img src="/IMG_2.jpg" alt=""></p></main>').should ==
+          "# Gallery\n\n![](https://example.com/IMG_1.jpg)![](https://example.com/IMG_2.jpg)"
+      end
+
       it "drops images whose alt text names nothing" do
         alts = ["IMG_6175.JPG", "DSC_0264", "image", "Foto 2", "描述", "صورة", "9f86d081884c7d65"]
         images = alts.map.with_index { |alt, index| %(<img src="/#{index}.jpg" alt="#{alt}">) }.join
-        extract("<main><h1>Trip</h1><p>Our trip.</p><p>#{images}<img src=\"/sea.jpg\" alt=\"Boats in the harbour\"></p></main>").should ==
-          "# Trip\n\nOur trip.\n\n![Boats in the harbour](https://example.com/sea.jpg)"
+        text = "We sailed along the rocky coast for a whole week, stopping at small harbours, fish markets and quiet beaches on the way."
+        extract("<main><h1>Trip</h1><p>#{text}</p><p>#{images}<img src=\"/sea.jpg\" alt=\"Boats in the harbour\"></p></main>").should ==
+          "# Trip\n\n#{text}\n\n![Boats in the harbour](https://example.com/sea.jpg)"
       end
 
       it "drops icons, logos and avatars" do
-        html = '<main><h1>Shop</h1><p>Our shop.</p><p><img src="/img/QDLogoBlue.gif" alt="Quality Dogs"><img src="/icons/rss.png" alt="Feed">' \
+        text = "Our shop sells leads, collars, beds and toys for dogs of every size, made by hand in our own workshop."
+        html = "<main><h1>Shop</h1><p>#{text}</p>" \
+               '<p><img src="/img/QDLogoBlue.gif" alt="Quality Dogs"><img src="/icons/rss.png" alt="Feed">' \
                '<img src="/a.jpg" class="avatar" alt="Sam"><img src="/c.svg" alt="Icono de chevron hacia abajo">' \
                '<img src="/rss-feed-guide.jpg" alt="An RSS reader on a phone" width="800"></p></main>'
-        extract(html).should == "# Shop\n\nOur shop.\n\n![An RSS reader on a phone](https://example.com/rss-feed-guide.jpg)"
+        extract(html).should == "# Shop\n\n#{text}\n\n![An RSS reader on a phone](https://example.com/rss-feed-guide.jpg)"
       end
 
       it "keeps the words around a decorative image apart" do

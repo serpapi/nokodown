@@ -22,8 +22,10 @@ module Nokodown
       # is the fence of a code block nested in a list or a quote.
       FENCE = /#{LINE_PREFIX.source}(`{3,})/.freeze
 
-      def initialize(images)
+      # unnamed: also remove the images Inline found to say nothing.
+      def initialize(images, unnamed: false)
         @images = images
+        @unnamed = unnamed
         # Image URL => @text_lines when its last copy was written.
         @seen = {}
         @text_lines = 0
@@ -120,7 +122,7 @@ module Nokodown
       # A thumbnail goes only while the Markdown still links to its page; a
       # card whose title link was dropped keeps its image.
       def redundant?(image)
-        image.redundant && image.targets.all? { |target| @linked.include?(target) }
+        (@unnamed && image.unnamed) || (image.redundant && image.targets.all? { |target| @linked.include?(target) })
       end
 
       # Lines left with only markers go. A list item whose first line held

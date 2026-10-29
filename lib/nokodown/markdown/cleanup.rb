@@ -7,6 +7,9 @@ module Nokodown
     # repeated images.
     module Cleanup
       DEDUPE_WINDOW = 4
+      # A page with fewer words than this is its images: a gallery, a
+      # photo post.
+      IMAGE_PAGE_WORDS = 20
       IMAGE_ONLY = /\A!\[([^\]]*)\]\([^)]*\)\z/.freeze
       LINKED_HEADING = /\A#+ \[.*\]\(.*\)\z/.freeze
       TITLE_LIST_MIN = 3
@@ -27,7 +30,11 @@ module Nokodown
         blocks = drop_repeated_runs(blocks)
         blocks = shorten_repeated_quotes(blocks)
         blocks = drop_empty_sections(RepeatedLinks.new(blocks).call)
-        images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
+        images.empty? ? blocks : ImageCleanup.new(images, unnamed: !image_page?(blocks)).call(blocks)
+      end
+
+      def image_page?(blocks)
+        blocks.sum { |block| Text.plain(block.text).scan(/[\p{L}\p{N}]+/).size } < IMAGE_PAGE_WORDS
       end
 
       def noise?(block)
