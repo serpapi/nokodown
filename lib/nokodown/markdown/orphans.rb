@@ -6,6 +6,8 @@ module Nokodown
     # without the value they introduce.
     module Orphans
       NUMBERS = /\A\d{1,3}(?:\s+\d{1,3})?\z/.freeze
+      # A number, with its separators and unit: "4.155", "393m²", "€24".
+      VALUE = /\A\p{Sc}?\d[\d.,\s]*[\p{L}\p{Sc}%²³]{0,4}\z/.freeze
       SEQUENCE = /\A[01](?:\s+\d{1,2})+\z/.freeze
       TIME = /(?:\d{1,2}:)?\d{1,2}:\d{2}/.freeze
       # A player shows the elapsed time and the duration, run together
@@ -24,9 +26,10 @@ module Nokodown
 
       def call(blocks)
         empty = empty_labels(blocks)
+        columns = columns(blocks)
         blocks.reject.with_index do |block, index|
           next true if empty.include?(index)
-          next false unless block.kind == :paragraph && !block.text.include?("](")
+          next false unless block.kind == :paragraph && !block.text.include?("](") && !columns.include?(index)
 
           counter?(blocks, index, Text.plain(block.text))
         end
@@ -59,6 +62,26 @@ module Nokodown
       # The page's title stays even when its form is all it held.
       def labels_section?(heading, following)
         heading&.kind == :heading && heading.level > 1 && (following.nil? || following.level <= heading.level)
+      end
+
+      # Numbers side by side are the columns of a row, such as a forum's
+      # posts and threads or a house's bedrooms and floor area, unless they
+      # count up like the options of a picker or the pages of a slider.
+      def columns(blocks)
+        values = blocks.map { |block| value_block?(block) }
+        runs = blocks.each_index.chunk_while { |a, b| values[a] && values[b] }.select { |run| values[run.first] && run.size > 1 }
+        runs.reject { |run| counting?(run.map { |index| Text.plain(blocks[index].text) }) }.flatten.to_set
+      end
+
+      def value_block?(block)
+        block.kind == :paragraph && !block.text.include?("](") && Text.plain(block.text).match?(VALUE)
+      end
+
+      def counting?(texts)
+        return false unless texts.all? { |text| text.match?(/\A\d+\z/) }
+
+        numbers = texts.map(&:to_i)
+        numbers.each_cons(2).all? { |a, b| b == a + 1 } && (numbers.size > 2 || numbers.first <= 1)
       end
 
       def colon_label_block?(block)
