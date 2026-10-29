@@ -6,7 +6,14 @@ module Nokodown
     # line instead of writing a list ("• Fast", "✓ Free shipping"), and split
     # a numbered list into one element per item.
     module Lists
-      GLYPH = /\A([#{Renderer::GLYPHS}✓✔✅☑➢◆★])\uFE0F?\s+/.freeze
+      # Any pictograph serves as a bullet ("🔹 Retargeting"), and so do a
+      # typed asterisk and a dash. Pages in scripts written without spaces
+      # set the bullet right before the item ("・送料無料").
+      CLOSE_BULLETS = "・･·•●○◆◇■□▪★☆▶►"
+      GLYPH = /
+        \A(\\\*|[–#{Renderer::GLYPHS}◽◾]|#{Headings::SYMBOL})\uFE0F?
+        (?:\s+|(?<=[#{CLOSE_BULLETS}])(?=[^\s\p{So}\p{Sm}#{CLOSE_BULLETS}]))
+      /x.freeze
       NUMBER = /^(\d+)\. /.freeze
       FIRST_NUMBER = /\A(\d+)\. /.freeze
 
@@ -20,6 +27,7 @@ module Nokodown
       # unless paragraphs with another glyph sit beside them, as cons marked
       # ✗ after pros marked ✓.
       def typed(blocks)
+        blocks = blocks.flat_map { |block| introduced(block) }
         runs = blocks.slice_when { |a, b| glyph(a).nil? || glyph(a) != glyph(b) }.to_a
         runs.each_with_index.flat_map do |run, index|
           neighbours = [index.positive? ? runs[index - 1].last : nil, runs[index + 1]&.first].compact
@@ -36,6 +44,18 @@ module Nokodown
       def list(run)
         lines = run.flat_map { |block| block.text.split("\n") }
         Block.new(:list, lines.map { |line| "- #{Text.escape_line_starts(line.sub(GLYPH, ''))}" }.join("\n"))
+      end
+
+      # A line that introduces the glyph lines below it in one paragraph
+      # ("Features:" over "• Fast" and "• Safe") stays a line of its own.
+      def introduced(block)
+        return [block] unless block.kind == :paragraph
+
+        first, rest = block.text.split("\n", 2)
+        return [block] if rest.nil? || !rest.include?("\n") || first.match?(GLYPH)
+
+        items = Block.new(:paragraph, rest)
+        glyph(items) ? [Block.new(:paragraph, first), items] : [block]
       end
 
       # The glyph that opens every line of a paragraph, or nil.

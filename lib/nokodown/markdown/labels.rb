@@ -66,8 +66,13 @@ module Nokodown
           first, second, *rest = texts[index, 4]
           next false if first.nil? || second.nil?
 
-          unit?(texts, index, starts) || (first.match?(LABEL) && second.match?(VALUE) && !list?(rest))
+          unit?(texts, index, starts) || (first.match?(LABEL) && value?(second) && !list?(rest))
         end.to_set
+      end
+
+      # A line typed with a bullet is an item of a list the label introduces.
+      def value?(text)
+        text.match?(VALUE) && !text.match?(Lists::GLYPH)
       end
 
       def unit?(texts, index, starts)

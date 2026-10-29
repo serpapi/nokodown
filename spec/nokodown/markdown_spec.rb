@@ -951,6 +951,21 @@ RSpec.describe "Markdown conversion" do
       convert("<p>\u2714\uFE0F Fast</p><p>\u2714\uFE0F Safe</p>").should == "- Fast\n- Safe"
     end
 
+    it "writes lines typed with a pictograph, an asterisk or a dash as a list, but not signs of a name" do
+      convert("<p>🔹 Age<br>🔹 Location</p><p>Then</p><p>* one<br>* two</p><p>Also</p><p>\u2013 Wiring<br>\u2013 Plumbing</p><p>\u00A9 Acme<br>\u00A9 Bob</p>").should ==
+        "- Age\n- Location\n\nThen\n\n- one\n- two\n\nAlso\n\n- Wiring\n- Plumbing\n\n\u00A9 Acme\n\u00A9 Bob"
+    end
+
+    it "writes items set right after a bullet, as Chinese and Japanese pages do, as a list" do
+      convert("<p>\u00B7\u7EAF\u6A61\u80F6\u5BC6\u5C01\u6761</p><p>\u00B7\u7845\u80F6\u5BC6\u5C01\u6761</p><p>\u203B\u8A73\u3057\u304F\u306F</p><p>\u203B\u3054\u5165\u529B</p><p>\u2605\u2605\u2605\u2605\u26054.4</p><p>\u2605\u2605\u2605\u2605\u26063.2</p>").should ==
+        "- \u7EAF\u6A61\u80F6\u5BC6\u5C01\u6761\n- \u7845\u80F6\u5BC6\u5C01\u6761\n\n\u203B\u8A73\u3057\u304F\u306F\n\n\u203B\u3054\u5165\u529B\n\n\u2605\u2605\u2605\u2605\u26054.4\n\n\u2605\u2605\u2605\u2605\u26063.2"
+    end
+
+    it "keeps the line that introduces glyph lines in one paragraph apart from the list" do
+      convert("<p><b>Safety notes:</b><br>\u2022 Do not drop.<br>\u2022 Keep dry.</p><p>Targeting:<br>🔹 Age<br>🔹 Location</p>").should ==
+        "**Safety notes:**\n\n- Do not drop.\n- Keep dry.\n\nTargeting:\n\n- Age\n- Location"
+    end
+
     it "joins numbered lists whose numbering runs on" do
       convert('<ul><li>a</li><li>b</li></ul><ul><li>c</li><li>d</li></ul><ol><li>one</li></ol><ol start="2"><li>two</li></ol><ol><li>again</li></ol>').should ==
         "- a\n- b\n\n- c\n- d\n\n1. one\n2. two\n\n1. again"

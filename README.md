@@ -241,7 +241,9 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    numbers and dates that adjacent elements run together are spaced
    ("20.07 2026"). Below the headline, a heading without letters (a date, a
    price, a phone number, but not a year) or holding a long sentence, unless
-   it is a card's title, is a paragraph. Text is escaped only where it would
+   it is a card's title, is a paragraph. Lines typed with a bullet, a
+   pictograph, an asterisk or a dash ("• Fast", "🔹 Age", "・送料無料") are a
+   list, below the line that introduces them. Text is escaped only where it would
    otherwise change meaning.
 
 ## Quality
