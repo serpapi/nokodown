@@ -277,6 +277,16 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, article_url).should_not be_empty
   end
 
+  it "finds no block in the screenshots under the step headings of an article" do
+    steps = Array.new(3) do |index|
+      "<h2>Step #{index + 1}</h2><figure><a href='/2026/05/bridge-reopens-0#{index + 1}/'>" \
+        "<img src='/img/step-#{index}.png' alt=''></a></figure>"
+    end
+    html = "<h1>Bridge reopens</h1><div class='entry'>#{story(2)}#{steps.join}</div>"
+
+    blocks(html, article_url).should be_empty
+  end
+
   it "does not take a sentence before a list of cards for its title" do
     grid = "<div class='grid'>#{cards(stories, '/blog/')}</div>"
     html = "<h1>Bridge reopens</h1>#{story(3)}<p>See our earlier report.</p>#{grid}"

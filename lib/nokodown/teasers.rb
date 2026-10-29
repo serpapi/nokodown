@@ -258,29 +258,34 @@ module Nokodown
     end
 
     # Children of the same tag and first class, in unbroken runs: text
-    # between two of them, as between the figures of an article, ends a run,
-    # but a heading does not: it titles the items after it, as in a column of
-    # widgets. A class no sibling shares marks a position ("first",
+    # between two of them, as between the figures of an article, ends a run.
+    # A heading ends it only before an item with no text, such as a
+    # screenshot under its step; cards go on under the headings of a column
+    # of widgets. A class no sibling shares marks a position ("first",
     # "primeiro"), not another kind of item.
     def shapes(parent)
       counts = parent.element_children.map { |child| shape_of(child) }.tally
       open = {}
       done = []
-      breaks = 0
+      texts = headings = 0
       parent.children.each do |child|
         if child.element?
-          shape = shape_of(child)
-          shape = "#{child.name}." if counts[shape] == 1
-          items, seen = open[shape]
-          if items.nil? || seen < breaks
+          shape = counts[shape_of(child)] == 1 ? "#{child.name}." : shape_of(child)
+          text = @stats.chars(child) > SEPARATOR
+          items, seen_texts, seen_headings = open[shape]
+          if items.nil? || seen_texts < texts || (seen_headings < headings && !text)
             done << items if items
             items = []
           end
           items << child
-          breaks += 1 if @stats.chars(child) > SEPARATOR && !heading_line?(child)
-          open[shape] = [items, breaks]
+          if text && heading_line?(child)
+            headings += 1
+          elsif text
+            texts += 1
+          end
+          open[shape] = [items, texts, headings]
         elsif child.text? && Dom.char_count(child.content) > SEPARATOR
-          breaks += 1
+          texts += 1
         end
       end
       done + open.values.map(&:first)
