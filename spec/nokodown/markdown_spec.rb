@@ -38,9 +38,9 @@ RSpec.describe "Markdown conversion" do
     it "spaces numbers, prices and dates that adjacent elements run together" do
       html = "<p>20.07<span>2026</span>, <time>October 5, 2024</time><span>1 min</span>, <time>2021年9月6日</time><time>2025年2月18日</time></p>" \
              "<p><span>350.000đ</span><span>Đã gồm VAT</span> <span>KABAR DAERAH</span><span>November</span> " \
-             "<span>delivered</span><span>£199</span> <span>admin</span><span>اخبار</span></p>"
+             "<span>delivered</span><span>£199</span> <span>admin</span><span>اخبار</span> <a href=\"/tag/pso2\">PSO2</a>1</p>"
       convert(html).should == "20.07 2026, October 5, 2024 1 min, 2021年9月6日 2025年2月18日\n\n" \
-                              "350.000đ Đã gồm VAT KABAR DAERAH November delivered £199 admin اخبار"
+                              "350.000đ Đã gồm VAT KABAR DAERAH November delivered £199 admin اخبار PSO2 1"
     end
 
     it "keeps a counter's digits and text split by a comment together" do

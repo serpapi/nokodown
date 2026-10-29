@@ -67,8 +67,8 @@ module Nokodown
       ].freeze
       # Two numbers ("20.07" and "2026", a date and "1 min"), unless both are
       # one digit, as a counter draws its digits.
-      DIGIT_BEFORE = /(?<![\p{N}.,])\p{Nd}\z/.freeze
-      DIGIT_AFTER = /\A\p{Nd}(?![\p{N}.,])/.freeze
+      DIGIT_BEFORE = /(?<![\p{L}\p{N}.,])\p{Nd}\z/.freeze
+      DIGIT_AFTER = /\A\p{Nd}(?![\p{L}\p{N}.,])/.freeze
       # Material icon fonts draw a glyph from a ligature word ("arrow_forward").
       ICON_FONT = /(?<![\w-])material-(?:icons|symbols)(?:-(?:outlined|round|rounded|sharp|two-tone))?(?![\w-])/.freeze
       # Some CMSs write the caption's markup into the alt attribute.
