@@ -43,21 +43,26 @@ module Nokodown
       # Drops the language label a highlighter prints above the code and its
       # copy button, and fences the code with the labelled language.
       def without_labels(blocks)
-        blocks.each_with_index.reject do |block, index|
-          label_block?(block, blocks[index + 1], index.positive? && blocks[index - 1])
-        end.map(&:first)
+        blocks.each_with_index.each_with_object([]) do |(block, index), kept|
+          following = blocks[index + 1]
+          name = label(block, following, index.positive? ? blocks[index - 1] : nil)
+          next kept << block unless name
+
+          following.text = following.text.sub(/\A(`+)\n/, "\\1#{name}\n") if language?(name) && following&.kind == :code
+        end
       end
 
-      def label_block?(block, following, previous)
-        return false unless block.kind == :paragraph
-        return previous && previous.kind == :code && block.text.match?(COPY_LABEL) unless following&.kind == :code
+      # The label's text when the block is a label or a copy button.
+      def label(block, following, previous)
+        return unless block.kind == :paragraph
+        return (block.text if previous&.kind == :code && block.text.match?(COPY_LABEL)) unless following&.kind == :code
 
         name = block.text.sub(COPY_SUFFIX, "").downcase
-        language = LANGUAGE_NAMES.include?(name)
-        return false unless block.text.match?(COPY_LABEL) || language || following.text[/\A`+(.*)/, 1] == name
+        name if block.text.match?(COPY_LABEL) || LANGUAGE_NAMES.include?(name) || following.text[/\A`+(.*)/, 1] == name
+      end
 
-        following.text = following.text.sub(/\A(`+)\n/, "\\1#{name}\n") if language && !NO_LANGUAGE.include?(name)
-        true
+      def language?(name)
+        LANGUAGE_NAMES.include?(name) && !NO_LANGUAGE.include?(name)
       end
 
       def render(node, raw)
