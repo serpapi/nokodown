@@ -29,7 +29,7 @@ module Nokodown
       Preprocessor.new(body).call
       nodes, mode = select_content(body, metadata[:page_type], product_page)
       blocks = render(nodes, mode, urls)
-      blocks = with_title(blocks, metadata[:title], metadata[:site]) if @title
+      blocks = with_title(blocks, metadata) if @title
       result(blocks, metadata, mode)
     end
 
@@ -102,13 +102,15 @@ module Nokodown
     # only names the site does not head content that has its own heading,
     # and away from the home page a heading that only names the site gives
     # way to the page's title.
-    def with_title(blocks, title, site)
+    def with_title(blocks, metadata)
+      title = metadata[:title]
+      site = metadata[:site]
       return blocks if blocks.empty?
 
       site_title = title && site.name?(title)
       blocks = without_site_heading(blocks, site) if title && !site_title && !site.home?
       first_h1 = blocks.find { |block| block.kind == :heading && block.level == 1 }
-      return demote_h1s(blocks, first_h1) if first_h1 && (title.nil? || page_heading?(blocks, first_h1, title))
+      return demote_h1s(blocks, first_h1) if first_h1 && (title.nil? || page_heading?(blocks, first_h1, title, metadata[:url_words]))
       return blocks if title.nil? || (site_title && blocks.first(TITLE_BLOCKS).any? { |block| block.kind == :heading })
 
       duplicate = blocks.first(TITLE_BLOCKS).find { |block| repeats_title?(block, title) }
@@ -130,10 +132,14 @@ module Nokodown
     end
 
     # When the page's title block is left out of the content, the first H1
-    # left can be a section heading below the body's opening paragraphs. A
-    # headline may follow a caption or a promo line, but not the body.
-    def page_heading?(blocks, h1, title)
-      return true if Dom.similarity(title, Markdown::Cleanup.heading_text(h1)) > TITLE_SIMILARITY
+    # left can be a section heading below the body's opening paragraphs, or
+    # the section's name above it when the URL names the title and none of
+    # the heading's words. A headline may follow a caption or a promo line,
+    # but not the body.
+    def page_heading?(blocks, h1, title, url_words)
+      heading = Markdown::Cleanup.heading_text(h1)
+      return true if Dom.similarity(title, heading) > TITLE_SIMILARITY
+      return false if url_words.names?(title) && url_words.coverage(heading).zero?
 
       opening = blocks.take_while { |block| !block.equal?(h1) }.select { |block| block.kind == :paragraph }
       opening.sum { |block| Markdown::Text.plain(block.text).length } < OPENING_PROSE

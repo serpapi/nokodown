@@ -36,6 +36,7 @@ module Nokodown
     def initialize(doc, url = nil)
       @doc = doc
       @url = url
+      @url_words = UrlWords.new(url)
     end
 
     def to_h
@@ -48,6 +49,7 @@ module Nokodown
       {
         title: title && heading_title(title, site),
         site: site,
+        url_words: @url_words,
         byline: clean(json[:byline] || first_value(meta, BYLINE_KEYS) || article_author(meta)) || document_byline,
         excerpt: clean(json[:excerpt] || first_value(meta, EXCERPT_KEYS)),
         site_name: site_name,
@@ -247,7 +249,14 @@ module Nokodown
     # ("Using the Fetch API - Web APIs | MDN"); the H1s tell which part it is.
     def heading_title(title, site)
       h1s = @doc.css("body h1")
-      title_from_h1(title, h1s, site) || title_without_site_h1(title, h1s) || title
+      title_from_h1(title, h1s, site) || title_without_site_h1(title, h1s) || h1_named_by_url(title, h1s) || title
+    end
+
+    # An H1 that the page's URL names, when the title does not, is the
+    # page's own name: such a title is stale or the same on every page.
+    def h1_named_by_url(title, h1s)
+      name = h1s.reject { |h1| logo?(h1) }.map { |h1| Dom.text(h1) }.max_by { |text| @url_words.coverage(text) }
+      name if name && @url_words.prefers?(name, title)
     end
 
     # Cut only at a separator, or before the site's name: an H1 that is just

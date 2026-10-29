@@ -211,6 +211,14 @@ RSpec.describe Nokodown::Metadata do
       .should == "June 2016 events and lives"
   end
 
+  it "takes the H1 that the URL names when the title does not" do
+    url = "https://np-arbeitssicherheit.de/schulung/1850002-geruestnutzer-pflichtunterweisung-e-learning-input-2-0.html"
+    head = "<title>PSA gegen Absturz – Jährliche Pflichtunterweisung</title>"
+
+    metadata_at(url, head, "<h1>1850002 Gerüstnutzer - Pflichtunterweisung E-Learning / iNPut 2.0</h1>")[:title]
+      .should == "1850002 Gerüstnutzer - Pflichtunterweisung E-Learning / iNPut 2.0"
+  end
+
   it "does not match an H1 without words to the end of a title without words" do
     body = '<h1><img src="/logo.png" alt=""></h1><h2>Understanding Ownership Rules</h2>'
 

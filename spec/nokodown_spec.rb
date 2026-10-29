@@ -65,6 +65,14 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html, url: "http://bonten.example/calendar/671515").should start_with("# Friends from afar\n\nWe caught")
     end
 
+    it "puts the title above a section's name when the URL names the title" do
+      body = "<h1>Transparencia</h1><p>Reporte abril 2023</p><p>#{'The public consultations held in April, with their dates and documents. ' * 3}</p>"
+      html = "<title>Reporte abril 2023</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://sb.gob.do/transparencia/consultas/reporte-abril-2023/")
+              .should start_with("# Reporte abril 2023\n\n## Transparencia\n\nThe public")
+    end
+
     it "drops a line below the title that only repeats it" do
       body = "<p><b>Fucili d'assalto</b></p><p>#{'The assault rifles of GTA 5 differ in damage, range and fire rate. ' * 3}</p>"
       html = "<title>Fucili d'assalto</title><body><article>#{body}</article></body>"
