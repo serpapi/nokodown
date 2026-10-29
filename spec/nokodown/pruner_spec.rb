@@ -163,6 +163,12 @@ RSpec.describe Nokodown::Pruner do
         pruned(card).inner_html.should include("AMC Otolaryngology")
       end
 
+      it "keeps a banner that holds a picture beside its heading" do
+        banner = "<div><img src='/img/cases.jpg' alt='Our cases'><h3>Cases</h3></div>"
+
+        pruned("#{banner}<div>#{share}</div><h2>Workshop</h2>").css("img").size.should == 1
+      end
+
       it "keeps a linked heading" do
         agent = "<a href='/agents/144'><h5>Gurhan Altunsoy</h5></a>#{share}"
 

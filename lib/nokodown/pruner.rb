@@ -469,13 +469,14 @@ module Nokodown
 
     # A short heading below the page title, a wrapper holding only one, or a
     # lead that ends in a colon ("Tags:"). A linked or long heading is the
-    # title of a card, not a label.
+    # title of a card, not a label, and a wrapper with a picture is a banner.
     def section_label?(node)
       text = Dom.text(node)
       return false if text.empty? || label_length(text) > MAX_LABEL || linked?(node)
       return true if text.match?(LEAD)
       return false unless node.element?
       return true if SECTION_HEADINGS.include?(node.name)
+      return false if node.at_css(MEDIA_SELECTOR)
 
       node.css(SECTION_HEADING_SELECTOR).any? { |heading| Dom.text(heading) == text }
     end
