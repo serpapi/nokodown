@@ -322,13 +322,30 @@ RSpec.describe Nokodown::Boilerplate do
       end
     end
 
-    it "keeps a block named like a sidebar under a title that stands alone, or one that holds prose" do
-      ["<div class=\"main\"><div class=\"title\"><h1>Sakura Clinic</h1></div><div id=\"sidebar\">#{hours}</div></div>",
-       "<div class=\"main\"><h1>Clinic news</h1><p>We moved.</p></div><div id=\"sidebar\">#{prose('Our new address', 2)}</div>"]
-        .each do |html|
-        remaining(html).should match(/Sakura Clinic|Our new address is explained/)
-        remaining(html).should match(/Monday 9:00|Part 2/)
+    it "keeps a block named like a sidebar under a title that stands alone" do
+      html = "<div class=\"main\"><div class=\"title\"><h1>Sakura Clinic</h1></div><div id=\"sidebar\">#{hours}</div></div>"
+
+      remaining(html).should include("Monday 9:00")
+    end
+
+    it "keeps a sidebar or footer that holds prose, in paragraphs or in other blocks" do
+      descriptions = %w[Acupuncture Massage Cupping].map do |treatment|
+        "<div class=\"service\"><h3>#{treatment}</h3><div class=\"description\">#{treatment} eases the pain in the back " \
+          "and the neck, and helps the patient sleep through the night again.</div></div>"
       end
+      ["<div id=\"sidebar\">#{prose('Our new address', 2)}</div>", "<div id=\"footer\">#{descriptions.join}</div>"]
+        .each do |box|
+        html = "<div class=\"main\"><h1>Clinic news</h1><p>We moved to Kego, two streets from the station.</p></div>#{box}"
+
+        remaining(html).should match(/Part 2|helps the patient sleep/)
+      end
+    end
+
+    it "removes a site header above the title that holds addresses in lines" do
+      html = "<div class=\"site-header\">#{hours * 2}</div><h1>Fully booked on Friday</h1>" \
+             "<p>#{'The morning slots are taken. ' * 8}</p>"
+
+      remaining(html).should_not include("Sakura Clinic")
     end
 
     it "removes a cookie banner that holds most of a page's text, but not a cookie policy" do

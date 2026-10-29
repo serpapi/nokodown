@@ -19,11 +19,10 @@ module Nokodown
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     # What a wrapper has, lacks or allows does not name it: "has-sidebar",
     # "o_wsale_has_sidebar", "with-navigation", "content-and-menu",
-    # "sidebar-enabled--true". The
-    # head of a compound names the wrapper, so "menu-and-content" stays a
-    # menu. "no-print" names what is left out of print, so it stays too.
-    # Nor does the layout it is laid out in: "layout-sidebar-left",
-    # "one-right-sidebar", "two-sidebars".
+    # "sidebar-enabled--true". The head of a compound names the wrapper, so
+    # "menu-and-content" stays a menu. "no-print" names what is left out of
+    # print, so it stays too. Nor does the layout it is laid out in:
+    # "layout-sidebar-left", "one-right-sidebar", "two-sidebars".
     MODIFIER = /
       (?:(?<![\w-])(?:has|with|without|no(?!-?print))|-(?:and|with|without))-[\w-]+|
       (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])|
@@ -36,6 +35,7 @@ module Nokodown
     TITLE_HOLDER_SHARE = 0.25
     # A note continues the prose only after a sentence or more of it, not after a line of links.
     NOTE_PROSE = 80
+    PROSE = 160
     FOOTNOTE_MARK = /\A[*†‡§]+/.freeze
     # The word goes with its separators: "footer__disclaimer" without it is "footer", not "footer__".
     DISCLAIMER_WORD = /[-_]*#{Patterns::DISCLAIMER.source}[-_]*/.freeze
@@ -55,6 +55,7 @@ module Nokodown
       @taxonomy = Taxonomy.blocks(@body, @url)
       @title = h1s.last
       @last_h1 = @title ? Dom.key(@title).to_i : 0
+      @prose_lines = {}
       # Card grids repeat the same class list hundreds of times.
       @names = Hash.new { |cache, signature| cache[signature] = signature.gsub(MODIFIER, " ") }
       @furniture = Hash.new { |cache, signature| cache[signature] = @names[signature].match?(Patterns::PAGE_FURNITURE) }
@@ -356,7 +357,7 @@ module Nokodown
     # a "sidebar".
     def beside_title?(node)
       return false unless @title && @names[Dom.signature(node)].match?(SIDE_FURNITURE)
-      return false unless node.at_css("h1").nil? && furniture_shaped?(node)
+      return false unless node.at_css("h1").nil? && !prose_lines?(node)
 
       branch = title_branch(node)
       !branch.nil? && @stats.text_chars(branch) - @stats.text_chars(@title) >= TITLED_TEXT
@@ -376,23 +377,41 @@ module Nokodown
       @names[Dom.signature(node)].match?(Patterns::CONSENT) && node.at_css(Dom::HEADING_SELECTOR).nil?
     end
 
+    # A mega menu gives its entries blurbs, so in a header only a paragraph
+    # with a line long enough for a sentence is prose.
     def furniture_shaped?(node)
-      @stats.link_density(node) > 0.5 || node.css("p").none? { |paragraph| prose?(paragraph) }
+      @stats.link_density(node) > 0.5 || node.css("p").none? { |paragraph| prose_chars(paragraph) >= NOTE_PROSE }
     end
 
-    # Short lines broken apart, as in an address or opening hours, are not prose.
-    def prose?(paragraph)
-      return false if @stats.text_chars(paragraph) < NOTE_PROSE
-      return true if paragraph.at_css("br").nil?
-
-      longest_line(paragraph) >= NOTE_PROSE
+    # Two sentences' worth of running text in lines long enough for one, in
+    # any block. Short lines broken apart, as in opening hours, are not
+    # prose, nor is what an address holds, nor one line such as a motto or
+    # a quote, and the text of links is a menu's or a teaser's.
+    def prose_lines?(node)
+      key = Dom.key(node)
+      @prose_lines.fetch(key) { @prose_lines[key] = prose_chars(node) >= PROSE }
     end
 
-    def longest_line(paragraph)
-      line = 0
-      paragraph.xpath(".//text() | .//br").map do |node|
-        line = node.element? ? 0 : line + Dom.char_count(node.content)
-      end.max.to_i
+    # Line breaks and the edges of blocks end a line; nil on the stack marks
+    # an edge.
+    def prose_chars(node)
+      prose = line = 0
+      stack = node.children.to_a.reverse
+      until stack.empty?
+        current = stack.pop
+        if current.nil? || current.name == "br"
+          prose += line if line >= NOTE_PROSE
+          line = 0
+        elsif current.text?
+          line += Dom.char_count(current.content)
+        elsif current.element? && current.name != "address" && !(current.name == "a" && current["href"])
+          block = Dom.block?(current)
+          stack << nil if block
+          stack.concat(current.children.to_a.reverse)
+          stack << nil if block
+        end
+      end
+      line >= NOTE_PROSE ? prose + line : prose
     end
 
     def last_descendant(node)
