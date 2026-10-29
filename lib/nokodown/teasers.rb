@@ -47,6 +47,7 @@ module Nokodown
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
     HEADING = "h1, h2, h3, h4, h5, h6, [role=heading]"
     MEDIA = "img, picture, time"
+    KEPT = "h1, img, picture, video, audio, iframe, object, embed, table, pre, math"
     STRUCTURE = "ul, ol, dl, table, li, p + p"
     DATE = %r{\d{1,4}[./-]\d{1,2}[./-]\d{1,4}}.freeze
     # A line ending a sentence is the content's, not a title over a block.
@@ -70,9 +71,25 @@ module Nokodown
       found = nodes.flat_map { |root| root.css("*").select { |node| keys.include?(Dom.key(node)) } }
       found.reject! { |node| node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) } }
       left = nodes.sum { |root| words(root) } - found.sum { |node| words(node) }
-      found.each(&:remove) if left >= MIN_WORDS_LEFT
+      return nodes if left < MIN_WORDS_LEFT
+
+      parents = found.map(&:parent)
+      found.each(&:remove)
+      roots = nodes.map { |root| Dom.key(root) }
+      parents.each { |parent| remove_emptied(parent, roots) }
       nodes
     end
+
+    # A heading over several blocks ("Previous matches" over a column per
+    # team) is left with nothing under it.
+    def self.remove_emptied(node, roots)
+      while node&.element? && !roots.include?(Dom.key(node)) && words(node).zero? && !node.at_css(KEPT)
+        parent = node.parent
+        node.remove
+        node = parent
+      end
+    end
+    private_class_method :remove_emptied
 
     # Words outside headings.
     def self.words(node)

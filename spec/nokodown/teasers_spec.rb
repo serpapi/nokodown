@@ -51,6 +51,17 @@ RSpec.describe Nokodown::Teasers do
     blocks(article, article_url).should_not be_empty
   end
 
+  it "drops the heading left over the blocks it removes" do
+    columns = %w[Ferries Port].map { |name| "<div class='col'><h4>#{name}</h4>#{cards(stories, '/blog/')}</div>" }
+    html = "<div class='story'>#{story(1)}<section><h2>Previous matches</h2>#{columns.join}</section></div>"
+    root = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css(".story")
+    Nokodown::Dom.assign_keys(root)
+
+    described_class.strip([root], root.css(".col").map { |column| Nokodown::Dom.key(column) }.to_set)
+    root.content.should include("cracked bearings")
+    root.content.should_not include("Previous matches")
+  end
+
   it "keeps titled teasers on a page that declares no article or product" do
     blocks(article, article_url, nil).should be_empty
   end
