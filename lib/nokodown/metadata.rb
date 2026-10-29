@@ -200,7 +200,7 @@ module Nokodown
         after_colon(original)
       elsif original.length > 150 || original.length < 15
         h1s = @doc.css("h1")
-        h1s.size == 1 ? Dom.text(h1s.first) : original
+        h1s.size == 1 ? heading_text(h1s.first) : original
       else
         original
       end
@@ -255,7 +255,7 @@ module Nokodown
     # Taken for the site's name, a logo needs more than a "brand" class,
     # which font and colour utilities share ("font-family-ua-brand").
     def logo_names
-      @doc.css("body h1").select { |h1| logo?(h1, SITE_LOGO_NAME) }.map { |h1| Dom.text(h1) }
+      @doc.css("body h1").select { |h1| logo?(h1, SITE_LOGO_NAME) }.map { |h1| heading_text(h1) }
     end
 
     # SEO titles wrap the page's name in sections, site names and keywords
@@ -268,8 +268,17 @@ module Nokodown
     # An H1 that the page's URL names, when the title does not, is the
     # page's own name: such a title is stale or the same on every page.
     def h1_named_by_url(title, h1s)
-      name = h1s.reject { |h1| logo?(h1) }.map { |h1| Dom.text(h1) }.max_by { |text| @url_words.coverage(text) }
+      name = h1s.reject { |h1| logo?(h1) }.map { |h1| heading_text(h1) }.max_by { |text| @url_words.coverage(text) }
       name if name && @url_words.prefers?(name, title)
+    end
+
+    # A line break in a heading parts two words ("café<br>para").
+    def heading_text(heading)
+      return Dom.text(heading) unless heading.at_css("br")
+
+      parts = []
+      heading.traverse { |node| parts << (node.text? ? node.content : (" " if node.name == "br")) }
+      Dom.squish(parts.join)
     end
 
     # Cut only at a separator, or before the site's name: an H1 that is just
@@ -280,7 +289,7 @@ module Nokodown
       matches = title.enum_for(:scan, WORD).map { Regexp.last_match }
       title_words = matches.map { |match| match[0].downcase }
       h1s.each do |h1|
-        h1_words = tokens(h1.content)
+        h1_words = tokens(heading_text(h1))
         next if h1_words.empty? || h1_words.size >= title_words.size || title_words.first(h1_words.size) != h1_words
         next if logo?(h1)
 
@@ -302,7 +311,7 @@ module Nokodown
 
       page = title[0, separator.begin(0)]
       site_words = tokens(title[separator.end(0)..])
-      return if words(page) < 3 || site_words.empty? || h1s.none? { |h1| tokens(h1.content) == site_words }
+      return if words(page) < 3 || site_words.empty? || h1s.none? { |h1| tokens(heading_text(h1)) == site_words }
 
       page if heading_text?(page)
     end
