@@ -1190,8 +1190,9 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "writes an embedded video with the player's generic title as its address" do
-      convert('<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="YouTube video player"></iframe>').should ==
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+      html = '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="YouTube video player"></iframe>' \
+             '<iframe src="https://www.youtube.com/embed/abcdefghijk" title="The Piano Player"></iframe>'
+      convert(html).should == "https://www.youtube.com/watch?v=dQw4w9WgXcQ\n\n[The Piano Player](https://www.youtube.com/watch?v=abcdefghijk)"
     end
 
     it "uses the TeX source of MathML" do
