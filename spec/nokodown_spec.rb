@@ -490,6 +490,42 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "leaked markup" do
+    def convert(body)
+      Nokodown.to_markdown("<body>#{body}</body>", url: "https://example.com/page", title: false)
+    end
+
+    it "reads alt text that holds escaped markup as text" do
+      convert('<p><img src="/pinot.jpg" alt="2020 Pinot Noir &lt;br&gt; Presqu’ile Vineyard"></p>')
+        .should == "![2020 Pinot Noir Presqu’ile Vineyard](https://example.com/pinot.jpg)"
+    end
+
+    it "drops escaped elements written out whole, but not a tutorial's lines of markup" do
+      convert("<p>&lt;abbr id=\"kygai\"&gt;&lt;/abbr&gt;</p><p>Garden furniture for every terrace.</p>").should == "Garden furniture for every terrace."
+      convert("<p>Start the form with</p><p>&lt;form method=\"GET\" action=\"get.asp\"&gt;</p>")
+        .should == "Start the form with\n\n\\<form method=\"GET\" action=\"get.asp\">"
+    end
+
+    it "drops PHP errors printed into the page" do
+      error = "<br />\n<b>Warning</b>:  Use of undefined constant mimes in <b>/home/site/functions.php</b> on line <b>28</b><br />"
+
+      convert("#{error}<p>Mestin recipes for camping.</p>").should == "Mestin recipes for camping."
+    end
+
+    it "drops Liquid errors" do
+      html = "<p>Filter <span>Liquid error (snippets/facets line 538): Could not find asset snippets/icon-close.liquid</span></p>"
+
+      convert(html).should == "Filter"
+    end
+
+    it "drops template placeholders and shortcodes left unrendered" do
+      body = "<p>{{item.guest_name}}, {{item.nationality}}</p><p>[mailerlite_form form_id=2]</p><p>{title}</p>" \
+             "<p>Rooms with a view of the lake. {Christmas}</p>"
+
+      convert(body).should == "Rooms with a view of the lake. {Christmas}"
+    end
+  end
+
   describe "encodings" do
     it "transcodes binary input using the declared charset" do
       html = "<html><head><meta charset=\"windows-1252\"></head><body><p>caf\xE9</p></body></html>".b
