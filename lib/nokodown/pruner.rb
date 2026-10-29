@@ -38,6 +38,7 @@ module Nokodown
         @mode == :article ? prune_article(root) : remove_link_clusters(root)
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
+        RepeatedLinks.new(root).call
       end
       self
     end
