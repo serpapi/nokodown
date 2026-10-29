@@ -25,6 +25,12 @@ RSpec.describe Nokodown::RepeatedLinks do
     text_after(html).should end_with("Read it here today.May 2, 2026About")
   end
 
+  it "keeps a short link after a badge or a definition term that links to the same page" do
+    html = "<article><a href='/films/7'>HD</a><h3><a href='/films/7'>Reboot the Earth</a></h3></article>" \
+           "<dl><dt><a href='/grease/59'>Lithium grease, 1 kg</a></dt><dd>For bearings. <a href='/grease/59'>Details</a></dd></dl>"
+    text_after(html).should == "HDReboot the EarthLithium grease, 1 kgFor bearings. Details"
+  end
+
   it "keeps a short link when the longer link to its page is in another card" do
     html = card("The harbor bridge reopens", "") + "<article><p>#{'Ferry times change. ' * 90}</p></article>" \
                                                    "<p><a href='/posts/25'>Read more</a></p>"

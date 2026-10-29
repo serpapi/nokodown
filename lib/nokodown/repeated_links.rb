@@ -95,10 +95,12 @@ module Nokodown
     end
 
     # Controls follow what they act on; a badge before a title ("HD",
-    # "New") is a fact about the item.
+    # "New") is a fact about the item. A term of a definition list is
+    # written without its link, so it does not name the page.
     def named_in_card?(label, holder, links)
       longer = links.select do |link|
-        link.position < label.position && link.text.length > label.text.length && link.text.match?(/\p{L}/)
+        link.position < label.position && link.text.length > label.text.length && link.text.match?(/\p{L}/) &&
+          Dom.ancestors_named(link.node, "dt").empty?
       end
       longer.min_by(NEAREST) { |link| (link.position - label.position).abs }.any? { |link| same_card?(holder, link.node) }
     end
