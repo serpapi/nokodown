@@ -35,16 +35,25 @@ module Nokodown
       end
 
       # The fields of a form whose inputs are gone ("Name:", "E-mail:"), or a
-      # "Tags:" whose tags are, end the page or a section. A lone label over
-      # a heading may name it, and labels followed by text may be a template
-      # a post sets out for readers to fill in.
+      # "Tags:" whose tags are, end the page or a section, and the heading of
+      # a section they were all of goes with them. A lone label over a
+      # heading may name it, and labels followed by text may be a template a
+      # post sets out for readers to fill in.
       def empty_labels(blocks)
         labels = blocks.map { |block| colon_label_block?(block) }
         runs = blocks.each_index.chunk_while { |a, b| labels[a] && labels[b] }.select { |run| labels[run.first] }
-        runs.select do |run|
+        runs.flat_map do |run|
           following = blocks[run.last + 1]
-          following.nil? || (following.kind == :heading && run.size > 1)
-        end.flatten.to_set
+          next [] unless following.nil? || (following.kind == :heading && run.size > 1)
+
+          heading = run.first.positive? ? blocks[run.first - 1] : nil
+          labels_section?(heading, following) ? [run.first - 1, *run] : run
+        end.to_set
+      end
+
+      # The page's title stays even when its form is all it held.
+      def labels_section?(heading, following)
+        heading&.kind == :heading && heading.level > 1 && (following.nil? || following.level <= heading.level)
       end
 
       def colon_label_block?(block)
