@@ -524,10 +524,18 @@ module Nokodown
       @stats.chars(card.node) - card.headings.sum { |heading| @stats.chars(heading) }
     end
 
-    # Another page of this site, not a file on it, nor a post further down
-    # this one ("viewtopic.php?p=12#p12").
+    # Lists and menus link the same pages over and over.
     def target(href)
       href = href.to_s.strip
+      @targets ||= {}
+      return @targets[href] if @targets.key?(href)
+
+      @targets[href] = site_page(href)
+    end
+
+    # Another page of this site, not a file on it, nor a post further down
+    # this one ("viewtopic.php?p=12#p12").
+    def site_page(href)
       return if href.empty? || href.start_with?("#")
 
       uri = parse(@urls.resolve(href))
