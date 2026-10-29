@@ -117,7 +117,13 @@ RSpec.describe Nokodown::Teasers do
   end
 
   it "keeps titled teasers on a page that declares no article or product" do
-    blocks(article, article_url, nil).should be_empty
+    html = "<h1>Bridge reopens</h1>#{story(3)}<section><h2>Harbor</h2><div class='grid'>#{cards(stories, '/blog/')}</div></section>"
+
+    blocks(html, article_url, nil).should be_empty
+  end
+
+  it "removes teasers under a title that calls them related on any page" do
+    blocks(article, article_url, nil).should_not be_empty
   end
 
   it "keeps teasers for pages below this one" do
@@ -373,7 +379,7 @@ RSpec.describe Nokodown::Teasers do
         "<h6><a href='video-detail?id=#{17 + index}'>#{title}</a></h6></div>"
     end
     html = "<h1>The minister speaks at the twelfth wind energy congress in the capital city</h1>" \
-           "<h4>Other videos</h4><div class='row'>#{items.join}</div>"
+           "<h4>Ministry videos</h4><div class='row'>#{items.join}</div>"
 
     blocks(html, "https://gov.example.org/video-detail?p=8&id=105", nil).should_not be_empty
   end
@@ -383,7 +389,7 @@ RSpec.describe Nokodown::Teasers do
       "<li class='item'><a href='/zhbi/lotki/#{name}'><img src='/img/#{name.tr('/', '-')}.jpg' alt=''>" \
         "<h3>Tray #{name}</h3><span>Price on request</span></a></li>"
     end
-    html = product("<div class='also'><h2>Похожие товары</h2><ul class='items'>#{products.join}</ul></div>")
+    html = product("<div class='also'><h2>Лотки типа Л</h2><ul class='items'>#{products.join}</ul></div>")
 
     markdown(html, "https://shop.example.com/zhbi/lotki/l-22d-3").should_not include("Tray l-27-12/2")
   end
@@ -400,7 +406,7 @@ RSpec.describe Nokodown::Teasers do
   end
 
   it "takes posts named by their titles under the root for pages like this one under a heading" do
-    html = "<h1>Bridge reopens</h1>#{story(1)}<section><h2>You may also like</h2>" \
+    html = "<h1>Bridge reopens</h1>#{story(1)}<section><h2>Beach days</h2>" \
            "<div class='grid'>#{cards(stories, '/')}</div></section>"
 
     blocks(html, "https://blog.example.com/bridge-reopens-after-repairs/", nil).should_not be_empty

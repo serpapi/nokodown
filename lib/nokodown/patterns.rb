@@ -344,5 +344,41 @@ module Nokodown
       recommended(?:\s\w+)?|more\sfrom\s.+|you\smay\salso\slike|you\smight\salso\slike|read\snext|
       read\smore|tags|categories|about\sthe\sauthor|sign\sup.*|most\s(?:read|popular|viewed))[\s:]*\z
     /xi.freeze
+
+    # Titles of boxes of other pages of a site, in the major web languages.
+    RELATED_TITLE = /
+      \A(?:
+      related(?:\s\p{L}+){0,2}|see\salso|recommended(?:\sfor\syou)?|read\s(?:next|also)|also\sread|don'?t\smiss|
+      you\s(?:may|might|will)\s(?:also\s)?(?:like|love|enjoy|be\sinterested\sin)(?:\s\p{L}+){0,3}|
+      (?:recommended|similar|popular|trending|latest|recent|other|more)\s(?:\p{L}+\s)?
+      (?:products|items|posts|articles|stories|news|videos|recipes|listings|guides|courses|projects|properties|tours|services)|
+      more\s(?:from|in|like)\s.{1,60}|(?:customers|people)\s(?:also|who)\s.{1,60}|most\s(?:read|popular|viewed|shared)|
+      (?:artículos|productos|noticias|entradas|publicaciones|artigos|produtos|notícias|posts|vídeos|videos)\s
+      (?:relacionad[oa]s|similares|recomendad[oa]s|populares)|(?:también\s)?te\s(?:puede|podría)\s(?:interesar|gustar)|
+      le[ae]\stambién|ver\stambién|lo\smás\s(?:leído|visto)|más\s(?:leídas|vistas|leídos|vistos)|
+      você\s(?:também\s)?pode\s(?:gostar|se\sinteressar)|veja\stambém|leia\stambém|mais\s(?:lidas|vistas|lidos)|
+      (?:articles|produits|actualités)\s(?:similaires|associés|liés|connexes|recommandés|populaires)|produits\sconnexes|
+      vous\s(?:aimerez|pourriez\saimer)\saussi|(?:à\s)?(?:lire|voir)\saussi|sur\sle\smême\s(?:sujet|thème)|
+      les\splus\s(?:lus|populaires)|ça\speut\svous\sintéresser|.{1,40}pourrai(?:en)?t\s(?:également|aussi)\svous\sintéresser|
+      (?:ähnliche|verwandte|empfohlene|beliebte|weitere)\s(?:artikel|produkte|beiträge|nachrichten|meldungen|videos)(?:\s.{1,60})?|
+      das\skönnte\s(?:sie|dich)\s(?:auch\s)?interessieren|meistgelesen|siehe\sauch|lesen\ssie\sauch|mehr\szum\sthema|
+      (?:gerelateerde|vergelijkbare|aanbevolen|populaire)\s(?:artikelen|producten|berichten)|
+      .{1,30}zou\sje\sook\s(?:kunnen\s)?interesseren|lees\sook|zie\sook|
+      (?:articoli|prodotti|notizie|post)\s(?:correlati|simili|consigliati|popolari)|
+      (?:ti\s)?potrebbe(?:ro)?\s(?:interessarti|interessare|piacere)|(?:leggi|vedi)\sanche|
+      (?:похожие|популярные|рекомендуемые|другие|связанные)(?:\s\p{L}+){0,2}|похожее|смотрите\sтакже|читайте\sтакже|
+      вам\sмо(?:жет|гут)\sпонрави(?:ться|тся)(?:\s\p{L}+){0,2}|рекомендуем|
+      (?:podobne|powiązane|polecane|popularne)(?:\s\p{L}+){0,2}|(?:czytaj|zobacz)\s(?:także|też|również)|
+      może\scię\szainteresować|(?:další|podobné|související)\s(?:články|produkty|zboží)(?:\s.{1,40})?|
+      (?:benzer|ilgili|popüler|diğer|önerilen)\s(?:ürünler|ürünlerimiz|haberler|yazılar|videolar|içerikler)|
+      (?:bunlar\sda\s)?ilginizi\sçekebilir|ayrıca\sbakınız|
+      関連(?:記事|商品|情報)|おすすめ(?:記事|商品)?|人気(?:記事|商品)|こちらもおすすめ|あわせて読みたい|
+      相[关關](?:推荐|推薦|文章|阅读|閱讀|产品|產品|新闻|新聞)|推荐(?:阅读|产品|文章)|推薦(?:閱讀|產品|文章)|猜你喜[欢歡]|
+      [热熱]门推[荐薦]|延伸[阅閱][读讀]|관련\s?(?:기사|글|상품|제품)|추천\s?(?:기사|글|상품)|인기\s?(?:기사|글|상품)|
+      (?:مقالات|مواضيع|منتجات|أخبار)\s(?:ذات\sصلة|مشابهة|مقترحة)|قد\sيعجبك\sأيضا|(?:مطالب|محصولات)\s(?:مرتبط|مشابه)|نوشته(?:\s|\u200c)?های\s(?:مشابه|مرتبط)|
+      (?:bài\sviết|sản\sphẩm|tin\stức|tin)\s(?:liên\squan|tương\stự)|có\sthể\sbạn\s(?:quan\stâm|thích)|
+      (?:artikel|berita|produk)\s(?:terkait|serupa|lainnya)|mungkin\sanda\s(?:suka|tertarik)
+      )[\s:：.!?…»›]*\z
+    /xi.freeze
   end
 end

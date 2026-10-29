@@ -207,6 +207,7 @@ module Nokodown
       return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
       return false if block.bare && !list_title?(block.title)
       return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
+      return true if related_title?(block.title) && !dominant?(block)
       return false if block.bare && listing
       return text_before(block) >= MIN_TEXT_BEFORE if block.alike
       return true if block.named && named_beside?(block)
@@ -221,6 +222,12 @@ module Nokodown
     def named_beside?(block)
       before = text_before(block)
       (heading?(block.title) && before >= MIN_TEXT_BEFORE) || (@declared && before >= MIN_BODY)
+    end
+
+    # "Related posts", "Похожие товары", "猜你喜欢": a box that says it holds
+    # other pages goes on any page, unless it holds most of it.
+    def related_title?(title)
+      !title.nil? && Dom.text(title).match?(Patterns::RELATED_TITLE)
     end
 
     # A list of bare links needs a heading or a label of its own over it: the
