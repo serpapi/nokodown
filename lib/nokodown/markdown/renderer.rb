@@ -349,9 +349,7 @@ module Nokodown
         return [] unless url && @links
 
         title = Dom.squish(node["title"].to_s)
-        return [Block.new(:paragraph, url)] if title.empty? || title.match?(Image::PLAYER_TITLE)
-
-        [Block.new(:paragraph, "[#{Text.link_text(Text.escape(title))}](#{Text.destination(url)})")]
+        [Block.new(:paragraph, title.empty? ? url : "[#{Text.link_text(Text.escape(title))}](#{Text.destination(url)})")]
       end
 
       def summary(node)

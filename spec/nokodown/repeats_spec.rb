@@ -27,7 +27,7 @@ RSpec.describe Nokodown::Markdown::Repeats do
 
     it "drops a copy of the title over an embedded video, whose address does not run on from it" do
       html = "<h1>Pasta at home</h1>#{intro}<p>Pasta at home</p>" \
-             '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="YouTube video player"></iframe>'
+             '<iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ"></iframe>'
       convert(html).should == "# Pasta at home\n\nFits a one litre pot and boils water in three minutes.\n\nhttps://www.youtube.com/watch?v=dQw4w9WgXcQ"
     end
 

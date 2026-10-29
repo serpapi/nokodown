@@ -44,8 +44,6 @@ module Nokodown
       ICON_ALT = /\b(?:logo|logotipo|logotype|icon|icono|ícone|icône|ikona|иконка)\b/i.freeze
       SHAPE_ALT_WORDS = 4
       CONTENT_SIZE = 300
-      # The title an embed code gives every video ("YouTube video player").
-      PLAYER_TITLE = /\A(?:[\w-]+\s)?(?:video\s|media\s)?player\z/i.freeze
 
       module_function
 
