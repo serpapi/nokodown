@@ -168,6 +168,23 @@ RSpec.describe Nokodown::Teasers do
     text.should_not include("Best flour for a rye starter")
   end
 
+  it "keeps the attachments of a post" do
+    files = %w[wiring-front wiring-back drive-label].each_with_index.map do |name, index|
+      "<li class='file'><a href='/attachments/#{name}.#{180 + index}/'><img src='/data/#{name}.jpg' alt=''></a>" \
+        "<span>#{name}.jpeg</span><span>3.1 MB, viewed 32 times</span></li>"
+    end.join
+    post = "<div class='post'><div class='meta'><span class='username'>stover</span> " \
+           "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></div><div class='content'>#{story(1)}" \
+           "<section><h4>Attachments</h4><ul>#{files}</ul></section></div></div>"
+    html = "<html><body><h1>Wiring the drive</h1><div class='posts'>#{post * 2}</div></body></html>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    Nokodown::Dom.assign_keys(body)
+    Nokodown::PostAttribution.new(body).call.write([body])
+    url = "https://forum.example.com/threads/wiring.1724/"
+
+    described_class.new(body, url, Nokodown::UrlResolver.new(url), :forum).call.should be_empty
+  end
+
   it "keeps the posts of a thread whose titles link to the posts themselves" do
     posts = Array.new(5) do |index|
       id = 657_618 + index

@@ -90,6 +90,7 @@ module Nokodown
       @urls = urls
       @page = parse(urls.resolve(url)) if url
       @declared = BODIES.include?(page_type)
+      @discussion = ContentLocator::DISCUSSIONS.include?(page_type)
     end
 
     # The keys of the blocks to drop and of their titles.
@@ -142,13 +143,22 @@ module Nokodown
       block.title.nil? || block.title.name == "h1" || !block.title.at_css("h1").nil?
     end
 
-    # Links to pages below this one are its own sections.
+    # Links to pages below this one are its own sections, and attachments are
+    # part of the post that holds them.
     def removable?(block, body)
-      return false if block.children || block.nodes.any? { |node| node.at_css(PROTECTED) }
+      return false if block.children || in_post?(block) || block.nodes.any? { |node| node.at_css(PROTECTED) }
       return false if own_list?(block) && !(block.title.nil? && block.siblings && after_text?(block))
       return follows_text?(block) if block.siblings
 
       @declared && body && !dominant?(block)
+    end
+
+    # A post's body and its parent, which also holds its attachments.
+    def in_post?(block)
+      return false unless @discussion
+
+      @posts ||= @body.css("[#{PostAttribution::AUTHOR}]").flat_map { |body| [Dom.key(body), Dom.key(body.parent)] }
+      block.nodes.first.ancestors.any? { |ancestor| ancestor.element? && @posts.include?(Dom.key(ancestor)) }
     end
 
     def dominant?(block)
