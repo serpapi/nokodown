@@ -19,6 +19,18 @@ RSpec.describe Nokodown::Listing do
     items("<div class='posts'>#{Array.new(3) { |index| post(index) }.join}</div><p>Page 1 of 4</p>").should == ["post-item"] * 3
   end
 
+  it "counts every run toward the text, so a shop's products with only prices for text count beside its posts" do
+    products = Array.new(4) { |index| "<li class='product'><h4><a href='/p/#{index}'>Bowl #{index}</a></h4><span>$8.99</span></li>" }
+
+    items("<ul class='grid'>#{products.join}</ul><div class='posts'>#{Array.new(3) { |index| post(index) }.join}</div>").should include("product")
+  end
+
+  it "leaves out menus, whose items hold no text of their own" do
+    menu = Array.new(4) { |index| "<li class='menu-item'><a href='/section/#{index}'>Section #{index}</a></li>" }
+
+    items("<ul class='menu'>#{menu.join}</ul><div class='posts'>#{Array.new(3) { |index| post(index) }.join}</div>").should_not include("menu-item")
+  end
+
   it "takes a featured post in a block of its own beside the run" do
     featured = "<div class='items-leading'><div class='leading-0'><h2><a href='/posts/9'>Featured</a></h2><p>A short summary.</p></div></div>"
 

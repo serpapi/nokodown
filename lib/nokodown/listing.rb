@@ -1,9 +1,9 @@
 # frozen_string_literal: true
 
 module Nokodown
-  # Posts on a blog index, products in a category, events in a calendar: a
-  # run of sibling items alike in tag and leading class, each linking to its
-  # own page, that holds most of the content's own text. Items differ in post
+  # Posts on a blog index, products in a category, events in a calendar:
+  # runs of sibling items alike in tag and leading class, each linking to its
+  # own page, that hold most of the content's own text. Items differ in post
   # ids and category classes, so only the leading class is compared. Cards
   # that are only a linked headline hold no text of their own: they point to
   # other stories rather than list this page's.
@@ -29,15 +29,23 @@ module Nokodown
       end
     end
 
+    # Every run counts once the runs together hold most of the text: a shop's
+    # home page lists products, with prices for text, beside posts.
     def items(root)
       stats = Stats.new(root)
-      needed = stats.text_chars(root) * SHARE
-      return [] if needed.zero?
+      total = stats.text_chars(root)
+      return [] if total.zero?
 
-      [root, *root.css("*")].flat_map do |parent|
-        runs = item_runs(parent, stats, needed)
-        runs.empty? ? [] : runs.flatten + featured(parent, runs.flatten)
-      end
+      runs = [root, *root.css("*")].flat_map { |parent| item_runs(parent, stats).map { |run| [parent, run] } }
+      items = runs.flat_map(&:last)
+      return [] if outermost(items).sum { |item| stats.text_chars(item) } < total * SHARE
+
+      items + runs.flat_map { |parent, run| featured(parent, run) }
+    end
+
+    def outermost(items)
+      keys = items.map { |item| Dom.key(item) }.to_set
+      items.reject { |item| item.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) } }
     end
 
     # Joomla and others lead with a featured post outside the run, in a block
@@ -49,7 +57,8 @@ module Nokodown
       end
     end
 
-    def item_runs(parent, stats, needed)
+    # Menus and grids of linked headlines hold no text of their own.
+    def item_runs(parent, stats)
       items = parent.element_children.select { |child| ITEM_TAGS.include?(child.name) }
       return [] if items.size < MIN_ITEMS
 
@@ -57,7 +66,7 @@ module Nokodown
       runs.filter_map do |(name, leading), run|
         next if run.size < MIN_ITEMS || (leading.empty? && !UNNAMED_ITEMS.include?(name))
 
-        run if run.sum { |item| stats.text_chars(item) } >= needed && run.all? { |item| teaser?(item) }
+        run if run.count { |item| stats.text_chars(item).positive? } * 2 >= run.size && run.all? { |item| teaser?(item) }
       end
     end
 
