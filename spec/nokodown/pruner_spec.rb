@@ -135,6 +135,18 @@ RSpec.describe Nokodown::Pruner do
         root.inner_html.should include("About us")
       end
 
+      it "drops the lead that ends in a colon before the box" do
+        ["<span>Find us on:</span> #{share}", "Find us on: #{share}"].each do |html|
+          Nokodown::Dom.text(pruned("<div>#{html}</div>")).should_not include("Find us")
+        end
+      end
+
+      it "keeps a header that holds more than a lead before the box" do
+        root = pruned("<div><div>Tag: Ant games Show: Sort:</div>#{share}</div>")
+
+        Nokodown::Dom.text(root).should include("Tag: Ant games")
+      end
+
       it "keeps a heading whose section holds text beside the box" do
         hours = "Monday to Friday, nine to five, closed on public holidays."
         ["<h3>Opening hours</h3>#{hours}<div>#{share}</div>", "<h3>Opening hours</h3><div>#{hours} #{share}</div>",

@@ -35,6 +35,8 @@ module Nokodown
     MEDIA_SELECTOR = MEDIA.join(", ")
     # A CJK character says about as much as a short word.
     WIDE = /[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]/.freeze
+    # One colon, at the end: "Tag: Ants Show: Sort:" is a header with controls.
+    LEAD = /\A[^:：]+[:：]\z/.freeze
     LETTER = /\p{L}/.freeze
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
@@ -465,22 +467,23 @@ module Nokodown
       !MEDIA.include?(node.name) && Dom.text(node).empty? && node.at_css(MEDIA_SELECTOR).nil?
     end
 
-    # A short heading below the page title, or a wrapper holding only one. A
-    # linked or long heading is the title of a card, not a label.
+    # A short heading below the page title, a wrapper holding only one, or a
+    # lead that ends in a colon ("Tags:"). A linked or long heading is the
+    # title of a card, not a label.
     def section_label?(node)
-      return false unless node.element?
-
       text = Dom.text(node)
       return false if text.empty? || label_length(text) > MAX_LABEL || linked?(node)
+      return true if text.match?(LEAD)
+      return false unless node.element?
       return true if SECTION_HEADINGS.include?(node.name)
 
       node.css(SECTION_HEADING_SELECTOR).any? { |heading| Dom.text(heading) == text }
     end
 
     def linked?(node)
-      links = Dom.ancestors_named(node, "a")
-      links << node if node.name == "a"
-      links.any? { |link| link["href"] } || !node.at_css("a[href]").nil?
+      return true if Dom.ancestors_named(node, "a").any? { |link| link["href"] }
+
+      node.element? && ((node.name == "a" && !node["href"].nil?) || !node.at_css("a[href]").nil?)
     end
 
     def label_length(text)
