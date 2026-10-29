@@ -379,8 +379,10 @@ RSpec.describe "Markdown conversion" do
 
     it "writes a link whose text is a whole address as that address" do
       html = '<p><a href="https://track.example.net/ct?url=x&amp;id=9">https://www.bar.example/</a> ' \
-             '<a href="https://t.co/x1">https://example.org/a/very/…</a> <a href="/wiki/%D8%AD%D8%AF">https://example.com/wiki/حد</a></p>'
-      convert(html).should == "https://www.bar.example/ [https://example.org/a/very/…](https://t.co/x1) https://example.com/wiki/حد"
+             '<a href="https://t.co/x1">https://example.org/a/very/…</a> <a href="/wiki/%D8%AD%D8%AF">https://example.com/wiki/حد</a> ' \
+             '<a href="https://www.naver.com/?a=b">https://www.naver.com?a=b</a></p>'
+      convert(html).should == "https://www.bar.example/ [https://example.org/a/very/…](https://t.co/x1) https://example.com/wiki/حد " \
+                              "https://www.naver.com?a=b"
     end
 
     it "writes a link whose text shows an address on its own site, whole or cut short, as its address" do

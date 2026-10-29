@@ -246,7 +246,7 @@ module Nokodown
         text = Emphasis.unwrap(text)
         return text if shown?(text, url)
         return url if same_as_url?(text, url)
-        return text if same_as_url?(text, decoded(url))
+        return text if same_address?(text, url)
 
         address_markup(text, url) || "[#{Text.link_text(text)}](#{Text.destination(url)})"
       end
@@ -278,7 +278,16 @@ module Nokodown
         bare(text.delete("\\")) == bare(url)
       end
 
-      # Link text shows non-ASCII addresses as they read.
+      # Text that writes the link's address as a person would: decoded
+      # ("wiki/حد"), in another case, or without the slash before a query.
+      def same_address?(text, url)
+        comparable(text.delete("\\")) == comparable(decoded(url))
+      end
+
+      def comparable(url)
+        bare(url).downcase.sub(%r{/(?=[?#])}, "")
+      end
+
       def decoded(url)
         text = URI::DEFAULT_PARSER.unescape(url).force_encoding(Encoding::UTF_8)
         text.valid_encoding? ? text : url
