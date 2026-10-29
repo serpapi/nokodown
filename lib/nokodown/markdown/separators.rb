@@ -14,9 +14,10 @@ module Nokodown
       LINE_EDGES = /\A(?:\|\s*)+|(?:\s*[#{MARKS}])+\z/.freeze
       BETWEEN_LINKS = %r{(?<=\))\s+[#{MARKS}/]\s+(?=!?\[)}.freeze
       REPEATED = /(\s[#{MARKS}])(?:\s+[#{MARKS}])+(?=\s)/.freeze
-      # Nothing but punctuation and operators: "|", "~", "- ->". Emoji and
-      # currency signs say something.
+      # Nothing but punctuation and operators: "|", "~", "- ->". Emoji,
+      # emoticons and currency signs say something.
       SYMBOL_LINE = /\A[\p{P}\p{Sm}\s]*\z/.freeze
+      EMOTICON = %r{\A[:;=][-'^]?[()\[\]/\\|*]+\z}.freeze
 
       module_function
 
@@ -29,7 +30,7 @@ module Nokodown
       # symbols are left.
       def line(line)
         line = line.gsub(REPEATED, '\1').gsub(BETWEEN_LINKS, " ").gsub(LINE_EDGES, "")
-        line unless line.match?(SYMBOL_LINE)
+        line if !line.match?(SYMBOL_LINE) || line.match?(EMOTICON)
       end
     end
   end

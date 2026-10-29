@@ -61,6 +61,10 @@ RSpec.describe "Markdown conversion" do
       convert("<p>a<br>|<br>~<br>- -&gt;<br>👍<br>b</p><ul><li>|</li><li>c</li></ul>").should == "a\n👍\nb\n\n- c"
     end
 
+    it "keeps emoticons on lines of their own" do
+      convert("<p>Thanks<br>:)<br>See you<br>:-(</p>").should == "Thanks\n:)\nSee you\n:-("
+    end
+
     it "drops separators between links and at the ends of lines" do
       convert('<p>by | Oct 7, 2011 |</p><p><a href="/a">A</a> | <a href="/b">B</a> · <a href="/c">C</a></p><p>Volume 13 | Issue 1</p>').should ==
         "by | Oct 7, 2011\n\n[A](https://example.com/a) [B](https://example.com/b) [C](https://example.com/c)\n\nVolume 13 | Issue 1"
@@ -804,6 +808,12 @@ RSpec.describe "Markdown conversion" do
     it "writes a title row spanning the table above it" do
       html = '<table><tr><th colspan="2">Specs</th></tr><tr><th>Key</th><th>Value</th></tr><tr><td>Weight</td><td>3 kg</td></tr></table>'
       convert(html).should == "Specs\n\n| Key | Value |\n| --- | --- |\n| Weight | 3 kg |"
+    end
+
+    it "keeps cell values written as a sign" do
+      html = "<table><tr><th>Module</th><th>Status</th><th>Note</th></tr><tr><td>mod_access</td><td>+</td><td>-</td></tr>" \
+             "<tr><td>mod_dbm</td><td>?</td><td>&times;</td></tr></table>"
+      convert(html).should == "| Module | Status | Note |\n| --- | --- | --- |\n| mod_access | + | - |\n| mod_dbm | ? | × |"
     end
 
     it "keeps the caption" do

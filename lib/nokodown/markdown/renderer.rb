@@ -23,6 +23,7 @@ module Nokodown
         @links = links
         @depth = 0
         @contains_block = {}
+        @in_cell = false
       end
 
       def render(nodes)
@@ -48,10 +49,21 @@ module Nokodown
         nodes.empty? ? [] : text_paragraphs(@inline.render(nodes))
       end
 
+      # A data table's cell holds values, where a line of only a sign ("+",
+      # "×", "—") is one.
+      def cell_blocks(cell)
+        outer = @in_cell
+        @in_cell = true
+        children_blocks(cell)
+      ensure
+        @in_cell = outer
+      end
+
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          lines = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) }
+          lines = Text.tidy(chunk).split("\n")
+          lines = lines.filter_map { |line| Separators.line(line) } unless @in_cell
           chunk = Labels.lines(lines.join("\n").strip)
           next if chunk.empty?
 
