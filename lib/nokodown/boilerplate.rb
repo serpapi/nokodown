@@ -109,6 +109,8 @@ module Nokodown
       @stats.chars(@body) - removals.sum { |node, _| @stats.chars(node) } < MIN_LEFT
     end
 
+    # Furniture that goes however much of the page it holds is never the
+    # content, and would otherwise hide the guesses smaller than it.
     def content_guess(removals)
       guess = removals.select { |_, kind| kind == :guess }.max_by { |node, _| @stats.chars(node) }
       return unless guess && @stats.chars(guess.first) >= MIN_LEFT
@@ -129,8 +131,9 @@ module Nokodown
       return :guess if trail?(node) || @taxonomy.include?(Dom.key(node))
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
+      return :panel if MemberPanel.panel?(node)
 
-      MemberPanel.panel?(node) ? :panel : :guess
+      dominant?(node) ? :furniture : :guess
     end
 
     # Themes render the post in a <footer> or in a complementary reading

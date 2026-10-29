@@ -172,6 +172,17 @@ RSpec.describe Nokodown::Boilerplate do
 
       remaining(html).should include("Robotic mower KR500")
     end
+
+    it "keeps the largest guessed block when a cookie banner that outweighs it goes" do
+      products = Array.new(6) { |index| "<a href=\"/mower-#{index}\">Robotic mower KR#{index}00 for lawns up to #{index + 1} acres</a>" }
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 6
+      html = "<h1>Mowers</h1><section class=\"related-product\">#{products.join}</section>" \
+             "<div class=\"cmplz-cookiebanner-container\"><div class=\"cmplz-cookiebanner\">#{notice}</div></div>"
+
+      text = remaining(html)
+      text.should include("Robotic mower KR500")
+      text.should_not include("Google Analytics")
+    end
   end
 
   describe "disclaimers" do
