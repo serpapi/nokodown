@@ -89,7 +89,8 @@ module Nokodown
       return Set.new if @page.nil? || home?
 
       @stats = Stats.new(@body)
-      blocks = runs.map { |run| block(run) }
+      # The slides of a carousel are runs of one block.
+      blocks = runs.map { |run| block(run) }.uniq { |block| block.nodes.map { |node| Dom.key(node) } }
       own_text = @stats.text_chars(@body) - blocks.sum { |block| block.nodes.sum { |node| @stats.text_chars(node) } }
       body = body?(blocks, own_text)
       total = @stats.chars(@body)
