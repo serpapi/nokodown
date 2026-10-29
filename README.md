@@ -130,7 +130,8 @@ with `main_content: false`, `:none` for a document without a body.
   paragraph, cell, heading or link (a short bold label stays), separators
   between links and at line ends, lines of only punctuation, icon-font
   glyphs, code-language labels and copy buttons, and escapes that cannot
-  change the rendering. A card's repeated links to its own page keep their
+  change the rendering. Emoji, arrows and separators around a heading's
+  text go ("📱 Benefits", "- Forum"), and a heading of only signs goes. A card's repeated links to its own page keep their
   text without the URL (its title keeps the link), and a button such as
   "Read more", a text the page uses once for each of several pages, goes when
   it ends its line (judged across all cards, in any language); texts that take turns from card to card ("Sold",
@@ -236,8 +237,10 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    descriptions, is text, not code. A label and its value, or a number and
    its unit, set in sibling elements share a line ("Type: Condo"), and words,
    numbers and dates that adjacent elements run together are spaced
-   ("20.07 2026"). Text is escaped only where it would otherwise change
-   meaning.
+   ("20.07 2026"). Below the headline, a heading without letters (a date, a
+   price, a phone number, but not a year) or holding a long sentence, unless
+   it is a card's title, is a paragraph. Text is escaped only where it would
+   otherwise change meaning.
 
 ## Quality
 

@@ -822,6 +822,41 @@ RSpec.describe "Markdown conversion" do
     end
   end
 
+  describe "headings" do
+    it "drops emoji, arrows and separators around the heading's text" do
+      convert("<h2>📱 Benefícios do Canal</h2><p>a</p><h3>☛ Такси</h3><p>b</p><h2>- Forum</h2><p>c</p><h2>***** Fest *****</h2><p>d</p>").should ==
+        "## Benefícios do Canal\n\na\n\n### Такси\n\nb\n\n## Forum\n\nc\n\n## Fest\n\nd"
+    end
+
+    it "keeps signs that are part of the heading's text" do
+      convert("<h2>№ 5 Chanel</h2><p>a</p><h2>© Acme</h2><p>b</p><h2>« Ainsi » :</h2><p>c</p><h2>Contact :</h2><p>d</p>").should ==
+        "## № 5 Chanel\n\na\n\n## © Acme\n\nb\n\n## « Ainsi » :\n\nc\n\n## Contact :\n\nd"
+    end
+
+    it "drops a heading with neither letters nor digits" do
+      convert("<h1>Title</h1><h2>-</h2><p>a</p><h3>★★★</h3><p>b</p>").should == "# Title\n\na\n\nb"
+    end
+
+    it "writes a date, a price or a number set as a heading below the headline as a paragraph, but keeps a year" do
+      convert("<h1>2024</h1><h2>28/01/2023</h2><p>Text</p><h6>€ 7,95</h6><p>Add</p><h3>1987–1990</h3><p>Founded</p>").should ==
+        "# 2024\n\n28/01/2023\n\nText\n\n€ 7,95\n\nAdd\n\n### 1987–1990\n\nFounded"
+    end
+
+    it "writes a sentence set as a heading as a paragraph, but keeps a tagline, a question and a card's title" do
+      html = "<h5>Legrand offers an array of products that provide power, data and charging connections where it is needed in offices.</h5>" \
+             "<p>Read on</p><h2>Emergency response available 24 hours a day, 7 days a week.</h2><p>Call</p>" \
+             "<h3>What is a salary loan and how does it work for you, and when should you take one out?</h3><p>Answer</p>" \
+             '<a href="/q/1"><h3>Can an employer move me to another job and to another schedule without my consent at all.</h3><p>Labour law</p></a>' \
+             "<h4>この会は以下のようなことを目的として毎月第三土曜日に開催しています。参加費は無料で、どなたでもお気軽にご参加いただけます。</h4><p>c</p>"
+      convert(html).should == "Legrand offers an array of products that provide power, data and charging connections where it is needed in offices.\n\n" \
+                              "Read on\n\n## Emergency response available 24 hours a day, 7 days a week.\n\nCall\n\n" \
+                              "### What is a salary loan and how does it work for you, and when should you take one out?\n\nAnswer\n\n" \
+                              "### [Can an employer move me to another job and to another schedule without my consent at all.](https://example.com/q/1)\n\n" \
+                              "Labour law\n\n" \
+                              "この会は以下のようなことを目的として毎月第三土曜日に開催しています。参加費は無料で、どなたでもお気軽にご参加いただけます。\n\nc"
+    end
+  end
+
   describe "lists" do
     it "renders nested lists with indentation" do
       convert("<ul><li>One<ul><li>One A</li></ul></li><li>Two</li></ul>").should == "- One\n  - One A\n- Two"
