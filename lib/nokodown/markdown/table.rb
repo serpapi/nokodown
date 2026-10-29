@@ -49,12 +49,12 @@ module Nokodown
       end
 
       # Rows across the table at its end hold a note or the text of a post
-      # laid out in a table, which go below it.
+      # laid out in a table, which go below it as the blocks they hold.
       def note_rows(grid, spanning)
         notes = []
         while grid.size > 1 && spanning.last && grid.last.first != ""
-          spanning.pop
-          notes.unshift(Block.new(:paragraph, Text.escape_line_starts(grid.pop.first.gsub("\\|", "|"))))
+          grid.pop
+          notes.unshift(*spanning.pop)
         end
         notes
       end
@@ -96,7 +96,8 @@ module Nokodown
       end
 
       # Drops empty rows, empty and separator columns and pads short rows;
-      # and whether each row is one cell across the table.
+      # and for each row that is one cell across the table, that cell's
+      # blocks.
       def trimmed_grid
         grid, spanning = cell_grid
         kept = grid.each_index.reject { |index| grid[index].all?(&:empty?) }
@@ -119,14 +120,15 @@ module Nokodown
       def cell_grid
         spans = {}
         rows = Tables.rows(@node)
+        blocks = []
         grid = rows.map do |row|
           line = spans.transform_values(&:first)
           spans = spans.transform_values { |text, rows_left| [text, rows_left - 1] }.reject { |_, (_, rows_left)| rows_left.zero? }
-          place_cells(row, line, spans)
+          blocks << place_cells(row, line, spans)
           (0..(line.keys.max || -1)).map { |column| line.fetch(column, "") }
         end
         width = grid.map(&:size).max.to_i
-        [grid, rows.map { |row| spanning?(row, width) }]
+        [grid, rows.each_index.map { |index| blocks[index].first if spanning?(rows[index], width) }]
       end
 
       def spanning?(row, width)
@@ -134,11 +136,13 @@ module Nokodown
         width > 1 && cells.size == 1 && span(cells.first, "colspan", MAX_COLSPAN) >= width
       end
 
+      # The blocks of each cell.
       def place_cells(row, line, spans)
         column = 0
-        Tables.cells(row).each do |cell|
+        Tables.cells(row).map do |cell|
           column += 1 while line.key?(column)
-          text = Emphasis.unwrap(Emphasis.merge(cell_text(@renderer.cell_blocks(cell))))
+          blocks = @renderer.cell_blocks(cell)
+          text = Emphasis.unwrap(Emphasis.merge(cell_text(blocks)))
           text = Text.table_cell(Text.unescape_lone(text))
           rows = span(cell, "rowspan", MAX_ROWSPAN)
           span(cell, "colspan", MAX_COLSPAN).times do |offset|
@@ -147,6 +151,7 @@ module Nokodown
             spans[column + offset] = [value, rows - 1] if rows > 1
           end
           column += 1 while line.key?(column)
+          blocks
         end
       end
 
