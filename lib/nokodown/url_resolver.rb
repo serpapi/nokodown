@@ -99,7 +99,8 @@ module Nokodown
     # Scheme, a "www." host, a trailing slash and the case of escapes rarely
     # tell two pages apart.
     def address(uri)
-      "#{uri.host.downcase.delete_prefix("www.")}#{uri.path.to_s.sub(%r{/+\z}, "")}?#{uri.query}".gsub(/%\h\h/, &:upcase)
+      path = uri.path.to_s.sub(%r{/+\z}, "")
+      "#{uri.host.downcase.delete_prefix("www.")}#{path}?#{uri.query}".gsub(/%\h\h/, &:upcase)
     end
 
     def absolute(href)

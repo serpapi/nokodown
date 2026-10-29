@@ -115,7 +115,8 @@ RSpec.describe Nokodown do
     it "keeps the menu of an index page that holds little else" do
       topics = %w[Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts]
       index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
-      menu = '<ul><li><a href="/news">News</a></li><li><a href="/page">Topics</a></li><li><a href="/events">Events</a></li></ul>'
+      menu = '<ul><li><a href="/news">News</a></li><li><a href="/page">Topics</a></li>' \
+             '<li><a href="/events">Events</a></li></ul>'
 
       markdown = extract("<main><h1>Topics</h1>#{index}#{menu}</main>")
 
@@ -173,7 +174,8 @@ RSpec.describe Nokodown do
     end
 
     it "keeps a title too long to be the label of the box of links below it" do
-      tags = '<div><a href="/tags/health">Health</a> <a href="/tags/tech">Tech</a> <a href="/tags/equity">Equity</a></div>'
+      tags = %w[Health Tech Equity].map { |tag| "<a href=\"/tags/#{tag.downcase}\">#{tag}</a>" }.join(" ")
+      tags = "<div>#{tags}</div>"
       card = "<article><h2>The future of healthcare is digital: seven reasons why</h2>#{tags}</article>"
 
       markdown = extract("<main><h1>Piotr's posts</h1>#{card}<p>One more post this week.</p></main>")

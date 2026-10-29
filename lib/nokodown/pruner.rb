@@ -297,7 +297,9 @@ module Nokodown
           return false
         end
       end
-      lead <= MAX_LABEL && entries.size >= 3 && entries.map(&:name).uniq.size == 1 && entries.all? { |entry| one_link?(entry) }
+      return false if lead > MAX_LABEL || entries.size < 3 || entries.map(&:name).uniq.size > 1
+
+      entries.all? { |entry| one_link?(entry) }
     end
 
     # A gallery's thumbnails link to each picture without a word.
