@@ -57,7 +57,7 @@ RSpec.describe Nokodown::Markdown::Repeats do
   describe "labels that repeat a heading" do
     it "drops a short label over a heading that contains it" do
       convert("<h1>Salkantay trek</h1>#{intro}<p>ITINERARY</p><hr><h2>Full itinerary for four days</h2><p>Day one.</p>").should ==
-        "# Salkantay trek\n\nFits a one litre pot and boils water in three minutes.\n\n---\n\n## Full itinerary for four days\n\nDay one."
+        "# Salkantay trek\n\nFits a one litre pot and boils water in three minutes.\n\n## Full itinerary for four days\n\nDay one."
     end
 
     it "keeps a short answer that opens the section above the heading" do

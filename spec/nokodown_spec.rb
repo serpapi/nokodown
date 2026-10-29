@@ -527,9 +527,9 @@ RSpec.describe Nokodown do
     end
 
     it "drops Liquid errors" do
-      html = "<p>Filter <span>Liquid error (snippets/facets line 538): Could not find asset snippets/icon-close.liquid</span></p>"
+      html = "<p>Coffee <span>Liquid error (snippets/facets line 538): Could not find asset snippets/icon-close.liquid</span></p>"
 
-      convert(html).should == "Filter"
+      convert(html).should == "Coffee"
     end
 
     it "keeps the template's text after a Liquid error's message" do

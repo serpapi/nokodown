@@ -45,7 +45,7 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops icon-font glyphs and ligatures" do
-      convert('<p>&#xE001; Next <i class="material-icons">arrow_forward</i></p>').should == "Next"
+      convert('<p>&#xE001; Opening hours <i class="material-icons">arrow_forward</i></p>').should == "Opening hours"
     end
 
     it "keeps the text of an element named after an icon font" do
@@ -710,9 +710,9 @@ RSpec.describe "Markdown conversion" do
 
       it "drops the icons of a layout table's text-free cells" do
         text = "Our shop sells leads, collars, beds and toys for dogs of every size, made by hand in our own workshop."
-        html = "<main><h1>Shop</h1><p>#{text}</p><table><tr><td>Sam wrote:</td>" \
+        html = "<main><h1>Shop</h1><p>#{text}</p><table><tr><td>Sam replied</td>" \
                '<td><img src="/icon_quote.gif" alt="Reply with quote"></td></tr></table></main>'
-        extract(html).should == "# Shop\n\n#{text}\n\nSam wrote:"
+        extract(html).should == "# Shop\n\n#{text}\n\nSam replied"
       end
 
       it "drops icons, logos and avatars" do
