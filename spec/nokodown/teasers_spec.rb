@@ -62,6 +62,42 @@ RSpec.describe Nokodown::Teasers do
     root.content.should_not include("Previous matches")
   end
 
+  it "never drops the page's main element" do
+    grid = "<div class='grid'>#{cards(stories, '/blog/')}</div>"
+    html = "<div class='story'>#{story(3)}</div><main><h2>Leia também</h2>#{grid}</main>"
+    body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
+    Nokodown::Dom.assign_keys(body)
+    url = article_url
+
+    keys = described_class.new(body, url, Nokodown::UrlResolver.new(url), :article).call
+    keys.should_not include(Nokodown::Dom.key(body.at_css("main")))
+  end
+
+  it "keeps a titled box that holds a large share of the page" do
+    titles = stories + ["Port strike ends", "Ferry fares rise", "Snow closes the pass"]
+    box = "<section><h2>Leia também</h2>#{cards(titles, '/blog/', '<p>Read on to see what changes.</p>')}</section>"
+    html = "<h1>Bridge reopens</h1>#{story(2)}#{box}"
+
+    blocks(html, article_url).should be_empty
+  end
+
+  it "does not take a count over a list of cards for its title" do
+    grid = "<div class='grid'>#{cards(stories, '/blog/')}</div>"
+    html = "<h1>Bridge reopens</h1>#{story(3)}<p>Showing 1-3 of 40</p>#{grid}"
+
+    blocks(html, article_url).should be_empty
+  end
+
+  it "keeps a forum's list of threads, which the same script shows under other query keys" do
+    threads = stories.each_with_index.map do |title, index|
+      "<div class='row'><img src='/icons/topic.gif' alt=''><a href='index.php?topic=#{70 + index}.0'>#{title}</a>" \
+        "<span>by wren, 12.04.2026</span></div>"
+    end.join
+    html = "<div class='board'>#{story(1)}#{threads}</div>"
+
+    blocks(html, "https://forum.example.com/index.php?board=2.0", :forum).should be_empty
+  end
+
   it "keeps titled teasers on a page that declares no article or product" do
     blocks(article, article_url, nil).should be_empty
   end

@@ -12,17 +12,17 @@ module Nokodown
   #
   # On listings, archives and hubs teasers are the content, so a block only
   # goes when its items are pages like this one (the same path but for its
-  # last segment, with the same query keys), or, on a page that declares
-  # itself an article, a product or a thread, when it has a title of its own
-  # and the page keeps a body of text, or a list of its own, that outweighs
-  # the titled blocks.
+  # last segment, with the same query keys) and a line of the page's own
+  # text comes before it, or, on a page that declares itself an article, a
+  # product or a thread, when it has a title of its own and the page keeps a
+  # body of text, or a list of its own, that outweighs the titled blocks.
   #
-  # The page is judged whole, but the blocks found are only dropped from the
-  # selected content once it is cleaned, so they weigh in locating the
-  # content and in pruning as before.
+  # Blocks are found once the content is located, but only dropped from it
+  # once it is cleaned, so they weigh in pruning as before.
   class Teasers
     Run = Struct.new(:parent, :items, :targets, :chars)
-    Block = Struct.new(:nodes, :title, :siblings, :children, :chars)
+    # alike: the items are pages like this one; below: pages under it.
+    Block = Struct.new(:nodes, :title, :alike, :below, :chars)
 
     MIN_ITEMS = 3
     MAX_ITEM_CHARS = 400
@@ -37,10 +37,8 @@ module Nokodown
     MAX_TITLE = 60
     MAX_HEADING = 100
     MIN_BODY = 200
-    BODY_SHARE = 1.0
     DOMINANT_SHARE = 0.4
-    MIN_SIBLINGS_BODY = 50
-    MIN_TEXT_BEFORE_LIST = 60
+    MIN_TEXT_BEFORE = 60
     MIN_SECTIONS = 3
     MIN_WORDS_LEFT = 20
     BODIES = %i[article product forum qa].freeze
@@ -52,8 +50,9 @@ module Nokodown
     DATE = %r{\d{1,4}[./-]\d{1,2}[./-]\d{1,4}}.freeze
     # A line ending a sentence is the content's, not a title over a block.
     SENTENCE = /[^.][.!?]\z|[。！？؟।]\z/.freeze
-    # Scripts written without spaces count a word per character.
-    WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[\p{L}\p{N}]+/.freeze
+    # Chinese and Japanese are written without spaces, so each Han or kana
+    # character counts as a word.
+    WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[[\p{L}\p{N}]&&[^\p{Han}\p{Hiragana}\p{Katakana}]]+/.freeze
     # Query values that differ between pages of one kind are ids; "lvl=categ_see"
     # and "lvl=notice_display" are two kinds of page.
     ID_VALUE = /\d/.freeze
@@ -93,9 +92,10 @@ module Nokodown
 
     # Words outside headings.
     def self.words(node)
-      return 0 if Dom.heading?(node)
+      return node.content.scan(WORD).size if node.text?
+      return 0 if !node.element? || Dom.heading?(node) || node["role"] == "heading"
 
-      node.content.scan(WORD).size - node.css(HEADING).sum { |heading| heading.content.scan(WORD).size }
+      node.children.sum { |child| words(child) }
     end
     private_class_method :words
 
@@ -116,8 +116,7 @@ module Nokodown
 
       @stats = Stats.new(@body)
       @total = @stats.chars(@body)
-      # The slides of a carousel are runs of one block.
-      @blocks = runs.map { |run| block(run) }.uniq { |block| block.nodes.map { |node| Dom.key(node) } }
+      @blocks = blocks
       hub = sections
       body = body?
       @blocks.each_with_object(Set.new) do |block, keys|
@@ -134,12 +133,21 @@ module Nokodown
       @page.path.to_s.match?(HOME) && !@page.query.to_s.include?("=")
     end
 
+    # The slides of a carousel are runs of one block.
+    def blocks
+      found = runs.map { |run| block(run) }.group_by { |block| block.nodes.map { |node| Dom.key(node) } }
+      found.values.map do |same|
+        first = same.first
+        Block.new(first.nodes, first.title, same.all?(&:alike), same.any?(&:below), same.sum(&:chars))
+      end
+    end
+
     # Text of the page's own that outweighs the titled boxes, as an article
     # does its sidebars; a hub of titled sections has a line of intro at most.
     def body?
       own_text = @stats.text_chars(@body) - @blocks.sum { |block| text_of(block) }
-      boxes = @blocks.select { |block| block.title && !block.siblings }.sum(&:chars)
-      (own_text >= MIN_BODY && own_text >= boxes * BODY_SHARE) || listing?
+      boxes = @blocks.select { |block| block.title && !block.alike }.sum(&:chars)
+      (own_text >= MIN_BODY && own_text >= boxes) || listing?
     end
 
     # Titled blocks built alike, one after another, are the sections of a
@@ -151,7 +159,7 @@ module Nokodown
 
     # A listing's own list outweighs the titled boxes beside it.
     def listing?
-      list = @blocks.select { |block| own_list?(block) && !block.siblings }.max_by(&:chars)
+      list = @blocks.select { |block| own_list?(block) && !block.alike }.max_by(&:chars)
       list && list.chars >= @blocks.sum(&:chars) - list.chars
     end
 
@@ -163,11 +171,15 @@ module Nokodown
     # Links to pages below this one are its own sections, and attachments are
     # part of the post that holds them.
     def removable?(block, body)
-      return false if block.children || in_post?(block) || block.nodes.any? { |node| node.at_css(PROTECTED) }
-      return false if own_list?(block) && !(block.title.nil? && block.siblings && after_text?(block))
-      return follows_text?(block) if block.siblings
+      return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
+      return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
+      return text_before(block) >= MIN_TEXT_BEFORE if block.alike
 
       @declared && body && !dominant?(block)
+    end
+
+    def protected?(node)
+      node.matches?(PROTECTED) || !node.at_css(PROTECTED).nil?
     end
 
     # A post's body and its parent, which also holds its attachments.
@@ -180,13 +192,6 @@ module Nokodown
 
     def dominant?(block)
       block.chars >= @total * DOMINANT_SHARE
-    end
-
-    # Pages like this one come after the page's own text. A listing whose
-    # address looks like its items' has only a title and a crumb before its
-    # list, which outweighs the page.
-    def follows_text?(block)
-      text_before(block) >= (dominant?(block) ? MIN_TEXT_BEFORE_LIST : MIN_SIBLINGS_BODY)
     end
 
     # The page's own text before the block. Keys number elements in
@@ -281,7 +286,8 @@ module Nokodown
       Run.new(parent, items, targets, chars) if distinct_targets?(targets.compact, items.size)
     end
 
-    # Stops at the first items without a link, as in most lists.
+    # Most items of a list have a link: gives up once more than a fifth have
+    # none.
     def primary_links(items)
       allowed = items.size * (1 - DISTINCT_SHARE)
       missing = 0
@@ -376,7 +382,7 @@ module Nokodown
       loop do
         up = node.parent
         break if up.nil? || !up.element? || up.name == "body"
-        break if holds_more?(up, run, MAX_HEADING) || up.at_css(PROTECTED)
+        break if holds_more?(up, run, MAX_HEADING) || protected?(up)
 
         up_title = title || title_in(up, run)
         break if holds_more?(up, run, length(up_title))
@@ -448,8 +454,8 @@ module Nokodown
       node.css(HEADING).any? { |heading| Dom.text(heading) == Dom.text(node) }
     end
 
-    def share?(run, &block)
-      run.targets.compact.count(&block) >= run.items.size * SIBLING_SHARE
+    def share?(run, &test)
+      run.targets.compact.count(&test) >= run.items.size * SIBLING_SHARE
     end
 
     def child?(uri)
