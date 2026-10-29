@@ -23,6 +23,7 @@ module Nokodown
     /x.freeze
     OVERLAY_ROLES = %w[dialog alertdialog].freeze
     OVERLAY_STYLE = /(?:\A|;)\s*position\s*:\s*(?:fixed|sticky)/i.freeze
+    TRAIL_OR_MENU = /breadcrumb|crumbs|trail|#{Patterns::WORD_START}nav|menu/.freeze
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     # What a wrapper has, lacks or allows does not name it: "has-sidebar",
     # "o_wsale_has_sidebar", "with-navigation", "content-and-menu",
@@ -136,14 +137,20 @@ module Nokodown
       holds_title?(node)
     end
 
-    # So is a block named like furniture: page builders wrap the whole page
-    # in "dialog-off-canvas-main-canvas" or "sidebar-fixed". A site's name in
-    # a sidebar links to its home page.
+    # A site's name in a sidebar links to its home page.
     def holds_title?(node)
       return false unless @single_h1 && @stats.text_chars(node) >= @total * TITLE_HOLDER_SHARE
 
       h1 = node.at_css("h1")
       !h1.nil? && h1.css("a[href]").none? { |link| Metadata.home_link?(link["href"].strip) }
+    end
+
+    # So is a block named like furniture that holds prose besides the title:
+    # page builders wrap the whole page in "dialog-off-canvas-main-canvas" or
+    # "sidebar-fixed". A breadcrumb trail or a menu with the title in it is
+    # still a trail or a menu.
+    def titled_page?(node)
+      holds_title?(node) && !@names[Dom.signature(node)].match?(TRAIL_OR_MENU) && prose_lines?(node)
     end
 
     # A trail stands apart from the text around it; one that words lead into
@@ -216,7 +223,7 @@ module Nokodown
     def class_noise?(node)
       return false if !@prose_blocks.empty? && prose_part?(node)
 
-      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node)) && !holds_title?(node)
+      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node)) && !titled_page?(node)
     end
 
     # Fine print about the site is furniture, but a note on the content right

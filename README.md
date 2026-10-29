@@ -181,10 +181,11 @@ Every structural rule is guarded: an element that contains the `<main>`
 region, or most of the page's text, is never removed because of its class name,
 and neither is one named for what it has or allows (`has-sidebar`,
 `with-navigation`, `sidebar-enabled`) or for the layout it is laid out in
-(`layout-sidebar-left`, `one-right-sidebar`). A `<footer>`, a complementary
-pane or a block named like furniture (`dialog-off-canvas-main-canvas`) that
-holds the page's only `<h1>`, unless that links to the home page, and a fair
-share of its text is the content.
+(`layout-sidebar-left`, `one-right-sidebar`). A `<footer>` or a complementary
+pane that holds the page's only `<h1>`, unless that links to the home page,
+and a fair share of its text is the content, and so is a block named like
+furniture (`dialog-off-canvas-main-canvas`) that also holds prose, unless it
+is named as a breadcrumb trail or a menu.
 Three kinds of named furniture go however much of a short page they hold: a
 site header above the title, a sidebar or footer without prose beside a title
 that has text of its own, and a cookie banner named for what it is (a banner,

@@ -135,6 +135,15 @@ RSpec.describe Nokodown::Boilerplate do
         text.should_not include("Imprint")
       end
     end
+
+    it "removes a footer or side pane whose h1 is the site's name linked home" do
+      ["footer", "aside"].each do |tag|
+        html = "<#{tag}><h1><a href=\"/\">Auto Lexicon</a></h1><p>Car reviews since 1998, written in Turin.</p></#{tag}>" \
+               "<h2>Lancia Musa</h2><p>A small car with a tall roof and room for five.</p>"
+
+        remaining(html).should_not include("Auto Lexicon")
+      end
+    end
   end
 
   describe "noise names" do
@@ -579,14 +588,20 @@ RSpec.describe Nokodown::Boilerplate do
   end
 
   describe "blocks that hold the page's title" do
-    it "keeps a block named like furniture that holds the page's only title, not a sidebar headed by the site's name" do
-      studio = "<p>Branding and web studio in Riyadh, open Sunday to Thursday.</p>"
-      canvas = "<div class=\"dialog-off-canvas-main-canvas\"><h1>Visual identity</h1><p>Logos and type for the Asir fair.</p></div>" \
-               "<div class=\"sidebar\">#{studio}</div>"
-      sidebar = "<div class=\"sidebar\"><h1><a href=\"/\">Fikra</a></h1>#{studio}</div><h2>Visual identity</h2><p>Logos and type.</p>"
+    it "keeps a block named like furniture that holds the page's only title and prose" do
+      html = "<div class=\"dialog-off-canvas-main-canvas\"><h1>Visual identity</h1>#{prose('The logo', 1)}</div>" \
+             "<div class=\"sidebar\"><p>Branding and web studio in Riyadh, open Sunday to Thursday.</p></div>"
 
-      remaining(canvas).should include("Visual identity")
+      remaining(html).should include("Visual identity")
+    end
+
+    it "removes a sidebar headed by the site's name, and a trail or menu that holds the title" do
+      studio = "<p>Branding and web studio in Riyadh, open Sunday to Thursday.</p>"
+      sidebar = "<div class=\"sidebar\"><h1><a href=\"/\">Fikra</a></h1>#{studio}</div><h2>Visual identity</h2><p>Logos and type.</p>"
+      trail = "<div class=\"breadcrumb\"><a href=\"/\">Home</a> <h1>Gallery</h1></div><img src=\"/1.jpg\"><p>Photos.</p>"
+
       remaining(sidebar).should_not include("Fikra")
+      remaining(trail).should_not include("Home")
     end
 
     it "does not read the layout a list is laid out in as its name" do
