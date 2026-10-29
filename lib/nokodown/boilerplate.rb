@@ -47,6 +47,7 @@ module Nokodown
       @single_h1 = @body.css("h1").size == 1
       @trails = Breadcrumbs.trails(@body).map { |trail| Dom.key(trail) }.to_set
       @taxonomy = Taxonomy.blocks(@body, @url)
+      @services = ServiceLinks.blocks(@body, @url)
       @title = @body.css("h1").to_a.last
       @last_h1 = @title ? Dom.key(@title).to_i : 0
       # Card grids repeat the same class list hundreds of times.
@@ -106,7 +107,8 @@ module Nokodown
       return :chrome if (chrome_element?(node) || chrome_role?(node)) && !title_holder?(node)
       return if dominant?(node) && !furniture_however_large?(node)
       return :guess if trail?(node) || @taxonomy.include?(Dom.key(node))
-      return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
+      return unless advertising?(node) || share_intent?(node) || service_links?(node) || chrome_label?(node) ||
+                    class_noise?(node)
       return if inside_sentence?(node)
 
       MemberPanel.panel?(node) ? :panel : :guess
@@ -180,6 +182,10 @@ module Nokodown
     # language, whatever its label ("シェア", "Partager sur LinkedIn").
     def share_intent?(node)
       node.name == "a" && node["href"].to_s.strip.match?(Patterns::SHARE_INTENT)
+    end
+
+    def service_links?(node)
+      @services.include?(Dom.key(node))
     end
 
     def chrome_label?(node)

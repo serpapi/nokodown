@@ -75,8 +75,11 @@ with `main_content: false`, `:none` for a document without a body.
   home page, then links down the site with separators), a line of links to
   the site's tag or label archives ("Tags: a, b") with at most a short label
   ending in a colon and a category kicker above the title, unless the page
-  repeats the line (a card's tags) or is such an archive, and
-  copyright and licence lines in the major web languages.
+  repeats the line (a card's tags) or is such an archive, a line of links to
+  the site's sign-in, registration, account, cart or feeds ("您需要登录后才可以回帖
+  登录 | 注册", "View Cart (0)", "Subscribe to: Posts (Atom)") by where they
+  point, unless a sentence runs on around them or they are items of a
+  larger menu, and copyright and licence lines in the major web languages.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, comment, review and contact forms (a form with
   a text box and little text) with the title and notes around them in any

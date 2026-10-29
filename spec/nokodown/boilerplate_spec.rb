@@ -548,4 +548,31 @@ RSpec.describe Nokodown::Boilerplate do
       remaining("<h1>House plan 12</h1>#{prose('The plan', 2)}<div class='features'>#{facts.join}</div>").should include("Roof gable")
     end
   end
+
+  describe "service links" do
+    def remaining_at(html)
+      body = Nokolexbor::HTML("<html><body><h1>Trail stove</h1>#{prose('The stove', 2)}#{html}</body></html>").at_css("body")
+      Nokodown::Preprocessor.new(body).call
+      Nokodown::Boilerplate.new(body, url: "https://www.example.com/shop/trail-stove").call
+      Nokodown::Dom.text(body)
+    end
+
+    it "removes lines of links to sign in, the cart or the feeds, whatever their label" do
+      html = '<div>您需要登录后才可以回帖 <a href="/member.php?mod=logging&action=login">登录</a> | ' \
+             '<a href="/member.php?mod=register">注册</a></div><p><a href="https://shop.example.com/cart.asp">View Cart (0)</a></p>' \
+             '<div>Subscribe to: <a href="https://www.example.com/feeds/posts/default">Posts (Atom)</a></div>'
+
+      text = remaining_at(html)
+      ["登录", "View Cart", "Subscribe to"].each { |line| text.should_not include(line) }
+    end
+
+    it "keeps a sign-in link in a sentence, a menu's sign-in item and another site's sign-up" do
+      html = '<p>Members can <a href="/login">log in</a> to see the trade price of every stove we stock.</p>' \
+             '<ul><li><a href="/shop">Shop</a></li><li><a href="/login">Login</a></li></ul>' \
+             '<p><a href="https://expo.example.org/register">Register for the outdoor expo</a></p>'
+
+      text = remaining_at(html)
+      ["Members can log in to see", "ShopLogin", "Register for the outdoor expo"].each { |line| text.should include(line) }
+    end
+  end
 end
