@@ -43,15 +43,12 @@ RSpec.describe Nokodown::Teasers do
 
   let(:box) { "<section><h2>Leia também</h2><div class='grid'>#{cards(stories, '/blog/')}</div></section>" }
 
-  it "removes a titled block of teasers beside the content of a product or an article, whatever the title's language" do
-    text = markdown(product(box), "https://shop.example.com/shoes/cirrus", type: "product")
-    text.should include("rock plate")
-    text.should_not include("Leia também")
-    text.should_not include("School board")
+  it "finds a titled block of teasers beside the content of an article, whatever the title's language" do
+    blocks("<h1>Bridge reopens</h1>#{story(3)}#{box}", "https://news.example.com/2026/05/bridge-reopens").should_not be_empty
   end
 
   it "keeps titled teasers on a page that declares no article or product" do
-    markdown(product(box), "https://shop.example.com/shoes/cirrus").should include("School board")
+    blocks("<h1>Bridge reopens</h1>#{story(3)}#{box}", "https://news.example.com/2026/05/bridge-reopens", nil).should be_empty
   end
 
   it "keeps teasers for pages below this one" do

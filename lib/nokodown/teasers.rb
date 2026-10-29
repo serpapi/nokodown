@@ -39,7 +39,7 @@ module Nokodown
     MIN_WORDS_LEFT = 20
     # Scripts written without spaces count a word per character.
     WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[\p{L}\p{N}]+/.freeze
-    DOMINANT_SHARE = 0.5
+    DOMINANT_SHARE = 0.4
     BODIES = %i[article product forum qa].freeze
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
     HEADING = "h1, h2, h3, h4, h5, h6, [role=heading]"
@@ -316,14 +316,14 @@ module Nokodown
     end
 
     # A heading, or a short line such as a widget's "Novinky", which may link
-    # to the section it comes from. Counts ("Showing 1-12 of 40") are not
-    # titles, a link among others is not, and neither is the caption or the
-    # header row of a data table, which names the table's own columns.
+    # to the section it comes from. Counts ("Showing 1-12 of 40") and arrows
+    # ("<") are not titles, a link among others is not, and neither is the
+    # caption or the header row of a data table, which names its columns.
     def title?(node)
       return false if @stats.chars(node).zero? || @stats.chars(node) > MAX_HEADING
 
       text = Dom.text(node)
-      return false if text.match?(/\d/) || node.name == "a" || Dom.ancestors_named(node, "a").any?
+      return false if text.match?(/\d/) || !text.match?(/\p{L}/) || node.name == "a" || Dom.ancestors_named(node, "a").any?
 
       (heading?(node) ? text.length <= MAX_HEADING : label?(node, text)) && !in_data_table?(node)
     end
@@ -355,14 +355,16 @@ module Nokodown
       other.size > page.size && other.first(page.size) == page
     end
 
-    # A page like this one: the same path but for the last segment, or the
-    # same script with other values for the same query keys.
+    # A page like this one: the same script with other values for the same
+    # query keys, or the same path but for the last segment and the same
+    # query keys. "viewforum.php?f=2" lists the threads at "viewtopic.php?t=7".
     def sibling?(uri)
       page = segments(@page)
       other = segments(uri)
-      return false unless page.size == other.size
+      keys = query_keys(@page)
+      return false unless page.size == other.size && query_keys(uri) == keys
+      return !keys.empty? if page == other
       return page[0..-2] == other[0..-2] if page.size > 1
-      return !query_keys(uri).empty? && query_keys(uri) == query_keys(@page) if page == other
 
       page.size == 1 && skeleton(page.first) == skeleton(other.first)
     end
