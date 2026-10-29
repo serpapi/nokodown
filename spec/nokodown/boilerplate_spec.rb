@@ -180,6 +180,35 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "breadcrumb trails" do
+    it "removes a trail from the home page that no class names, in any language" do
+      trails = [
+        '<div><a href="https://shop.example/">首页</a> &gt; <a href="/dushi/">都市小说</a> &gt; 厌世假少爷</div>',
+        '<ol><li><a href="/">Úvod</a></li><li><a href="/umeni">Umění</a></li><li>Afghanistán známky</li></ol>',
+        '<span>Ti trovi in: <a href="index.php">Home</a> -&gt; <a href="ricerca.php">Ricerca</a> -&gt; Volume 0002</span>',
+        '<div><a href="/">Главная</a> / Люше (LYS)</div>'
+      ]
+      trails.each do |trail|
+        text = remaining("#{trail}#{prose('Choosing a stamp album', 2)}")
+
+        text.should start_with("Choosing a stamp album")
+      end
+    end
+
+    it "keeps a category link followed by the post's date" do
+      remaining("<div><a href=\"/\">Home</a> | 20.07.2026 08:42</div>#{prose('Health', 2)}").should include("20.07.2026")
+    end
+
+    it "keeps a list of other sites, each linked at its home page with a description" do
+      html = "#{prose('Salary research', 2)}<ul><li><a href=\"https://www.salary.com/\">Salary.com</a> – salaries by industry and zip code</li>" \
+             "<li><a href=\"https://www.homefair.com/\">HomeFair.com</a>: a relocation guide with a salary calculator</li></ul>"
+
+      text = remaining(html)
+      text.should include("salaries by industry")
+      text.should include("relocation guide")
+    end
+  end
+
   describe "site headers" do
     it "removes a header above the page's title however much it holds" do
       notices = Array.new(12) { |index| "<li>Service centre #{index + 1}: 600 Friendship Road, open 8:30 to 18:30 by appointment</li>" }

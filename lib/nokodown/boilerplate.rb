@@ -32,6 +32,7 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
+      @trails = Breadcrumbs.trails(@body).map { |trail| Dom.key(trail) }.to_set
       # Card grids repeat the same class list hundreds of times.
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
@@ -86,6 +87,7 @@ module Nokodown
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if chrome_element?(node) || chrome_role?(node)
       return if dominant?(node) && !header_above_title?(node)
+      return :guess if @trails.include?(Dom.key(node))
       return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
