@@ -447,6 +447,15 @@ RSpec.describe Nokodown::Pruner do
       lines.each { |line| pruned(story + line).should end_with("dry weather.") }
     end
 
+    it "removes them in Persian, Ukrainian and the other languages of Europe" do
+      lines = [
+        "<p>کلیه حقوق مادی و معنوی این سایت برای <a href=\"/\">ملک مارکت</a> محفوظ می باشد.</p>",
+        "<p>Усі права захищені. Harbor Times, 2026</p>",
+        "<p>Všechna práva vyhrazena, Harbor Times</p>"
+      ]
+      lines.each { |line| pruned(story + line).should end_with("dry weather.") }
+    end
+
     it "keeps text about copyright and licence filings" do
       lines = [
         "<h2>ICP备案需要哪些材料？</h2>",
@@ -496,6 +505,73 @@ RSpec.describe Nokodown::Pruner do
       text = Nokodown::Dom.text(root)
 
       ["Jo Pine", "Related reading", "How to choose", "Women"].each { |noise| text.should_not include(noise) }
+    end
+
+    def titled(title, html)
+      root = Nokolexbor::HTML("<html><head><title>#{title} - Talking Canberra</title></head>" \
+                              "<body><div class='story'>#{story}#{html}</div></body></html>").at_css("div.story")
+      Nokodown::Dom.assign_keys(root)
+      described_class.new([root], :article, conditional: false).call
+      Nokodown::Dom.text(root)
+    end
+
+    it "drops the line a feed adds naming the post and the site it appeared on first" do
+      lines = {
+        "Man missing from unit" => "<p>The post <a href='https://radio.example.com/?p=4127'>Man missing from unit</a> " \
+                                   "appeared first on <a href='https://radio.example.com/'>Talking Canberra</a>.</p>",
+        "Врач призвал привиться" => "<p>Сообщение <a href='https://news.example.ru/общество/врач-призвал/'>Врач призвал " \
+                                    "привиться</a> появились сначала на <a href='https://news.example.ru'>Новости</a>.</p>"
+      }
+      lines.each do |title, line|
+        text = titled(title, line)
+
+        text.should_not include(title)
+        text.should end_with("dry weather.")
+      end
+    end
+
+    it "keeps a photo's credit, which names its author" do
+      credit = "<p>Image by <a href='https://photos.example.com/users/susan-7009216/'>Susan Cipriano</a> from " \
+               "<a href='https://photos.example.com/'>Photos</a></p>"
+
+      titled("Man missing from unit", credit).should include("Susan Cipriano")
+    end
+
+    it "keeps a line like a feed's that goes on after its links" do
+      line = "<p>Read <a href='https://radio.example.com/news/missing-man/'>Man missing from unit</a> on " \
+             "<a href='https://radio.example.com/'>our site</a>, then vote.</p>"
+
+      titled("Man missing from unit", line).should include("then vote")
+    end
+
+    it "keeps a line like a feed's whose links lead to two sites" do
+      line = "<p>The post <a href='https://radio.example.com/news/missing-man/'>Man missing from unit</a> is " \
+             "kept on <a href='https://archive.example.org/'>the archive</a>.</p>"
+
+      titled("Man missing from unit", line).should include("the archive")
+    end
+
+    it "drops a line that holds nothing but a label and the link after it" do
+      root = content("#{story}<div class='see-also'>👉 <strong>Siehe auch:</strong> <a href='/news/9'>Ferry fares rise again</a></div>")
+      described_class.new([root], :article, conditional: false).call
+
+      Nokodown::Dom.text(root).should_not include("Ferry fares")
+    end
+
+    it "reads a label after the icon that leads it" do
+      root = content("#{story}<p>📖 Lire aussi : <a href='/news/8'>Port strike ends after two weeks of talks</a></p>")
+      described_class.new([root], :article, conditional: false).call
+
+      Nokodown::Dom.text(root).should_not include("Port strike")
+    end
+
+    it "drops links to other stories under a label in the page's language" do
+      labels = ["Lea también:", "Читайте также:", "İlgili Haberler:", "Baca juga:", "関連記事", "اقرأ أيضاً:"]
+      boxes = labels.map { |label| "<p><strong>#{label}</strong> <a href='/news/9'>Ferry fares rise again in the spring</a></p>" }
+      root = content(story + boxes.join)
+      described_class.new([root], :article, conditional: false).call
+
+      Nokodown::Dom.text(root).should_not include("Ferry fares")
     end
   end
 end

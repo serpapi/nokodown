@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "uri"
+
 module Nokodown
   # Final cleanup inside the selected content.
   class Pruner
@@ -59,6 +61,10 @@ module Nokodown
     # One colon, at the end: "Tag: Ants Show: Sort:" is a header with controls.
     LEAD = /\A[^:：]+[:：]\z/.freeze
     LETTER = /\p{L}/.freeze
+    MAX_FEED_WORDS = 8
+    LABEL_LINES = %w[p li div].freeze
+    # An icon or an arrow before a label: "📖 Lire aussi :", "» Read more".
+    LEADING_MARKS = /\A[^\p{L}\p{N}]+/.freeze
     # What may follow a site footer: a copyright line, a back-to-top link.
     TAIL_SHARE = 0.1
     TAIL_CHARS = 100
@@ -90,6 +96,7 @@ module Nokodown
         remove_in_page_links(root)
         @mode == :article ? prune_article(root) : prune_page(root)
         remove_boilerplate_text(root)
+        remove_feed_footers(root)
         remove_calls_to_action(root)
         ReadMoreLinks.new(root).call
       end
@@ -251,7 +258,7 @@ module Nokodown
     # <link>", a "More:" label over a list of headlines, a paragraph of links.
     def remove_related_links(root)
       root.css("p, li, h2, h3, h4, h5, h6, strong, b").each do |node|
-        text = Dom.text(node)
+        text = Dom.text(node).sub(LEADING_MARKS, "")
         if related_label?(text)
           remove_with_link_box(node)
         elsif related_box?(node, text)
@@ -266,14 +273,24 @@ module Nokodown
     end
 
     # The label may sit in a wrapper of its own (Wikipedia's div.mw-heading),
-    # so the box of links follows the wrapper.
+    # so the box of links follows the wrapper. A line that holds nothing but
+    # the label and links ("📖 Lire aussi : <a>…</a>") goes whole.
     def remove_with_link_box(label)
+      line = label.parent
+      return remove(line) if line&.element? && LABEL_LINES.include?(line.name) && only_links_besides?(line, label)
+
       text = Dom.text(label)
       holder = label
       holder = holder.parent while holder.next_element.nil? && holder.parent&.element? && Dom.text(holder.parent) == text
       following = holder.next_element
       remove(following) if following && link_density(following) >= 0.6
       remove(holder)
+    end
+
+    def only_links_besides?(line, label)
+      links = line.css("a[href]")
+      rest = links.reduce(Dom.text(line).sub(Dom.text(label), "")) { |text, link| text.sub(Dom.text(link), "") }
+      !links.empty? && !rest.match?(LETTER)
     end
 
     # "READ MORE: <headline>", or a paragraph made of several headlines.
@@ -666,6 +683,51 @@ module Nokodown
       return Tables.data_table?(table) if key.nil?
 
       @data_tables.fetch(key) { @data_tables[key] = Tables.data_table?(table) }
+    end
+
+    # A feed ends each post with a line naming it and the site it appeared on
+    # first, in the site's language ("The post <a>…</a> appeared first on
+    # <a>Site</a>."): a few words around two links, the first to the post
+    # this page shows, by its title, and the second to the home page of the
+    # post's site, with nothing after it. A photo's credit has the same
+    # shape, but names its author.
+    def remove_feed_footers(root)
+      root.css("p").each { |node| remove(node) if feed_footer?(node) }
+    end
+
+    def feed_footer?(node)
+      links = node.css("a[href]")
+      return false unless links.size == 2
+
+      post, home = links.map { |link| web_address(link["href"]) }
+      return false unless post && home && post.host == home.host && home?(home) && !home?(post)
+      return false unless names_page?(Dom.text(links.first), node.document)
+
+      text = Dom.text(node)
+      outside = links.reduce(text) { |rest, link| rest.sub(Dom.text(link), " ") }
+      outside.scan(Teasers::WORD).size <= MAX_FEED_WORDS && !text_after(text, Dom.text(links.last)).match?(LETTER)
+    end
+
+    def home?(uri)
+      uri.path.to_s.delete("/").empty? && uri.query.to_s.empty?
+    end
+
+    # The page's title or a heading of its own holds the name.
+    def names_page?(name, document)
+      @page_names ||= document.css("title, h1").map { |node| Dom.text(node).downcase }
+      name = name.downcase
+      !name.empty? && @page_names.any? { |page_name| page_name.include?(name) }
+    end
+
+    def text_after(text, part)
+      text[(text.rindex(part) || 0) + part.length..].to_s
+    end
+
+    def web_address(href)
+      uri = URI.parse(UrlResolver.encode(href.to_s.strip))
+      uri if uri.is_a?(URI::HTTP) && uri.host
+    rescue URI::Error
+      nil
     end
 
     def remove_boilerplate_text(root)

@@ -68,17 +68,7 @@ module Nokodown
     end
 
     def outermost(link, site, judged)
-      found = nil
-      node = link.parent
-      while node&.element? && node.name != "body"
-        key = Dom.key(node)
-        judged[key] = line(node, site) unless judged.key?(key)
-        break unless judged[key]
-
-        found = node
-        node = node.parent
-      end
-      found
+      Dom.outermost_accepted(link, judged) { |node| line(node, site) }
     end
 
     # :tag when every link is a tag, :category when any is a category.

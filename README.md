@@ -75,24 +75,47 @@ with `main_content: false`, `:none` for a document without a body.
   home page, then links down the site with separators), a line of links to
   the site's tag or label archives ("Tags: a, b") with at most a short label
   ending in a colon and a category kicker above the title, unless the page
-  repeats the line (a card's tags) or is such an archive, and
-  copyright and licence lines in the major web languages.
+  repeats the line (a card's tags) or is such an archive, and copyright and
+  licence lines in the major web languages.
+- Once the content is chosen and pruned, so that they cannot sway either, a
+  line of links to the site's sign-in, registration, account, cart or feeds
+  ("您需要登录后才可以回帖 登录 | 注册", "View Cart (0)", "Subscribe to:
+  Posts (Atom)") by where they point, unless a sentence, a heading, the
+  page's title, a date, a table or a picture sits with them or they are
+  items of a larger menu, and comment, review and contact forms (a visible
+  text box, a name or e-mail field and little text) with the title above
+  them, and a note under that title, in any language. A form stays when it
+  wraps the page (ASP.NET), holds its title or main region, holds an e-mail
+  address or a phone number, asks how many (an order with a note), or is
+  all an application or sign-up page's main region holds, and neither kind
+  goes when it is all the content holds.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
   continuing the paragraph before it, or the footnote to a mark just above),
   and, next to an article, its comment thread.
 - Blocks of teasers for other pages of the same site whatever their class
-  names: a run of cards, each a title link with a thumbnail, a date or an
-  excerpt, under a title of its own in any language ("Flere Nyheder",
-  "Похожие товары"). They go when they list pages like this one (the same
-  path but for its last segment, with the same query keys and ids for the
-  values that differ) after a line of the page's own text, or, on a page that
-  declares itself an article, a product or a thread, when the page's own
-  text, or its own list, outweighs them. They stay on home pages, in hubs of
-  sections built alike, in forum posts (attachments), when they link to pages
-  below this one, and when the content would be left with fewer than 20 words
-  outside headings.
+  names: a run of cards (a title link with a thumbnail, a date or an
+  excerpt) or a titled list of bare links ("Смотрите также"). A block goes
+  when:
+  - it lists pages like this one (the same path but for its last segment,
+    the same query keys, ids for the values that differ) after a line of
+    the page's own text;
+  - it lists posts named by their titles under the root, as this page is,
+    under a heading after a line of text, or after a body of text on a
+    page that declares itself an article, a product or a thread;
+  - its title calls it related in the major web languages ("You may also
+    like", "Похожие товары", "猜你喜欢"), unless it holds most of the page;
+  - on a page that declares itself an article, a product or a thread, it is
+    a titled box of cards that the page's own text, or its own list,
+    outweighs.
+
+  Blocks stay on home pages, in hubs of sections built alike, in forum posts,
+  under a title the page's address names, when they link below this page,
+  and when the content would be left with fewer than 20 words outside
+  headings. Lists of bare links also stay on listings, under a letter of an
+  index, among three or more headed lists of links (a site map), and when
+  they hold most of the page.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
@@ -173,8 +196,19 @@ with `main_content: false`, `:none` for a document without a body.
 Every structural rule is guarded: an element that contains the `<main>`
 region, or most of the page's text, is never removed because of its class name,
 and neither is one named for what it has or allows (`has-sidebar`,
-`with-navigation`, `sidebar-enabled`). A `<footer>` or complementary pane that
-holds the page's only `<h1>` and a fair share of its text is the content.
+`with-navigation`, `sidebar-enabled`) or for the layout it is laid out in
+(`layout-sidebar-left`, `one-right-sidebar`). A `<footer>` or a complementary
+pane that holds the page's only `<h1>`, unless that links to the home page,
+and a fair share of its text is the content, and so is a block named like
+furniture (`dialog-off-canvas-main-canvas`) that also holds prose, unless it
+is named as a breadcrumb trail or a menu.
+Three kinds of named furniture go however much of a short page they hold: a
+site header above the title, a sidebar or footer without prose beside a title
+that has text of its own, and a cookie banner named for what it is (a banner,
+a bar, a dialog, a consent manager) or laid over the page, unless the page is
+about cookies. Prose here is two sentences' worth of lines of 80 characters or
+more in any block, not counting link text or what an `<address>` holds:
+opening hours and contact details are lines, not prose.
 
 ## How it works
 
@@ -187,7 +221,9 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    shows it, and gives way to an `<h1>` that the page's URL names when the
    title does not.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
-   `<noscript>` copies), drop scripts, invisible elements and form controls.
+   `<noscript>` copies), drop scripts, invisible elements and form controls,
+   and mark the forms that ask for a message, with their titles, while their
+   controls are there.
 4. **Boilerplate**: remove page chrome and noise widgets across the whole page.
 5. **ContentLocator**: score paragraphs with Readability's algorithm. When one
    candidate holds most of the page's prose the content is narrowed to it
@@ -209,7 +245,9 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    slot and goes. **Teasers** then finds the blocks of teasers for other
    pages, which are dropped from the content once it is cleaned.
 6. **Pruner**: in articles, Readability's conditional cleaning plus removal of
-   bylines, datelines and inline boxes of links to other stories; on other
+   bylines, datelines and inline boxes of links to other stories, under a
+   label in the major web languages ("Read also", "Lea también", "Читайте
+   также", "Baca juga") or none; on other
    pages, removal of leftover link clusters, with the heading over them, and
    of columns of links beside a column of prose in layout tables, unless the
    table declares them the wider column or they hold the page title, and of
@@ -220,7 +258,10 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    above its title, and the side columns its table declares narrower. In
    both modes, short links and boxes styled as buttons ("Add to cart", "Book
    a demo") are removed, except for disclosure toggles, buttons inside a
-   sentence and titles or labels styled as buttons. If article cleaning
+   sentence and titles or labels styled as buttons, and so is the line a
+   feed adds after a post ("The post … appeared first on …", in any
+   language): a few words around a link to the post the page shows, by its
+   title, and one to its site's home page. If article cleaning
    keeps less than half of what it was given (unless what it removed from a
    declared article was mostly links), it is undone and light cleaning,
    which treats link clusters and menus as page pruning does, is used
@@ -229,7 +270,9 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    posts or products (alike blocks, each with a linked title, that hold most
    of the text) and a featured post beside them, since it would judge each
    item on its own. A teaser's linked title with its date and author links
-   is not a link cluster, however short.
+   is not a link cluster, however short. Then **MessageForms** and
+   **ServiceLinks** remove what is left in the content of the marked forms
+   and titles and of the sign-in, cart and feed lines.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in, a

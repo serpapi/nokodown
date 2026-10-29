@@ -28,6 +28,14 @@ module Nokodown
 
     STREAMED_LINK_SHARE = 0.5
 
+    UTILITY_FORM_TEXT = 300
+    # Set on a main region once its text besides headings is measured.
+    REGION_TEXT = "data-nokodown-region-text"
+    SENDER_INPUTS = ["", "text", "email"].freeze
+    QUANTITY = /qty|quantity/i.freeze
+    FORM_CONTENT = "h1, main, article, [role=main], video, iframe"
+    FORM_PAGE_TEXT = 100
+
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
     # Injected link spam, honeypot fields and hidden copies of the page are
@@ -64,11 +72,13 @@ module Nokodown
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
       restore_picture_sources
+      mark_message_forms
       @body.css(JUNK).each(&:remove)
       LeakedMarkup.clean(@body)
       @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
+      mark_titled_forms
       remove_form_controls
       HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
@@ -202,7 +212,7 @@ module Nokodown
 
     def remove_hidden
       total = Dom.char_count(@body.content)
-      @panel_ids = @body.css("[aria-controls]").flat_map { |control| control["aria-controls"].split }.to_set
+      @panel_ids = panel_ids
       @body.css(HIDDEN_CANDIDATES).each do |node|
         next unless hidden?(node)
         # A hidden wrapper around most of the page is an anti-flicker snippet
@@ -211,6 +221,10 @@ module Nokodown
 
         node.remove
       end
+    end
+
+    def panel_ids
+      @body.css("[aria-controls]").flat_map { |control| control["aria-controls"].split }.to_set
     end
 
     def page_like?(node)
@@ -274,6 +288,89 @@ module Nokodown
       @body.css("form").each { |form| form.remove if leftover_form?(form) }
     end
 
+    # Text boxes go with the junk, so the forms that ask for a message in a
+    # box readers can see are marked first.
+    def mark_message_forms
+      @panel_ids = panel_ids
+      @body.css("form").each do |form|
+        form[MessageForms::MARK] = "" if form.css("textarea").any? { |box| shown?(box) }
+      end
+    end
+
+    # Hidden itself or by a wrapper inside the form; a hidden form goes whole.
+    def shown?(box)
+      node = box
+      until node.nil? || node.name == "form"
+        return false if hidden?(node)
+
+        node = node.parent
+      end
+      true
+    end
+
+    # Comment, review and contact forms ask who writes as well as what. The
+    # wrappers that add only their title are marked too, as the form itself
+    # may go before the content is chosen, and the content may start inside
+    # them.
+    def mark_titled_forms
+      @body.css("form[#{MessageForms::MARK}]").each do |form|
+        if message_form?(form)
+          MessageForms.title_wrappers(form).each { |wrapper| wrapper[MessageForms::MARK] = "" }
+        else
+          form.remove_attribute(MessageForms::MARK)
+        end
+      end
+    end
+
+    # A message form holds a few labels and notes; its pictures are a
+    # captcha, smileys or rating stars. The form ASP.NET wraps a page in, or
+    # one holding the page's title, main region or the address to write to,
+    # holds the page. One that asks how many orders something, with a note
+    # for the cake or the engraving.
+    def message_form?(form)
+      return false if form.parent&.name == "body" || form.at_css(FORM_CONTENT)
+      return false if Dom.char_count(form.content) >= UTILITY_FORM_TEXT
+      return false if form.content.match?(MessageForms::CONTACT_DETAIL)
+
+      inputs = form.css("input")
+      return false if inputs.none? { |input| SENDER_INPUTS.include?(input["type"].to_s.downcase) }
+
+      inputs.none? { |input| quantity?(input) } && !page_form?(form)
+    end
+
+    def quantity?(input)
+      input["type"].to_s.casecmp?("number") || input["name"].to_s.match?(QUANTITY)
+    end
+
+    # On an application or sign-up page the form is what the main region
+    # holds besides its headings, and what it asks for says what the page is
+    # for. A comment form is never that.
+    def page_form?(form)
+      holder = form
+      holder = holder.parent while holder&.element? && !main_region?(holder) && !comment_area?(holder)
+      return false unless holder&.element? && main_region?(holder)
+
+      region_text(holder) - (Dom.char_count(form.content) - heading_chars(form)) < FORM_PAGE_TEXT
+    end
+
+    # A thread's replies share their region, which is measured once.
+    def region_text(holder)
+      holder[REGION_TEXT] ||= (Dom.char_count(holder.content) - heading_chars(holder)).to_s
+      holder[REGION_TEXT].to_i
+    end
+
+    def heading_chars(node)
+      node.css(Dom::HEADING_SELECTOR).sum { |heading| Dom.char_count(heading.content) }
+    end
+
+    def main_region?(node)
+      Boilerplate::CONTENT_ANCESTORS.include?(node.name) || node["role"] == "main"
+    end
+
+    def comment_area?(node)
+      Dom.signature(node).match?(Patterns::SECONDARY)
+    end
+
     # Only a prompt such as "Search:" is left once the controls are gone.
     def leftover_form?(form)
       text = Dom.text(form)
@@ -287,7 +384,7 @@ module Nokodown
     # Search boxes, sign-ups and logins. Forms that wrap real content (ASP.NET
     # pages, product option pickers) are left alone.
     def utility_form?(form)
-      return false if Dom.char_count(form.content) >= 300
+      return false if Dom.char_count(form.content) >= UTILITY_FORM_TEXT
 
       form["role"] == "search" ||
         form.css("input").any? { |i| %w[search email password].include?(i["type"].to_s.downcase) } ||

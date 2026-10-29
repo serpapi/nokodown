@@ -14,14 +14,28 @@ module Nokodown
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
+    SIDE_FURNITURE = /sidebar|#{Patterns::WORD_START}footer#{Patterns::WORD_END}/.freeze
+    TITLED_TEXT = 20
+    # A banner, bar or dialog named for the cookies, or a consent manager.
+    CONSENT_PROMPT = /
+      consent|gdpr|ccpa|onetrust|didomi|cookiebot|usercentrics|
+      banner|bar|notice|notification|popup|pop-up|popin|modal|dialog|dlg|overlay|alert|layer|box|prompt|wall
+    /x.freeze
+    OVERLAY_ROLES = %w[dialog alertdialog].freeze
+    OVERLAY_STYLE = /(?:\A|;)\s*position\s*:\s*(?:fixed|sticky)/i.freeze
+    TRAIL_OR_MENU = /breadcrumb|crumbs|trail|#{Patterns::WORD_START}nav|menu/.freeze
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     # What a wrapper has, lacks or allows does not name it: "has-sidebar",
-    # "with-navigation", "content-and-menu", "sidebar-enabled--true". The
-    # head of a compound names the wrapper, so "menu-and-content" stays a
-    # menu. "no-print" names what is left out of print, so it stays too.
+    # "o_wsale_has_sidebar", "with-navigation", "content-and-menu",
+    # "sidebar-enabled--true". The head of a compound names the wrapper, so
+    # "menu-and-content" stays a menu. "no-print" names what is left out of
+    # print, so it stays too. Nor does the layout it is laid out in:
+    # "layout-sidebar-left", "one-right-sidebar", "two-sidebars".
     MODIFIER = /
       (?:(?<![\w-])(?:has|with|without|no(?!-?print))|-(?:and|with|without))-[\w-]+|
-      (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])
+      (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])|
+      (?<![\w-])(?:layout|one|two)-[\w-]+|(?<![\w-])[\w-]+-layout(?![\w-])|
+      _(?:has|with|without)_[\w-]+
     /x.freeze
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
@@ -29,6 +43,7 @@ module Nokodown
     TITLE_HOLDER_SHARE = 0.25
     # A note continues the prose only after a sentence or more of it, not after a line of links.
     NOTE_PROSE = 80
+    PROSE = 160
     FOOTNOTE_MARK = /\A[*†‡§]+/.freeze
     # The word goes with its separators: "footer__disclaimer" without it is "footer", not "footer__".
     DISCLAIMER_WORD = /[-_]*#{Patterns::DISCLAIMER.source}[-_]*/.freeze
@@ -42,10 +57,14 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
-      @single_h1 = @body.css("h1").size == 1
+      h1s = @body.css("h1").to_a
+      @single_h1 = h1s.size == 1
       @trails = Breadcrumbs.trails(@body).map { |trail| Dom.key(trail) }.to_set
       @taxonomy = Taxonomy.blocks(@body, @url)
-      @last_h1 = @body.css("h1").map { |h1| Dom.key(h1).to_i }.max.to_i
+      @title = h1s.last
+      @last_h1 = @title ? Dom.key(@title).to_i : 0
+      @consent_page = @url.to_s.sub(Taxonomy::ADDRESS, "").split("?").first.to_s.downcase.match?(Patterns::CONSENT)
+      @prose_lines = {}
       # Card grids repeat the same class list hundreds of times.
       @names = Hash.new { |cache, signature| cache[signature] = signature.gsub(MODIFIER, " ") }
       @furniture = Hash.new { |cache, signature| cache[signature] = @names[signature].match?(Patterns::PAGE_FURNITURE) }
@@ -94,13 +113,14 @@ module Nokodown
     end
 
     # Semantic chrome (nav, a page-level footer) goes even when it outweighs
-    # the content, as legal footnotes often do; class-name guesses do not.
+    # the content, as legal footnotes often do; class-name guesses only when
+    # where they sit or what they ask says they are furniture.
     def removal(node)
       return if @shielded.include?(Dom.key(node))
       # Side notes inside an article are content whatever their class says.
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if (chrome_element?(node) || chrome_role?(node)) && !title_holder?(node)
-      return if dominant?(node) && !header_above_title?(node)
+      return if dominant?(node) && !furniture_however_large?(node)
       return :guess if trail?(node) || @taxonomy.include?(Dom.key(node))
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
@@ -114,7 +134,23 @@ module Nokodown
     def title_holder?(node)
       return false unless node.name == "footer" || node.name == "aside" || node["role"] == "complementary"
 
-      @single_h1 && !node.at_css("h1").nil? && @stats.text_chars(node) >= @total * TITLE_HOLDER_SHARE
+      holds_title?(node)
+    end
+
+    # A site's name in a sidebar links to its home page.
+    def holds_title?(node)
+      return false unless @single_h1 && @stats.text_chars(node) >= @total * TITLE_HOLDER_SHARE
+
+      h1 = node.at_css("h1")
+      !h1.nil? && h1.css("a[href]").none? { |link| Metadata.home_link?(link["href"].strip) }
+    end
+
+    # So is a block named like furniture that holds prose besides the title:
+    # page builders wrap the whole page in "dialog-off-canvas-main-canvas" or
+    # "sidebar-fixed". A breadcrumb trail or a menu with the title in it is
+    # still a trail or a menu.
+    def titled_page?(node)
+      holds_title?(node) && !@names[Dom.signature(node)].match?(TRAIL_OR_MENU) && prose_lines?(node)
     end
 
     # A trail stands apart from the text around it; one that words lead into
@@ -187,7 +223,7 @@ module Nokodown
     def class_noise?(node)
       return false if !@prose_blocks.empty? && prose_part?(node)
 
-      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node))
+      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node)) && !titled_page?(node)
     end
 
     # Fine print about the site is furniture, but a note on the content right
@@ -324,8 +360,79 @@ module Nokodown
       Dom.key(last_descendant(node)).to_i < @last_h1
     end
 
+    # A short page's sidebar or footer outweighs it too, and so does a
+    # cookie banner on a page whose content its scripts load.
+    def furniture_however_large?(node)
+      header_above_title?(node) || beside_title?(node) || consent_banner?(node)
+    end
+
+    # A sidebar or footer without prose sits beside the content when the
+    # page's title has text of its own. A title standing alone may head the
+    # block, as an archive's record title heads the fields its theme puts in
+    # a "sidebar".
+    def beside_title?(node)
+      return false unless @title && @names[Dom.signature(node)].match?(SIDE_FURNITURE)
+      return false unless node.at_css("h1").nil? && !prose_lines?(node)
+
+      branch = title_branch(node)
+      !branch.nil? && @stats.text_chars(branch) - @stats.text_chars(@title) >= TITLED_TEXT
+    end
+
+    # The title's ancestor that sits beside the node, under the parent they share.
+    def title_branch(node)
+      around = node.ancestors.select(&:element?).map { |ancestor| Dom.key(ancestor) }.to_set
+      ([@title] + @title.ancestors.select(&:element?)).each_cons(2) do |branch, parent|
+        return branch if around.include?(Dom.key(parent))
+      end
+      nil
+    end
+
+    # A cookie banner is named for what it is as well as for the cookies, or
+    # is laid over the page. On a page about cookies, what is named for them
+    # is the page.
+    def consent_banner?(node)
+      name = @names[Dom.signature(node)]
+      return false if @consent_page || !name.match?(Patterns::CONSENT)
+
+      name.match?(CONSENT_PROMPT) || OVERLAY_ROLES.include?(node["role"]) || node["aria-modal"] == "true" ||
+        node["style"].to_s.match?(OVERLAY_STYLE)
+    end
+
+    # A mega menu gives its entries blurbs, so in a header only a paragraph
+    # with a line long enough for a sentence is prose.
     def furniture_shaped?(node)
-      @stats.link_density(node) > 0.5 || node.css("p").none? { |paragraph| @stats.text_chars(paragraph) >= NOTE_PROSE }
+      @stats.link_density(node) > 0.5 || node.css("p").none? { |paragraph| prose_chars(paragraph) >= NOTE_PROSE }
+    end
+
+    # Two sentences' worth of running text in lines long enough for one, in
+    # any block. Short lines broken apart, as in opening hours, are not
+    # prose, nor is what an address holds, nor one line such as a motto or
+    # a quote, and the text of links is a menu's or a teaser's.
+    def prose_lines?(node)
+      key = Dom.key(node)
+      @prose_lines.fetch(key) { @prose_lines[key] = prose_chars(node) >= PROSE }
+    end
+
+    # Line breaks and the edges of blocks end a line; nil on the stack marks
+    # an edge.
+    def prose_chars(node)
+      prose = line = 0
+      stack = node.children.to_a.reverse
+      until stack.empty?
+        current = stack.pop
+        if current.nil? || current.name == "br"
+          prose += line if line >= NOTE_PROSE
+          line = 0
+        elsif current.text?
+          line += Dom.char_count(current.content)
+        elsif current.element? && current.name != "address" && !(current.name == "a" && current["href"])
+          block = Dom.block?(current)
+          stack << nil if block
+          stack.concat(current.children.to_a.reverse)
+          stack << nil if block
+        end
+      end
+      line >= NOTE_PROSE ? prose + line : prose
     end
 
     def last_descendant(node)

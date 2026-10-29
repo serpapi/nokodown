@@ -97,6 +97,24 @@ module Nokodown
       node[KEY]
     end
 
+    # The outermost of a node's ancestors below the body that the block
+    # accepts, climbing until it refuses one. The links of one line ask about
+    # the same ancestors, so verdicts are kept by key.
+    def outermost_accepted(node, verdicts)
+      found = nil
+      node = node.parent
+      while node&.element? && node.name != "body"
+        key = key(node)
+        verdict = key && verdicts.key?(key) ? verdicts[key] : yield(node)
+        verdicts[key] = verdict if key
+        break unless verdict
+
+        found = node
+        node = node.parent
+      end
+      found
+    end
+
     def mark_as_thread(node)
       node[THREAD] = "1"
       node.css("*").each { |descendant| descendant[THREAD] = "1" }

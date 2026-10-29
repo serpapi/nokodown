@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
 RSpec.describe Nokodown::Boilerplate do
-  def cleaned(html)
+  def cleaned(html, url: nil)
     body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
     Nokodown::Preprocessor.new(body).call
-    Nokodown::Boilerplate.new(body).call
+    Nokodown::Boilerplate.new(body, url: url).call
     body
   end
 
   # Text left by boilerplate removal alone, before the content is located.
-  def remaining(html)
-    Nokodown::Dom.text(cleaned(html))
+  def remaining(html, url: nil)
+    Nokodown::Dom.text(cleaned(html, url: url))
   end
 
   def prose(topic, count)
@@ -106,12 +106,13 @@ RSpec.describe Nokodown::Boilerplate do
         <div class="content-container has-sidebar">#{prose('Grinding coffee', 1)}</div>
         <div class="clearfix with-navigation">#{prose('Brewing', 1)}</div>
         <div class="td-content-and-menu">#{prose('Storing beans', 1)}</div>
+        <div class="o_wsale_container o_wsale_has_sidebar">#{prose('Roasting', 1)}</div>
         <div class="product-grid sidebar-enabled--true"><a href="/p/1">House blend</a> <a href="/p/2">Dark roast</a></div>
         <div class="sidebar"><p>Archive of older posts</p></div>
       HTML
 
       text = remaining(html)
-      ["Grinding coffee", "Brewing", "Storing beans", "House blend"].each { |content| text.should include(content) }
+      ["Grinding coffee", "Brewing", "Storing beans", "Roasting", "House blend"].each { |content| text.should include(content) }
       text.should_not include("Archive")
     end
 
@@ -132,6 +133,15 @@ RSpec.describe Nokodown::Boilerplate do
         text = remaining(html)
         text.should include("Lancia MusaThe Musa is explained")
         text.should_not include("Imprint")
+      end
+    end
+
+    it "removes a footer or side pane whose h1 is the site's name linked home" do
+      ["footer", "aside"].each do |tag|
+        html = "<#{tag}><h1><a href=\"/\">Auto Lexicon</a></h1><p>Car reviews since 1998, written in Turin.</p></#{tag}>" \
+               "<h2>Lancia Musa</h2><p>A small car with a tall roof and room for five.</p>"
+
+        remaining(html).should_not include("Auto Lexicon")
       end
     end
   end
@@ -302,6 +312,69 @@ RSpec.describe Nokodown::Boilerplate do
        "<h1>Branches</h1><div class=\"header\"><ul>#{notices}</ul></div>"].each do |html|
         remaining(html).should include("Branch 12")
       end
+    end
+  end
+
+  describe "furniture that outweighs a short page" do
+    def hours
+      days = %w[Monday Tuesday Wednesday Thursday Friday Saturday].map { |day| "#{day} 9:00-13:00, 14:00-17:30" }
+      "<p>Sakura Clinic<br>3-6-1 Kego, Fukuoka<br>Tel 092 725 7900<br>#{days.join('<br>')}</p>"
+    end
+
+    it "removes a sidebar or footer beside a short post" do
+      ["<div id=\"sidebar\"><h2>Contact</h2>#{hours}</div>", "<div class=\"footer\"><h2>Contact</h2>#{hours}</div>"].each do |box|
+        html = "<div class=\"main\"><h1>Fully booked on Friday</h1><p>The morning slots are taken.</p></div>#{box}"
+
+        text = remaining(html)
+        text.should include("The morning slots are taken.")
+        text.should_not include("Sakura Clinic")
+      end
+    end
+
+    it "keeps a block named like a sidebar under a title that stands alone" do
+      html = "<div class=\"main\"><div class=\"title\"><h1>Sakura Clinic</h1></div><div id=\"sidebar\">#{hours}</div></div>"
+
+      remaining(html).should include("Monday 9:00")
+    end
+
+    it "keeps a sidebar or footer that holds prose, in paragraphs or in other blocks" do
+      descriptions = %w[Acupuncture Massage Cupping].map do |treatment|
+        "<div class=\"service\"><h3>#{treatment}</h3><div class=\"description\">#{treatment} eases the pain in the back " \
+          "and the neck, and helps the patient sleep through the night again.</div></div>"
+      end
+      ["<div id=\"sidebar\">#{prose('Our new address', 2)}</div>", "<div id=\"footer\">#{descriptions.join}</div>"]
+        .each do |box|
+        html = "<div class=\"main\"><h1>Clinic news</h1><p>We moved to Kego, two streets from the station.</p></div>#{box}"
+
+        remaining(html).should match(/Part 2|helps the patient sleep/)
+      end
+    end
+
+    it "removes a site header above the title that holds addresses in lines" do
+      html = "<div class=\"site-header\">#{hours * 2}</div><h1>Fully booked on Friday</h1>" \
+             "<p>#{'The morning slots are taken. ' * 8}</p>"
+
+      remaining(html).should_not include("Sakura Clinic")
+    end
+
+    it "removes a cookie banner that holds most of a page's text, named for what it is or laid over the page" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+      banners = ["<div id=\"dlgcookies\">#{notice}</div>", "<div class=\"widget-cookie-banner\"><h2>Cookie Policy</h2>#{notice}</div>",
+                 "<div class=\"cookies\" style=\"position: fixed; bottom: 0\">#{notice}</div>"]
+      banners.each do |banner|
+        remaining("<h1>Lake at dawn</h1><img src=\"/lake.jpg\">#{banner}").should_not include("Google Analytics")
+      end
+    end
+
+    it "keeps a cookie policy, the body of a page about cookies and a form named for them" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+      policy = "<h1>Privacy</h1><div class=\"cookie-policy\"><h2>Cookies we use</h2>#{notice}<h2>Refusing them</h2>#{notice}</div>"
+      page = "<h1>Cookies</h1><div class=\"cookies-banner\"><p>We use cookies.</p></div><section class=\"cookies-page__body\">#{notice}</section>"
+      form = "<h1>Create an account</h1><div class=\"user-info-from-cookie\">#{notice}</div>"
+
+      remaining(policy).should include("Refusing them")
+      remaining(page, url: "https://wordsforlife.org.uk/cookies/").should include("Google Analytics")
+      remaining(form).should include("Google Analytics")
     end
   end
 
@@ -511,6 +584,33 @@ RSpec.describe Nokodown::Boilerplate do
       end
 
       remaining("<h1>House plan 12</h1>#{prose('The plan', 2)}<div class='features'>#{facts.join}</div>").should include("Roof gable")
+    end
+  end
+
+  describe "blocks that hold the page's title" do
+    it "keeps a block named like furniture that holds the page's only title and prose" do
+      html = "<div class=\"dialog-off-canvas-main-canvas\"><h1>Visual identity</h1>#{prose('The logo', 1)}</div>" \
+             "<div class=\"sidebar\"><p>Branding and web studio in Riyadh, open Sunday to Thursday.</p></div>"
+
+      remaining(html).should include("Visual identity")
+    end
+
+    it "removes a sidebar headed by the site's name, and a trail or menu that holds the title" do
+      studio = "<p>Branding and web studio in Riyadh, open Sunday to Thursday.</p>"
+      sidebar = "<div class=\"sidebar\"><h1><a href=\"/\">Fikra</a></h1>#{studio}</div><h2>Visual identity</h2><p>Logos and type.</p>"
+      trail = "<div class=\"breadcrumb\"><a href=\"/\">Home</a> <h1>Gallery</h1></div><img src=\"/1.jpg\"><p>Photos.</p>"
+
+      remaining(sidebar).should_not include("Fikra")
+      remaining(trail).should_not include("Home")
+    end
+
+    it "does not read the layout a list is laid out in as its name" do
+      html = "<h1>News</h1>#{prose('The parade', 1)}<div class=\"posts-list one-right-sidebar\">#{prose('The jury', 2)}</div>" \
+             "<div class=\"product-grid layout-sidebar-left\">#{prose('The costume', 2)}</div>"
+
+      text = remaining(html)
+      text.should include("The jury is explained")
+      text.should include("The costume is explained")
     end
   end
 end
