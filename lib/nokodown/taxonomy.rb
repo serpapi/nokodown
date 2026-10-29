@@ -9,11 +9,10 @@ module Nokodown
   # an archive page such lines are its listing, so nothing goes there.
   module Taxonomy
     TAG_PATH = %r{/(?:tags?|labels?|topics)/[^/?#]}i.freeze
-    # WooCommerce files products under "/product-category/".
-    CATEGORY_PATH = %r{[/_-]categor(?:y|ies)/[^/?#]}i.freeze
+    # Shops file products under "/product-category/", "/categoria-producto/".
+    CATEGORY_PATH = %r{/[^/?#]*[ck]ategor[^/?#]*/[^/?#]}i.freeze
     TAG_QUERY = /[?&]tag=[^&#]/.freeze
     CATEGORY_QUERY = /[?&]cat=[^&#]/.freeze
-    TAG_REL = /(?<![\w-])tag(?![\w-])/i.freeze
     CATEGORY_REL = /(?<![\w-])category(?![\w-])/i.freeze
     ADDRESS = %r{\A(?:https?:)?//(?:www\.)?([^/?#:]+)[^/?#]*}i.freeze
     MAX_LABEL = 24
@@ -63,7 +62,9 @@ module Nokodown
       rel = link["rel"].to_s
       return :category if rel.match?(CATEGORY_REL) || local.match?(CATEGORY_PATH) || local.match?(CATEGORY_QUERY)
 
-      :tag if rel.match?(TAG_REL) || local.match?(TAG_PATH) || local.match?(TAG_QUERY)
+      # Shops mark categories, tags and brands alike with rel="tag", so only
+      # the address tells a tag archive.
+      :tag if local.match?(TAG_PATH) || local.match?(TAG_QUERY)
     end
 
     def outermost(link, site, judged)
