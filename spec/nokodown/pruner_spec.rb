@@ -497,5 +497,14 @@ RSpec.describe Nokodown::Pruner do
 
       ["Jo Pine", "Related reading", "How to choose", "Women"].each { |noise| text.should_not include(noise) }
     end
+
+    it "drops links to other stories under a label in the page's language" do
+      labels = ["Lea también:", "Читайте также:", "Baca juga:", "関連記事", "اقرأ أيضاً:"]
+      boxes = labels.map { |label| "<p><strong>#{label}</strong> <a href='/news/9'>Ferry fares rise again in the spring</a></p>" }
+      root = content(story + boxes.join)
+      described_class.new([root], :article, conditional: false).call
+
+      Nokodown::Dom.text(root).should_not include("Ferry fares")
+    end
   end
 end

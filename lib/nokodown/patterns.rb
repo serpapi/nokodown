@@ -292,10 +292,23 @@ module Nokodown
     # A paragraph that is all furniture, a control's label or a counter.
     PARAGRAPH_NOISE = Regexp.union(BOILERPLATE_TEXT, UI_LABEL, COUNTER_TEXT).freeze
 
-    # Labels that introduce a box of links to other stories.
+    # Labels that introduce a box of links to other stories, in the major web
+    # languages. Word boundaries are spelled out: \b knows only ASCII letters.
     RELATED_LABEL = /
       \A(?:read\smore|more|related(?:\s(?:stories|articles|posts|content|coverage|reading))?|see\salso|
-      also\sread|don'?t\smiss|recommended|must\sread|more\son\sthis|watch|trending|popular)\b[\s:|]*
+      also\sread|read\salso|don'?t\smiss|recommended|must\sread|more\son\sthis|watch|trending|popular|
+      le[ae]\stambién|ver\stambién|te\spuede\sinteresar|artículos\srelacionados|noticias\srelacionadas|
+      leia\stambém|veja\stambém|(?:posts|artigos|notícias)\srelacionad[oa]s|
+      (?:à\s)?lire\saussi|(?:à\s)?voir\saussi|sur\sle\smême\ssujet|articles\ssimilaires|
+      lesen\ssie\sauch|siehe\sauch|auch\sinteressant|mehr\szum\sthema|ähnliche\sartikel|
+      leggi\sanche|vedi\sanche|articoli\scorrelati|lees\sook|zie\sook|
+      читайте\sтакже|смотрите\sтакже|см\.\sтакже|читайте\sещё|читайте\sеще|
+      czytaj\s(?:także|też)|zobacz\s(?:także|też)|przeczytaj\s(?:także|też)|
+      ayrıca\soku(?:yun)?|ilgili\shaberler|benzer\shaberler|
+      あわせて読みたい|関連記事|相关阅读|相关文章|延伸阅读|推荐阅读|相關閱讀|相關文章|延伸閱讀|관련\s?기사|
+      اقرأ\s(?:أيضاً|أيضا|ايضا)|مقالات\sذات\sصلة|
+      xem\sthêm|đọc\sthêm|bài\sviết\sliên\squan|tin\sliên\squan|baca\sjuga|artikel\sterkait|berita\sterkait|
+      بیشتر\sبخوانید|مطالب\sمرتبط)(?![\p{L}\p{N}])[\s:|]*
     /xi.freeze
 
     # Short lines that are page furniture inside an article body.
