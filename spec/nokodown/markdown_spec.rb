@@ -38,6 +38,15 @@ RSpec.describe "Markdown conversion" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
     end
 
+    it "drops lines of only punctuation and operators" do
+      convert("<p>a<br>|<br>~<br>- -&gt;<br>👍<br>b</p><ul><li>|</li><li>c</li></ul>").should == "a\n👍\nb\n\n- c"
+    end
+
+    it "drops separators between links and at the ends of lines" do
+      convert('<p>by | Oct 7, 2011 |</p><p><a href="/a">A</a> | <a href="/b">B</a> · <a href="/c">C</a></p><p>Volume 13 | Issue 1</p>').should ==
+        "by | Oct 7, 2011\n\n[A](https://example.com/a) [B](https://example.com/b) [C](https://example.com/c)\n\nVolume 13 | Issue 1"
+    end
+
     it "writes raised and lowered digits as Unicode characters and drops the tag from footnote markers" do
       convert("<p>10<sup>-6</sup> cells, H<sub>2</sub>O, cited<sup>[1]</sup></p>").should == "10⁻⁶ cells, H₂O, cited[1]"
     end
@@ -208,6 +217,13 @@ RSpec.describe "Markdown conversion" do
 
     it "drops permalink symbols and read-more links" do
       convert('<h2>Setup<a href="#setup">¶</a></h2><p>Intro. <a href="/post">Read more »</a></p>').should == "## Setup\n\nIntro."
+    end
+
+    it "drops separators and arrows at the ends of link text" do
+      html = '<p><a href="/f">Forum |</a> <a href="/j">· Jobs</a> <a href="/m">Learn more →</a> <a href="/n">»</a> ' \
+             '<a href="/v">Voir ›</a> <a href="/q">«Rycari 2017»</a></p>'
+      convert(html).should == "[Forum](https://example.com/f) [Jobs](https://example.com/j) [Learn more](https://example.com/m) " \
+                              "[Voir](https://example.com/v) [«Rycari 2017»](https://example.com/q)"
     end
 
     it "writes a link whose text is its URL as a bare URL" do

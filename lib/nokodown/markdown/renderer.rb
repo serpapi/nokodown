@@ -8,7 +8,6 @@ module Nokodown
     # paragraphs; block elements are rendered by tag.
     class Renderer
       MAX_DEPTH = 400
-      SEPARATOR_LINE = /\A\s*([-=_*~])\1{2,}\s*\z/.freeze
       GLYPHS = "•·▪◦‣►▶▸➤→■●○"
       # A run of glyphs (●●●○○) is a rating, not a bullet.
       BULLET_GLYPH = /\A(?:[#{GLYPHS}](?![#{GLYPHS}])|[-–—](?=\s))\s*/.freeze
@@ -49,7 +48,7 @@ module Nokodown
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          chunk = Text.tidy(chunk).lines.reject { |line| line.match?(SEPARATOR_LINE) }.join.strip
+          chunk = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) }.join("\n").strip
           Block.new(:paragraph, Text.escape_line_starts(Emphasis.paragraph(chunk))) unless chunk.empty?
         end
       end

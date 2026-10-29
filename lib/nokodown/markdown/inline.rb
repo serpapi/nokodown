@@ -186,6 +186,7 @@ module Nokodown
       end
 
       def link_markup(text, href)
+        text = Separators.link_text(text)
         return "" if text.empty? || text.match?(Patterns::LINK_NOISE_TEXT)
         return text if !@links || @in_link
 
