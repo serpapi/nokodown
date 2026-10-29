@@ -49,14 +49,19 @@ module Nokodown
       end
 
       # Rows across the table at its end hold a note or the text of a post
-      # laid out in a table, which go below it as the blocks they hold.
+      # laid out in a table, which go below it as the blocks they hold, a
+      # heading as its text, as in any cell.
       def note_rows(grid, spanning)
         notes = []
         while grid.size > 1 && spanning.last && grid.last.first != ""
           grid.pop
-          notes.unshift(*spanning.pop)
+          notes.unshift(*spanning.pop.map { |block| unmarked(block) })
         end
         notes
+      end
+
+      def unmarked(block)
+        block.kind == :heading ? Block.new(:paragraph, Text.escape_line_starts(block.content)) : block
       end
 
       # GFM takes a table's first row for its column names, which a table of

@@ -1183,12 +1183,13 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Specs\n\n| Key | Value |\n| --- | --- |\n| Weight | 3 kg |"
     end
 
-    it "writes rows across the end of a table below it, as the blocks they hold" do
+    it "writes rows across the end of a table below it, as the blocks they hold and a heading as its text" do
       html = "<table><tr><th>Size</th><th>Height</th><th>Weight</th></tr><tr><td>S</td><td>10</td><td>1</td></tr>" \
-             '<tr><td>M</td><td>15</td><td>2</td></tr><tr><td colspan="3"><p>Other sizes on request:</p><ul><li>XL</li><li>XXL</li></ul></td></tr></table>' \
+             '<tr><td>M</td><td>15</td><td>2</td></tr><tr><td colspan="3"><p>Other sizes on request:</p><ul><li>XL</li><li>XXL</li></ul></td></tr>' \
+             '<tr><td colspan="3"><h2>Status</h2></td></tr></table>' \
              '<table><tr><td colspan="4">Notice</td></tr><tr><th>Date</th><td>2021-09-01</td><th>Type</th><td>Info</td></tr>' \
              '<tr><td colspan="4"><p>Hello.</p><p>Please update.</p></td></tr></table>'
-      convert(html).should == "| Size | Height | Weight |\n| --- | --- | --- |\n| S | 10 | 1 |\n| M | 15 | 2 |\n\nOther sizes on request:\n\n- XL\n- XXL\n\n" \
+      convert(html).should == "| Size | Height | Weight |\n| --- | --- | --- |\n| S | 10 | 1 |\n| M | 15 | 2 |\n\nOther sizes on request:\n\n- XL\n- XXL\n\nStatus\n\n" \
                               "Notice\n\nDate 2021-09-01 Type Info\n\nHello.\n\nPlease update."
     end
 
