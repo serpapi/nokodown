@@ -1026,6 +1026,11 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "- Power: 3 W\n- Voltage: 12 V\n- Sizes: S|M\n- Class: III\n- Note: dry\n- Mass: 0.25 kg"
     end
 
+    it "keeps a two-column grid of links or pictures a table" do
+      rows = (1..6).map { |n| %(<tr><td><a href="/a#{n}">Fields #{n}</a></td><td><a href="/b#{n}">Trees #{n}</a></td></tr>) }.join
+      convert("<table>#{rows}</table>").lines.first.should == "| [Fields 1](https://example.com/a1) | [Trees 1](https://example.com/b1) |\n"
+    end
+
     it "keeps a header row whose other cells are blank" do
       rows = %w[Apple Pear].map { |fruit| %(<tr><td>#{fruit}</td><td><a href="/buy/#{fruit}">Buy</a></td></tr>) }.join
       convert("<table><tr><th>Item</th><th></th></tr>#{rows}</table>").should ==
