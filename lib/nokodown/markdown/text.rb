@@ -11,6 +11,9 @@ module Nokodown
         [\u00AD\u200B\u2060\uFEFF\p{Co}]|
         (?<![\p{L}\p{M}\p{So}\p{Sk}])[\u200C\u200D]|[\u200C\u200D](?![\p{L}\p{M}\p{So}\p{Sk}])
       /x.freeze
+      # Characters that could open or close emphasis. An underscore inside a
+      # word cannot.
+      DELIMITERS = { "*" => /\*/, "_" => /(?<![\p{L}\p{N}\p{M}])_|_(?![\p{L}\p{N}\p{M}])/ }.freeze
 
       module_function
 
@@ -22,9 +25,22 @@ module Nokodown
         string = string.gsub(/\\(?=[!-\/:-@\[-`{-~])/, "\\\\\\\\")
         string = string.gsub("`", "\\\\`")
         string = string.gsub(/(?<!\s)\*|\*(?!\s)/, "\\\\*")
-        string = string.gsub(/(?<![\p{L}\p{N}\\])_|_(?![\p{L}\p{N}])/, "\\\\_")
+        string = string.gsub(/(?<![\p{L}\p{N}\p{M}\\])_|_(?![\p{L}\p{N}\p{M}])/, "\\\\_")
         string = string.gsub(/\](?=[(\[])/, "\\\\]")
         string.gsub(/<(?=[A-Za-z\/!?])/, "\\\\<")
+      end
+
+      # An escaped asterisk or underscore needs its backslash only when another
+      # one in the paragraph could pair with it, or when it would start a list
+      # item. A lone run cannot pair: "2011*", "Leser*innen", "!_Tokyo".
+      def unescape_lone(string)
+        DELIMITERS.reduce(string) do |text, (char, delimiter)|
+          runs = text.scan(/(?:\\#{Regexp.escape(char)})+/)
+          next text unless runs.size == 1 && text.scan(delimiter).size == runs.first.length / 2
+
+          run = runs.first
+          text.match?(/^#{Regexp.escape(run)}(?:\s|$)/) ? text : text.sub(run, char * (run.length / 2))
+        end
       end
 
       # Block syntax that plain text could trigger at the start of a line.

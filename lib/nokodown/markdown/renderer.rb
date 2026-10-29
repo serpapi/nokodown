@@ -51,7 +51,7 @@ module Nokodown
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
           chunk = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) }.join("\n").strip
-          Block.new(:paragraph, Text.escape_line_starts(Emphasis.paragraph(chunk))) unless chunk.empty?
+          Block.new(:paragraph, Text.escape_line_starts(Text.unescape_lone(Emphasis.paragraph(chunk)))) unless chunk.empty?
         end
       end
 

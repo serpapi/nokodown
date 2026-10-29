@@ -52,6 +52,8 @@ module Nokodown
         [/\p{Nd}\z/, /\A#{CASED.source}{2}/]
       ].freeze
       ICON_FONT = /(?<![\w-])material-(?:icons|symbols)/.freeze
+      # Some CMSs write the caption's markup into the alt attribute.
+      TAG = %r{</?[a-z][^<>]*>}i.freeze
 
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
@@ -216,7 +218,7 @@ module Nokodown
       end
 
       def image(node)
-        alt = Text.collapse(Dom.squish(node["alt"].to_s)).strip
+        alt = Text.collapse(Dom.squish(node["alt"].to_s.gsub(TAG, " "))).strip
         return Image.tex(alt) if node["class"].to_s.include?("mwe-math-fallback-image")
         return alt if Image.emoji?(node, alt)
         return "" if !@images || @in_heading

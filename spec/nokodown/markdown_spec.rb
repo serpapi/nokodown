@@ -14,6 +14,11 @@ RSpec.describe "Markdown conversion" do
       convert("<p>snake_case, 5 * 3, *starred*, `tick`, <b>bold</b></p>").should == "snake_case, 5 * 3, \\*starred\\*, \\`tick\\`, **bold**"
     end
 
+    it "escapes a lone asterisk or underscore only where it would start a list" do
+      convert("<p>2011* <i>a</i></p><p>Leser*innen</p><p>**Ontdek</p><p>!_Tokyo, \u09AC\u09BE_\u09A6</p><p>* note</p><p>5*21*19</p>").should ==
+        "2011\\* *a*\n\nLeser*innen\n\n**Ontdek\n\n!_Tokyo, \u09AC\u09BE_\u09A6\n\n\\* note\n\n5\\*21\\*19"
+    end
+
     it "escapes text that would start a heading or a quote" do
       convert("<p># not a heading</p><p>&gt; not a quote</p>").should == "\\# not a heading\n\n\\> not a quote"
     end
@@ -272,6 +277,10 @@ RSpec.describe "Markdown conversion" do
              '<img src="/assets/grey-placeholder.png"><img src="https://img.shields.io/badge/ci-passing-green" alt="CI">' \
              '<img src="/arrow.svg"><p>Text</p>'
       convert(html).should == "Text"
+    end
+
+    it "drops markup written into alt text" do
+      convert('<p><img src="/a.jpg" alt="<p>Design <b>the</b> solution</p>"></p>').should == "![Design the solution](https://example.com/a.jpg)"
     end
 
     it "uses the alt text of emoji images" do
