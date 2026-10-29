@@ -40,7 +40,6 @@ module Nokodown
       TAIL_BYTES = 1600
       PARAGRAPH_BREAK = /(\s*\n\s*\n\s*)/.freeze
       LINK_ONLY = /\A!?\[(?:\\.|[^\\\]])*\]\([^\s]*\)\z/.freeze
-      LEADING_IMAGES = /\A(?:!\[#{Text::LINK_TEXT}\]\(#{Text::DESTINATION}\)\s*)+/.freeze
       # Markup around the first and last visible characters of a piece.
       TRAILING_MARKUP = /(?:[*~`]|\]\([^()\s]*(?:\([^()\s]*\)[^()\s]*)*\))+\z/.freeze
       LEADING_MARKUP = /\A[*~`]*(?:\[(?=(?:\\.|[^\]\\\n])*\]\())?[*~`]*/.freeze
@@ -235,7 +234,7 @@ module Nokodown
       def marked(text, marker)
         return text if text.match?(PARAGRAPH_BREAK) || text.empty? || text.match?(/\A[^\p{L}\p{N}]*\z/) || text.match?(LINK_ONLY)
 
-        images = text[LEADING_IMAGES]
+        images = text[Text::LEADING_IMAGES]
         return "#{images}#{marked(text.delete_prefix(images), marker)}" if images && images != text
 
         "#{marker}#{text}#{marker}"

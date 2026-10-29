@@ -21,6 +21,7 @@ module Nokodown
       # and the destination's parentheses are balanced or percent-encoded.
       LINK_TEXT = /(?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*/.freeze
       DESTINATION = /(?:[^()\s]|\([^()\s]*\))*/.freeze
+      LEADING_IMAGES = /\A(?:!\[#{LINK_TEXT}\]\(#{DESTINATION}\)\s*)+/.freeze
       ENCODED_NON_ASCII = /(?:%[89A-F]\h)+/i.freeze
       # Spaces and invisible characters would end or hide the destination.
       UNPRINTABLE = /[\p{Z}\p{C}]/.freeze

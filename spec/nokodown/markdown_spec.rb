@@ -212,9 +212,11 @@ RSpec.describe "Markdown conversion" do
                               "See [this](https://example.com/a) and [that](https://example.com/b)."
     end
 
-    it "puts images that open an emphasis run before its marker" do
-      convert('<p><strong><a href="/poster.png"><img src="/poster-s.png" alt="Fair poster"></a>Milano Food City is the food week.</strong></p>').should ==
-        "![Fair poster](https://example.com/poster-s.png) **Milano Food City is the food week.**"
+    it "puts images that open an emphasis run before its marker, and drops a run that wraps all the text after them" do
+      html = '<p><strong><a href="/poster.png"><img src="/poster-s.png" alt="Fair poster"></a>Milano Food City</strong> is the food week.</p>' \
+             '<p><em><img src="/me.jpg" alt="Portrait"><strong>The whole paragraph is set in bold and italics.</strong></em></p>'
+      convert(html).should == "![Fair poster](https://example.com/poster-s.png) **Milano Food City** is the food week.\n\n" \
+                              "![Portrait](https://example.com/me.jpg) The whole paragraph is set in bold and italics."
     end
 
     it "marks emphasis that spans paragraphs in each paragraph" do
