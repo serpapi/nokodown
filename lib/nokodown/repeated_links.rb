@@ -81,9 +81,22 @@ module Nokodown
     # The link with the elements that hold only it.
     def holder(link)
       holder = link.node
-      holder = holder.parent while holder.parent&.element? && Dom.key(holder.parent) != Dom.key(@root) &&
-                                   Dom.text(holder.parent) == link.text
+      holder = holder.parent while wrapper?(holder.parent, holder)
       holder
+    end
+
+    # Read from the node's siblings, nearest first: the text of a large
+    # parent costs as much as the page.
+    def wrapper?(parent, node)
+      return false unless parent&.element? && Dom.key(parent) != Dom.key(@root)
+
+      blank_side?(node, :previous_sibling) && blank_side?(node, :next_sibling)
+    end
+
+    def blank_side?(node, direction)
+      sibling = node.send(direction)
+      sibling = sibling.send(direction) while sibling && Dom.text(sibling).empty?
+      sibling.nil?
     end
 
     # On a line of its own, at the end of an excerpt or in a row of
