@@ -80,6 +80,13 @@ RSpec.describe Nokodown do
     end
 
     let(:prose) { "<p>#{'The command line tool runs on every major platform and needs nothing else to work. ' * 3}</p>" }
+    let(:product) do
+      "<h1>Hardcover notebook, 200 sheets</h1><ul><li>Code: 31579</li><li>Barcode: 7894494526435</li>" \
+        "<li>Brand: Jandaia</li><li>Package: 4 units</li><li>Weight: 0.4 kg</li></ul>" \
+        "<p>A ruled notebook with a hard PET cover, a ribbon marker and a pocket inside the back cover. " \
+        "The sheets are 56 g paper with a margin line, and the notebook is sold by the package.</p>"
+    end
+    let(:delivery) { "<div><h3>Delivery</h3><p>Orders leave our warehouse the next working day.</p></div>" }
 
     it "keeps the link lists of an index page, which are its content" do
       sections = {
@@ -112,6 +119,21 @@ RSpec.describe Nokodown do
       ["News", "Events"].each { |noise| markdown.should_not include(noise) }
     end
 
+    it "keeps the link lists above a title that opens nothing, like an SEO line at the foot of an index" do
+      topics = %w[
+        Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts
+        Dentistry Design Drama Diving Ecology Economics Energy Ethics Farming Fashion Fishing Forestry
+        Gardening Geography Geology Glassmaking Hiking History Horses Hunting
+      ]
+      index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
+      intro = "<p>Every subject the library holds, from anatomy to hunting. Each topic lists its books, the shelf " \
+              "they stand on and when they are due back, and the librarians add new topics every month.</p>"
+
+      markdown = extract("<main>#{intro}#{index}<h1>Topics for every reader</h1><p>Browse them all.</p></main>")
+
+      markdown.should include("- [Anatomy](https://example.com/topics/anatomy)")
+    end
+
     it "keeps the menu of an index page that holds little else" do
       topics = %w[Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts]
       index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
@@ -124,18 +146,16 @@ RSpec.describe Nokodown do
     end
 
     it "drops the menus above the page title even when they hold most of the text" do
-      departments = %w[Party Toys Bedding Cleaning Office School Kitchen Garden Tools Paint Pets Books]
+      departments = %w[
+        Party Toys Bedding Cleaning Office School Kitchen Garden Tools Paint Pets Books Music Sports Baby Lighting
+        Bath Storage Crafts Travel
+      ]
       groups = departments.map do |name|
         slug = "/#{name.downcase}"
         "<li><a href=\"#{slug}\">#{name}</a><ul><li><a href=\"#{slug}/new\">New</a></li>" \
           "<li><a href=\"#{slug}/sale\">Sale</a></li><li><a href=\"#{slug}/all\">All #{name}</a></li></ul></li>"
       end
-      product = "<h1>Hardcover notebook, 200 sheets</h1><ul><li>Code: 31579</li><li>Barcode: 7894494526435</li>" \
-                "<li>Brand: Jandaia</li><li>Package: 4 units</li><li>Weight: 0.4 kg</li></ul>" \
-                "<p>A ruled notebook with a hard PET cover, a ribbon marker and a pocket inside the back cover. " \
-                "The sheets are 56 g paper with a margin line, and the notebook is sold by the package.</p>"
-
-      markdown = extract("<body><div class=\"mobilemenu\"><ul>#{groups.join}</ul></div><div>#{product}</div></body>")
+      markdown = extract("<body><div><ul>#{groups.join}</ul></div><div>#{product}</div></body>")
 
       markdown.should include("- Barcode: 7894494526435")
       ["Party", "Bedding", "All Books"].each { |noise| markdown.should_not include(noise) }
@@ -192,13 +212,14 @@ RSpec.describe Nokodown do
     end
 
     it "drops the heading over a box of links it drops" do
-      types = %w[Backend Frontend Mobile Games Infrastructure Security]
-      links = types.map { |type| "<li><a href=\"/jobs/#{type.downcase}\">#{type}</a></li>" }.join
-      box = "<div><h2>Find jobs of other types</h2><ul>#{links}</ul></div>"
+      kinds = %w[Notebooks Pens Folders Markers Erasers Rulers]
+      links = kinds.map { |kind| "<li><a href=\"/shop/#{kind.downcase}\">#{kind}</a></li>" }.join
+      box = "<div><h2>More from the shop</h2><ul>#{links}</ul></div>"
 
-      markdown = extract("<main><h1>Game planner</h1>#{prose}#{box}</main>")
+      markdown = extract("<main>#{product}#{box}#{delivery}</main>")
 
-      markdown.should_not include("other types")
+      markdown.should include("the notebook is sold by the package.\n\n### Delivery")
+      markdown.should_not include("More from the shop")
     end
 
     it "keeps a title too long to be the label of the box of links below it" do
@@ -215,10 +236,11 @@ RSpec.describe Nokodown do
     it "drops the heading over a box of links that a rule parts from the next section" do
       skills = %w[PHP Java Ruby Python Swift Kotlin]
       links = skills.map { |skill| "<li><a href=\"/jobs/#{skill.downcase}\">#{skill}</a></li>" }.join
-      boxes = "<div><h2>Find jobs by type</h2><ul>#{links}</ul><hr><h2>Find jobs by skill</h2><ul>#{links}</ul></div>"
+      boxes = "<div><h2>Find jobs by type</h2><ul>#{links}</ul><hr><h3>Find jobs by skill</h3><ul>#{links}</ul></div>"
 
-      markdown = extract("<main><h1>Game planner</h1>#{prose}#{boxes}</main>")
+      markdown = extract("<main>#{product}#{boxes}#{delivery}</main>")
 
+      markdown.should include("### Delivery")
       markdown.should_not include("by type")
     end
 

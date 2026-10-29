@@ -30,7 +30,11 @@ module Nokodown
     MAX_LABEL = 40
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
     SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
-    SEPARATORS = %w[hr br].freeze
+    MIN_SERIES = 3
+    MEDIA = %w[img picture iframe].freeze
+    MEDIA_SELECTOR = MEDIA.join(", ")
+    # A CJK character says about as much as a short word.
+    WIDE = /[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]/.freeze
     LETTER = /\p{L}/.freeze
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
@@ -276,17 +280,18 @@ module Nokodown
       return remove_menus(root, clusters_above_title(root, clusters) + current_page_menus(root)) if index
 
       # Removal can only start at a cluster, so none means nothing to remove.
-      remove_clusters(root) unless clusters.empty?
-      remove_clusters(root) if remove_menus(root, current_page_menus(root))
+      repeated = repeated_shapes(clusters)
+      remove_clusters(root, repeated) unless clusters.empty?
+      remove_clusters(root, repeated) if remove_menus(root, current_page_menus(root))
     end
 
     def index?(root, clusters)
       !clusters.empty? && clusters_dominate?(root, clusters)
     end
 
-    def remove_clusters(root)
+    def remove_clusters(root, repeated)
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
-        remove_with_label(node, root) if link_cluster?(node) && !in_data_table?(node)
+        remove_with_label(node, root, repeated) if link_cluster?(node) && !in_data_table?(node)
       end
     end
 
@@ -295,7 +300,8 @@ module Nokodown
       menus = outermost(menus.uniq { |menu| Dom.key(menu) })
       return false if menus.empty? || Dom.text(root).length - menus.sum { |menu| Dom.text(menu).length } < MIN_LEFT
 
-      menus.each { |menu| remove_with_label(menu, root) }
+      repeated = repeated_shapes(menus)
+      menus.each { |menu| remove_with_label(menu, root, repeated) }
       true
     end
 
@@ -350,7 +356,7 @@ module Nokodown
         if child.element? && (child.name == "a" || child.at_css("a[href]"))
           entries << child
         elsif entries.empty?
-          lead += Dom.text(child).length
+          lead += label_length(Dom.text(child))
         elsif Dom.text(child).match?(LETTER)
           return false
         end
@@ -374,10 +380,20 @@ module Nokodown
       node&.element? && node.ancestors.any? { |ancestor| ancestor.element? && Dom.key(ancestor) == key }
     end
 
-    def remove_with_label(node, root)
-      labels = labels_of(node, root)
+    def remove_with_label(node, root, repeated)
+      labels = repeated.include?(shape(node)) ? [] : labels_of(node, root)
       remove(node)
       labels.each { |label| remove(label) }
+    end
+
+    # Alike boxes repeated down the page are the tags of a run of cards, and
+    # the heading over each is the card's title.
+    def repeated_shapes(boxes)
+      boxes.group_by { |box| shape(box) }.select { |_, alike| alike.size >= MIN_SERIES }.keys.to_set
+    end
+
+    def shape(node)
+      [node, node.parent].compact.flat_map { |element| [element.name, Dom.signature(element)] }
     end
 
     # The headings over a box of links label nothing once the box is gone,
@@ -388,11 +404,11 @@ module Nokodown
       holder = node
       loop do
         holder = holder.parent while only_child?(holder) && inside?(holder.parent, root)
-        label = holder.previous_element
-        break unless label && section_label?(label) && section_end?(holder)
+        label = previous_content(holder)
+        break unless label && section_label?(label) && section_end?(holder, root)
 
         labels << label
-        break unless label.previous_element.nil? && holder.next_element.nil? && inside?(holder.parent, root)
+        break unless previous_content(label).nil? && next_content(holder).nil? && inside?(holder.parent, root)
 
         holder = holder.parent
       end
@@ -400,23 +416,62 @@ module Nokodown
     end
 
     def only_child?(node)
-      node.previous_element.nil? && node.next_element.nil?
+      previous_content(node).nil? && next_content(node).nil?
     end
 
-    def section_end?(node)
-      following = node.next_element
-      following = following.next_element while following && SEPARATORS.include?(following.name)
-      following.nil? || section_label?(following)
+    # The next section starts after the box, or after the wrapper the box
+    # ends: a card's body may follow in a row of its own below the row that
+    # holds its title and tags.
+    def section_end?(node, root)
+      following = next_content(node)
+      following = next_content(node.parent) if following.nil? && inside?(node.parent, root)
+      following.nil? || section_start?(following)
+    end
+
+    def section_start?(node)
+      node = node.children.find { |child| !blank?(child) } while node&.element? && !Dom.heading?(node)
+      !node.nil? && Dom.heading?(node)
+    end
+
+    def previous_content(node)
+      sibling = node.previous_sibling
+      sibling = sibling.previous_sibling while sibling && blank?(sibling)
+      sibling
+    end
+
+    def next_content(node)
+      sibling = node.next_sibling
+      sibling = sibling.next_sibling while sibling && blank?(sibling)
+      sibling
+    end
+
+    # Comments, white space, rules and empty spacers hold nothing of a section.
+    def blank?(node)
+      return !node.text? || Dom.text(node).empty? unless node.element?
+
+      !MEDIA.include?(node.name) && Dom.text(node).empty? && node.at_css(MEDIA_SELECTOR).nil?
     end
 
     # A short heading below the page title, or a wrapper holding only one. A
     # linked or long heading is the title of a card, not a label.
     def section_label?(node)
+      return false unless node.element?
+
       text = Dom.text(node)
-      return false if text.empty? || text.length > MAX_LABEL || node.at_css("a[href]")
+      return false if text.empty? || label_length(text) > MAX_LABEL || linked?(node)
       return true if SECTION_HEADINGS.include?(node.name)
 
       node.css(SECTION_HEADING_SELECTOR).any? { |heading| Dom.text(heading) == text }
+    end
+
+    def linked?(node)
+      links = Dom.ancestors_named(node, "a")
+      links << node if node.name == "a"
+      links.any? { |link| link["href"] } || !node.at_css("a[href]").nil?
+    end
+
+    def label_length(text)
+      text.length + text.scan(WIDE).size * 2
     end
 
     # On an index page (an A-Z list, a category grid) the clusters are the

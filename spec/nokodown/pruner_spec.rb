@@ -105,6 +105,68 @@ RSpec.describe Nokodown::Pruner do
 
       Nokodown::Dom.text(root).should_not include("Contact")
     end
+
+    describe "headings over a box of links it drops" do
+      let(:share) do
+        "<ul><li><a href='/share/email'>Email</a></li><li><a href='/share/twitter'>Twitter</a></li>" \
+          "<li><a href='/share/facebook'>Facebook</a></li></ul>"
+      end
+
+      def pruned(html)
+        root = content(story + html)
+        described_class.new([root], :page, urls: urls).call
+        root
+      end
+
+      it "drops a heading that labels nothing else" do
+        root = pruned("<div><h3>Elsewhere</h3>#{share}</div><div><h3>About us</h3><p>A small team.</p></div>")
+
+        root.inner_html.should_not include("Elsewhere")
+        root.inner_html.should include("About us")
+      end
+
+      it "keeps a heading whose section holds text beside the box" do
+        hours = "Monday to Friday, nine to five, closed on public holidays."
+        ["<h3>Opening hours</h3>#{hours}<div>#{share}</div>", "<h3>Opening hours</h3><div>#{hours} #{share}</div>",
+         "<div><h3>Opening hours</h3>#{share} #{hours}</div>"].each do |html|
+          pruned(html).inner_html.should include("Opening hours")
+        end
+      end
+
+      it "keeps a card's title when the card's details follow in a row of their own" do
+        tags = "Categories: <a href='/fields/albany'>Albany</a>, <a href='/page'>Nose</a>, " \
+               "<a href='/fields/throat'>Throat</a>"
+        card = "<div><h2>AMC Otolaryngology</h2><small>#{tags}</small></div><div>Address: 35 Hackett Boulevard</div>"
+
+        pruned(card).inner_html.should include("AMC Otolaryngology")
+      end
+
+      it "keeps a linked heading" do
+        agent = "<a href='/agents/144'><h5>Gurhan Altunsoy</h5></a>#{share}"
+
+        pruned(agent).inner_html.should include("Gurhan Altunsoy")
+      end
+
+      it "keeps the titles of a run of cards over their tags" do
+        cards = %w[Handles Bins Drawers].map do |name|
+          "<div class='card'><h5>#{name}</h5><span><a href='/c/kitchen'>Kitchen</a>, <a href='/c/steel'>Steel</a>, " \
+            "<a href='/c/#{name.downcase}'>#{name}</a></span></div>"
+        end
+
+        pruned(cards.join).css("h5").map(&:text).should == %w[Handles Bins Drawers]
+      end
+
+      it "keeps the page title" do
+        pruned("<div><h1>Spring sale</h1>#{share}</div><h2>Delivery</h2>").inner_html.should include("Spring sale")
+      end
+
+      it "counts a CJK character in a label as a short word" do
+        tags = %w[東京 大阪 京都].map { |city| "<a href='/tags/#{city}'>#{city}</a>" }.join(" ")
+        title = "東武伊勢崎線沿線の新しい温泉旅館を訪ねて"
+
+        pruned("<div><h4>#{title}</h4><div>#{tags}</div></div><h2>次の記事</h2>").inner_html.should include(title)
+      end
+    end
   end
 
   describe "article pruning with conditional cleaning off" do
