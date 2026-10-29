@@ -61,8 +61,6 @@ module Nokodown
     # One colon, at the end: "Tag: Ants Show: Sort:" is a header with controls.
     LEAD = /\A[^:：]+[:：]\z/.freeze
     LETTER = /\p{L}/.freeze
-    # Each Han or kana character counts as a word.
-    FEED_WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[[\p{L}\p{N}]&&[^\p{Han}\p{Hiragana}\p{Katakana}]]+/.freeze
     MAX_FEED_WORDS = 8
     # What may follow a site footer: a copyright line, a back-to-top link.
     TAIL_SHARE = 0.1
@@ -676,8 +674,10 @@ module Nokodown
 
     # A feed ends each post with a line naming it and the site it appeared on
     # first, in the site's language ("The post <a>…</a> appeared first on
-    # <a>Site</a>."): a few words around two links, the second to the home
-    # page of the first one's site, and nothing after it.
+    # <a>Site</a>."): a few words around two links, the first to the post
+    # this page shows, by its title, and the second to the home page of the
+    # post's site, with nothing after it. A photo's credit has the same
+    # shape, but names its author.
     def remove_feed_footers(root)
       root.css("p").each { |node| remove(node) if feed_footer?(node) }
     end
@@ -687,12 +687,23 @@ module Nokodown
       return false unless links.size == 2
 
       post, home = links.map { |link| web_address(link["href"]) }
-      return false unless post && home && post.host == home.host
-      return false unless home.path.to_s.delete("/").empty? && !post.path.to_s.delete("/").empty?
+      return false unless post && home && post.host == home.host && home?(home) && !home?(post)
+      return false unless names_page?(Dom.text(links.first), node.document)
 
       text = Dom.text(node)
       outside = links.reduce(text) { |rest, link| rest.sub(Dom.text(link), " ") }
-      outside.scan(FEED_WORD).size <= MAX_FEED_WORDS && !text_after(text, Dom.text(links.last)).match?(LETTER)
+      outside.scan(Teasers::WORD).size <= MAX_FEED_WORDS && !text_after(text, Dom.text(links.last)).match?(LETTER)
+    end
+
+    def home?(uri)
+      uri.path.to_s.delete("/").empty? && uri.query.to_s.empty?
+    end
+
+    # The page's title or a heading of its own holds the name.
+    def names_page?(name, document)
+      @page_names ||= document.css("title, h1").map { |node| Dom.text(node).downcase }
+      name = name.downcase
+      !name.empty? && @page_names.any? { |page_name| page_name.include?(name) }
     end
 
     def text_after(text, part)
@@ -700,7 +711,7 @@ module Nokodown
     end
 
     def web_address(href)
-      uri = URI.parse(href.to_s.strip)
+      uri = URI.parse(UrlResolver.encode(href.to_s.strip))
       uri if uri.is_a?(URI::HTTP) && uri.host
     rescue URI::Error
       nil
