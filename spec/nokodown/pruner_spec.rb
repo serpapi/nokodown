@@ -93,6 +93,23 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "copyright lines" do
+    it "removes them in other languages, with licence numbers, and from a layout table" do
+      lines = [
+        "<p>Alle Rechte vorbehalten. Deutscher Baseball Verband 2005</p>",
+        "<div>互联网药品信息服务资格证书 | 冀ICP备17031426号</div>",
+        "<table><tr><td>© анекдотов.net, 1997 - 2026</td></tr></table>",
+        "<font color=\"999999\">Copyright &copy; 2026 By <a href=\"/\">Showlive</a> All Rights Reserved.</font>"
+      ]
+      lines.each do |line|
+        root = content(story + line)
+        described_class.new([root], :page).call
+
+        Nokodown::Dom.text(root).should end_with("dry weather.")
+      end
+    end
+  end
+
   describe "article pruning with conditional cleaning off" do
     let(:html) do
       "<p class='byline'>By Jo Pine</p>#{story}#{cards}" \

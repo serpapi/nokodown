@@ -5,6 +5,7 @@ module Nokodown
   class Pruner
     CLUSTER_CONTAINERS = "ul, ol, menu, dl, div, section, p, td, li, span, table, header, footer"
     TEXT_BLOCKS = "p, div, span, li, h1, h2, h3, h4, h5, h6, small, section, aside, figcaption, b, strong, em, i"
+    LAYOUT_CELLS = "td, center, font"
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
     # A class names a button when that is its last word, before a modifier,
@@ -246,9 +247,14 @@ module Nokodown
         next if text.empty? || text.length > 200
 
         boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
-        copyright = text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
-        remove(node) if boilerplate || copyright
+        remove(node) if boilerplate || copyright?(node, text)
       end
+      # Old sites lay their footer out in a table and set it in font tags.
+      root.css(LAYOUT_CELLS).each { |node| remove(node) if copyright?(node, Dom.text(node)) && !in_data_table?(node) }
+    end
+
+    def copyright?(node, text)
+      text.length <= 200 && text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
     end
 
     # Links and boxes styled as buttons ("Add to cart", "Book a demo") are

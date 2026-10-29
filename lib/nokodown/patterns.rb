@@ -165,7 +165,16 @@ module Nokodown
       ¶|§|\#|🔗)[\s.:!…»›→>]*\z
     /xi.freeze
 
-    COPYRIGHT_TEXT = /\A(?:copyright\s*)?(?:©|\(c\)|&copy;)|all\srights\sreserved/i.freeze
+    # Copyright lines in the major web languages, and the licence numbers
+    # Chinese sites must print in their footer.
+    COPYRIGHT_TEXT = /
+      \A[\s|·•-]*(?:copyright\s*)?(?:©|ⓒ|\(c\)|&copy;)|\Acopyright\s+\d{4}|
+      all\srights\sreserved|alle\srechte\svorbehalten|tous\sdroits\sréservés|todos\slos\sderechos\sreservados|
+      tutti\si\sdiritti\sriservati|todos\sos\sdireitos\sreservados|alle\srechten\svoorbehouden|
+      все\sправа\sзащищены|wszelkie\sprawa\szastrzeżone|tüm\shakları\ssaklıdır|hak\scipta\sdilindungi|
+      bản\squyền\sthuộc\svề|جميع\sالحقوق\sمحفوظة|版权所有|版權所有|無断転載|무단\s?전재|
+      ICP[备證证]|公网安备
+    /xi.freeze
 
     NOISE_HEADING = /
       \A(?:related(?:\s\w+)?|share(?:\sthis)?(?:\s\w+)?|comments?|leave\sa\s(?:comment|reply)|
