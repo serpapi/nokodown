@@ -38,7 +38,7 @@ module Nokodown
     BODY_SHARE = 1.0
     DOMINANT_SHARE = 0.4
     MIN_SIBLINGS_BODY = 50
-    MIN_TEXT_BEFORE_LIST = 100
+    MIN_TEXT_BEFORE_LIST = 60
     MIN_SECTIONS = 3
     MIN_WORDS_LEFT = 20
     BODIES = %i[article product forum qa].freeze
