@@ -171,12 +171,27 @@ module Nokodown
       # level, lost its section during extraction. Title lists are content in
       # their own right, and a page that is only its headline keeps it.
       def drop_empty_sections(blocks)
-        titles = title_list_indexes(blocks)
+        titles = title_list_indexes(blocks) | card_titles(blocks)
         kept = blocks.each_index.reject { |index| !titles.include?(index) && empty_section?(blocks, index) }
         kept.pop while kept.any? && blocks[kept.last].kind == :heading && !titles.include?(kept.last)
         return blocks.values_at(*kept) if kept.any?
 
         [blocks.find { |block| block.kind == :heading && block.level == 1 }].compact
+      end
+
+      # The last card of a listing whose "More" control was removed ends the
+      # page with its linked title. A linked title at a level where an
+      # earlier title links too is a card's, not a section's.
+      def card_titles(blocks)
+        levels = Set.new
+        blocks.each_index.select do |index|
+          block = blocks[index]
+          block.kind == :heading && linked_title?(block) && !levels.add?(block.level)
+        end.to_set
+      end
+
+      def linked_title?(heading)
+        heading.text.match?(LINKED_HEADING) && !heading_text(heading).match?(Patterns::NOISE_HEADING)
       end
 
       def empty_section?(blocks, index)

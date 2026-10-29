@@ -703,6 +703,13 @@ RSpec.describe "Markdown conversion" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
     end
 
+    it "keeps the last card's linked title when the control after it is removed" do
+      html = '<p>2026.08.21</p><h2><a href="/news/42">Café night</a></h2><p>2026.07.19</p><h2><a href="/news/40">Survey results</a></h2>' \
+             "<p>Ver más</p><h2>Related</h2>"
+      convert(html).should == "2026.08.21\n\n## [Café night](https://example.com/news/42)\n\n2026.07.19\n\n" \
+                              "## [Survey results](https://example.com/news/40)"
+    end
+
     it "keeps a trailing list of linked titles" do
       html = '<h2>Candles</h2><p>3 products</p><h3><a href="/fig">Fig candle</a></h3>' \
              '<h3><a href="/pear">Pear candle</a></h3><h3><a href="/sage">Sage candle</a></h3>'
