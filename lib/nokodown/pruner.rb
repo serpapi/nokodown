@@ -5,17 +5,24 @@ module Nokodown
   class Pruner
     CLUSTER_CONTAINERS = "ul, ol, menu, dl, div, section, p, td, li, span, table, header, footer"
     TEXT_BLOCKS = "p, div, span, li, h1, h2, h3, h4, h5, h6, small, section, aside, figcaption, b, strong, em, i"
+    LAYOUT_CELLS = "td, center, font"
+    NOTICE_BLOCKS = "#{TEXT_BLOCKS}, #{LAYOUT_CELLS}"
+    MAX_NOTICE = 200
+    NO_WORDS = /\A[\p{P}\p{S}\p{N}\s]*\z/.freeze
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
     # A class names a button when that is its last word, before a modifier,
-    # a size or a rank: "btn", "c-button", "hero-cta", "btn--ghost",
-    # "btn_medium", "button-primary". "button-text" and
+    # a size, a rank or a color: "btn", "c-button", "hero-cta", "btn--ghost",
+    # "btn_medium", "button-primary", "btn-outline-dark". "button-text" and
     # "btn-view-author-options" name something else, and Bootstrap's
     # "btn-link" is a button that looks like a link.
     BUTTON_CLASS = /
       (?:\A|[-_])(?:btn|btns|button|buttons|cta|ctas)\d*
-      (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|sm|md|lg))?\z
+      (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|xs|sm|md|lg|xl|
+      light|dark|white|black|success|danger|warning|info|ghost|solid|block|outline(?:-[a-z]+)?))?\z
     /x.freeze
+    # Component libraries (shadcn/ui and others) name the part an element plays.
+    BUTTON_PART = %w[data-slot data-component data-part].freeze
     BUTTON_WORD = /btn|button|cta/.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
@@ -38,6 +45,16 @@ module Nokodown
     # One colon, at the end: "Tag: Ants Show: Sort:" is a header with controls.
     LEAD = /\A[^:：]+[:：]\z/.freeze
     LETTER = /\p{L}/.freeze
+    # What may follow a site footer: a copyright line, a back-to-top link.
+    TAIL_SHARE = 0.1
+    TAIL_CHARS = 100
+    # On a page with little text, such as a gallery of images, where a
+    # footer sits tells nothing.
+    MIN_TAIL_TEXT = 200
+    # A footer holding most of the content is the content.
+    MAX_TAIL_SHARE = 0.5
+    QUOTES = %w[blockquote figure].freeze
+    SECTIONS = %w[section aside nav].freeze
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
     def initialize(nodes, mode, conditional: true, urls: nil)
@@ -55,7 +72,11 @@ module Nokodown
         @mode == :article ? prune_article(root) : prune_page(root)
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
+        ReadMoreLinks.new(root).call
       end
+      # Article cleaning works on copies cut from the page, which cannot tell
+      # whether the main landmark holds a footer.
+      remove_tail_footers if @mode == :page
       self
     end
 
@@ -524,13 +545,49 @@ module Nokodown
     end
 
     def remove_boilerplate_text(root)
+      notices = []
       root.css(TEXT_BLOCKS).each do |node|
         text = Dom.text(node)
-        next if text.empty? || text.length > 200
+        next if text.empty? || text.length > MAX_NOTICE
 
-        boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
-        copyright = text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
-        remove(node) if boilerplate || copyright
+        if text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
+          remove(node)
+        elsif copyright?(node, text)
+          notices << node
+        end
+      end
+      # Old sites lay their footer out in a table and set it in font tags.
+      root.css(LAYOUT_CELLS).each do |node|
+        next if Dom.char_count(node.content) > MAX_NOTICE
+
+        notices << node if copyright?(node, Dom.text(node)) && !in_data_table?(node)
+      end
+      remove_notices(notices)
+    end
+
+    def copyright?(node, text)
+      text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
+    end
+
+    # The smallest block carries the notice. The block around it goes too
+    # when the rest of it is links and numbers ("Privacy | Terms", a visitor
+    # counter), but not when it also holds a product's name and price.
+    def remove_notices(notices)
+      keys = notices.map { |node| Dom.key(node) }.to_set
+      carriers = notices.reject { |node| node.css(NOTICE_BLOCKS).any? { |child| keys.include?(Dom.key(child)) } }
+      carrier_keys = carriers.map { |node| Dom.key(node) }.to_set
+      notices.each do |node|
+        rest = carrier_keys.include?(Dom.key(node)) ? "" : Dom.squish(text_outside(node, carrier_keys))
+        remove(node) if rest.match?(NO_WORDS)
+      end
+    end
+
+    def text_outside(node, skipped)
+      node.children.sum("") do |child|
+        next " #{child.content}" if child.text?
+        next "" if !child.element? || child.name == "a" || skipped.include?(Dom.key(child))
+
+        text_outside(child, skipped)
       end
     end
 
@@ -580,7 +637,7 @@ module Nokodown
     end
 
     def button?(node)
-      return true if node["role"] == "button"
+      return true if node["role"] == "button" || BUTTON_PART.any? { |name| node[name] == "button" }
       return false unless "#{node["class"]} #{node["id"]}".downcase.match?(BUTTON_WORD)
 
       tokens = Dom.signature(node).split
@@ -622,6 +679,83 @@ module Nokodown
       return 0 if !child.element? || Dom.block?(child) || button?(child)
 
       Dom.text(child).length
+    end
+
+    # Site footers go by many names ("mFooter", "b-footer", "foot_section",
+    # "agriFooterWrapper"), and a card or a post has a footer too. One that
+    # almost nothing of the content follows is the site's, unless the main
+    # landmark or an article holds it: there it ends that content, with its
+    # notes or sources.
+    def remove_tail_footers
+      @tail_total = @nodes.sum { |root| Dom.char_count(root.content) }
+      return if @tail_total < MIN_TAIL_TEXT
+
+      @tail_limit = [@tail_total * TAIL_SHARE, TAIL_CHARS].max
+      @footer_budget = @tail_total * MAX_TAIL_SHARE
+      @footers = []
+      after = 0
+      @nodes.reverse_each { |root| after += walk_back(root, after) }
+      @footers.each { |node| remove(node) }
+    end
+
+    # Visits the content from its end and returns the characters it visited,
+    # so after is always what follows the node being visited. It stops at the
+    # limit, and so does every walk above it.
+    def walk_back(node, after)
+      inside = 0
+      node.children.reverse_each do |child|
+        break if after + inside > @tail_limit
+
+        inside += chars_back(child, after + inside)
+      end
+      inside
+    end
+
+    # A footer holding most of the content is the content, though the site's
+    # footer can still end it.
+    def chars_back(node, after)
+      return Dom.char_count(node.content) if node.text? || (node.element? && Dom::CODE.include?(node.name))
+      return 0 unless node.element?
+
+      if site_footer?(node)
+        chars = Dom.char_count(node.content)
+        return take_footer(node, chars) if chars <= @footer_budget
+      end
+      walk_back(node, after)
+    end
+
+    def take_footer(node, chars)
+      @footers << node
+      @footer_budget -= chars
+      chars
+    end
+
+    def site_footer?(node)
+      return false unless footer_named?(node) && node.at_css("h1").nil?
+
+      node.ancestors.none? { |ancestor| ancestor.element? && content_landmark?(ancestor) }
+    end
+
+    def content_landmark?(node)
+      Boilerplate::CONTENT_ANCESTORS.include?(node.name) || node["role"] == "main" ||
+        node["itemprop"].to_s.include?("articleBody")
+    end
+
+    def footer_named?(node)
+      signature = Dom.signature(node).gsub(Patterns::TAXONOMY_TERM, " ")
+      return false if signature.match?(Patterns::UNIT_FOOTER)
+      return page_footer?(node) if node.name == "footer"
+
+      signature.match?(Patterns::FOOTER_NAME)
+    end
+
+    # A footer element belongs to its quote or its section, and ends the page
+    # only when that section wraps most of it.
+    def page_footer?(node)
+      return false if QUOTES.include?(node.parent&.name)
+
+      section = node.ancestors.find { |ancestor| ancestor.element? && SECTIONS.include?(ancestor.name) }
+      section.nil? || Dom.char_count(section.content) >= @tail_total * MAX_TAIL_SHARE
     end
 
     # Every rule removes through here: nothing inside code is furniture.

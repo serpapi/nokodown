@@ -28,6 +28,17 @@ module Nokodown
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
+    # Injected link spam, honeypot fields and hidden copies of the page are
+    # placed far off screen or in a strip one pixel high; collapsed panels
+    # have no height. A box clipped to one pixel where it stands is
+    # screen-reader text, which can be the only copy of a price. Moved off
+    # screen as well, such boxes held only spam, skip links and copies.
+    POSITIONED_STYLE = /(?:\A|;)\s*position\s*:\s*(?:absolute|fixed)/i.freeze
+    OFFSCREEN_STYLE = /(?:\A|;)\s*(?:left|top)\s*:\s*-(?:\d{4,}(?:\.\d+)?px|999px|\d{3,}(?:\.\d+)?r?em)/i.freeze
+    PIXEL_STRIP_STYLE = /(?:\A|;)\s*height\s*:\s*1px/i.freeze
+    PIXEL_WIDE_STYLE = /(?:\A|;)\s*width\s*:\s*1px/i.freeze
+    OVERFLOW_HIDDEN = /(?:\A|;)\s*overflow\s*:\s*hidden/i.freeze
+
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
 
     VIDEO_HOSTS = %r{//(?:www\.)?(?:(?:dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq|bilibili|live\.bilibili)\.com|(?:archive|upload\.wikimedia)\.org|player\.twitch\.tv|fast\.wistia\.(?:net|com)|play\.vidyard\.com|loom\.com/embed)}i.freeze
@@ -47,10 +58,12 @@ module Nokodown
     def call
       place_streamed_segments
       @body.xpath(".//comment()").each(&:remove)
+      ProtectedEmails.reveal(@body)
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
       restore_picture_sources
       @body.css(JUNK).each(&:remove)
+      LeakedMarkup.clean(@body)
       @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
@@ -204,9 +217,15 @@ module Nokodown
     def hidden?(node)
       return !disclosure?(node) if node.key?("hidden") && node["hidden"] != "until-found"
       return !node["class"].to_s.include?("fallback-image") && !closed_panel?(node) if node["aria-hidden"] == "true"
-      return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE)
+      return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE) || out_of_sight?(node["style"].to_s)
 
       hidden_by_class?(node) && !disclosure?(node)
+    end
+
+    def out_of_sight?(style)
+      return true if style.match?(OFFSCREEN_STYLE) && style.match?(POSITIONED_STYLE)
+
+      style.match?(PIXEL_STRIP_STYLE) && style.match?(OVERFLOW_HIDDEN) && !style.match?(PIXEL_WIDE_STYLE)
     end
 
     def hidden_by_class?(node)

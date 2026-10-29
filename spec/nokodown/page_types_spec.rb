@@ -67,9 +67,9 @@ RSpec.describe "Main content of different kinds of pages" do
     let(:markdown) { extract("listing").markdown }
 
     it "keeps every result with its link and snippet" do
-      markdown.should include("### [Perovskite cells pass a thousand-hour stability test](https://example.com/notes/perovskite-cells)")
+      markdown.should include("1. [Perovskite cells pass a thousand-hour stability test](https://example.com/notes/perovskite-cells)\n   Lab cells")
       markdown.should include("Raised arrays shade lettuce and berries")
-      markdown.should include("[88 comments](https://example.com/notes/balcony-solar#comments)")
+      markdown.should include("by [lena](https://example.com/u/lena) · 9 hours ago · 88 comments")
     end
 
     it "drops the top bar, result buttons, pagination and footer links" do

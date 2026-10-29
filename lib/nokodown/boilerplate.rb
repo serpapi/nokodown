@@ -32,6 +32,8 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
+      @trails = Breadcrumbs.trails(@body).map { |trail| Dom.key(trail) }.to_set
+      @last_h1 = @body.css("h1").map { |h1| Dom.key(h1).to_i }.max.to_i
       # Card grids repeat the same class list hundreds of times.
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
@@ -85,11 +87,20 @@ module Nokodown
       # Side notes inside an article are content whatever their class says.
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if chrome_element?(node) || chrome_role?(node)
-      return if dominant?(node)
-      return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
+      return if dominant?(node) && !header_above_title?(node)
+      return :guess if trail?(node)
+      return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
       MemberPanel.panel?(node) ? :panel : :guess
+    end
+
+    # A trail stands apart from the text around it; one that words lead into
+    # or out of is part of a sentence ("Open Home › Account and pick...").
+    def trail?(node)
+      return false unless @trails.include?(Dom.key(node))
+
+      [node.previous_sibling, node.next_sibling].none? { |sibling| sibling&.text? && !Dom.squish(sibling.content).empty? }
     end
 
     # A link or span in the middle of running text is part of that text,
@@ -137,6 +148,12 @@ module Nokodown
       return true if node["id"].to_s.start_with?("div-gpt-ad", "google_ads")
 
       AD_ATTRIBUTES.any? { |name| node.key?(name) }
+    end
+
+    # A link that asks a network to share the page is a share button in any
+    # language, whatever its label ("シェア", "Partager sur LinkedIn").
+    def share_intent?(node)
+      node.name == "a" && node["href"].to_s.strip.match?(Patterns::SHARE_INTENT)
     end
 
     def chrome_label?(node)
@@ -268,10 +285,30 @@ module Nokodown
     # section; outside, one holding the page title (h1, few links, no
     # navigation) is still content.
     def site_header?(node)
-      return false if inside_sectioning?(node) || dominant?(node)
+      return false if inside_sectioning?(node) || (dominant?(node) && !header_above_title?(node))
 
       title_block = node.at_css("h1") && @stats.link_density(node) < 0.5 && !node.at_css("nav, [role=navigation], [role=search]")
       !title_block
+    end
+
+    # A mega menu or a banner of notices can outweigh the content, but the
+    # site header holding it still sits above the page's title. Prose is not
+    # furniture: Drupal views wrap their whole content in a header, and a
+    # banner below may hold the page's only h1.
+    def header_above_title?(node)
+      return false unless node.name == "header" || Dom.signature(node).match?(Patterns::HEADER)
+      return false if node.at_css("h1") || !furniture_shaped?(node)
+
+      Dom.key(last_descendant(node)).to_i < @last_h1
+    end
+
+    def furniture_shaped?(node)
+      @stats.link_density(node) > 0.5 || node.css("p").none? { |paragraph| @stats.text_chars(paragraph) >= NOTE_PROSE }
+    end
+
+    def last_descendant(node)
+      node = node.last_element_child while node.last_element_child
+      node
     end
 
     def aside_noise?(node)
