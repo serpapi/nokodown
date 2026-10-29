@@ -24,13 +24,14 @@ module Nokodown
       /xi.freeze
       # A file name that stands in for an image still loading or missing:
       # "no-image.png", "placeholder100.png", and a spinner's, all about
-      # loading ("img_load.gif", "ajax-loader.gif") or an animation that
-      # names it ("tribe-loading.gif").
+      # loading ("img_load.gif", "ajax-loader.gif") or naming it in a file
+      # that is no photo ("tribe-loading.gif", "poster_loading.png", but not
+      # "loading-dock.jpg").
       PLACEHOLDER_WORD = /\A(?:placeholder|noimage|noimg|nophoto|lazyload)\d*\z/.freeze
       PLACEHOLDER_PAIRS = [%w[no image], %w[no img], %w[no photo]].freeze
       LOADING_WORD = /\A(?:ajax|img|image|lazy|load|loading|loader|spinner|\d+)\z/.freeze
-      SPINNER_WORD = /\A(?:load|loading|loader|spinner)\z/.freeze
-      ANIMATION = /\.(?:gif|svg)\z/i.freeze
+      SPINNER_WORD = /\A(?:loading|loader|spinner)\z/.freeze
+      PHOTO = /\.(?:jpe?g|webp|avif|heic)\z/i.freeze
       # Icons, logos and avatars, by file name words, folder, class or alt.
       # Some icon words also name things an alt can describe ("Granite
       # kitchen counter"), and count only beside a short alt.
@@ -77,9 +78,14 @@ module Nokodown
 
       def placeholder?(src)
         words = file_words(src)
-        return true if words.any? { |word| word.match?(PLACEHOLDER_WORD) } || words.each_cons(2).any? { |pair| PLACEHOLDER_PAIRS.include?(pair) }
+        words.any? { |word| word.match?(PLACEHOLDER_WORD) } || words.each_cons(2).any? { |pair| PLACEHOLDER_PAIRS.include?(pair) } ||
+          spinner?(words, src)
+      end
 
-        words.any? { |word| word.match?(SPINNER_WORD) } && (path(src).match?(ANIMATION) || words.all? { |word| word.match?(LOADING_WORD) })
+      def spinner?(words, src)
+        return !path(src).match?(PHOTO) if words.any? { |word| word.match?(SPINNER_WORD) }
+
+        words.include?("load") && words.all? { |word| word.match?(LOADING_WORD) }
       end
 
       # In the main content an image stays only when its alt text says what

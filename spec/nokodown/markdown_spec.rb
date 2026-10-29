@@ -422,7 +422,9 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops images that stand in for one still loading or missing" do
-      convert('<p><img src="/img_load.gif" alt="Rose"><img src="/no-image.png" alt="Rose"><img src="/placeholder100.png"></p><p>Rose</p>').should == "Rose"
+      html = '<p><img src="/img_load.gif" alt="Rose"><img src="/no-image.png" alt="Rose"><img src="/placeholder100.png">' \
+             '<img src="/poster_loading.png" alt="Rose"></p><p>Rose</p>'
+      convert(html).should == "Rose"
     end
 
     it "keeps images whose file name holds a placeholder or loading word inside another word" do
