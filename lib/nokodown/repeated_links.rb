@@ -19,6 +19,8 @@ module Nokodown
     NEAREST = 2
     NEAREST_SCAN = 10
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th caption figcaption].freeze
+    MEDIA = %w[img picture video audio iframe svg object embed].freeze
+    MEDIA_SELECTOR = MEDIA.join(", ").freeze
     # An excerpt the label follows ends like a sentence or with "[…]".
     EXCERPT_END = /[.…!?。！？\])]\z/.freeze
 
@@ -121,9 +123,11 @@ module Nokodown
     end
 
     # A link in words can name its page. A term of a definition list is
-    # written without its link, so it does not.
+    # written without its link, so it does not, and neither does a
+    # thumbnail, whose text is the badges over its image, nor a date.
     def namer?(link)
-      link.text.match?(/\p{L}/) && Dom.ancestors_named(link.node, "dt").empty?
+      link.text.match?(/\p{L}/) && !link.text.match?(/\d/) && !link.node.at_css(MEDIA_SELECTOR) &&
+        Dom.ancestors_named(link.node, "dt").empty?
     end
 
     # Controls follow what they act on, so the nearest longer links before

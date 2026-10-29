@@ -36,4 +36,10 @@ RSpec.describe Nokodown::RepeatedLinks do
                                                    "<p><a href='/posts/25'>Read more</a></p>"
     text_after(html).should end_with("Read more")
   end
+
+  it "keeps an item's name when the longer link to its page is a thumbnail or a date" do
+    html = "<li><a href='/vod/1'><img src='/1.jpg'><span>Episode 54 added</span></a><div><a href='/vod/1'>Pokémon</a></div></li>" \
+           "<div><a href='/game/2'><div>15 September, 19:00</div></a><div><a href='/game/2'>Bunker</a></div></div>"
+    text_after(html).should == "Episode 54 addedPokémon15 September, 19:00Bunker"
+  end
 end
