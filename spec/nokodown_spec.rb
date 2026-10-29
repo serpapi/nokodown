@@ -453,5 +453,71 @@ RSpec.describe Nokodown do
     it "drops invalid UTF-8 bytes" do
       Nokodown.to_markdown("<p>a\xFFb</p>", title: false).should == "ab"
     end
+
+    it "reads a page declared Latin-1 as Windows-1252" do
+      html = "<meta charset=iso-8859-1><p>\x93Caf\xE9\x94 \x96 open</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "“Café” – open"
+    end
+
+    it "reads the charset of a <meta> deep in the head" do
+      html = "<head><script>#{"x" * 5000}</script><meta charset=windows-1254></head><p>K\xFDble y\xF6n\xFC</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Kıble yönü"
+    end
+
+    it "reads the encoding of an XML declaration" do
+      html = "<?xml version=\"1.0\" encoding=\"windows-1251\"?><html><body><p>\xCF\xF0\xE8\xE2\xE5\xF2</p></body></html>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Привет"
+    end
+
+    it "reads bytes that are UTF-8 as UTF-8 whatever the page declares" do
+      html = "<meta charset=windows-1251><p>Привет, мир</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Привет, мир"
+    end
+
+    it "detects the encoding of a page that declares none" do
+      {
+        "Windows-1252" => "Ein schöner Tag für große Äpfel und süße Öle",
+        "Windows-1251" => "Добро пожаловать на наш форум о рыбалке",
+        "KOI8-R" => "Добро пожаловать на наш форум о рыбалке",
+        "Shift_JIS" => "今日はとても良い天気ですね。散歩に行きましょう。",
+        "GBK" => "欢迎来到我们的网站，这里有最新的产品信息。",
+        "EUC-KR" => "우리 웹사이트에 오신 것을 환영합니다. 최신 소식을 확인하세요.",
+        "Big5" => "歡迎來到我們的網站，這裡有最新的產品資訊。"
+      }.each do |encoding, text|
+        Nokodown.to_markdown("<p>#{text}</p>".encode(encoding).b, title: false).should == text
+      end
+    end
+
+    it "reads stray bytes in UTF-8 as Windows-1252" do
+      html = "<meta charset=utf-8><p>Ünïcödé text, Reykjav\xEDk \xA9 2020</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Ünïcödé text, Reykjavík © 2020"
+    end
+
+    it "drops what is left of a character cut off" do
+      html = "<meta charset=utf-8><p>Zażółć gęślą jaźń przekaza\xC4...</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Zażółć gęślą jaźń przekaza..."
+    end
+
+    it "undoes UTF-8 read as Windows-1252" do
+      html = "<p>CafÃ© crÃ¨me, itâ€™s ÐŸÑ€Ð¸Ð²ÐµÑ‚ Ã¢â‚¬â€œ twice</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Café crème, it’s Привет – twice"
+    end
+
+    it "keeps letters that only look like UTF-8 read as Windows-1252" do
+      html = "<p>Spaß\u00A0an der « identité\u00A0» und 2×–3×</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "Spaß an der « identité » und 2×–3×"
+    end
+
+    it "drops byte order marks and replacement characters" do
+      Nokodown.to_markdown("\uFEFF<p>a\uFEFFb\uFFFDc</p>".b, title: false).should == "abc"
+    end
   end
 end
