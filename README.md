@@ -92,13 +92,19 @@ with `main_content: false`, `:none` for a document without a body.
   they list pages like this one (the same path but for its last segment, a
   few perhaps a folder deeper, with the same query keys, or fewer, and ids
   for the values that differ) after a line of the page's own text; when they
-  list posts named by their titles under the root, as this page is, under a
-  heading of their own or after a body of text on a page that declares itself
-  an article, a product or a thread; or, on such a page, when the page's own
-  text, or its own list, outweighs each of them. They stay on home pages, in
-  hubs of sections built alike, in forum posts (attachments), when they link
-  to pages below this one, and when the content would be left with fewer
-  than 20 words outside headings and no video of its own.
+  list posts named by their titles under the root, as this page is (a shop
+  that codes its categories and products apart, "-g8893" beside "-37209", is
+  told apart), under a heading of their own or after a body of text on a page
+  that declares itself an article, a product or a thread; on such a page,
+  when the page's own text, or its own list, outweighs each of them; and on
+  any page under a title that calls them related in the major web languages
+  ("You may also like", "Похожие товары", "猜你喜欢") unless they hold most
+  of it. They stay on home pages, in hubs of sections built alike, in forum
+  posts (attachments), under a title the page's address names
+  ("/maglia-jarrod-bowen" over "Maglia Jarrod Bowen"), when they link to
+  pages below this one, as lists of bare links on a listing, and when the
+  content would be left with fewer than 20 words outside headings and no
+  video of its own.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
