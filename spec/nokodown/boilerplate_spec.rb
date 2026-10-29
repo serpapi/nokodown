@@ -376,6 +376,26 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(page, url: "https://wordsforlife.org.uk/cookies/").should include("Google Analytics")
       remaining(form).should include("Google Analytics")
     end
+
+    it "keeps a product whose tags name cookies and a bar" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+      product = "<div class=\"product type-product product_tag-buy-girl-scout-cookies-online product_tag-bar-harbor\">#{notice}</div>"
+
+      remaining("<h1>Super Silver Haze</h1>#{product}").should include("Google Analytics")
+    end
+
+    it "keeps a block named for consent alone" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+
+      remaining("<h1>Study</h1><div class=\"consent-text\">#{notice}</div>").should include("Google Analytics")
+      remaining("<h1>Study</h1><div class=\"entry informed-consent\">#{notice}</div>").should include("Google Analytics")
+    end
+
+    it "keeps a block named as a cookie notice that holds the page's title" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+
+      remaining("<div class=\"cookie-notice-container page\"><h1>Lake at dawn</h1>#{notice}</div>").should include("Google Analytics")
+    end
   end
 
   describe "member panels" do

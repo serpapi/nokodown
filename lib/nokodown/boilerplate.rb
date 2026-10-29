@@ -16,11 +16,16 @@ module Nokodown
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     SIDE_FURNITURE = /sidebar|#{Patterns::WORD_START}footer#{Patterns::WORD_END}/.freeze
     TITLED_TEXT = 20
-    # A banner, bar or dialog named for the cookies, or a consent manager.
+    CONSENT_MANAGER = /onetrust|didomi|cookiebot|usercentrics/.freeze
+    # What a banner is, said in the same name as the cookies ("cookie-notice",
+    # "cmplz-cookiebanner", "gdpr-consent"): words in other names of the
+    # class list belong to them ("informed-consent", "product_tag-bar-harbor").
     CONSENT_PROMPT = /
-      consent|gdpr|ccpa|onetrust|didomi|cookiebot|usercentrics|
-      banner|bar|notice|notification|popup|pop-up|popin|modal|dialog|dlg|overlay|alert|layer|box|prompt|wall
+      consent|banner|bar|notice|notification|popup|pop-up|popin|modal|dialog|dlg|overlay|alert|layer|box|prompt|wall
     /x.freeze
+    # A shop's or a blog's tags and categories name the products or posts it
+    # lists ("product_tag-buy-cookies-online", "category-cookies").
+    LISTED_TAXONOMY = /(?<![\w-])(?:\w+_)?(?:tag|cat|category)-[\w-]+/.freeze
     OVERLAY_ROLES = %w[dialog alertdialog].freeze
     OVERLAY_STYLE = /(?:\A|;)\s*position\s*:\s*(?:fixed|sticky)/i.freeze
     TRAIL_OR_MENU = /breadcrumb|crumbs|trail|#{Patterns::WORD_START}nav|menu/.freeze
@@ -388,14 +393,18 @@ module Nokodown
     end
 
     # A cookie banner is named for what it is as well as for the cookies, or
-    # is laid over the page. On a page about cookies, what is named for them
-    # is the page.
+    # is laid over the page, and never holds the page's title. On a page
+    # about cookies, what is named for them is the page.
     def consent_banner?(node)
-      name = @names[Dom.signature(node)]
-      return false if @consent_page || !name.match?(Patterns::CONSENT)
+      name = @names[Dom.signature(node)].gsub(LISTED_TAXONOMY, " ")
+      return false if @consent_page || !name.match?(Patterns::CONSENT) || node.at_css("h1")
 
-      name.match?(CONSENT_PROMPT) || OVERLAY_ROLES.include?(node["role"]) || node["aria-modal"] == "true" ||
-        node["style"].to_s.match?(OVERLAY_STYLE)
+      name.split.any? { |token| consent_name?(token) } || OVERLAY_ROLES.include?(node["role"]) ||
+        node["aria-modal"] == "true" || node["style"].to_s.match?(OVERLAY_STYLE)
+    end
+
+    def consent_name?(token)
+      token.match?(CONSENT_MANAGER) || (token.match?(Patterns::CONSENT) && token.sub(Patterns::CONSENT, " ").match?(CONSENT_PROMPT))
     end
 
     # A mega menu gives its entries blurbs, so in a header only a paragraph
