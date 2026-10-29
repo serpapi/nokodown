@@ -184,6 +184,13 @@ RSpec.describe "Markdown conversion" do
       convert('<p><a href="https://shop.example/p?id=7&_ga=2.1.2-3&srsltid=AfmBOx">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
     end
 
+    it "writes encoded letters of other scripts in a destination as letters" do
+      html = '<p><a href="/tag/%D8%A7%D8%AE%D8%A8%D8%A7%D8%B1">News</a> <a href="/новости/спорт">Sport</a> ' \
+             '<a href="/a%20b%C2%A0c%E2%80%8Bd%E9">Odd</a> <img src="/%E5%9C%B0%E5%9B%BE.png" alt="Map"></p>'
+      convert(html).should == "[News](https://example.com/tag/اخبار) [Sport](https://example.com/новости/спорт) " \
+                              "[Odd](https://example.com/a%20b%C2%A0c%E2%80%8Bd%E9) ![Map](https://example.com/地图.png)"
+    end
+
     it "strips session ids from links and images" do
       html = '<p><a href="/forum/topic;jsessionid=652BF224C9E98AE30B1B7D9D747F7D8D?id=4">Topic</a> ' \
              '<a href="/viewtopic.php?f=2&sid=65ac1f0e7d1c0e3b9a4f2c7d8e9a0b1c">Post</a> ' \
