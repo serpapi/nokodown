@@ -205,6 +205,10 @@ RSpec.describe Nokodown::Metadata do
     metadata_at("https://hughlupton.com/", "<title>Hugh Lupton - Storyteller</title>")[:title].should == "Hugh Lupton - Storyteller"
   end
 
+  it "keeps the site's name in the title of a language's home page" do
+    metadata_at("https://hughlupton.com/en/", "<title>Hugh Lupton - Storyteller</title>")[:title].should == "Hugh Lupton - Storyteller"
+  end
+
   it "cuts the title after the H1's words at an underscore or before the site's name" do
     metadata("<title>60级副本任务介绍_网络游戏水浒Q传_新浪游戏_新浪网</title>", "<h1>60级副本任务介绍</h1>")[:title].should == "60级副本任务介绍"
     metadata_at("https://www.eventernote.com/events", "<title>June 2016 events and lives Eventernote</title>", "<h1>June 2016 events and lives</h1>")[:title]

@@ -577,9 +577,16 @@ RSpec.describe Nokodown do
         "Shift_JIS" => "今日はとても良い天気ですね。散歩に行きましょう。",
         "GBK" => "欢迎来到我们的网站，这里有最新的产品信息。",
         "EUC-KR" => "우리 웹사이트에 오신 것을 환영합니다. 최신 소식을 확인하세요.",
-        "Big5" => "歡迎來到我們的網站，這裡有最新的產品資訊。"
+        "Big5" => "歡迎來到我們的網站，這裡有最新的產品資訊。",
+        "EUC-JP" => "今日はとても良い天気ですね。散歩に行きましょう。"
       }.each do |encoding, text|
         Nokodown.to_markdown("<p>#{text}</p>".encode(encoding).b, title: false).should == text
+      end
+    end
+
+    it "reads UTF-16 by its byte order mark" do
+      %w[UTF-16LE UTF-16BE].each do |encoding|
+        Nokodown.to_markdown("\uFEFF<p>Grüße aus Köln</p>".encode(encoding).b, title: false).should == "Grüße aus Köln"
       end
     end
 
