@@ -34,6 +34,7 @@ module Nokodown
     PROMPT = 40
     MAX_LINKS = 6
     ITEMS = %w[li dt dd tr td th].freeze
+    UNLINKED_TEXT = ".//text()[not(ancestor::a[@href])]"
 
     module_function
 
@@ -90,7 +91,19 @@ module Nokodown
       links = node.css("a[href]")
       return false if links.size > MAX_LINKS || !links.all? { |link| service_link?(link, site) }
 
-      Dom.char_count(node.content) - links.sum { |link| Dom.char_count(link.content) } <= PROMPT
+      prompt?(node)
+    end
+
+    # "您需要登录后才可以回帖", "Subscribe to:": not a title, a name with a
+    # date or a price that the links sit beside.
+    def prompt?(node)
+      prompt = unlinked_text(node)
+      Dom.char_count(prompt) <= PROMPT && !prompt.match?(/\d/) &&
+        node.css(Dom::HEADING_SELECTOR).all? { |heading| unlinked_text(heading).strip.empty? }
+    end
+
+    def unlinked_text(node)
+      node.xpath(UNLINKED_TEXT).map(&:content).join
     end
   end
 end

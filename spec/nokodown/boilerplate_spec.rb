@@ -574,6 +574,14 @@ RSpec.describe Nokodown::Boilerplate do
       text = remaining_at(html)
       ["Members can log in to see", "ShopLogin", "Register for the outdoor expo"].each { |line| text.should include(line) }
     end
+
+    it "keeps the title or the date that service links sit beside" do
+      html = '<div><h3>Trail kettle</h3><a href="/login">Log in for prices</a></div>' \
+             '<p>5 June 2026 <a href="/feed/">RSS</a></p>'
+
+      text = remaining_at(html)
+      ["Trail kettle", "5 June 2026"].each { |line| text.should include(line) }
+    end
   end
 
   describe "blocks that hold the page's title" do
