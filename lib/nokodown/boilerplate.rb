@@ -14,6 +14,8 @@ module Nokodown
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
+    SIDE_FURNITURE = /sidebar|#{Patterns::WORD_START}footer#{Patterns::WORD_END}/.freeze
+    TITLED_TEXT = 20
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     # What a wrapper has, lacks or allows does not name it: "has-sidebar",
     # "with-navigation", "content-and-menu", "sidebar-enabled--true". The
@@ -45,7 +47,8 @@ module Nokodown
       @single_h1 = @body.css("h1").size == 1
       @trails = Breadcrumbs.trails(@body).map { |trail| Dom.key(trail) }.to_set
       @taxonomy = Taxonomy.blocks(@body, @url)
-      @last_h1 = @body.css("h1").map { |h1| Dom.key(h1).to_i }.max.to_i
+      @title = @body.css("h1").to_a.last
+      @last_h1 = @title ? Dom.key(@title).to_i : 0
       # Card grids repeat the same class list hundreds of times.
       @names = Hash.new { |cache, signature| cache[signature] = signature.gsub(MODIFIER, " ") }
       @furniture = Hash.new { |cache, signature| cache[signature] = @names[signature].match?(Patterns::PAGE_FURNITURE) }
@@ -94,13 +97,14 @@ module Nokodown
     end
 
     # Semantic chrome (nav, a page-level footer) goes even when it outweighs
-    # the content, as legal footnotes often do; class-name guesses do not.
+    # the content, as legal footnotes often do; class-name guesses only when
+    # where they sit or what they ask says they are furniture.
     def removal(node)
       return if @shielded.include?(Dom.key(node))
       # Side notes inside an article are content whatever their class says.
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if (chrome_element?(node) || chrome_role?(node)) && !title_holder?(node)
-      return if dominant?(node) && !header_above_title?(node)
+      return if dominant?(node) && !furniture_however_large?(node)
       return :guess if trail?(node) || @taxonomy.include?(Dom.key(node))
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
@@ -324,8 +328,55 @@ module Nokodown
       Dom.key(last_descendant(node)).to_i < @last_h1
     end
 
+    # A short page's sidebar or footer outweighs it too, and so does a
+    # cookie banner on a page whose content its scripts load.
+    def furniture_however_large?(node)
+      header_above_title?(node) || beside_title?(node) || consent_banner?(node)
+    end
+
+    # A sidebar or footer without prose sits beside the content when the
+    # page's title has text of its own. A title standing alone may head the
+    # block, as an archive's record title heads the fields its theme puts in
+    # a "sidebar".
+    def beside_title?(node)
+      return false unless @title && @names[Dom.signature(node)].match?(SIDE_FURNITURE)
+      return false unless node.at_css("h1").nil? && furniture_shaped?(node)
+
+      branch = title_branch(node)
+      !branch.nil? && @stats.text_chars(branch) - @stats.text_chars(@title) >= TITLED_TEXT
+    end
+
+    # The title's ancestor that sits beside the node, under the parent they share.
+    def title_branch(node)
+      around = node.ancestors.select(&:element?).map { |ancestor| Dom.key(ancestor) }.to_set
+      ([@title] + @title.ancestors.select(&:element?)).each_cons(2) do |branch, parent|
+        return branch if around.include?(Dom.key(parent))
+      end
+      nil
+    end
+
+    # A cookie policy has headings; the banner that links to it has none.
+    def consent_banner?(node)
+      @names[Dom.signature(node)].match?(Patterns::CONSENT) && node.at_css(Dom::HEADING_SELECTOR).nil?
+    end
+
     def furniture_shaped?(node)
-      @stats.link_density(node) > 0.5 || node.css("p").none? { |paragraph| @stats.text_chars(paragraph) >= NOTE_PROSE }
+      @stats.link_density(node) > 0.5 || node.css("p").none? { |paragraph| prose?(paragraph) }
+    end
+
+    # Short lines broken apart, as in an address or opening hours, are not prose.
+    def prose?(paragraph)
+      return false if @stats.text_chars(paragraph) < NOTE_PROSE
+      return true if paragraph.at_css("br").nil?
+
+      longest_line(paragraph) >= NOTE_PROSE
+    end
+
+    def longest_line(paragraph)
+      line = 0
+      paragraph.xpath(".//text() | .//br").map do |node|
+        line = node.element? ? 0 : line + Dom.char_count(node.content)
+      end.max.to_i
     end
 
     def last_descendant(node)

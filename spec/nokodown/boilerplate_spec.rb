@@ -305,6 +305,41 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "furniture that outweighs a short page" do
+    def hours
+      days = %w[Monday Tuesday Wednesday Thursday Friday Saturday].map { |day| "#{day} 9:00-13:00, 14:00-17:30" }
+      "<p>Sakura Clinic<br>3-6-1 Kego, Fukuoka<br>Tel 092 725 7900<br>#{days.join('<br>')}</p>"
+    end
+
+    it "removes a sidebar or footer beside a short post" do
+      ["<div id=\"sidebar\"><h2>Contact</h2>#{hours}</div>", "<div class=\"footer\"><h2>Contact</h2>#{hours}</div>"].each do |box|
+        html = "<div class=\"main\"><h1>Fully booked on Friday</h1><p>The morning slots are taken.</p></div>#{box}"
+
+        text = remaining(html)
+        text.should include("The morning slots are taken.")
+        text.should_not include("Sakura Clinic")
+      end
+    end
+
+    it "keeps a block named like a sidebar under a title that stands alone, or one that holds prose" do
+      ["<div class=\"main\"><div class=\"title\"><h1>Sakura Clinic</h1></div><div id=\"sidebar\">#{hours}</div></div>",
+       "<div class=\"main\"><h1>Clinic news</h1><p>We moved.</p></div><div id=\"sidebar\">#{prose('Our new address', 2)}</div>"]
+        .each do |html|
+        remaining(html).should match(/Sakura Clinic|Our new address is explained/)
+        remaining(html).should match(/Monday 9:00|Part 2/)
+      end
+    end
+
+    it "removes a cookie banner that holds most of a page's text, but not a cookie policy" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+      banner = "<h1>Lake at dawn</h1><img src=\"/lake.jpg\"><div id=\"dlgcookies\">#{notice}</div>"
+      policy = "<h1>Privacy</h1><div class=\"cookie-policy\"><h2>Cookies we use</h2>#{notice}<h2>Refusing them</h2>#{notice}</div>"
+
+      remaining(banner).should_not include("Google Analytics")
+      remaining(policy).should include("Refusing them")
+    end
+  end
+
   describe "member panels" do
     def post(panel)
       "<div class=\"message\">#{panel}<div class=\"message-userContent\">#{prose('Bleeding the radiators', 2)}</div></div>"

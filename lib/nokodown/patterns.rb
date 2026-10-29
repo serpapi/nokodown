@@ -41,11 +41,14 @@ module Nokodown
     # message-userContent, is not one. MemberPanel reduces it to the name.
     MEMBER_PANEL = /#{WORD_START}(?:postprofile|poster-?info|author-?pane|message-user|user-?(?:info|details|extras|stats))(?![\w-])/.freeze
 
+    # Cookie banners and consent managers.
+    CONSENT = /cookie|consent|gdpr|#{WORD_START}ccpa#{WORD_END}|onetrust|didomi|cookiebot|usercentrics/.freeze
+
     # Overlays, ads, prompts and widgets that are never part of the content.
     # "ad" may carry a size ("ad300x250") but must not touch other digits:
     # generated hashes such as "elementor-element-38ad5ea" contain it.
     NOISE = /
-      cookie|consent|gdpr|#{WORD_START}ccpa#{WORD_END}|onetrust|didomi|cookiebot|usercentrics|
+      #{CONSENT.source}|
       newsletter|subscribe|#{WORD_START}sign-?up#{WORD_END}|#{WORD_START}opt-?in#{WORD_END}|#{WORD_START}log-?in#{WORD_END}|#{WORD_START}sign-?in#{WORD_END}|
       advert|adsbygoogle|adsense|#{WORD_START}ad-?(?:slot|unit|container|wrapper|wrap|box|banner|block|label|zone|space)s?#{WORD_END}|
       (?<![a-z\d])(?:ad|ads|dfp|gpt-ad)(?:\d+(?:x\d+)?)?(?![a-z\d])|doubleclick|taboola|outbrain|revcontent|zergnet|
@@ -101,7 +104,7 @@ module Nokodown
     # "skip-item"), but never after a place on the page.
     PLACE = /sidebar|rail|footer|nav|menu|masthead|breadcrumb|crumbs|pager|pagination|copyright|colophon|toolbar|top-?bar/.freeze
 
-    OVERLAY = /cookie|consent|gdpr|onetrust|didomi|cookiebot|usercentrics|modal|popup|pop-up|popover|dialog|flyout|off-?canvas|interstitial|snackbar|toast|tooltip/.freeze
+    OVERLAY = /#{CONSENT.source}|modal|popup|pop-up|popover|dialog|flyout|off-?canvas|interstitial|snackbar|toast|tooltip/.freeze
 
     MENU = /#{WORD_START}(?:menu|menus|menu-?items?)#{WORD_END}/.freeze
 
