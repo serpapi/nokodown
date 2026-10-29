@@ -158,7 +158,8 @@ module Nokodown
     # one is the layout around it.
     def runs
       found = @body.css("*").flat_map do |parent|
-        shapes(parent.element_children).values.filter_map { |items| run(parent, items) }
+        children = parent.element_children
+        children.size < MIN_ITEMS ? [] : shapes(children).values.filter_map { |items| run(parent, items) }
       end
       outer = found.flat_map { |run| run.parent.ancestors.map { |ancestor| Dom.key(ancestor) } }.compact.to_set
       found.reject { |run| outer.include?(Dom.key(run.parent)) }
@@ -182,12 +183,24 @@ module Nokodown
       chars = items.sum { |item| @stats.chars(item) }
       return if chars > MAX_ITEM_CHARS * items.size
 
-      links = items.map { |item| primary_link(item) }
-      targets = links.map { |link| link && target(link["href"]) }
-      return unless distinct_targets?(targets.compact, items.size)
-      return if items.zip(links).count { |item, link| teaser?(item, link) } < items.size * RICH_SHARE
+      links = primary_links(items)
+      return if links.nil? || items.zip(links).count { |item, link| teaser?(item, link) } < items.size * RICH_SHARE
 
-      Run.new(parent, items, targets, chars)
+      targets = links.map { |link| link && target(link["href"]) }
+      Run.new(parent, items, targets, chars) if distinct_targets?(targets.compact, items.size)
+    end
+
+    # Stops at the first items without a link, as in most lists.
+    def primary_links(items)
+      allowed = items.size * (1 - DISTINCT_SHARE)
+      missing = 0
+      items.map do |item|
+        link = primary_link(item)
+        missing += 1 unless link
+        return nil if missing > allowed
+
+        link
+      end
     end
 
     def distinct_targets?(targets, size)
@@ -197,12 +210,16 @@ module Nokodown
     # The title link, or else the first link with text: an image link often
     # comes first.
     def primary_link(item)
-      links = item.name == "a" ? [item] : item.css("a[href]").to_a
-      links.find { |link| title_link?(link) } || links.find { |link| @stats.chars(link) > 1 } || links.first
+      return item if item.name == "a"
+
+      links = item.css("a[href]")
+      headings = item.css(HEADING)
+      title = links.find { |link| title_link?(link, headings) } unless headings.empty?
+      title || links.find { |link| @stats.chars(link) > 1 } || links.first
     end
 
-    def title_link?(link)
-      link.at_css(HEADING) || Dom.ancestors_named(link, *Dom::HEADINGS).any?
+    def title_link?(link, headings)
+      link.at_css(HEADING) || headings.any? { |heading| heading.css("a[href]").any? { |inner| Dom.key(inner) == Dom.key(link) } }
     end
 
     # A teaser shows a thumbnail or a date, or is a card: its title is a
@@ -211,15 +228,22 @@ module Nokodown
     # heading is not its link is content with a call to action ("Deposit ...
     # More →"), and a column of links is a menu.
     def teaser?(item, link)
-      heading = item.at_css(HEADING)
-      return false if link.nil? || (heading && !title_link?(link))
+      headings = item.css(HEADING)
+      return false if link.nil? || (!headings.empty? && !title_link?(link, headings))
       return true if item.at_css(MEDIA)
 
       card = Dom.key(link) == Dom.key(item)
-      return false unless card || title_link?(link) || Dom.text(item).match?(DATE)
+      return false unless card || !headings.empty? || Dom.text(item).match?(DATE)
 
-      extra = card ? @stats.chars(item) - (heading ? @stats.chars(heading) : @stats.chars(item)) : @stats.text_chars(item)
-      extra >= RICH_TEXT
+      beside_title(item, card, headings) >= RICH_TEXT
+    end
+
+    # Text besides the title: a card link holds all of it.
+    def beside_title(item, card, headings)
+      return @stats.text_chars(item) unless card
+      return 0 if headings.empty?
+
+      @stats.chars(item) - headings.sum { |heading| @stats.chars(heading) }
     end
 
     # Another page of this site, not a file on it.
@@ -238,26 +262,22 @@ module Nokodown
     # title and a "more" link. When the items sit beside other content, the
     # block is the items alone.
     def block(run)
-      nodes = [run.parent]
-      title = title_in(run.parent, run)
-      if extra(run.parent, run, title) > SLACK
-        nodes = run.items
-        title = nil
-      else
-        nodes, title = widen(run, title)
-      end
+      title = title_in(run.parent, run) unless holds_more?(run.parent, run, MAX_HEADING)
+      nodes, title = holds_more?(run.parent, run, length(title)) ? [run.items, nil] : widen(run, title)
       title ||= title_before(nodes.first)
       Block.new(nodes, title, share?(run) { |uri| sibling?(uri) }, share?(run) { |uri| child?(uri) }, run.chars)
     end
 
+    # Looking for a title only where even the longest one would leave no
+    # more than the slack.
     def widen(run, title)
       node = run.parent
       loop do
         up = node.parent
-        break if up.nil? || !up.element? || up.name == "body" || up.at_css(PROTECTED)
+        break if up.nil? || !up.element? || up.name == "body" || holds_more?(up, run, MAX_HEADING) || up.at_css(PROTECTED)
 
         up_title = title || title_in(up, run)
-        break if extra(up, run, up_title) > SLACK
+        break if holds_more?(up, run, length(up_title))
 
         node = up
         title = up_title
@@ -265,8 +285,12 @@ module Nokodown
       [[node], title]
     end
 
-    def extra(node, run, title)
-      @stats.chars(node) - run.chars - (title ? @stats.chars(title) : 0)
+    def holds_more?(node, run, title_length)
+      @stats.chars(node) - run.chars - title_length > SLACK
+    end
+
+    def length(title)
+      title ? @stats.chars(title) : 0
     end
 
     # The first title before the items, however deep: old layouts put it in
@@ -296,8 +320,10 @@ module Nokodown
     # titles, a link among others is not, and neither is the caption or the
     # header row of a data table, which names the table's own columns.
     def title?(node)
+      return false if @stats.chars(node).zero? || @stats.chars(node) > MAX_HEADING
+
       text = Dom.text(node)
-      return false if text.empty? || text.match?(/\d/) || node.name == "a" || Dom.ancestors_named(node, "a").any?
+      return false if text.match?(/\d/) || node.name == "a" || Dom.ancestors_named(node, "a").any?
 
       (heading?(node) ? text.length <= MAX_HEADING : label?(node, text)) && !in_data_table?(node)
     end
