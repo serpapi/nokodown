@@ -16,6 +16,18 @@ RSpec.describe "UI labels" do
     convert(lines.map { |line| "<p>#{line}</p>" }.join + text).should == "The stove boils a litre in three minutes."
   end
 
+  it "drops a counter written over two lines" do
+    convert("#{text}<p>Views:</p><p>1,204</p>").should == "The stove boils a litre in three minutes."
+  end
+
+  it "drops a card's comment count and read-more once only the card's title links to its page" do
+    cards = (1..3).map do |index|
+      "<article><h3><a href='/post#{index}'>Stove test #{index}</a></h3>#{text}" \
+        "<p><a href='/post#{index}#comments'>Comments: #{index}</a></p><p><a href='/post#{index}'>En savoir plus</a></p></article>"
+    end
+    convert("<main>#{cards.join}</main>").should_not match(/Comments|savoir/)
+  end
+
   it "keeps a line of counters that ends in words" do
     line = "#{'조회 1 ' * 15}and more"
     convert("<p>#{line}</p>").should == line

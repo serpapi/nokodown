@@ -81,6 +81,24 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, article_url).should be_empty
   end
 
+  it "keeps the rows of a data table" do
+    rows = stories.map do |title|
+      slug = title.downcase.delete("^a-z ").tr(" ", "-")
+      "<tr><td><a href='/blog/#{slug}'>#{title}</a></td><td>12.04.2026</td><td>51 KB</td></tr>"
+    end
+    header = "<thead><tr><td>Name</td><td>Uploaded</td><td>Size</td></tr></thead>"
+    html = "<h1>Bridge reopens</h1>#{story(3)}<h2>Earlier versions</h2><table>#{header}<tbody>#{rows.join}</tbody></table>"
+
+    blocks(html, article_url).should be_empty
+  end
+
+  it "does not take the label of a sort control for the title of a list" do
+    sort = "<div class='sort'><span>Sort by:</span><form><select name='sort'><option>Price</option></select></form></div>"
+    html = "<h1>Bridge reopens</h1>#{story(3)}<div>#{sort}<div class='grid'>#{cards(stories, '/shop/')}</div></div>"
+
+    blocks(html, article_url).should be_empty
+  end
+
   it "does not take a count over a list of cards for its title" do
     grid = "<div class='grid'>#{cards(stories, '/blog/')}</div>"
     html = "<h1>Bridge reopens</h1>#{story(3)}<p>Showing 1-3 of 40</p>#{grid}"
@@ -118,6 +136,19 @@ RSpec.describe Nokodown::Teasers do
     text = markdown(html, "https://shop.example.com/shoes/cirrus")
     text.should include("rock plate")
     text.should_not include("Trail shoe model 3")
+  end
+
+  it "takes dated permalinks and coded product pages for pages like this one" do
+    rows = lambda do |href|
+      stories.each_with_index.map do |title, index|
+        "<div class='row'><b>12.08.2026</b> <a href='#{href.call(index)}'>#{title}</a> <span>A short summary.</span></div>"
+      end.join
+    end
+    dated = rows.call(->(index) { "/2026/4/#{index + 2}/port/#{575_500 + index}.html" })
+    coded = rows.call(->(index) { "/fq0#{index}4100.html" })
+
+    blocks("<div class='news'>#{story(2)}#{dated}</div>", "https://news.example.com/2026/4/30/port/575431.html").should_not be_empty
+    blocks("<div class='news'>#{story(2)}#{coded}</div>", "https://shop.example.com/fq146100.html").should_not be_empty
   end
 
   it "keeps a listing whose address looks like its items' when its list comes first" do

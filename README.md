@@ -66,8 +66,10 @@ with `main_content: false`, `:none` for a document without a body.
   however much it holds, a footer by any name that ends a page (not one
   inside `main` or an article, nor the footer of a section, a card or a
   quote), a breadcrumb trail by its shape in any language (a link to the
-  home page, then links down the site with separators), and copyright and
-  licence lines in the major web languages.
+  home page, then links down the site with separators), a line of links to
+  the site's tag, category or label archives ("Tags: a, b", a category above
+  the title) with at most a short label, except on such an archive, and
+  copyright and licence lines in the major web languages.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
@@ -103,7 +105,8 @@ with `main_content: false`, `:none` for a document without a body.
   copies of the title (an H2 or bold line under the H1, a gallery label on
   every item), labels and tabs over the heading they repeat, lists made of
   the page's own headings, a "Read more", "Leer más" or "Comprar" link
-  after a title that links to the same page, labels of controls ("Menu",
+  after a title that links to the same page (judged card by card, so a
+  label the page uses once goes too), labels of controls ("Menu",
   "Loading...", "Back to top", "Quantity:", "prev / next"), counters
   without a label (view and comment counts, FAQ and step badges, slide
   numbers, a player's "0:00"), and form labels left without their fields.
@@ -112,8 +115,8 @@ with `main_content: false`, `:none` for a document without a body.
   card ("In stock") stay.
 - Tracking pixels, spacers, icons, placeholders and loading spinners
   (`no-image.png`, `img_load.gif`), README badges, click-tracking URL
-  parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors, "Read more"
-  links, code line numbers, and repeated responsive copies of the same image.
+  parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors, English
+  "Read more" and "Continue reading" links wherever they are, code line numbers, and repeated responsive copies of the same image.
 - Markdown that costs tokens without meaning: horizontal rules, blank lines
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators
@@ -122,7 +125,7 @@ with `main_content: false`, `:none` for a document without a body.
   change the rendering. A card's repeated links to its own page keep their
   text without the URL (its title keeps the link), and a button such as
   "Read more", a text the page uses once for each of several pages, goes when
-  it ends its line; texts that take turns from card to card ("Sold",
+  it ends its line (judged across all cards, in any language); texts that take turns from card to card ("Sold",
   "Available") are values and stay.
 - In the main content, images whose alt text does not say what they show, at
   any size and in any wrapper (a figure keeps its caption): no alt text, a
@@ -142,8 +145,8 @@ with `main_content: false`, `:none` for a document without a body.
   "Shop now" link goes too; in an `:article`, only one outside a figure whose
   alt is a word or two, or is mostly the link text.
 - Later copies of an image that stands alone on its line: always for an
-  image without alt text or whose alt is only a file name, as in a gallery's
-  thumbnail strip, and for one with alt text only when nothing but
+  image whose alt names nothing (none, a file or camera name, "photo"), as in
+  a gallery's thumbnail strip, and for one with alt text only when nothing but
   images came since the last copy, as in a logo strip shown twice. A line
   with several copies of one image, such as a row of rating stars, keeps
   them all.
