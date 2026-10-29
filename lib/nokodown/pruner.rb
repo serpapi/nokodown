@@ -22,6 +22,8 @@ module Nokodown
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
+    MIN_TITLED_CONTENT = 200
+    MIN_LEFT = 200
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
     SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ")
     LETTER = /\p{L}/.freeze
@@ -189,27 +191,60 @@ module Nokodown
     end
 
     # Navigation that survived as unlabeled markup: several links, almost no
-    # other text, and no link long enough to be a headline.
+    # other text, and no link long enough to be a headline. An index page
+    # keeps its clusters, which are its content, but not its menus.
     def remove_link_clusters(root)
-      remove_menus(root)
-      clusters = root.css(CLUSTER_CONTAINERS).select { |node| link_cluster?(node) && !in_data_table?(node) }
-      # Removal can only start at one of these, so none means nothing to remove.
-      return if clusters.empty? || clusters_dominate?(root, clusters)
+      clusters = link_clusters(root)
+      index = !clusters.empty? && clusters_dominate?(root, clusters)
+      remove_menus(root, index ? clusters_above_title(root, clusters) : [])
+      # Removal can only start at a cluster, so none means nothing to remove.
+      return if index || clusters.empty?
 
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
         remove_with_label(node, root) if link_cluster?(node) && !in_data_table?(node)
       end
     end
 
+    # Menus stay when they are nearly all the page holds.
+    def remove_menus(root, menus)
+      menus = outermost((menus + current_page_menus(root)).uniq { |menu| Dom.key(menu) })
+      return if menus.empty? || Dom.text(root).length - menus.sum { |menu| Dom.text(menu).length } < MIN_LEFT
+
+      menus.each { |menu| remove_with_label(menu, root) }
+    end
+
+    def link_clusters(root)
+      root.css(CLUSTER_CONTAINERS).select { |node| link_cluster?(node) && !in_data_table?(node) }
+    end
+
+    # The page title opens the content, so the clusters before it are the
+    # site's menus. A title with little after it, like an SEO line at the
+    # foot of the page, opens nothing.
+    def clusters_above_title(root, clusters)
+      title = root.at_css("h1")
+      return [] if title.nil? || text_after(title, root) < MIN_TITLED_CONTENT
+
+      position = Dom.key(title).to_i
+      outermost(clusters).select { |node| Dom.key(node).to_i < position && !node.at_css("h1") }
+    end
+
+    def text_after(node, root)
+      length = 0
+      until node.nil? || Dom.key(node) == Dom.key(root)
+        sibling = node
+        length += Dom.text(sibling).length while (sibling = sibling.next_sibling)
+        node = node.parent
+      end
+      length
+    end
+
     # A list of links holding one to the page itself shows the reader where
-    # they are: a menu, a breadcrumb trail, a pager. That holds on an index
-    # page too, where the other clusters are the content.
-    def remove_menus(root)
-      return unless @urls
+    # they are: a menu, a breadcrumb trail, a pager.
+    def current_page_menus(root)
+      return [] unless @urls
 
       links = root.css("a[href]").select { |link| @urls.current_page?(link["href"]) }
-      menus = links.filter_map { |link| menu_of(link, root) }.uniq { |menu| Dom.key(menu) }
-      menus.each { |menu| remove_with_label(menu, root) }
+      links.filter_map { |link| menu_of(link, root) }
     end
 
     def menu_of(link, root)

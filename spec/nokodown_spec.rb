@@ -97,7 +97,11 @@ RSpec.describe Nokodown do
     end
 
     it "drops a menu that links to the page itself, even on an index page" do
-      topics = %w[Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts]
+      topics = %w[
+        Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts
+        Dentistry Design Drama Diving Ecology Economics Energy Ethics Farming Fashion Fishing Forestry
+        Gardening Geography Geology Glassmaking Hiking History Horses Hunting
+      ]
       index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
       menu = '<ul><li><a href="/news">News</a></li><li><a href="https://www.example.com/page/">Topics</a> (8)</li>' \
              '<li><a href="/events">Events</a></li></ul>'
@@ -106,6 +110,34 @@ RSpec.describe Nokodown do
 
       markdown.should include("- [Baking](https://example.com/topics/baking)")
       ["News", "Events"].each { |noise| markdown.should_not include(noise) }
+    end
+
+    it "keeps the menu of an index page that holds little else" do
+      topics = %w[Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts]
+      index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
+      menu = '<ul><li><a href="/news">News</a></li><li><a href="/page">Topics</a></li><li><a href="/events">Events</a></li></ul>'
+
+      markdown = extract("<main><h1>Topics</h1>#{index}#{menu}</main>")
+
+      markdown.should include("- [Events](https://example.com/events)")
+    end
+
+    it "drops the menus above the page title even when they hold most of the text" do
+      departments = %w[Party Toys Bedding Cleaning Office School Kitchen Garden Tools Paint Pets Books]
+      groups = departments.map do |name|
+        slug = "/#{name.downcase}"
+        "<li><a href=\"#{slug}\">#{name}</a><ul><li><a href=\"#{slug}/new\">New</a></li>" \
+          "<li><a href=\"#{slug}/sale\">Sale</a></li><li><a href=\"#{slug}/all\">All #{name}</a></li></ul></li>"
+      end
+      product = "<h1>Hardcover notebook, 200 sheets</h1><ul><li>Code: 31579</li><li>Barcode: 7894494526435</li>" \
+                "<li>Brand: Jandaia</li><li>Package: 4 units</li><li>Weight: 0.4 kg</li></ul>" \
+                "<p>A ruled notebook with a hard PET cover, a ribbon marker and a pocket inside the back cover. " \
+                "The sheets are 56 g paper with a margin line, and the notebook is sold by the package.</p>"
+
+      markdown = extract("<body><div class=\"mobilemenu\"><ul>#{groups.join}</ul></div><div>#{product}</div></body>")
+
+      markdown.should include("- Barcode: 7894494526435")
+      ["Party", "Bedding", "All Books"].each { |noise| markdown.should_not include(noise) }
     end
 
     it "keeps cards whose tags link to the page itself" do
