@@ -33,18 +33,19 @@ module Nokodown
       end
 
       def children_blocks(node)
-        blocks = []
+        groups = []
         run = []
         node.children.each do |child|
           if block_level?(child)
-            blocks.concat(paragraphs(run))
+            groups << paragraphs(run)
             run = []
-            blocks.concat(block(child))
+            groups << block(child)
           else
             run << child
           end
         end
-        blocks.concat(paragraphs(run))
+        groups << paragraphs(run)
+        Labels.siblings(groups.reject(&:empty?))
       end
 
       def paragraphs(nodes)

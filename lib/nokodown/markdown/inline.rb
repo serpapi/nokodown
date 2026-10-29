@@ -216,6 +216,7 @@ module Nokodown
       end
 
       # Headings are bold already; nested emphasis of the same kind is dropped.
+      # Emphasis cannot span paragraphs, so each paragraph is marked alone.
       def emphasis(node, marker)
         return render(node.children) if @emphasis[marker].positive? || (@in_heading && marker == "**")
 

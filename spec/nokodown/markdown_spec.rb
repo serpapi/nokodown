@@ -74,6 +74,17 @@ RSpec.describe "Markdown conversion" do
                               "Check all that apply:\n\nFurniture\n\nJunk\n\nTyres"
     end
 
+    it "joins a label only to a value its sibling element holds" do
+      html = "<div><p>Thanks for watching</p><div><div><span>Date:</span></div><div>2026. 08. 10.</div></div>" \
+             '<div><div>Tags:</div><div> </div></div></div><div><a href="/list">Add to list</a></div>'
+      convert(html).should == "Thanks for watching\n\nDate: 2026. 08. 10.\n\nTags:\n\n[Add to list](https://example.com/list)"
+    end
+
+    it "takes a number after a name for that name's value, not the next name's" do
+      html = "<div><p>Main Floor</p><p>1045</p><p>Second Floor</p><p>Loft</p><p>440</p><p>Stories</p><p>1.5</p><p>Basement</p></div>"
+      convert(html).should == "Main Floor\n\n1045\n\nSecond Floor\n\nLoft\n\n440\n\nStories\n\n1.5\n\nBasement"
+    end
+
     it "drops decorative separator lines" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
     end
