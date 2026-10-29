@@ -231,8 +231,10 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    is not a link cluster, however short.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
-   highlighter's classes, GFM tables (rowspans and colspans filled in) for data
-   tables while layout tables are unwrapped, and a list of "name: value" lines
+   highlighter's classes, GFM tables (rowspans and colspans filled in, a
+   heading in a cell as its text, and a row across the end of the table, such
+   as a note, below it) for data tables while layout tables are unwrapped,
+   and a list of "name: value" lines
    for a two-column table without column names, definition lists, details,
    TeX from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
    other scripts as 2^(n-1) and a_n. A `<pre>` whose lines are set with `<br>`

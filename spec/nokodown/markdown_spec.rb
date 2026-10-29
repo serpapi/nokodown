@@ -1095,6 +1095,15 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Specs\n\n| Key | Value |\n| --- | --- |\n| Weight | 3 kg |"
     end
 
+    it "writes rows across the end of a table below it" do
+      html = "<table><tr><th>Size</th><th>Height</th><th>Weight</th></tr><tr><td>S</td><td>10</td><td>1</td></tr>" \
+             '<tr><td>M</td><td>15</td><td>2</td></tr><tr><td colspan="3">Other sizes on request.</td></tr></table>' \
+             '<table><tr><td colspan="4">Notice</td></tr><tr><th>Date</th><td>2021-09-01</td><th>Type</th><td>Info</td></tr>' \
+             '<tr><td colspan="4"><p>Hello.</p><p>Please update.</p></td></tr></table>'
+      convert(html).should == "| Size | Height | Weight |\n| --- | --- | --- |\n| S | 10 | 1 |\n| M | 15 | 2 |\n\nOther sizes on request.\n\n" \
+                              "Notice\n\nDate 2021-09-01 Type Info\n\nHello.\n\nPlease update."
+    end
+
     it "keeps rows across a table of names and values in their place" do
       html = '<table><tr><td colspan="2">Acme Films</td></tr><tr><th>Website:</th><td>acme.org</td></tr>' \
              '<tr><td colspan="2">Film Festival</td></tr><tr><th>Website:</th><td>festival.org</td></tr></table>'
@@ -1116,6 +1125,12 @@ RSpec.describe "Markdown conversion" do
       rows = %w[Apple Pear].map { |fruit| %(<tr><td>#{fruit}</td><td><a href="/buy/#{fruit}">Buy</a></td></tr>) }.join
       convert("<table><tr><th>Item</th><th></th></tr>#{rows}</table>").should ==
         "| Item |  |\n| --- | --- |\n| Apple | [Buy](https://example.com/buy/Apple) |\n| Pear | [Buy](https://example.com/buy/Pear) |"
+    end
+
+    it "writes the headings in a table's cells as their text" do
+      html = '<table><tr><th>Forum</th><th>Topics</th></tr><tr><td><h3><a href="/f/1">General</a></h3>Talk</td><td>12</td></tr>' \
+             "<tr><td><h3>News</h3></td><td>3</td></tr></table>"
+      convert(html).should == "| Forum | Topics |\n| --- | --- |\n| [General](https://example.com/f/1) Talk | 12 |\n| News | 3 |"
     end
 
     it "keeps cell values written as a sign" do

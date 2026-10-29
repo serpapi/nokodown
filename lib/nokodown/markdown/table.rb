@@ -23,9 +23,10 @@ module Nokodown
         return caption + [Block.new(:list, name_values(grid))] if grid.size >= 2 && names?(grid) && !header_row?
 
         titles = title_rows(grid, spanning)
+        notes = note_rows(grid, spanning)
         return layout_blocks if grid.size < 2 || grid.first.size < 2
 
-        caption + titles + [Block.new(:table, gfm(grid))]
+        caption + titles + [Block.new(:table, gfm(grid))] + notes
       end
 
       private
@@ -45,6 +46,17 @@ module Nokodown
           titles << Block.new(:paragraph, Text.escape_line_starts(grid.shift.first.gsub("\\|", "|")))
         end
         titles
+      end
+
+      # Rows across the table at its end hold a note or the text of a post
+      # laid out in a table, which go below it.
+      def note_rows(grid, spanning)
+        notes = []
+        while grid.size > 1 && spanning.last && grid.last.first != ""
+          spanning.pop
+          notes.unshift(Block.new(:paragraph, Text.escape_line_starts(grid.pop.first.gsub("\\|", "|"))))
+        end
+        notes
       end
 
       # GFM takes a table's first row for its column names, which a table of
@@ -126,7 +138,7 @@ module Nokodown
         column = 0
         Tables.cells(row).each do |cell|
           column += 1 while line.key?(column)
-          text = Emphasis.unwrap(Emphasis.merge(@renderer.cell_blocks(cell).map(&:text).join(" ")))
+          text = Emphasis.unwrap(Emphasis.merge(cell_text(@renderer.cell_blocks(cell))))
           text = Text.table_cell(Text.unescape_lone(text))
           rows = span(cell, "rowspan", MAX_ROWSPAN)
           span(cell, "colspan", MAX_COLSPAN).times do |offset|
@@ -136,6 +148,11 @@ module Nokodown
           end
           column += 1 while line.key?(column)
         end
+      end
+
+      # A heading's markers mean nothing in a cell.
+      def cell_text(blocks)
+        blocks.map { |block| block.kind == :heading ? block.text.sub(/\A#+ /, "") : block.text }.join(" ")
       end
 
       def span(cell, attribute, limit)
