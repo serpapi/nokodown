@@ -80,7 +80,8 @@ module Nokodown
     # Keys survive the copy article cleaning works on. Content that would be
     # left with a heading and a line or two keeps its blocks: on a listing
     # whose address looks like a single page's, they were the content after
-    # all.
+    # all. A video's or a recording's page is its player, however few its
+    # words.
     def self.strip(nodes, keys)
       return nodes if keys.empty?
 
@@ -88,7 +89,7 @@ module Nokodown
       nodes.each { |root| root.traverse { |node| found << node if node.element? && keys.include?(Dom.key(node)) } }
       found.reject! { |node| node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) } }
       left = nodes.sum { |root| words(root) } - found.sum { |node| words(node) }
-      return nodes if left < MIN_WORDS_LEFT
+      return nodes if left < MIN_WORDS_LEFT && !player_left?(nodes, found)
 
       parents = found.map(&:parent)
       found.each(&:remove)
@@ -96,6 +97,11 @@ module Nokodown
       parents.each { |parent| remove_emptied(parent, roots) }
       nodes
     end
+
+    def self.player_left?(nodes, found)
+      nodes.sum { |root| root.css(PLAYERS).size } > found.sum { |node| node.css(PLAYERS).size }
+    end
+    private_class_method :player_left?
 
     # A heading over several blocks ("Previous matches" over a column per
     # team) is left with nothing under it.
@@ -108,10 +114,12 @@ module Nokodown
     end
     private_class_method :remove_emptied
 
-    # Words outside headings.
+    # Words outside headings. A heading longer than any title is a paragraph
+    # set in a heading's type.
     def self.words(node)
       return node.content.scan(WORD).size if node.text?
-      return 0 if !node.element? || Dom.heading?(node) || node["role"] == "heading"
+      return 0 unless node.element?
+      return 0 if (Dom.heading?(node) || node["role"] == "heading") && Dom.text(node).length <= MAX_HEADING
 
       node.children.sum { |child| words(child) }
     end

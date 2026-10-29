@@ -444,4 +444,28 @@ RSpec.describe Nokodown::Teasers do
 
     blocks(html, "https://shop.example.com/info/9", nil).should be_empty
   end
+
+  it "removes the teasers of a video's page however few its words" do
+    videos = stories.each_with_index.map do |title, index|
+      "<div class='item'><a href='video-detail?id=#{17 + index}'><img src='/img/#{index}.jpg' alt=''></a>" \
+        "<h6><a href='video-detail?id=#{17 + index}'>#{title}</a></h6></div>"
+    end
+    html = "<h1>The minister speaks at the twelfth wind energy congress in the capital city</h1>" \
+           "<iframe src='https://www.youtube.com/embed/V55VQKvORq0'></iframe>" \
+           "<div class='more'><h4>Other videos</h4><div class='row'>#{videos.join}</div></div>"
+
+    text = markdown(html, "https://gov.example.org/video-detail?id=105")
+    text.should include("V55VQKvORq0")
+    text.should_not include(stories.first)
+  end
+
+  it "counts the words of a paragraph set as a heading toward what the teasers leave" do
+    html = "<div class='story'><h5>#{story(1)[3..-5]}</h5><div class='box'>#{cards(stories, '/blog/')}</div></div>"
+    root = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css(".story")
+    Nokodown::Dom.assign_keys(root)
+
+    described_class.strip([root], Set[Nokodown::Dom.key(root.at_css(".box"))])
+    root.content.should include("cracked bearings")
+    root.content.should_not include("School board")
+  end
 end
