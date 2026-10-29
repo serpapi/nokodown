@@ -151,8 +151,10 @@ RSpec.describe Nokodown::Pruner do
       text.should_not include("محفوظة")
     end
 
-    it "removes the links that share the line's block" do
-      pruned("#{story}<div><p>© 2026 Harbor Times</p><a href=\"/privacy\">Privacy</a> | <a href=\"/terms\">Terms</a></div>").should end_with("dry weather.")
+    it "removes the links and numbers that share the line's block" do
+      line = "<div><span>21064736</span><p>Harbor Times 2026. All rights reserved.</p><a href=\"/privacy\">Privacy</a> | <a href=\"/terms\">Terms</a></div>"
+
+      pruned(story + line).should end_with("dry weather.")
     end
   end
 

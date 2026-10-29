@@ -8,7 +8,7 @@ module Nokodown
     LAYOUT_CELLS = "td, center, font"
     NOTICE_BLOCKS = "#{TEXT_BLOCKS}, #{LAYOUT_CELLS}"
     MAX_NOTICE = 200
-    ONLY_MARKS = /\A[\p{P}\p{S}\s]*\z/.freeze
+    NO_WORDS = /\A[\p{P}\p{S}\p{N}\s]*\z/.freeze
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
     # A class names a button when that is its last word, before a modifier,
@@ -271,15 +271,15 @@ module Nokodown
     end
 
     # The smallest block carries the notice. The block around it goes too
-    # when the rest of it is links ("Privacy | Terms"), but not when it also
-    # holds a product's name and price.
+    # when the rest of it is links and numbers ("Privacy | Terms", a visitor
+    # counter), but not when it also holds a product's name and price.
     def remove_notices(notices)
       keys = notices.map { |node| Dom.key(node) }.to_set
       carriers = notices.reject { |node| node.css(NOTICE_BLOCKS).any? { |child| keys.include?(Dom.key(child)) } }
       carrier_keys = carriers.map { |node| Dom.key(node) }.to_set
       notices.each do |node|
         rest = carrier_keys.include?(Dom.key(node)) ? "" : Dom.squish(text_outside(node, carrier_keys))
-        remove(node) if rest.match?(ONLY_MARKS)
+        remove(node) if rest.match?(NO_WORDS)
       end
     end
 
