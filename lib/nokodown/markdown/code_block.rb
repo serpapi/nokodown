@@ -23,6 +23,9 @@ module Nokodown
       # list and quote markers this is the fence of a code block nested in
       # a list or a quote.
       NESTED_FENCE = /\A(?: |>|(?:[-*+]|\d+\.) )*(`{3,})/.freeze
+      SENTENCE = /\p{L}+(?:[ ,]+\p{L}+){7}/.freeze
+      CODE_SIGNS = /[{}\[\]<>=;$\\|_`^~@#]/.freeze
+      MAX_CODE_SIGNS = 0.01
 
       module_function
 
@@ -72,6 +75,17 @@ module Nokodown
 
         fence = Text.code_fence(text)
         [Block.new(:code, "#{fence}#{language(node)}\n#{text}\n#{fence}")]
+      end
+
+      # Site builders put a product's description in a <pre> to keep its line
+      # breaks. Lines set with <br> or <p> rather than typed, that read as
+      # sentences with next to no code signs, are text.
+      def prose?(node)
+        return false if node.at_css("br, p").nil? || node.at_css(Dom::INLINE_CODE.join(", ")) || !language(node).empty?
+        return false if node.xpath(".//text()").any? { |text| text.content.strip.include?("\n") }
+
+        text = node.content
+        text.match?(SENTENCE) && text.scan(CODE_SIGNS).size <= text.length * MAX_CODE_SIGNS
       end
 
       # <code> used as a block: <div class="code"><code>multi-line</code></div>.

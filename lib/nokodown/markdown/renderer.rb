@@ -121,7 +121,7 @@ module Nokodown
         when "ul", "ol", "menu", "dir" then list(node)
         when "li" then format_list([children_blocks(node)].reject(&:empty?), nil)
         when "blockquote" then quote(node)
-        when "pre" then CodeBlock.render(node, CodeBlock.preformatted(node))
+        when "pre" then CodeBlock.prose?(node) ? children_blocks(node) : CodeBlock.render(node, CodeBlock.preformatted(node))
         when "code" then CodeBlock.render(node, node.content)
         when "table" then Table.new(self, node).blocks
         when "dl" then definition_list(node)

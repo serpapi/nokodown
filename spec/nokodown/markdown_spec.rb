@@ -935,6 +935,13 @@ RSpec.describe "Markdown conversion" do
         "```js\nlet a = 1\n```\n\n```python\nprint(1)\n```\n\nOutput\n\n```\n1\n```"
     end
 
+    it "writes a description that a site builder set in <pre> as text" do
+      html = "<pre data-hook=\"description\">Get to know your new favorite tee, made from a soft cotton jersey that keeps its shape." \
+             "<br><br>- Fabric: 96% polyester<br>- Regular fit</pre><pre>Usage: tool [options]<br>Run the tool on every file in the folder.</pre>"
+      convert(html).should == "Get to know your new favorite tee, made from a soft cotton jersey that keeps its shape.\n\n" \
+                              "- Fabric: 96% polyester\n- Regular fit\n\n```\nUsage: tool [options]\nRun the tool on every file in the folder.\n```"
+    end
+
     it "uses a longer fence when the code contains one" do
       convert("<pre>```\ninner\n```</pre>").should == "````\n```\ninner\n```\n````"
     end
