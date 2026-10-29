@@ -557,6 +557,11 @@ RSpec.describe "Markdown conversion" do
           "# Trip\n\n#{text}\n\n![Boats in the harbour](https://example.com/sea.jpg)"
       end
 
+      it "drops an image that names nothing although its alt text holds an escape" do
+        text = "We sailed along the rocky coast for a whole week, stopping at small harbours, fish markets and quiet beaches on the way."
+        extract("<main><h1>Trip</h1><p>#{text}</p><p><img src=\"/2.jpg\" alt=\"photo_ 2\"></p></main>").should == "# Trip\n\n#{text}"
+      end
+
       it "drops icons, logos and avatars" do
         text = "Our shop sells leads, collars, beds and toys for dogs of every size, made by hand in our own workshop."
         html = "<main><h1>Shop</h1><p>#{text}</p>" \

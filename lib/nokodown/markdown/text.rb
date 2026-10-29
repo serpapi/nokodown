@@ -32,8 +32,11 @@ module Nokodown
 
       # An escaped asterisk or underscore needs its backslash only when another
       # one in the paragraph could pair with it, or when it would start a list
-      # item. A lone run cannot pair: "2011*", "Leser*innen", "!_Tokyo".
+      # item. A lone run cannot pair: "2011*", "Leser*innen", "!_Tokyo". Image
+      # markup stays as written, since Cleanup finds images by it.
       def unescape_lone(string)
+        return string if string.include?("![")
+
         DELIMITERS.reduce(string) do |text, (char, delimiter)|
           runs = text.scan(/(?:\\#{Regexp.escape(char)})+/)
           next text unless runs.size == 1 && text.scan(delimiter).size == runs.first.length / 2
