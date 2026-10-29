@@ -20,7 +20,7 @@ module Nokodown
   # content and in pruning as before.
   class Teasers
     Run = Struct.new(:parent, :items, :targets, :chars)
-    Block = Struct.new(:nodes, :title, :siblings, :chars)
+    Block = Struct.new(:nodes, :title, :siblings, :children, :chars)
 
     MIN_ITEMS = 3
     MAX_ITEM_CHARS = 400
@@ -36,7 +36,11 @@ module Nokodown
     BODY_SHARE = 1.0
     MIN_SIBLINGS_BODY = 50
     MIN_SECTIONS = 3
+    MIN_WORDS_LEFT = 20
+    # Scripts written without spaces count a word per character.
+    WORD = /[\p{Han}\p{Hiragana}\p{Katakana}]|[\p{L}\p{N}]+/.freeze
     DOMINANT_SHARE = 0.5
+    BODIES = %i[article product forum qa].freeze
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
     HEADING = "h1, h2, h3, h4, h5, h6, [role=heading]"
     MEDIA = "img, picture, time"
@@ -46,18 +50,36 @@ module Nokodown
     HOME = %r{\A/*(?:[a-z]{2}(?:[-_][a-z]{2})?/*)?(?:index\.\w+)?\z}i.freeze
     FILE = /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|docx?|xlsx?|pptx?|mp[34])\z/i.freeze
 
-    # Keys survive the copy article cleaning works on. A selected root that
-    # is itself a teaser block stays: dropping it would leave nothing.
+    # Keys survive the copy article cleaning works on. Content that would be
+    # left with a heading and a line or two keeps its blocks: on a listing
+    # whose address looks like a single page's, they were the content after
+    # all.
     def self.strip(nodes, keys)
       return nodes if keys.empty?
 
-      nodes.each { |root| root.css("*").select { |node| keys.include?(Dom.key(node)) }.each(&:remove) }
+      found = nodes.flat_map { |root| root.css("*").select { |node| keys.include?(Dom.key(node)) } }
+      found.reject! { |node| node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) } }
+      left = nodes.sum { |root| words(root) } - found.sum { |node| words(node) }
+      found.each(&:remove) if left >= MIN_WORDS_LEFT
+      nodes
     end
 
-    def initialize(body, url, urls)
+    # Words outside headings.
+    def self.words(node)
+      return 0 if Dom.heading?(node)
+
+      node.content.scan(WORD).size - node.css(HEADING).sum { |heading| heading.content.scan(WORD).size }
+    end
+    private_class_method :words
+
+    # Only a page that declares itself an article, a product or a thread has
+    # a body that titled boxes of teasers stand beside; on others (landing
+    # pages, topics, catalogs) such boxes are often its sections.
+    def initialize(body, url, urls, page_type)
       @body = body
       @urls = urls
       @page = parse(urls.resolve(url)) if url
+      @declared = BODIES.include?(page_type)
     end
 
     # The keys of the blocks to drop and of their titles.
@@ -109,12 +131,13 @@ module Nokodown
       block.title.nil? || block.title.name == "h1" || !block.title.at_css("h1").nil?
     end
 
+    # Links to pages below this one are its own sections.
     def removable?(block, own_text, body, total)
-      return false if block.nodes.any? { |node| node.at_css(PROTECTED) }
+      return false if block.children || block.nodes.any? { |node| node.at_css(PROTECTED) }
       return block.title.nil? && block.siblings && after_text?(block) && own_text >= MIN_SIBLINGS_BODY if own_list?(block)
       return own_text >= MIN_SIBLINGS_BODY if block.siblings
 
-      body && block.chars < total * DOMINANT_SHARE
+      @declared && body && block.chars < total * DOMINANT_SHARE
     end
 
     # Pages like this one listed under its text in the same container, as a
@@ -224,7 +247,7 @@ module Nokodown
         nodes, title = widen(run, title)
       end
       title ||= title_before(nodes.first)
-      Block.new(nodes, title, siblings?(run), run.chars)
+      Block.new(nodes, title, share?(run) { |uri| sibling?(uri) }, share?(run) { |uri| child?(uri) }, run.chars)
     end
 
     def widen(run, title)
@@ -270,15 +293,24 @@ module Nokodown
 
     # A heading, or a short line such as a widget's "Novinky", which may link
     # to the section it comes from. Counts ("Showing 1-12 of 40") are not
-    # titles, and neither is a link among others.
+    # titles, a link among others is not, and neither is the caption or the
+    # header row of a data table, which names the table's own columns.
     def title?(node)
       text = Dom.text(node)
       return false if text.empty? || text.match?(/\d/) || node.name == "a" || Dom.ancestors_named(node, "a").any?
-      return text.length <= MAX_HEADING if heading?(node)
+
+      (heading?(node) ? text.length <= MAX_HEADING : label?(node, text)) && !in_data_table?(node)
+    end
+
+    def label?(node, text)
       return false if text.length > MAX_TITLE || node.at_css(STRUCTURE)
 
       links = node.css("a[href]")
       links.empty? || (links.size == 1 && Dom.text(links.first) == text)
+    end
+
+    def in_data_table?(node)
+      Dom.ancestors_named(node, "table").any? { |table| Tables.data_table?(table) }
     end
 
     def heading?(node)
@@ -287,8 +319,14 @@ module Nokodown
       node.css(HEADING).any? { |heading| Dom.text(heading) == Dom.text(node) }
     end
 
-    def siblings?(run)
-      run.targets.compact.count { |uri| sibling?(uri) } >= run.items.size * SIBLING_SHARE
+    def share?(run, &block)
+      run.targets.compact.count(&block) >= run.items.size * SIBLING_SHARE
+    end
+
+    def child?(uri)
+      page = segments(@page)
+      other = segments(uri)
+      other.size > page.size && other.first(page.size) == page
     end
 
     # A page like this one: the same path but for the last segment, or the

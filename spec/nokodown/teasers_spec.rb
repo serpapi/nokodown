@@ -1,15 +1,16 @@
 # frozen_string_literal: true
 
 RSpec.describe Nokodown::Teasers do
-  def markdown(html, url)
-    Nokodown.to_markdown("<html><body>#{html}</body></html>", url: url)
+  def markdown(html, url, type: nil)
+    head = type ? "<head><meta property='og:type' content='#{type}'></head>" : ""
+    Nokodown.to_markdown("<html>#{head}<body>#{html}</body></html>", url: url)
   end
 
   # Keys of the blocks found, before any content is located.
-  def blocks(html, url)
+  def blocks(html, url, type = :article)
     body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
     Nokodown::Dom.assign_keys(body)
-    described_class.new(body, url, Nokodown::UrlResolver.new(url)).call
+    described_class.new(body, url, Nokodown::UrlResolver.new(url), type).call
   end
 
   def story(count)
@@ -27,11 +28,11 @@ RSpec.describe Nokodown::Teasers do
       "rough ground. It keeps its grip on wet rock and roots, and the foam stays soft on long descents.</p></div>#{extra}"
   end
 
-  def cards(titles, path)
+  def cards(titles, path, excerpt = "")
     titles.map do |title|
       slug = title.downcase.delete("^a-z ").tr(" ", "-")
       "<div class='card'><img src='/img/#{slug}.jpg' alt=''><h3><a href='#{path}#{slug}'>#{title}</a></h3>" \
-        "<span>12.04.2026</span></div>"
+        "<span>12.04.2026</span>#{excerpt}</div>"
     end.join
   end
 
@@ -40,13 +41,23 @@ RSpec.describe Nokodown::Teasers do
      "Library extends its opening hours on weekends"]
   end
 
-  it "removes a titled block of teasers beside the page's content, whatever the title's language" do
-    html = product("<section><h2>Leia também</h2><div class='grid'>#{cards(stories, '/blog/')}</div></section>")
+  let(:box) { "<section><h2>Leia também</h2><div class='grid'>#{cards(stories, '/blog/')}</div></section>" }
 
-    text = markdown(html, "https://shop.example.com/shoes/cirrus")
+  it "removes a titled block of teasers beside the content of a product or an article, whatever the title's language" do
+    text = markdown(product(box), "https://shop.example.com/shoes/cirrus", type: "product")
     text.should include("rock plate")
     text.should_not include("Leia também")
     text.should_not include("School board")
+  end
+
+  it "keeps titled teasers on a page that declares no article or product" do
+    markdown(product(box), "https://shop.example.com/shoes/cirrus").should include("School board")
+  end
+
+  it "keeps teasers for pages below this one" do
+    grid = "<section><h2>Our services</h2><div class='grid'>#{cards(stories, '/services/security/')}</div></section>"
+
+    blocks("<h1>Security</h1>#{story(4)}#{grid}", "https://example.com/services/security").should be_empty
   end
 
   it "removes teasers for pages like this one even when they outweigh its text" do
@@ -81,10 +92,11 @@ RSpec.describe Nokodown::Teasers do
 
   it "keeps a listing's own list and removes the titled box beside it" do
     popular = ["Snow closes the pass", "Port strike ends", "Ferry fares rise"]
-    html = "<h1>Tag: harbor</h1><div class='posts'>#{cards(stories + ['Ferry adds a night crossing'], '/2026/04/')}</div>" \
+    posts = cards(stories + ["Ferry adds a night crossing"], "/2026/04/", "<p>What changes, and for whom.</p>")
+    html = "<h1>Tag: harbor</h1><div class='posts'>#{posts}</div>" \
            "<div class='box'><div class='box-title'>Mest läst</div><div class='grid'>#{cards(popular, '/2026/03/')}</div></div>"
 
-    text = markdown(html, "https://news.example.com/tag/harbor")
+    text = markdown(html, "https://news.example.com/tag/harbor", type: "article")
     text.should include("School board")
     text.should include("Ferry adds a night crossing")
     text.should_not include("Mest läst")
@@ -102,14 +114,25 @@ RSpec.describe Nokodown::Teasers do
   it "keeps titled teasers on a page with no text of its own" do
     html = "<h1>Volume 5, issue 2</h1><h2>Articles</h2><div class='grid'>#{cards(stories, '/article/view/')}</div>"
 
-    markdown(html, "https://journal.example.com/issue/view/238").should include("School board")
+    markdown(html, "https://journal.example.com/issue/view/238", type: "article").should include("School board")
+  end
+
+  it "keeps the teasers when the page would be left with a heading and a line" do
+    products = Array.new(4) do |index|
+      "<div class='tile'><a href='/en-us/mower-#{index}'><img src='/img/#{index}.jpg' alt=''><h3>Robotic mower #{index}</h3></a>" \
+        "<p>Cuts up to #{index + 1} acres a day</p></div>"
+    end.join
+    html = "<h1>Robotic lawn mowers</h1><p>Quiet mowers for any lawn, without a boundary wire.</p>" \
+           "<section><h2>Models</h2><div class='tiles'>#{products}</div></section>"
+
+    markdown(html, "https://www.example.com/en-us/robotic-lawn-mowers").should include("Robotic mower 2")
   end
 
   it "keeps a list of links in the prose" do
     items = stories.map { |title| "<li><a href='/docs/#{title.length}'>#{title}</a> explains the next step in detail.</li>" }
     html = product("<h2>What's next</h2><ul>#{items.join}</ul>")
 
-    markdown(html, "https://shop.example.com/shoes/cirrus").should include("School board")
+    markdown(html, "https://shop.example.com/shoes/cirrus", type: "product").should include("School board")
   end
 
   it "finds no teaser blocks on a site's home page" do

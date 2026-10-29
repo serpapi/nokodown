@@ -53,7 +53,7 @@ module Nokodown
       attribution = PostAttribution.new(body).call if ContentLocator::DISCUSSIONS.include?(page_type)
       Boilerplate.new(body).call
       ProductReviews.new(body).call if product_page
-      teasers = Teasers.new(body, @url, urls).call
+      teasers = Teasers.new(body, @url, urls, page_type).call
       selection = ContentLocator.new(body, page_type: page_type).call
       attribution&.write(selection.nodes)
       return [Teasers.strip(cleaned_article(selection.nodes, page_type), teasers), :article] if selection.mode == :article
