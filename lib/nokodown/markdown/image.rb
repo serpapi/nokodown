@@ -34,8 +34,8 @@ module Nokodown
       # Icons, logos and avatars, by file name words, folder, class or alt.
       # Some icon words also name things an alt can describe ("Granite
       # kitchen counter"), and count only beside a short alt.
-      ICON_WORD = /\A(?:logo|icon|ico|ic|favicon|sprite|chevron|caret|btn|avatar|gravatar|informer)s?\d*\z/.freeze
-      SHAPE_WORD = /\A(?:arrow|bullet|badge|separator|divider|rss|counter)s?\d*\z/.freeze
+      ICON_WORD = /\A(?:logo|icon|ico|ic|favicon|sprite|chevron|caret|btn|badge|avatar|gravatar|rss|informer)s?\d*\z/.freeze
+      SHAPE_WORD = /\A(?:arrow|bullet|separator|divider|counter)s?\d*\z/.freeze
       ICON_FOLDER = %r{/(?:icons?|logos?|emoji|emojis|flags|avatars?|smilies)/}i.freeze
       # A class or id word: "custom-logo", "siteLogo", "headerlogo", but not
       # "catalogo", "silicon" or "iconic".

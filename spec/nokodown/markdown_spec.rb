@@ -696,6 +696,7 @@ RSpec.describe "Markdown conversion" do
         html = "<main><h1>Shop</h1><p>#{text}</p>" \
                '<p><img src="/img/QDLogoBlue.gif" alt="Quality Dogs"><img src="/icons/rss.png" alt="Feed">' \
                '<img src="/a.jpg" class="avatar" alt="Sam"><img src="/c.svg" alt="Icono de chevron hacia abajo">' \
+               '<img src="/badge_67_8@3x.png" alt="Allied Kitchen, Bath, Home and Outdoor Living in Fort Lauderdale on Houzz">' \
                '<img src="/rss-feed-guide.jpg" alt="An RSS reader on a phone" width="800"></p></main>'
         extract(html).should == "# Shop\n\n#{text}\n\n![An RSS reader on a phone](https://example.com/rss-feed-guide.jpg)"
       end
