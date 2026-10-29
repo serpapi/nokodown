@@ -51,6 +51,7 @@ module Nokodown
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
     HEADING = "h1, h2, h3, h4, h5, h6, [role=heading]"
     MEDIA = "img, picture, time"
+    PLAYERS = "video, iframe"
     KEPT = "h1, img, picture, video, audio, iframe, object, embed, table, pre, math"
     STRUCTURE = "ul, ol, dl, table, li, p + p"
     DATE = %r{\d{1,4}[./-]\d{1,2}[./-]\d{1,4}}.freeze
@@ -366,17 +367,28 @@ module Nokodown
     end
 
     # The title link, or else the first link with text: an image link often
-    # comes first.
+    # comes first. An empty link that opens the card is stretched over it.
     def primary_link(card)
       return card.node if card.node.name == "a"
 
       links = card.node.css("a[href]")
-      title = links.find { |link| title_link?(link, card) } unless card.headings.empty?
+      title = links.find { |link| heading_link?(link, card) } unless card.headings.empty?
+      title ||= links.first if links.first && cover?(links.first)
       title || links.find { |link| @stats.chars(link) > 1 } || links.first
     end
 
     def title_link?(link, card)
+      heading_link?(link, card) || cover?(link)
+    end
+
+    def heading_link?(link, card)
       card.title_links.include?(Dom.key(link)) || !link.at_css(HEADING).nil?
+    end
+
+    # An empty link that a stylesheet stretches over the whole card links its
+    # title too.
+    def cover?(link)
+      @stats.chars(link).zero? && link.at_css(MEDIA).nil?
     end
 
     # A teaser shows a thumbnail or a date, or is a card: its title is a
@@ -387,9 +399,9 @@ module Nokodown
     def teaser?(card, link)
       item = card.node
       return false if link.nil? || (!card.headings.empty? && !title_link?(link, card))
-      return true if item.at_css(MEDIA)
+      return true if item.at_css(MEDIA) || link.at_css(PLAYERS)
 
-      whole = Dom.key(link) == Dom.key(item)
+      whole = Dom.key(link) == Dom.key(item) || cover?(link)
       return false unless whole || !card.headings.empty? || Dom.text(item).match?(DATE)
 
       beside_title(card, whole) >= RICH_TEXT

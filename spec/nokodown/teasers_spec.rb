@@ -335,4 +335,25 @@ RSpec.describe Nokodown::Teasers do
     blocks(article, article_url).should_not be_empty
     blocks(article, "https://news.example.com/en/").should be_empty
   end
+
+  it "takes an empty link that opens a card for the link of its title" do
+    overlaid = stories.map do |title|
+      slug = title.downcase.delete("^a-z ").tr(" ", "-")
+      "<div class='card'><a href='/blog/#{slug}'></a><img src='/img/#{slug}.jpg' alt=''><h3>#{title}</h3></div>"
+    end
+    html = "<h1>Bridge reopens</h1>#{story(3)}<section><h2>Leia também</h2><div class='grid'>#{overlaid.join}</div></section>"
+
+    blocks(html, article_url).should_not be_empty
+  end
+
+  it "takes a video player inside a card's link for its thumbnail" do
+    videos = stories.each_with_index.map do |title, index|
+      "<a class='item' href='video-detail?id=#{17 + index}'><iframe src='https://www.youtube.com/embed/v#{index}'>" \
+        "</iframe><h6>#{title}</h6></a>"
+    end
+    html = "<h1>The minister speaks at the twelfth wind energy congress in the capital city</h1>" \
+           "<div class='more'><h4>Other videos</h4><div class='row'>#{videos.join}</div></div>"
+
+    blocks(html, "https://gov.example.org/video-detail?id=105", nil).should_not be_empty
+  end
 end
