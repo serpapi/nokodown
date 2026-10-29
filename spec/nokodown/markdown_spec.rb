@@ -274,6 +274,12 @@ RSpec.describe "Markdown conversion" do
       Nokodown.to_markdown(html, url: product, main_content: false, title: false).should == "Read reviews."
     end
 
+    it "keeps only the text of links to the page itself" do
+      html = '<body><h1><a href="/2024/05/harbour/">Harbour</a></h1><p>Posted <a href="https://www.example.com/2024/05/harbour">May 3</a>.</p></body>'
+      Nokodown.to_markdown(html, url: "https://example.com/2024/05/harbour/", main_content: false, title: false)
+        .should == "# Harbour\n\nPosted May 3."
+    end
+
     it "keeps only the text of in-page anchors, scripts and phone links" do
       convert('<p><a href="#top">Top</a> <a href="javascript:void(0)">Open</a> <a href="tel:+1555">Call</a></p>').should == "Top Open Call"
     end

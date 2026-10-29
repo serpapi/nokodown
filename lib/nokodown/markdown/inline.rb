@@ -66,14 +66,14 @@ module Nokodown
       ARCHIVE_REL = /\b(?:author|category|tag)\b/i.freeze
       WORD = /[\p{L}\p{N}]/.freeze
 
-      # Absolute URL worth linking to, or nil for in-page anchors, scripts and
-      # phone numbers.
+      # Absolute URL worth linking to, or nil for in-page anchors, links to
+      # the page itself, scripts and phone numbers.
       def self.link_url(href, urls)
         href = href.strip
         return if href.empty? || href.start_with?("#") || href.match?(UNSAFE_SCHEME)
 
         url = urls.resolve(href)
-        url unless url.nil? || urls.same_page?(url)
+        url unless url.nil? || urls.same_page?(url) || urls.current_page?(href)
       end
 
       # redundant_images: RedundantImages#call. main_content: keep only images
