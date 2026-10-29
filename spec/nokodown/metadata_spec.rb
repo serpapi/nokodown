@@ -195,6 +195,13 @@ RSpec.describe Nokodown::Metadata do
       .should == "Fucili d'assalto"
   end
 
+  it "keeps the page's own separators after a breadcrumb that the site's name leads" do
+    metadata_at("https://acme-blog.com/2020/rust/", "<title>Acme Blog » Blog Archive » Why we moved to Rust - Part 2</title>")[:title]
+      .should == "Why we moved to Rust - Part 2"
+    metadata_at("https://ppag.pl/dzien-1/", "<title>PPAG » Dzień 1 – Aby urosnąć, trzeba obumrzeć</title>")[:title]
+      .should == "Dzień 1 – Aby urosnąć, trzeba obumrzeć"
+  end
+
   it "takes the <title> when the declared title only names the site" do
     head = '<meta property="og:title" content="Seongnam Library"><title>Seongnam Library > Notices > Card spending report</title>'
 

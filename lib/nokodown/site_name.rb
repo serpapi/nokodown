@@ -36,8 +36,8 @@ module Nokodown
 
     # Drops the parts of a title that name the site from either end. On the
     # site's home page the site is the page, so nothing is dropped. After a
-    # site name that leads a breadcrumb ("Site » Section » Page"), the page
-    # is the last part.
+    # site name that leads a breadcrumb ("Site » Section » Page - Part 2"),
+    # the page starts after the breadcrumb's last separator.
     def without(title)
       separators = title.to_enum(:scan, PART_SEPARATOR).map { Regexp.last_match }
       return title if @home || separators.empty?
@@ -47,8 +47,7 @@ module Nokodown
       last = (tail_start(title, bounds, parts.size) || parts.size) - 1
       first = 0
       first += 1 while first < last && name?(parts[first])
-      return parts[last] if first.positive? && separators[(first - 1)...last].any? { |separator| separator[0].match?(BREADCRUMB) }
-
+      first += last_crumb(separators[(first - 1)...last]) if first.positive?
       kept = title[bounds[2 * first]...bounds[2 * last + 1]]
       kept.strip.empty? ? title : kept
     end
@@ -61,6 +60,10 @@ module Nokodown
     end
 
     private
+
+    def last_crumb(separators)
+      separators.rindex { |separator| separator[0].match?(BREADCRUMB) } || 0
+    end
 
     # The longest end that names the site, or else the shortest that
     # mentions its domain: "iPhone 15 | Shop | Apple" keeps "iPhone 15 |
