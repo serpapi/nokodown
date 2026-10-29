@@ -526,6 +526,21 @@ RSpec.describe Nokodown do
       convert(html).should == "Filter"
     end
 
+    it "leaves template placeholders and addresses in code alone" do
+      html = "<p>Print <code>{{item.guest_name}}</code> in the template.</p><p>Run <code>info@ <span>ex.com</span> example.com</code></p>"
+
+      convert(html).should == "Print `{{item.guest_name}}` in the template.\n\nRun `info@ ex.com example.com`"
+    end
+
+    it "looks for decoys in addresses in time linear in the lines of a page" do
+      lines = Array.new(6000) { |index| "Week #{index}: Lakers @ Celtics, user#{index}@ example.org<br>" }
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert("<div>#{lines.join}</div>")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 5
+      markdown.should include("Week 5999: Lakers @ Celtics, user5999@ example.org")
+    end
+
     it "drops template placeholders and shortcodes left unrendered" do
       body = "<p>{{item.guest_name}}, {{item.nationality}}</p><p>[mailerlite_form form_id=2]</p><p>{title}</p>" \
              "<p>Rooms with a view of the lake. {Christmas}</p>"

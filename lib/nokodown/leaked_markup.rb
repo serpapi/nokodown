@@ -29,7 +29,7 @@ module Nokodown
     MAX_ERROR_NODES = 8
     # "info@ <span>ex.com</span> example.com": no address has spaces.
     DECOY = /\A([^\s@]+@)\s+(\S+)\s+([^\s@]+\.[^\s@]+)\z/.freeze
-    SPACED_AT = /@\s/.freeze
+    LOCAL_PART = /\A\s*[^\s@]+@\s+\z/.freeze
 
     module_function
 
@@ -41,14 +41,14 @@ module Nokodown
       root.css("b, strong").each { |bold| drop_php_error(bold) if Dom.text(bold).match?(PHP_LEVEL) }
       addresses = []
       root.xpath(".//text()").each { |text| clean_text(text, addresses) }
-      addresses.select { |node| Dom.text(node).match?(DECOY) }.each { |node| drop_decoy(node) }
+      addresses.each { |node| drop_decoy(node) }
     end
 
     def clean_text(text, addresses)
       content = text.content
       return unless content.match?(CANDIDATE)
+      return add_address(text.parent, addresses) if content.match?(LOCAL_PART)
 
-      addresses << text.parent if content.match?(SPACED_AT)
       cleaned = leaked?(content) ? "" : content.gsub(LIQUID_ERROR, "").gsub(PHP_ERROR, "")
       return if cleaned == content || Dom.in_code?(text.parent)
 
@@ -73,6 +73,12 @@ module Nokodown
       closing = content.scan(CLOSING_TAG).flatten.map(&:downcase).reject { |name| VOID.include?(name) }
       opening = content.scan(OPENING_TAG).flatten.map(&:downcase).reject { |name| VOID.include?(name) }
       closing.any? && closing.sort == opening.sort
+    end
+
+    # The local part of an address with a decoy is a text node of its own
+    # ("info@ "), which a line such as "Lakers @ Celtics" never is.
+    def add_address(node, addresses)
+      addresses << node unless addresses.last == node || Dom.in_code?(node)
     end
 
     def drop_decoy(node)
