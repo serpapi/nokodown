@@ -116,6 +116,22 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "chrome elements around the content" do
+    it "keeps a footer or reading pane that holds the page's only h1, not the site footer" do
+      ["footer", "div role='complementary'"].each do |tag|
+        html = <<~HTML
+          <header class="site-header"><a href="/">Auto Lexicon</a></header>
+          <#{tag} class="elementor-location-single"><h1>Lancia Musa</h1>#{prose('The Musa', 2)}</#{tag.split.first}>
+          <footer class="site-footer"><p>Imprint and privacy of the publisher of this site, who answers mail weekly.</p></footer>
+        HTML
+
+        text = remaining(html)
+        text.should include("Lancia MusaThe Musa is explained")
+        text.should_not include("Imprint")
+      end
+    end
+  end
+
   describe "noise names" do
     it "removes a related block even when its classes also name content" do
       html = "<article>#{prose('Sizing', 8)}</article><div class=\"related-posts entry-related\">#{prose('Another heat pump story', 2)}</div>"

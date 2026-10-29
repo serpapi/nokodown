@@ -25,6 +25,7 @@ module Nokodown
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
+    TITLE_HOLDER_SHARE = 0.25
     # A note continues the prose only after a sentence or more of it, not after a line of links.
     NOTE_PROSE = 80
     FOOTNOTE_MARK = /\A[*†‡§]+/.freeze
@@ -39,6 +40,7 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
+      @single_h1 = @body.css("h1").size == 1
       # Card grids repeat the same class list hundreds of times.
       @names = Hash.new { |cache, signature| cache[signature] = signature.gsub(MODIFIER, " ") }
       @furniture = Hash.new { |cache, signature| cache[signature] = @names[signature].match?(Patterns::PAGE_FURNITURE) }
@@ -92,12 +94,21 @@ module Nokodown
       return if @shielded.include?(Dom.key(node))
       # Side notes inside an article are content whatever their class says.
       return if node.name == "aside" && !aside_noise?(node)
-      return :chrome if chrome_element?(node) || chrome_role?(node)
+      return :chrome if (chrome_element?(node) || chrome_role?(node)) && !title_holder?(node)
       return if dominant?(node)
       return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
       MemberPanel.panel?(node) ? :panel : :guess
+    end
+
+    # Themes render the post in a <footer> or in a complementary reading
+    # pane. One that holds the page's only h1 and a fair share of its text is
+    # the content.
+    def title_holder?(node)
+      return false unless node.name == "footer" || node.name == "aside" || node["role"] == "complementary"
+
+      @single_h1 && !node.at_css("h1").nil? && @stats.text_chars(node) >= @total * TITLE_HOLDER_SHARE
     end
 
     # A link or span in the middle of running text is part of that text,
