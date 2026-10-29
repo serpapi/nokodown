@@ -14,6 +14,10 @@ module Nokodown
       # Characters that could open or close emphasis. An underscore inside a
       # word cannot.
       DELIMITERS = { "*" => /\*/, "_" => /(?<![\p{L}\p{N}\p{M}])_|_(?![\p{L}\p{N}\p{M}])/ }.freeze
+      # Link and image markup as Inline writes it: "](" in the text is escaped,
+      # and the destination's parentheses are balanced or percent-encoded.
+      LINK_TEXT = /(?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*/.freeze
+      DESTINATION = /(?:[^()\s]|\([^()\s]*\))*/.freeze
 
       module_function
 

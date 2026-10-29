@@ -10,7 +10,7 @@ module Nokodown
     # only repeats it and goes, as does a second copy of the title; other
     # repeats keep their text.
     class RepeatedLinks
-      LINK = /\[((?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*)\]\(((?:[^()\s]|\([^()\s]*\))*)\)/.freeze
+      LINK = /\[(#{Text::LINK_TEXT})\]\((#{Text::DESTINATION})\)/.freeze
       # Escapes, image openers and code spans are text, so neither an escaped
       # bracket, an image nor a link written in code is read as a link.
       PLAIN = /\\.|!\[|[^\\!\[`]+/.freeze

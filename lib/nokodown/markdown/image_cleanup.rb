@@ -6,12 +6,11 @@ module Nokodown
     # image anywhere on the page. Run earlier, it would leave a heading whose
     # section held only an image for drop_empty_sections to take.
     class ImageCleanup
-      # Markup as Inline writes it: "](" in the alt is escaped, and the
-      # destination's parentheses are balanced or percent-encoded. One pattern
-      # for every image keeps the cost linear on pages with thousands; the
-      # rare URL with nested parentheses is not matched, so its image stays.
-      IMAGE = /!\[(?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*\]\((?:[^()\s]|\([^()\s]*\))*\)/.freeze
-      DESTINATION = /\]\(((?:[^()\s]|\([^()\s]*\))*)\)/.freeze
+      # One pattern for every image keeps the cost linear on pages with
+      # thousands; the rare URL with nested parentheses is not matched, so its
+      # image stays.
+      IMAGE = /!\[#{Text::LINK_TEXT}\]\(#{Text::DESTINATION}\)/.freeze
+      DESTINATION = /\]\((#{Text::DESTINATION})\)/.freeze
       # A line with nothing but list or quote markers, nested lists included.
       BARE_LINE = /\A(?:\s|>|[-*+]|\d+\.)*\z/.freeze
       LIST_MARKER = /\A *(?:[-*+]|\d+\.) /.freeze
