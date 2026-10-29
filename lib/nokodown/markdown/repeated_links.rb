@@ -118,9 +118,11 @@ module Nokodown
         text.match?(/\p{L}/)
       end
 
+      # Dates and counts say something even when every card has the same one.
       def button?(link, keeper)
         text = label(link)
-        return false unless text.match?(/\p{L}/) && (@generic.include?(text) || text == label(keeper))
+        return false if text.match?(/\d/) || !text.match?(/\p{L}/)
+        return false unless @generic.include?(text) || text == label(keeper)
 
         standalone?(@blocks[link.block].text, link.range)
       end

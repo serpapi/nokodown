@@ -259,6 +259,11 @@ RSpec.describe "Markdown conversion" do
         "- [Ridge runner](https://example.com/p/2)\n  Mesh Weiterlesen\n\n## Edge\n\n7 octobre\n\n[Voir](https://example.com/e/edge)"
     end
 
+    it "keeps the dates of cards, as text, even when cards share one" do
+      cards = %w[a b].map { |page| %(<h2><a href="/#{page}">Post #{page.upcase}</a></h2><p><a href="/#{page}">May 30, 2018</a></p>) }.join
+      convert(cards).should == "## [Post A](https://example.com/a)\n\nMay 30, 2018\n\n## [Post B](https://example.com/b)\n\nMay 30, 2018"
+    end
+
     it "keeps a card's link on its title when initials or a count come first" do
       html = '<ul><li><a href="/w">J</a> <a href="/w">John Wick, Chapter 2</a><p>Foley artist</p></li>' \
              '<li><a href="/h">TFH</a><h4><a href="/h">The Finest Hours</a></h4><p>Foley artist</p></li></ul>'
