@@ -12,6 +12,10 @@ module Nokodown
     MAX_CHARS = 600
     MAX_LINK_DENSITY = 0.5
     TITLE_MATCH = 0.5
+    # A body inside a list or a data table would be rendered as part of it,
+    # and invalid nesting there, such as a list right inside a <dl>, is
+    # dropped. Layout tables are unwrapped.
+    LISTS = Set.new(%w[ul ol menu dl li dt dd]).freeze
     HEADINGS = "h1, h2, h3, h4, h5, h6"
 
     def initialize(root, nodes, stats, title = nil)
@@ -29,6 +33,8 @@ module Nokodown
       return @nodes unless headline && page_headline?(headline)
 
       holder = shared_ancestor(headline, body)
+      return @nodes if in_structure?(body, holder)
+
       stretch = between(headline, body, holder)
       return @nodes unless short?(stretch) && !rival?(headline, stretch)
 
@@ -57,7 +63,8 @@ module Nokodown
       return false if @title.nil?
 
       own = match(Dom.text(headline)).min
-      headings = (stretch.drop(1) + @nodes).flat_map { |node| Dom.heading?(node) ? [node] : node.css(HEADINGS).to_a }
+      below = (stretch.drop(1) + @nodes).select(&:element?)
+      headings = below.flat_map { |node| Dom.heading?(node) ? [node] : node.css(HEADINGS).to_a }
       headings.any? { |heading| (rival = match(Dom.text(heading)).min) >= TITLE_MATCH && rival > own }
     end
 
@@ -66,20 +73,26 @@ module Nokodown
       [Dom.similarity(@title, text), Dom.similarity(text, @title)]
     end
 
+    def in_structure?(body, holder)
+      [*path_to(body, holder).drop(1), holder].any? do |node|
+        LISTS.include?(node.name) || (node.name == "table" && Tables.data_table?(node))
+      end
+    end
+
     def shared_ancestor(node, other)
       keys = other.ancestors.map { |ancestor| Dom.key(ancestor) }.to_set
       node.ancestors.find { |ancestor| keys.include?(Dom.key(ancestor)) }
     end
 
-    # The elements from `first` up to `last` in document order, each taken
-    # whole where it can be: up from `first` to the branch the two share,
-    # across it, then down to `last`.
+    # The nodes from `first` up to `last` in document order, each taken whole
+    # where it can be: up from `first` to the branch the two share, across
+    # it, then down to `last`.
     def between(first, last, holder)
       down = path_to(last, holder)
       up = path_to(first, holder)
       head = [first]
       up[0...-1].each { |node| head.concat(following(node)) }
-      head.concat(following(up.last).take_while { |node| Dom.key(node) != Dom.key(down.last) })
+      head.concat(following(up.last).take_while { |node| !same?(node, down.last) })
       down[0...-1].reverse_each { |node| head.concat(preceding(node)) }
       head
     end
@@ -88,33 +101,38 @@ module Nokodown
       path_to(headline, holder).each { |node| preceding(node).each(&:remove) }
       kept = @nodes.map { |node| Dom.key(node) }.to_set
       parent = @nodes.first.parent
-      later = parent.element_children.drop_while { |child| !kept.include?(Dom.key(child)) }
-      later.each { |child| child.remove unless kept.include?(Dom.key(child)) }
+      later = parent.children.drop_while { |child| !(child.element? && kept.include?(Dom.key(child))) }
+      later.each { |child| child.remove unless child.element? && kept.include?(Dom.key(child)) }
       path_to(parent, holder).each { |node| following(node).each(&:remove) }
     end
 
     # The node and its ancestors below `top`.
     def path_to(node, top)
-      [node, *node.ancestors.select(&:element?)].take_while { |step| Dom.key(step) != Dom.key(top) }
+      [node, *node.ancestors.select(&:element?)].take_while { |step| !same?(step, top) }
     end
 
     def following(node)
       siblings = []
-      sibling = node.next_element
+      sibling = node.next_sibling
       while sibling
-        siblings << sibling
-        sibling = sibling.next_element
+        siblings << sibling if sibling.element? || sibling.text?
+        sibling = sibling.next_sibling
       end
       siblings
     end
 
     def preceding(node)
-      node.parent.element_children.take_while { |sibling| Dom.key(sibling) != Dom.key(node) }
+      node.parent.children.take_while { |sibling| !same?(sibling, node) }.select { |sibling| sibling.element? || sibling.text? }
+    end
+
+    def same?(node, other)
+      node.element? && Dom.key(node) == Dom.key(other)
     end
 
     def short?(stretch)
-      chars = stretch.sum { |node| @stats.chars(node) }
-      chars <= MAX_CHARS && (chars.zero? || stretch.sum { |node| @stats.link_chars(node) } / chars < MAX_LINK_DENSITY)
+      chars = stretch.sum { |node| node.element? ? @stats.chars(node) : Dom.char_count(node.content) }
+      links = stretch.sum { |node| node.element? ? @stats.link_chars(node) : 0 }
+      chars <= MAX_CHARS && (chars.zero? || links / chars < MAX_LINK_DENSITY)
     end
   end
 end

@@ -504,6 +504,23 @@ RSpec.describe Nokodown do
       end
     end
 
+    it "keeps a body that sits in a list below the headline" do
+      abstract = "<p>Digital puppetry is a form of computer animation in which performers control a model in real time.</p>" * 3
+      html = "<title>Evolving performance control systems</title><body><h1>Evolving performance control systems</h1>" \
+             "<p>Created by <a href='/langdon'>W. Langdon</a></p><dl><dt>@PhdThesis{Gildfind:thesis,</dt>" \
+             "<ul><li>author = \"Andrew Gildfind\",</li><li>abstract = \"#{abstract}\"</li></ul></dl></body>"
+
+      Nokodown.to_markdown(html).should include("Digital puppetry is a form")
+    end
+
+    it "leaves out bare text after the body when it reaches up to the headline" do
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      html = "<main><div class='listing'><div class='intro'><h1>Flat for sale in the Eixample</h1><div class='price'>525,000 €</div></div>" \
+             "<div class='description'>#{prose}</div>Posted by Ana | 3 comments</div></main>"
+
+      Nokodown.to_markdown(html).should_not include("Posted by Ana")
+    end
+
     it "keeps the whole table of results when one row outscores the others" do
       authors = Array.new(60) { |index| "Moretti#{index}, A." }.join("; ")
       rows = [["Predicting kidney failure", authors], ["Preeclampsia before a biopsy", "Cabiddu, G."], ["Dialysis in older patients", "Rossi, M."]]
