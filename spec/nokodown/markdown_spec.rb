@@ -251,6 +251,10 @@ RSpec.describe "Markdown conversion" do
         "## Setup\n\na\n\n### Run\n\nb\n\n### #Shots\n\n6"
     end
 
+    it "keeps a section sign that opens a numbered heading" do
+      convert("<h2>§ 1 Geltungsbereich</h2><p>a</p>").should == "## § 1 Geltungsbereich\n\na"
+    end
+
     it "drops separators and arrows at the ends of link text" do
       html = '<p><a href="/f">Forum |</a> <a href="/j">· Jobs</a> <a href="/m">Learn more →</a> <a href="/n">»</a> ' \
              '<a href="/v">Voir ›</a> <a href="/q">«Rycari 2017»</a></p>'

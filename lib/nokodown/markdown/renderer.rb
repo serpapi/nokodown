@@ -15,7 +15,8 @@ module Nokodown
       # and cons, ✓ and ✗), not only the glyphs that are stripped.
       LEADING_SYMBOLS = /\A[^\p{L}\p{N}\s]+(?=\s)/.freeze
       # Heading-anchor markup puts a permalink before or after the text.
-      PERMALINK = /\A[#¶§🔗]\s+|\s+[#¶§🔗]\z/.freeze
+      # A sign before a number is the heading's own: "§ 1 Geltungsbereich".
+      PERMALINK = /\A[#¶§🔗]\s+(?!\d)|\s+[#¶§🔗]\z/.freeze
 
       def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images,
