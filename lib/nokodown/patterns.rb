@@ -122,11 +122,10 @@ module Nokodown
       publicit[eé]|publicidad|pubblicit[aà]|реклама|广告
     /xi.freeze
 
-    # Controls that reveal the rest of a text or list, in the major web
-    # languages, with the arrows and dots sites put before them.
-    READ_MORE_TEXT = /
-      [+»›>.…(]*\s?(?:
-      (?:read|view|see|show|load)\s(?:more|less)|continue\sreading|
+    # Controls that reveal the rest of a text or lead to more about it, in
+    # the major web languages.
+    MORE_TEXT = /
+      (?:read|view|see|show|load)\s(?:more|less)|continue\sreading|learn\smore|find\sout\smore|
       leer\sm[aá]s|seguir\sleyendo|(?:ver|mostrar|cargar)\sm[aá]s|
       leia\smais|ler\smais|continu(?:e|ar)\slendo|(?:ver|mostrar|carregar)\smais|
       lire\s(?:la\ssuite|plus)|voir\s(?:plus|la\ssuite)|(?:afficher|charger)\splus|
@@ -145,14 +144,8 @@ module Nokodown
       baca\s(?:selengkapnya|lebih\slanjut)|lihat\s(?:selengkapnya|lebih\sbanyak)|muat\slebih\sbanyak|
       č[ií]st\s(?:v[ií]ce|d[áa]le|cel[ée])|zobrazit\sv[ií]ce|
       l[äæ]s\smere?|les\smer|visa\smer|vis\smer|tov[áa]bb|
-      קרא(?:ו)?\sעוד|อ่านต่อ|อ่านเพิ่มเติม|और\sपढ़ें
-      )
-    /xi.freeze
-
-    # Calls to action that a link inside a sentence can also say ("to learn
-    # more, see"), so they count only as the whole text of a block.
-    LEARN_MORE_TEXT = /
-      learn\smore|find\sout\smore|saber\sm[aá]s|saiba\smais|en\ssavoir\splus|(?:\+|plus)\sde\sd[ée]tails|
+      קרא(?:ו)?\sעוד|อ่านต่อ|อ่านเพิ่มเติม|और\sपढ़ें|
+      saber\sm[aá]s|saiba\smais|en\ssavoir\splus|(?:\+|plus)\sde\sd[ée]tails|
       mehr\serfahren|erfahren\ssie\smehr|scopri\sdi\spi[uù]|meer\sinformatie|узнать\sбольше|
       dowiedz\ssię\swięcej|daha\sfazla\sbilgi|了解更多|もっと知る|자세히\s알아보기|اعرف\sالمزيد|tìm\shiểu\sthêm|
       pelajari\slebih\slanjut
@@ -175,10 +168,12 @@ module Nokodown
 
     # A paragraph that is only the label of a control. Bare words such as
     # "More", "Menu" or "Close" are content inside a sentence or as a
-    # heading, so this is matched against whole paragraphs only.
+    # heading, so this is matched against whole paragraphs only. A label
+    # that links to its page stays when it is the only way there:
+    # RepeatedLinks takes it when a title links to the same page.
     UI_LABEL = /
       \A[\s+»›>.…(]*(?:
-        #{READ_MORE_TEXT}|#{LEARN_MORE_TEXT}|#{SHOP_CONTROL_TEXT}|
+        #{MORE_TEXT}|#{SHOP_CONTROL_TEXT}|
         more|más|mehr|meer|più|więcej|ещё|еще|більше|v[ií]ce|devam[ıi]|selengkapnya|更多|もっと|المزيد|
         loading|cargando|carregando|chargement(?:\sen\scours)?|wird\sgeladen|caricamento|ładowanie|wczytywanie|
         загрузка|завантаження|yükleniyor|読み込み中|加载中|載入中|正在加载|로딩\s?중|불러오는\s중|جار[يی]?\sالتحميل|
@@ -213,7 +208,7 @@ module Nokodown
         share(?:\sthis)?(?:\s(?:article|story|post|page))?|share\son\s\w+|tweet(?:\sthis)?|pin\sit|
         email(?:\sthis)?|print(?:\sthis)?(?:\s(?:article|page))?|
         loading|loading(?:\s[\p{L}]+){1,2}(?=\s*(?:…|\.{3}))|back\sto\stop|scroll\sto\stop|copy\slink|link\scopied|copied|
-        #{READ_MORE_TEXT}|#{LEARN_MORE_TEXT}|#{SHOP_CONTROL_TEXT}|click\sto\sexpand|
+        (?:read|view|see|show|load)\s(?:more|less)|continue\sreading|#{SHOP_CONTROL_TEXT}|click\sto\sexpand|
         (?:hide|show|toggle)\scaption|enlarge\sthis\simage|
         (?:image|photo|picture|slide)\s\d+\s(?:of|\/)\s\d+|\d*\s?comments?|
         (?:this\s\w+\srequires|please\senable|you\sneed\sto\senable)\sjavascript.*|
@@ -236,7 +231,7 @@ module Nokodown
     /xi.freeze
 
     LINK_NOISE_TEXT = /
-      \A(?:(?:read|view|see|show|load)\s(?:the\s)?(?:full\s)?(?:more|less|article|story|post)|#{READ_MORE_TEXT}|
+      \A(?:(?:read|view|see|show|load)\s(?:the\s)?(?:full\s)?(?:more|less|article|story|post)|continue\sreading|
       permalink|link\sto\sthis\s(?:heading|section)|copy\slink|edit(?:\sthis\s(?:page|section))?|
       ¶|§|\#|🔗)[\s.:!…»›→>]*\z
     /xi.freeze

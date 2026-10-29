@@ -8,9 +8,9 @@ RSpec.describe "UI labels" do
     convert(labels.map { |label| "<p>#{label}</p>" }.join + text).should == "The stove boils a litre in three minutes."
   end
 
-  it "drops a read-more link after an excerpt in any of those languages" do
-    convert("<p>Der Kocher kocht einen Liter in drei Minuten … <a href='/kocher'>Weiterlesen →</a></p>").should ==
-      "Der Kocher kocht einen Liter in drei Minuten …"
+  it "keeps a read-more link that is the only way to its page" do
+    convert("<h3>Kocher im Test</h3><p>Er kocht einen Liter in drei Minuten …</p><p><a href='/kocher'>Weiterlesen</a></p>").should ==
+      "### Kocher im Test\n\nEr kocht einen Liter in drei Minuten …\n\n[Weiterlesen](https://example.com/kocher)"
   end
 
   it "keeps the same words inside a sentence and as a heading" do
