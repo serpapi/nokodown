@@ -63,6 +63,13 @@ with `main_content: false`, `:none` for a document without a body.
   disclaimers and disclosures (but not a note continuing the paragraph before
   it, or the footnote to a mark just above), and, next to an article, its
   comment thread.
+- Blocks of teasers for other pages of the same site whatever their class
+  names: a run of cards, each a title link with a thumbnail, a date or an
+  excerpt, under a title of its own in any language ("Flere Nyheder",
+  "Похожие товары"). They go when they list pages like this one (the same
+  path but for its last segment), or when the page's own text, or its own
+  list, outweighs them. On home pages, hubs of sections built alike and pages
+  with no text of their own they stay.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
@@ -107,6 +114,8 @@ region, or most of the page's text, is never removed because of its class name.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
    `<noscript>` copies), drop scripts, invisible elements and form controls.
 4. **Boilerplate**: remove page chrome and noise widgets across the whole page.
+   **Teasers** then finds the blocks of teasers for other pages, which are
+   dropped from the content once it is cleaned.
 5. **ContentLocator**: score paragraphs with Readability's algorithm. When one
    candidate holds most of the page's prose the content is narrowed to it
    (`:article`); otherwise the whole main region is kept (`:page`), because a
