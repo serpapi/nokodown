@@ -325,14 +325,14 @@ RSpec.describe "Markdown conversion" do
     it "keeps nested list markers when it drops a repeated image" do
       html = '<p><img src="https://ex.com/avatar.png"> Forum</p><ol><li><p>First post</p></li>' \
              '<li><ol><li><ul><li><img src="https://ex.com/avatar.png"><p>Reply</p></li></ul></li></ol></li></ol>'
-      convert(html).should == "![](https://ex.com/avatar.png) Forum\n\n1. First post\n\n   1. - Reply"
+      convert(html).should == "![](https://ex.com/avatar.png) Forum\n\n1. First post\n   1. - Reply"
     end
 
     it "does not remove repeated images from code blocks, nested ones included" do
       code = "<pre><code>![](https://example.com/logo.png)\n\n\nend</code></pre>"
       html = %(<p><img src="/logo.png" alt=""></p>#{code}<ul><li><img src="/logo.png" alt=""></li><li>Use this:#{code}</li></ul>)
       convert(html).should == "![](https://example.com/logo.png)\n\n```\n![](https://example.com/logo.png)\n\n\nend\n```\n\n" \
-                              "- Use this:\n\n  ```\n  ![](https://example.com/logo.png)\n\n\n  end\n  ```"
+                              "- Use this:\n  ```\n  ![](https://example.com/logo.png)\n\n\n  end\n  ```"
     end
 
     describe "in the main content" do
@@ -348,8 +348,8 @@ RSpec.describe "Markdown conversion" do
                '<h3><a href="/p/2">Ridge runner</a></h3><p>A light mesh boot for fast summer hikes.</p></li>' \
                '<li><a href="/lookbook.jpg"><img src="/lookbook-small.jpg" alt="Boots on a mountain trail"></a></li></ul></main>'
         extract(html).should == "# Hiking boots\n\n" \
-                                "- [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
-                                "- [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes.\n\n" \
+                                "- [Trail boot](https://example.com/p/1)\n  Waterproof leather for long days on rocky ground.\n" \
+                                "- [Ridge runner](https://example.com/p/2)\n  A light mesh boot for fast summer hikes.\n" \
                                 "- ![Boots on a mountain trail](https://example.com/lookbook-small.jpg)"
       end
 
@@ -361,8 +361,8 @@ RSpec.describe "Markdown conversion" do
                '<li><ul><li><a href="/p/2"><img src="/2a.jpg" alt="Ridge runner, front"></a></li></ul>' \
                '<h3><a href="/p/2">Ridge runner</a></h3><p>A light mesh boot for fast summer hikes.</p></li></ul></main>'
         extract(html).should == "# Hiking boots\n\n" \
-                                "- [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
-                                "- [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes."
+                                "- [Trail boot](https://example.com/p/1)\n  Waterproof leather for long days on rocky ground.\n" \
+                                "- [Ridge runner](https://example.com/p/2)\n  A light mesh boot for fast summer hikes."
       end
 
       it "keeps a thumbnail when no link left in the Markdown names its page in words" do
@@ -464,13 +464,13 @@ RSpec.describe "Markdown conversion" do
       convert('<ol start="3"><li>c</li><li>d</li></ol>').should == "3. c\n4. d"
     end
 
-    it "separates items holding several paragraphs" do
-      convert("<ol><li><p>First</p><p>More</p></li><li><p>Second</p></li></ol>").should == "1. First\n\n   More\n\n2. Second"
+    it "keeps items holding several paragraphs tight, the later paragraphs indented" do
+      convert("<ol><li><p>First</p><p>More</p></li><li><p>Second</p></li></ol>").should == "1. First\n   More\n2. Second"
     end
 
     it "writes the headings of list items as their text" do
       convert('<ul><li><h3><a href="/p/1">Trail boot</a></h3><p>Leather</p></li></ul><ol><li><h2># 1 pick</h2></li></ol>').should ==
-        "- [Trail boot](https://example.com/p/1)\n\n  Leather\n\n1. \\# 1 pick"
+        "- [Trail boot](https://example.com/p/1)\n  Leather\n\n1. \\# 1 pick"
     end
 
     it "looks through wrappers between the list and its items" do
@@ -528,7 +528,7 @@ RSpec.describe "Markdown conversion" do
 
     it "keeps an item together when content follows its nested list" do
       convert("<ul><li><ul><li>Photo</li></ul>Boot $5</li><li><ul><li>Photo</li></ul>Sock $6</li></ul>").should ==
-        "- - Photo\n\n  Boot $5\n\n- - Photo\n\n  Sock $6"
+        "- - Photo\n  Boot $5\n- - Photo\n  Sock $6"
     end
 
     it "keeps a numbered list nested at the start of an item under its own number" do
@@ -548,12 +548,12 @@ RSpec.describe "Markdown conversion" do
     it "keeps a list or a table inside a definition under its term" do
       html = "<dl><dt>Colors</dt><dd><ul><li>Brown</li><li>Black</li></ul></dd>" \
              "<dt>Sizes</dt><dd><table><tr><th>S</th><th>M</th></tr><tr><td>36</td><td>38</td></tr></table></dd></dl>"
-      convert(html).should == "- **Colors**\n  - Brown\n  - Black\n\n- **Sizes**\n\n  | S | M |\n  | --- | --- |\n  | 36 | 38 |"
+      convert(html).should == "- **Colors**\n  - Brown\n  - Black\n- **Sizes**\n  | S | M |\n  | --- | --- |\n  | 36 | 38 |"
     end
 
     it "keeps the paragraphs and code of a longer definition under its term" do
       html = "<dl><dt>cache(f)</dt><dd><p>Caches results.</p><pre>cache(f)(1)</pre></dd><dt>Since</dt><dd>3.9</dd></dl>"
-      convert(html).should == "- **cache(f)**\n\n  Caches results.\n\n  ```\n  cache(f)(1)\n  ```\n\n- **Since**: 3.9"
+      convert(html).should == "- **cache(f)**\n  Caches results.\n  ```\n  cache(f)(1)\n  ```\n- **Since**: 3.9"
     end
   end
 

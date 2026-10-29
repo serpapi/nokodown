@@ -175,8 +175,7 @@ module Nokodown
           previous = index.positive? && nested_only[index - 1]
           list_entry(start ? "#{start + index}. " : "- ", unheaded(blocks), nested_only[index] && !previous && !nested_only[index + 1])
         end
-        loose = items.any? { |blocks| blocks.drop(1).any? { |block| block.kind != :list } }
-        [Block.new(:list, rendered.join(loose ? "\n\n" : "\n"))]
+        [Block.new(:list, rendered.join("\n"))]
       end
 
       # Card grids put each title in a heading; in a list item the marker
@@ -235,13 +234,10 @@ module Nokodown
         ([marker + first.to_s] + rest.map { |line| line.empty? ? "" : indent + line }).join("\n")
       end
 
-      # A nested list hugs the line above it; other blocks are separated.
+      # Blank lines inside or between items cost tokens and change nothing
+      # for a reader: the indentation keeps an item's blocks together.
       def join_item(blocks)
-        blocks.each_with_index.map { |block, index| (index.zero? ? "" : separator(block)) + block.text }.join
-      end
-
-      def separator(block)
-        block.kind == :list ? "\n" : "\n\n"
+        blocks.map(&:text).join("\n")
       end
 
       def quote(node)
@@ -258,10 +254,7 @@ module Nokodown
         entries = definition_groups(node).map do |term, definitions|
           compact?(definitions) ? definition_line(term, definitions) : list_entry("- ", definition_item(term, definitions))
         end
-        return [] if entries.empty?
-
-        runs = entries.slice_when { |a, b| a.include?("\n") || b.include?("\n") }
-        [Block.new(:list, runs.map { |run| run.join("\n") }.join("\n\n"))]
+        entries.empty? ? [] : [Block.new(:list, entries.join("\n"))]
       end
 
       # [term, [blocks of each <dd>]] pairs; a term may be nil or have no <dd>.
