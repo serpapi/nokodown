@@ -563,6 +563,16 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "deep nesting" do
+    it "writes the text of elements nested thousands deep" do
+      %w[span b div td blockquote].each do |tag|
+        html = "<p>#{'An opening sentence long enough to be prose. ' * 4}</p>#{"<#{tag}>" * 5000}Deep text here#{"</#{tag}>" * 5000}"
+
+        [true, false].each { |main| Nokodown.to_markdown(html, main_content: main, title: false).should include("Deep text here") }
+      end
+    end
+  end
+
   describe "encodings" do
     it "transcodes binary input using the declared charset" do
       html = "<html><head><meta charset=\"windows-1252\"></head><body><p>caf\xE9</p></body></html>".b
