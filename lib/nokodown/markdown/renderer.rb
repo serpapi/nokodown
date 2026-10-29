@@ -14,6 +14,7 @@ module Nokodown
       # Any symbols before a space can be an item's marker (+ and - in pros
       # and cons, ✓ and ✗), not only the glyphs that are stripped.
       LEADING_SYMBOLS = /\A[^\p{L}\p{N}\s]+(?=\s)/.freeze
+      SIGN_LENGTH = 3
       # Heading-anchor markup puts a permalink before or after the text.
       # A sign before a number is the heading's own: "§ 1 Geltungsbereich".
       PERMALINK = /\A[#¶§🔗]\s+(?!\d)|\s+[#¶§🔗]\z/.freeze
@@ -51,7 +52,7 @@ module Nokodown
       end
 
       # A data table's cell holds values, where a line of only a sign ("+",
-      # "×", "—") is one.
+      # "×", "—") is one; a longer one ("_____") still separates.
       def cell_blocks(cell)
         outer = @in_cell
         @in_cell = true
@@ -63,12 +64,16 @@ module Nokodown
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          lines = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) || (line if @in_cell) }
+          lines = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) || (line if sign?(line)) }
           chunk = Labels.lines(lines.join("\n").strip)
           next if chunk.empty?
 
           Block.new(:paragraph, Text.escape_line_starts(Text.unescape_lone(Emphasis.paragraph(chunk))))
         end
+      end
+
+      def sign?(line)
+        @in_cell && line.length <= SIGN_LENGTH
       end
 
       def inline(nodes)

@@ -936,6 +936,11 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "| Team | Links |\n| --- | --- |\n| Cougars | [Roster](https://example.com/r) [Stats](https://example.com/s) |"
     end
 
+    it "drops a signature's separator line in a table cell" do
+      html = "<table><tr><th>Author</th><th>Post</th></tr><tr><td>Sam</td><td>Great collars.<br>_________________<br>Sam's shop</td></tr></table>"
+      convert(html).should == "| Author | Post |\n| --- | --- |\n| Sam | Great collars. Sam's shop |"
+    end
+
     it "keeps the caption" do
       convert("<table><caption>Results</caption><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>").should ==
         "Results\n\n| A | B |\n| --- | --- |\n| 1 | 2 |"
