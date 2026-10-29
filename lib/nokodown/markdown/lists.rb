@@ -6,7 +6,7 @@ module Nokodown
     # line instead of writing a list ("• Fast", "✓ Free shipping"), and split
     # a numbered list into one element per item.
     module Lists
-      GLYPH = /\A([#{Renderer::GLYPHS}✓✔✅☑➢◆★])\s+/.freeze
+      GLYPH = /\A([#{Renderer::GLYPHS}✓✔✅☑➢◆★])\uFE0F?\s+/.freeze
       NUMBER = /^(\d+)\. /.freeze
       FIRST_NUMBER = /\A(\d+)\. /.freeze
 

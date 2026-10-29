@@ -804,6 +804,10 @@ RSpec.describe "Markdown conversion" do
         "- Fast\n- Safe\n\nAlso:\n\n- Free shipping\n- Returns\n\nVerdict\n\n✓ Light\n\n✗ Loud"
     end
 
+    it "writes paragraphs typed with an emoji glyph as a list" do
+      convert("<p>\u2714\uFE0F Fast</p><p>\u2714\uFE0F Safe</p>").should == "- Fast\n- Safe"
+    end
+
     it "joins numbered lists whose numbering runs on" do
       convert('<ul><li>a</li></ul><ul><li>b</li></ul><ol><li>one</li></ol><ol start="2"><li>two</li></ol><ol><li>again</li></ol>').should ==
         "- a\n\n- b\n\n1. one\n2. two\n\n1. again"
