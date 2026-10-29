@@ -2,7 +2,11 @@
 
 RSpec.describe Nokodown::Metadata do
   def metadata(head, body = "")
-    Nokodown::Metadata.new(Nokolexbor::HTML("<html><head>#{head}</head><body>#{body}</body></html>")).to_h
+    metadata_at(nil, head, body)
+  end
+
+  def metadata_at(url, head, body = "")
+    Nokodown::Metadata.new(Nokolexbor::HTML("<html><head>#{head}</head><body>#{body}</body></html>"), url).to_h
   end
 
   it "prefers JSON-LD article data" do
@@ -114,15 +118,20 @@ RSpec.describe Nokodown::Metadata do
       .should == "İstanbul Gezi Rehberi"
   end
 
-  it "does not take a logo H1 for the page's name" do
-    title = "Example Corp | Industrial Widgets"
-    head = %(<meta property="og:title" content="#{title}">)
+  it "drops a logo H1's name from the title instead of taking it for the page's name" do
+    head = '<meta property="og:title" content="Example Corp | Industrial Widgets">'
 
-    metadata(head, '<header><h1><a href="/">Example Corp</a></h1></header>')[:title].should == title
-    metadata(head, '<h1><a href="https://example.com/index.html">Example Corp</a></h1>')[:title].should == title
-    metadata(head, '<h1><a href="/en-us/">Example Corp</a></h1>')[:title].should == title
-    metadata(head, '<h1><a href="/?ref=logo">Example Corp</a></h1>')[:title].should == title
-    metadata(head, '<header><h1 class="site-title">Example Corp</h1></header>')[:title].should == title
+    metadata(head, '<header><h1><a href="/">Example Corp</a></h1></header>')[:title].should == "Industrial Widgets"
+    metadata(head, '<h1><a href="https://example.com/index.html">Example Corp</a></h1>')[:title].should == "Industrial Widgets"
+    metadata(head, '<h1><a href="/en-us/">Example Corp</a></h1>')[:title].should == "Industrial Widgets"
+    metadata(head, '<h1><a href="/?ref=logo">Example Corp</a></h1>')[:title].should == "Industrial Widgets"
+    metadata(head, '<header><h1 class="site-title">Example Corp</h1></header>')[:title].should == "Industrial Widgets"
+  end
+
+  it "does not take a wiki page's H1 that links to index.php for the site's name" do
+    body = '<h1><a href="index.php?Ownership%20Rules">Ownership Rules</a></h1>'
+
+    metadata("<title>Ownership Rules - Example Wiki</title>", body)[:title].should == "Ownership Rules"
   end
 
   it "drops a book's name that its H1 repeats at the end of the title when the rest is a heading" do
@@ -147,11 +156,10 @@ RSpec.describe Nokodown::Metadata do
       .should == "Acme | Contact Us"
   end
 
-  it "keeps a 'Site | Page' title whose site name is an H1, a logo, or a heading in the site's header or footer" do
+  it "keeps a 'Site | Page' title whose site name is a plain H1 or a heading in the site's header or footer" do
     title = "City of Springfield | Parks and Recreation"
     page = "<main><h1>Parks and Recreation</h1></main>"
     site_headings = [
-      '<header><h1 class="site-title"><a href="/">City of Springfield</a></h1></header>',
       '<div class="masthead"><h2 class="site-name">City of Springfield</h2></div>',
       "<footer><h3>City of Springfield</h3></footer>"
     ]
@@ -159,6 +167,48 @@ RSpec.describe Nokodown::Metadata do
     site_headings.each { |site| metadata("<title>#{title}</title>", site + page)[:title].should == title }
     metadata("<title>City of Springfield » Parks and Recreation</title>", "<div><h1>City of Springfield</h1></div>#{page}")[:title]
       .should == "City of Springfield » Parks and Recreation"
+  end
+
+  it "drops the site's name as its domain spells it from either end of the title" do
+    url = "https://www.gta-series.com/it/armi.html"
+
+    metadata_at(url, "<title>Fucili d'assalto - GTA-Series.com</title>")[:title].should == "Fucili d'assalto"
+    metadata_at(url, "<title>GTA-Series.com | Fucili d'assalto</title>")[:title].should == "Fucili d'assalto"
+  end
+
+  it "drops a last part that mentions the domain" do
+    title = "Hotels in Coclé | Find great deals and compare on trivago"
+
+    metadata_at("https://www.trivago.ae/en-AE/odr/hotels-cocle", %(<meta property="og:title" content="#{title}">))[:title]
+      .should == "Hotels in Coclé"
+  end
+
+  it "drops the start of a declared site name that goes on with a slogan" do
+    head = '<meta property="og:title" content="Rachmaninov MK2 RCA Cable - Sound Glory - Hi-Fi Store">' \
+           '<meta property="og:site_name" content="Sound Glory - Hi-Fi Store - Serving music lovers since 1986">'
+
+    metadata(head)[:title].should == "Rachmaninov MK2 RCA Cable"
+  end
+
+  it "takes the last part of a breadcrumb title that the site's name leads" do
+    metadata_at("http://www.gta-series.com/it/gta-5/armi.html", "<title>GTA-Series.com » GTA 5 » Armi » Fucili d'assalto</title>")[:title]
+      .should == "Fucili d'assalto"
+  end
+
+  it "takes the <title> when the declared title only names the site" do
+    head = '<meta property="og:title" content="Seongnam Library"><title>Seongnam Library > Notices > Card spending report</title>'
+
+    metadata(head, '<h1 class="header-logo"><a href="/sn/index.do">Seongnam Library</a></h1>')[:title].should == "Card spending report"
+  end
+
+  it "keeps the site's name in the title of its home page" do
+    metadata_at("https://hughlupton.com/", "<title>Hugh Lupton - Storyteller</title>")[:title].should == "Hugh Lupton - Storyteller"
+  end
+
+  it "cuts the title after the H1's words at an underscore or before the site's name" do
+    metadata("<title>60级副本任务介绍_网络游戏水浒Q传_新浪游戏_新浪网</title>", "<h1>60级副本任务介绍</h1>")[:title].should == "60级副本任务介绍"
+    metadata_at("https://www.eventernote.com/events", "<title>June 2016 events and lives Eventernote</title>", "<h1>June 2016 events and lives</h1>")[:title]
+      .should == "June 2016 events and lives"
   end
 
   it "does not match an H1 without words to the end of a title without words" do

@@ -57,6 +57,35 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should start_with("Photo by Ben Hon for Resy\n\n# The Resy Guide to the Michelin Winners")
     end
 
+    it "puts the page's title in place of a heading that only names the site" do
+      body = "<p>#{'We caught twelve trout at the upper pond, and the water was cold and clear all day. ' * 3}</p>"
+      html = "<title>Bonten Fishing Pond - Friends from afar</title><body><article>" \
+             "<h1><a href='http://bonten.example/'>Bonten Fishing Pond</a></h1>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "http://bonten.example/calendar/671515").should start_with("# Friends from afar\n\nWe caught")
+    end
+
+    it "drops a line below the title that only repeats it" do
+      body = "<p><b>Fucili d'assalto</b></p><p>#{'The assault rifles of GTA 5 differ in damage, range and fire rate. ' * 3}</p>"
+      html = "<title>Fucili d'assalto</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html).should start_with("# Fucili d'assalto\n\nThe assault rifles")
+    end
+
+    it "keeps the site's name heading the content on its home page" do
+      body = "<p>#{'Arcade game with a bouncing ball, cosmic levels and endless runs to beat. ' * 3}</p>"
+      html = "<title>Chickenin Route - Arcade Game</title><body><article><h1>Chickenin Route</h1>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://www.chickenin-route.top/it/").should start_with("# Chickenin Route\n\nArcade game")
+    end
+
+    it "does not head content that has its own heading with a title that only names the site" do
+      body = "<h2>David Hellenius</h2><p>#{'Swedish presenter, comedian and actor, known for his television shows. ' * 3}</p>"
+      html = "<title>Edisonline SK</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://edisonline.sk/catalog/category/person").should start_with("## David Hellenius\n\nSwedish")
+    end
+
     it "accepts nil" do
       Nokodown.extract(nil).markdown.should == ""
     end

@@ -21,17 +21,21 @@ module Nokodown
     HIERARCHY_SEPARATOR = %r{\s[\\/>»]\s}.freeze
     SITE_NAME_SEPARATOR = "[#{TITLE_SEPARATORS}:·•]"
     WORD = /[\p{L}\p{N}]+/.freeze
-    HEADING_END = /\A([?!.)\]"'”’]*)(?:\s[-–—]\s|\s*[|:·•,])/.freeze
+    CLOSING = /\A[?!.)\]"'”’）」』】》]*/.freeze
+    HEADING_END = /\A(?:\s[-–—]\s|\s*[|:·•,_])/.freeze
     HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?/?(?:index\.[a-z]+|[a-z]{2}(?:[-_][a-z]{2})?/?)?(?:[?#].*)?\z}i.freeze
     LOGO_NAME = /logo|brand|site[-_]?(?:title|name)/i.freeze
+    SITE_LOGO_NAME = /logo|site[-_]?(?:title|name)/i.freeze
+    SCRIPT_QUERY = /index\.[a-z]+\?/i.freeze
     ENTITY = /&(?:#\d+|#x\h+|[a-z][a-z\d]*);/i.freeze
 
     TITLE_KEYS = %w[dc:title dcterm:title og:title weibo:article:title weibo:webpage:title title twitter:title parsely-title].freeze
     BYLINE_KEYS = %w[dc:creator dcterm:creator author parsely-author].freeze
     EXCERPT_KEYS = %w[dc:description dcterm:description og:description weibo:article:description weibo:webpage:description description twitter:description].freeze
 
-    def initialize(doc)
+    def initialize(doc, url = nil)
       @doc = doc
+      @url = url
     end
 
     def to_h
@@ -39,9 +43,11 @@ module Nokodown
       json = json_ld(documents)
       meta = meta_values
       site_name = clean(json[:site_name] || meta["og:site_name"] || meta["application-name"])
-      title = strip_site_name(clean(json[:title] || first_value(meta, TITLE_KEYS)) || document_title, site_name)
+      site = SiteName.new(@url, [site_name, meta["application-name"]] + logo_names)
+      title = page_title(clean(json[:title] || first_value(meta, TITLE_KEYS)), site_name, site)
       {
-        title: title && heading_title(title),
+        title: title && heading_title(title, site),
+        site: site,
         byline: clean(json[:byline] || first_value(meta, BYLINE_KEYS) || article_author(meta)) || document_byline,
         excerpt: clean(json[:excerpt] || first_value(meta, EXCERPT_KEYS)),
         site_name: site_name,
@@ -213,17 +219,42 @@ module Nokodown
       stripped.empty? ? title : stripped
     end
 
-    # SEO titles wrap the page's name in sections, site names and keywords
-    # ("Using the Fetch API - Web APIs | MDN"); the H1s tell which part it is.
-    def heading_title(title)
-      h1s = @doc.css("body h1")
-      title_from_h1(title, h1s) || title_without_site_h1(title, h1s) || title
+    # A declared title that only names the site gives way to the <title>,
+    # which may name the page as well, except on the home page. Site names
+    # are dropped before Readability's cut, which keeps the start of
+    # "Site » Section » Page".
+    def page_title(declared, site_name, site)
+      title = site.without(strip_site_name(declared, site_name)) if declared && (site.home? || !site.name?(declared))
+      return title if title
+
+      document = document_page_title(site_name, site)
+      document && (declared.nil? || !site.name?(document)) ? document : declared
     end
 
-    # Cut only at a separator: an H1 that is just the first words of a longer
-    # name ("Trail Running" in "Trail Running Shoes for Women") says less than
-    # the title. A logo H1 names the site, not the page.
-    def title_from_h1(title, h1s)
+    def document_page_title(site_name, site)
+      original = Dom.squish((@doc.at_css("head title") || @doc.at_css("title"))&.content.to_s)
+      title = site.without(strip_site_name(original, site_name))
+      title == original ? strip_site_name(document_title, site_name) : title
+    end
+
+    # Taken for the site's name, a logo needs more than a "brand" class,
+    # which font and colour utilities share ("font-family-ua-brand").
+    def logo_names
+      @doc.css("body h1").select { |h1| logo?(h1, SITE_LOGO_NAME) }.map { |h1| Dom.text(h1) }
+    end
+
+    # SEO titles wrap the page's name in sections, site names and keywords
+    # ("Using the Fetch API - Web APIs | MDN"); the H1s tell which part it is.
+    def heading_title(title, site)
+      h1s = @doc.css("body h1")
+      title_from_h1(title, h1s, site) || title_without_site_h1(title, h1s) || title
+    end
+
+    # Cut only at a separator, or before the site's name: an H1 that is just
+    # the first words of a longer name ("Trail Running" in "Trail Running
+    # Shoes for Women") says less than the title. A logo H1 names the site,
+    # not the page.
+    def title_from_h1(title, h1s, site)
       matches = title.enum_for(:scan, WORD).map { Regexp.last_match }
       title_words = matches.map { |match| match[0].downcase }
       h1s.each do |h1|
@@ -232,8 +263,9 @@ module Nokodown
         next if logo?(h1)
 
         cut = matches[h1_words.size - 1].end(0)
-        rest = title[cut..].match(HEADING_END)
-        return title[0, cut] + rest[1] if rest
+        closing = title[cut..][CLOSING]
+        rest = title[(cut + closing.length)..]
+        return title[0, cut] + closing if rest.match?(HEADING_END) || site.ending?(rest)
       end
       nil
     end
@@ -272,17 +304,18 @@ module Nokodown
     # A logo heading links to the site's root or names itself a logo, brand or
     # site title. A <header> around an H1, or its container's classes, say too
     # little: most such H1s are the page's own title.
-    def logo?(heading)
+    def logo?(heading, names = LOGO_NAME)
       nodes = [heading] + heading.css("[class], [id]").to_a
-      return true if nodes.any? { |node| "#{node["class"]} #{node["id"]}".match?(LOGO_NAME) }
+      return true if nodes.any? { |node| "#{node["class"]} #{node["id"]}".match?(names) }
 
       heading.css("a[href]").any? { |link| home_link?(link["href"].strip) }
     end
 
     # An empty href, or one that starts with a fragment or query, links to
-    # the page itself, as a permalink does.
+    # the page itself, as a permalink does. A query on a script links to any
+    # page: wikis link every page as "index.php?Page".
     def home_link?(href)
-      !href.empty? && !href.start_with?("#", "?") && href.match?(HOME_LINK)
+      !href.empty? && !href.start_with?("#", "?") && href.match?(HOME_LINK) && !href.match?(SCRIPT_QUERY)
     end
 
     # Split before downcasing, like the title's words, which are scanned first
