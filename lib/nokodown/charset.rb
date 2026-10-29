@@ -72,6 +72,7 @@ module Nokodown
     DOUBLE_ENCODED = /#{DOUBLE_ENCODED_CHAR}/n.freeze
     DOUBLE_ENCODED_RUN = /\A(?:#{DOUBLE_ENCODED_CHAR})+\z/n.freeze
     C1_CONTROL = /[\u0080-\u009F]/.freeze
+    ONLY_C1_CONTROLS = /\A[\u0080-\u009F]+\z/.freeze
     SINGLE_CHARACTER = /\A[\u00A0-\u017F\u0370-\u04FF\u0600-\u06FF\u2000-\u214F\uFEFF]\z/.freeze
 
     module_function
@@ -170,7 +171,9 @@ module Nokodown
 
     # A run decoded twice over is undone until it no longer reads back. One
     # character alone only counts in alphabets and punctuation: "é »" reads
-    # back as one Han character, "×–" as a Hebrew letter.
+    # back as one Han character, "×–" as a Hebrew letter. A run that reads
+    # back as control characters only ("ÂŽ") was garbage before it was
+    # misread.
     def redecoded(run)
       return unless run.match?(DOUBLE_ENCODED_RUN)
 
@@ -179,8 +182,9 @@ module Nokodown
       return if bytes.include?(nil)
 
       text = bytes.join.force_encoding(Encoding::UTF_8)
-      return unless text.valid_encoding? && !text.match?(C1_CONTROL)
-      return unless text.length > 1 || text.match?(SINGLE_CHARACTER)
+      return unless text.valid_encoding?
+      return "".b if text.match?(ONLY_C1_CONTROLS)
+      return if text.match?(C1_CONTROL) || (text.length == 1 && !text.match?(SINGLE_CHARACTER))
 
       redecoded(text.b) || text.b
     end

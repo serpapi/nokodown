@@ -601,6 +601,10 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html, title: false).should == "Café crème, it’s Привет – twice"
     end
 
+    it "drops a misread run that reads back as control characters only" do
+      Nokodown.to_markdown("<p>Fall 2017</p><p>ÂŽ</p>".b, title: false).should == "Fall 2017"
+    end
+
     it "keeps letters that only look like UTF-8 read as Windows-1252" do
       html = "<p>Spaß\u00A0an der « identité\u00A0» und 2×–3×</p>".b
 
