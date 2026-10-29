@@ -210,6 +210,43 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "pagers and calendars" do
+    it "drops page numbers whose current number is plain text, on any page" do
+      numbers = (1..47).map { |number| number == 3 ? "<b>3</b>" : "<a href='/list?page=#{number}'>#{number}</a>" }
+      pager = "<div class='nav'>Pages: <a href='/list?page=2'>«</a> #{numbers.join(' ')} <a href='/list?page=4'>Next ›</a></div>"
+      %i[page article].each do |mode|
+        root = content("#{story}#{pager}")
+
+        described_class.new([root], mode).call
+
+        Nokodown::Dom.text(root).should_not include("Pages")
+        Nokodown::Dom.text(root).should include("cracked bearings")
+      end
+    end
+
+    it "drops an archive calendar of day links" do
+      weeks = (1..30).each_slice(7).map { |days| "<tr>#{days.map { |day| day.odd? ? "<td><a href='/2026/04/#{day}'>#{day}</a></td>" : "<td>#{day}</td>" }.join}</tr>" }
+      calendar = "<table><caption>April 2026</caption><tr>#{%w[Mo Tu We Th Fr Sa Su].map { |day| "<th>#{day}</th>" }.join}</tr>" \
+                 "#{weeks.join}<tfoot><tr><td><a href='/2026/03'>« March</a></td></tr></tfoot></table>"
+      root = content("#{story}#{calendar}")
+
+      described_class.new([root], :page).call
+
+      Nokodown::Dom.text(root).should_not include("April")
+    end
+
+    it "keeps numbers in a sentence, footnote marks and a short run" do
+      notes = (1..6).map { |number| "<a href='#fn#{number}'>#{number}</a>" }.join(" ")
+      html = "#{story}<p>See notes #{notes} below.</p><p><a href='/p/1'>1</a> <a href='/p/2'>2</a> <a href='/p/3'>3</a></p>"
+      root = content(html)
+
+      described_class.new([root], :page).call
+
+      Nokodown::Dom.text(root).should include("See notes 1 2 3 4 5 6 below.")
+      Nokodown::Dom.text(root).should end_with("1 2 3")
+    end
+  end
+
   describe "footers by any name" do
     let(:report) do
       "#{story}<p>The city will repaint the railings next spring, when river traffic is light and scaffolding can hang over the water.</p>"

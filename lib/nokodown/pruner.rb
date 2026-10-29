@@ -71,6 +71,8 @@ module Nokodown
 
     def call
       @nodes.each do |root|
+        # Before the index decision, which a long pager would sway.
+        Pagers.find(root).each { |node| remove_with_label(node, root, Set.new) }
         @mode == :article ? prune_article(root) : prune_page(root)
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
