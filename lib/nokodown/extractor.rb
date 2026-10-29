@@ -73,7 +73,7 @@ module Nokodown
         Pruner.new(nodes, :page).call
         return nodes
       end
-      return copies if keep_conditional_cleaning?(pruner, page_type)
+      return copies if keep_conditional_cleaning?(pruner, page_type, nodes)
 
       Pruner.new(nodes, :article, conditional: false).call
       nodes
@@ -81,11 +81,12 @@ module Nokodown
 
     # When what conditional cleaning removed from a declared article is mostly
     # links, it was a grid of teasers for other stories, not the article. On
-    # listings and hubs the same teasers are the content.
-    def keep_conditional_cleaning?(pruner, page_type)
-      return true if pruner.conditional_share >= CONDITIONAL_SHARE
-
-      page_type == :article && pruner.removed_link_share > REMOVED_LINK_SHARE
+    # listings and hubs the same teasers are the content. A listing whose
+    # items mostly survive still loses those whose titles make them linky.
+    def keep_conditional_cleaning?(pruner, page_type, nodes)
+      kept = pruner.conditional_share >= CONDITIONAL_SHARE ||
+             (page_type == :article && pruner.removed_link_share > REMOVED_LINK_SHARE)
+      kept && nodes.none? { |node| Listing.listing?(node) }
     end
 
     def almost_nothing_kept?(copies, nodes)

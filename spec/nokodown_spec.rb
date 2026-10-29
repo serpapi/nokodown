@@ -96,6 +96,19 @@ RSpec.describe Nokodown do
       markdown.should include("- [Diving](https://example.com/topics/diving)")
     end
 
+    it "keeps the linked title of every post on a listing" do
+      titles = ["Spring planting for small gardens", "Pruning roses without losing blooms", "Composting in a city kitchen"]
+      posts = titles.each_with_index.map do |title, index|
+        "<div class='post-item'><div class='post-header'><h2><a href='/posts/#{index}'>#{title}</a></h2>" \
+          "<div class='post-date'>12 May 2026</div></div>" \
+          "<p>#{'Our gardeners explain the method step by step, with photos of each stage and the tools they use. ' * 2}</p></div>"
+      end
+
+      markdown = extract("<main><h1>Blog</h1><div class='posts'>#{posts.join}</div></main>")
+
+      titles.each_with_index { |title, index| markdown.should include("## [#{title}](https://example.com/posts/#{index})") }
+    end
+
     it "drops the few menu links left in a content area that holds almost nothing else" do
       html = '<main><a href="#content">Skip to content</a><div><a href="/shop">Shop all products</a> ' \
              '<a href="/help">Help and contact</a> <a href="/account">Your account</a></div><p>Sold out.</p></main>'
