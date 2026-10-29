@@ -59,8 +59,6 @@ module Nokodown
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
     HEADING = "h1, h2, h3, h4, h5, h6, [role=heading]"
     MEDIA = "img, picture, time"
-    # Preprocessing keeps only the embeds of video sites.
-    PLAYERS = "iframe"
     KEPT = "h1, img, picture, video, audio, iframe, object, embed, table, pre, math"
     STRUCTURE = "ul, ol, dl, table, li, p + p"
     DATE = %r{\d{1,4}[./-]\d{1,2}[./-]\d{1,4}}.freeze
@@ -84,8 +82,7 @@ module Nokodown
     # Keys survive the copy article cleaning works on. Content that would be
     # left with a heading and a line or two keeps its blocks: on a listing
     # whose address looks like a single page's, they were the content after
-    # all. A video's or a recording's page is its player, however few its
-    # words.
+    # all.
     def self.strip(nodes, keys)
       return nodes if keys.empty?
 
@@ -93,7 +90,7 @@ module Nokodown
       nodes.each { |root| root.traverse { |node| found << node if node.element? && keys.include?(Dom.key(node)) } }
       found.reject! { |node| node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) } }
       left = nodes.sum { |root| words(root) } - found.sum { |node| words(node) }
-      return nodes if left < MIN_WORDS_LEFT && !player_left?(nodes, found)
+      return nodes if left < MIN_WORDS_LEFT
 
       parents = found.map(&:parent)
       found.each(&:remove)
@@ -101,11 +98,6 @@ module Nokodown
       parents.each { |parent| remove_emptied(parent, roots) }
       nodes
     end
-
-    def self.player_left?(nodes, found)
-      nodes.sum { |root| root.css(PLAYERS).size } > found.sum { |node| node.css(PLAYERS).size }
-    end
-    private_class_method :player_left?
 
     # A heading over several blocks ("Previous matches" over a column per
     # team) is left with nothing under it.
@@ -489,7 +481,7 @@ module Nokodown
     def teaser?(card, link)
       item = card.node
       return false if link.nil? || (!card.headings.empty? && !title_link?(link, card))
-      return true if item.at_css(MEDIA) || link.at_css(PLAYERS)
+      return true if item.at_css(MEDIA)
 
       whole = Dom.key(link) == Dom.key(item) || cover?(link)
       return false unless whole || !card.headings.empty? || Dom.text(item).match?(DATE)
@@ -631,11 +623,8 @@ module Nokodown
       node.css(HEADING).any? { |heading| Dom.text(heading) == Dom.text(node) }
     end
 
-    # Pages like this one, a few of which may sit a folder deeper beside the
-    # others ("l-27-12/2" beside "l-20d-11").
     def alike?(kinds, size)
-      near = kinds.count(:sibling)
-      near >= size * SIBLING_SHARE || (near * 3 >= size && near + kinds.count(:deeper) >= size * SIBLING_SHARE)
+      kinds.count(:sibling) >= size * SIBLING_SHARE
     end
 
     def named?(kinds, size)
@@ -648,17 +637,15 @@ module Nokodown
       other.size > page.size && other.first(page.size) == page
     end
 
-    # A page like this one: the same script with other ids for its query keys,
-    # or the same path but for the last segment and the same query keys.
-    # "viewforum.php?f=2" lists the threads at "viewtopic.php?t=7", and a
-    # page that pages through its list of others ("detail?p=8&id=105") links
-    # to them without the page number ("detail?id=17").
+    # A page like this one: the same script with other ids for the same
+    # query keys, or the same path but for the last segment and the same
+    # query keys. "viewforum.php?f=2" lists the threads at "viewtopic.php?t=7".
     def kinship(uri)
       page = page_segments
       other = segments(uri)
-      return (:sibling if same_kind?(uri)) if page == other
       return unless query_keys(uri) == page_keys
-      return folder_kinship(page, other) if page.size > 1
+      return (:sibling if same_kind?(uri)) if page == other
+      return (:sibling if other.size == page.size && folders(page) == folders(other)) if page.size > 1
       return unless page.size == 1 && other.size == 1
       return :sibling if skeleton(page.first) == skeleton(other.first)
 
@@ -679,13 +666,6 @@ module Nokodown
       URI.decode_www_form_component(segment).scrub("")
     rescue ArgumentError
       segment
-    end
-
-    def folder_kinship(page, other)
-      return :sibling if other.size == page.size && folders(page) == folders(other)
-
-      deeper = other.size == page.size + 1 && other[page.size - 1] != page.last
-      :deeper if deeper && folders(page) == folders(other.first(page.size))
     end
 
     # Dated permalinks differ in their date folders ("/2023/4/30/news/").
