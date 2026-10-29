@@ -414,6 +414,13 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, "https://blog.example.com/bridge-reopens-after-repairs/", nil).should_not be_empty
   end
 
+  it "takes a list of posts named by their titles under the root for pages like this one below an article" do
+    links = stories.map { |title| "<li><a href='/#{title.downcase.tr(' ', '-')}/'>#{title}</a></li>" }
+    html = "<h1>Bridge reopens</h1>#{story(1)}<div class='label'>Beach days</div><ul>#{links.join}</ul>"
+
+    blocks(html, "https://blog.example.com/bridge-reopens-after-repairs/").should_not be_empty
+  end
+
   it "keeps a shop's products named by their titles under a label of the page's own" do
     html = "<h1>Olive oil tin cans</h1><p>Tin cans for olive oil.</p><div class='name'>All olive oil cans</div>" \
            "<div class='grid'>#{cards(stories, '/')}</div>"
@@ -475,6 +482,30 @@ RSpec.describe Nokodown::Teasers do
     keys.should include(Nokodown::Dom.key(body.at_css(".picks")), Nokodown::Dom.key(body.at_css(".highlights")))
   end
 
+  it "weighs Chinese characters as words in the titles of a list of bare links" do
+    titles = %w[港口大桥重新开放 学校董事会批准预算 渔季提前两周开放]
+    items = titles.each_with_index.map { |title, index| "<li><a href='/news/#{index}.html'>#{title}</a></li>" }
+    html = "<h1>大桥重新开放</h1>#{story(2)}<h3>相关文章</h3><ul>#{items.join}</ul>"
+
+    blocks(html, "https://news.example.cn/news/9.html", nil).should_not be_empty
+  end
+
+  it "finds teasers whose cards each hold a list of links to pages like this one" do
+    grid = stories.each_with_index.map do |title, index|
+      topics = ["Harbor bridge news", "Ferry timetable changes", "Road closures this week"].each_with_index.map do |topic, other|
+        "<li><a href='/2026/04/topic-#{index}-#{other}'>#{topic}</a></li>"
+      end
+      "<div class='card'><img src='/img/#{index}.jpg' alt=''><h3><a href='/blog/story-#{index}'>#{title}</a></h3>" \
+        "<ul>#{topics.join}</ul></div>"
+    end
+    html = "<h1>Bridge reopens</h1>#{story(3)}<section><h2>Leia também</h2><div class='grid'>#{grid.join}</div></section>"
+    body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
+    Nokodown::Dom.assign_keys(body)
+
+    keys = described_class.new(body, article_url, Nokodown::UrlResolver.new(article_url), :article).call
+    keys.should include(Nokodown::Dom.key(body.at_css("section")))
+  end
+
   it "keeps a list of short links, such as a product's options" do
     sizes = %w[60x110 80x150 120x170].map { |size| "<li><a href='/p/rug-#{size}'>#{size}</a></li>" }
     html = "<h1>Round rug</h1>#{story(1)}<h4>Diameter (mm)</h4><ul>#{sizes.join}</ul>"
@@ -508,6 +539,13 @@ RSpec.describe Nokodown::Teasers do
     box = "<section><h2>Refresh your digital marketing skills</h2><div class='grid'>#{cards(stories, '/courses/')}</div></section>"
 
     blocks("<h1>What is digital marketing</h1>#{story(3)}#{box}", "https://example.org/what-is-digital-marketing/").should_not be_empty
+  end
+
+  it "does not take a title that has the address's words among many others for the page's name" do
+    box = "<section><h2>Digital marketing strategy courses for small business owners</h2>" \
+          "<div class='grid'>#{cards(stories, '/courses/')}</div></section>"
+
+    blocks("<h1>Digital marketing strategy</h1>#{story(3)}#{box}", "https://example.org/digital-marketing-strategy/").should_not be_empty
   end
 
   it "does not take a title that leaves out some of the address's words for the page's name" do
