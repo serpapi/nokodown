@@ -83,6 +83,12 @@ module Nokodown
     C1_CONTROL = /[\u0080-\u009F]/.freeze
     ONLY_C1_CONTROLS = /\A[\u0080-\u009F]+\z/.freeze
     SINGLE_CHARACTER = /\A[\u00A0-\u017F\u0370-\u04FF\u0600-\u06FF\u2000-\u214F\uFEFF]\z/.freeze
+    # What UTF-8 a Western page holds: accented letters, Greek, Cyrillic,
+    # punctuation, signs, emoji, and byte order marks and replacement
+    # characters to be dropped. A letter and a sign of Windows-1252 that read
+    # as UTF-8 by chance mostly make another script ("ß“" an NKo letter,
+    # "é\u00A0»" a Han one).
+    WESTERN = /\A[\u00A0-\u024F\u0370-\u04FF\u1E00-\u1EFF\u2000-\u27BF\uFEFF\uFFFD\u{1F000}-\u{1FAFF}]+\z/.freeze
 
     module_function
 
@@ -114,7 +120,7 @@ module Nokodown
       encoding = declared || detected(bytes)
       return bytes.force_encoding(encoding) unless encoding.nil? || encoding == Encoding::Windows_1252
 
-      mixed(bytes, Encoding::Windows_1252, whole: !encoding.nil?)
+      mixed(bytes, Encoding::Windows_1252, whole: !encoding.nil?, western: !encoding.nil?)
     end
 
     # UTF-8 with bytes of another encoding here and there: the declared one
@@ -176,9 +182,9 @@ module Nokodown
     # is in it. Otherwise only a lone byte is, and a lone lead byte only
     # inside a word: before anything else it is what is left of a character
     # cut off ("przekaza\xC4...").
-    def mixed(bytes, legacy, whole: false)
+    def mixed(bytes, legacy, whole: false, western: false)
       bytes.delete_prefix(UTF8_BOM).gsub(HIGH_RUN_BEFORE_LETTER) do |run|
-        mixed_run(run, (whole || stray?(run, Regexp.last_match(1))) && legacy)
+        mixed_run(run, (whole || stray?(run, Regexp.last_match(1))) && legacy, western)
       end.force_encoding(Encoding::UTF_8)
     end
 
@@ -195,12 +201,12 @@ module Nokodown
       run.bytesize == 1 && (letter || !run.match?(LEAD_BYTE))
     end
 
-    def mixed_run(run, legacy)
+    def mixed_run(run, legacy, western)
       redecoded = redecoded(run)
       return redecoded if redecoded
 
       utf8 = run.dup.force_encoding(Encoding::UTF_8)
-      return run if utf8.valid_encoding?
+      return run if utf8.valid_encoding? && (!western || utf8.match?(WESTERN))
       return utf8.scrub("").b unless legacy
 
       run.force_encoding(legacy).encode(Encoding::UTF_8, undef: :replace, replace: "").b

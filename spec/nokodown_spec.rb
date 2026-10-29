@@ -595,6 +595,12 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html, title: false).should == "Привет, мир, № 5"
     end
 
+    it "reads a Western page's runs that are UTF-8 by chance as Windows-1252" do
+      html = "<meta charset=iso-8859-1><p>\x84Ohne Unterla\xDF\x93, sagt K\xF6ln, caf\xE9\xA0\xBB \x96 und caf\xC3\xA9</p>".b
+
+      Nokodown.to_markdown(html, title: false).should == "„Ohne Unterlaß“, sagt Köln, café » – und café"
+    end
+
     it "drops what is left of a character cut off" do
       html = "<meta charset=utf-8><p>Zażółć gęślą jaźń przekaza\xC4...</p>".b
 
