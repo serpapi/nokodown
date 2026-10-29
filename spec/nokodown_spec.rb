@@ -332,6 +332,13 @@ RSpec.describe Nokodown do
       convert('<p>Open daily.</p><div class="w-condition-invisible"><p>Closed for the holidays.</p></div>').should == "Open daily."
     end
 
+    it "drops the messages Webflow shows only once a form is sent" do
+      form = '<div class="w-form"><form><input name="email"></form><div class="w-form-done"><div>Thank you! Check your inbox.</div></div>' \
+             '<div class="w-form-fail"><div>There was an issue with the form.</div></div></div>'
+
+      convert("<p>Open daily.</p>#{form}").should == "Open daily."
+    end
+
     it "drops a large hidden block beside the visible title, but not an anti-flicker wrapper around the page" do
       article = "<h1>Trail stoves</h1><p>#{'A trail stove boils a litre in three minutes. ' * 14}</p>"
       copy = "<pre hidden>#{'# Trail stoves raw markdown copy of the article. ' * 8}</pre>"

@@ -14,7 +14,7 @@ module Nokodown
     HIDDEN_CLASSES = Set.new(%w[
       hidden hide d-none is-hidden u-hidden visually-hidden visuallyhidden sr-only screen-reader-text
       screen-reader-only screenreader-only a11y-hidden offscreen invisible element-invisible
-      print-only visible-print d-print-block show-for-sr w-condition-invisible
+      print-only visible-print d-print-block show-for-sr w-condition-invisible w-form-done w-form-fail
     ]).freeze
 
     # Found by Lexbor's selector engine, so the checks below only run on
