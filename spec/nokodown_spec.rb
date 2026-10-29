@@ -704,6 +704,26 @@ RSpec.describe Nokodown do
       html.should == "<p>#{text}</p>"
     end
 
+    it "returns nothing for a PDF, an image or an archive served as a page" do
+      ["%PDF-1.6\r%\xE2\xE3\xCF\xD3\r\n1 0 obj <</Type /Catalog>> endobj", "\x89PNG\r\n\x1A\n\x00\x00\x00\rIHDR",
+       "PK\x03\x04\x14\x00\x00\x00<html><p>Inside</p>"].each do |body|
+        result = Nokodown.extract(body.b)
+
+        result.markdown.should == ""
+        result.mode.should == :none
+      end
+    end
+
+    it "returns nothing for a body made mostly of control bytes" do
+      body = "<html><body><p>Download</p>#{"\x01\x9C\x00\x12\xF3\x07ab" * 200}</body></html>".b
+
+      Nokodown.extract(body).markdown.should == ""
+    end
+
+    it "does not take UTF-16 without a byte order mark for binary" do
+      Nokodown::Charset.binary?("<html><body><p>Grüße aus Köln</p></body></html>".encode("UTF-16LE").b).should be false
+    end
+
     it "drops byte order marks and replacement characters" do
       Nokodown.to_markdown("\uFEFF<p>a\uFEFFb\uFFFDc</p>".b, title: false).should == "abc"
     end
