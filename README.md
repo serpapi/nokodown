@@ -173,8 +173,11 @@ with `main_content: false`, `:none` for a document without a body.
 Every structural rule is guarded: an element that contains the `<main>`
 region, or most of the page's text, is never removed because of its class name,
 and neither is one named for what it has or allows (`has-sidebar`,
-`with-navigation`, `sidebar-enabled`). A `<footer>` or complementary pane that
-holds the page's only `<h1>` and a fair share of its text is the content.
+`with-navigation`, `sidebar-enabled`) or for the layout it is laid out in
+(`layout-sidebar-left`, `one-right-sidebar`). A `<footer>`, a complementary
+pane or a block named like furniture (`dialog-off-canvas-main-canvas`) that
+holds the page's only `<h1>`, unless that links to the home page, and a fair
+share of its text is the content.
 Three kinds of named furniture go however much of a short page they hold: a
 site header above the title, a sidebar or footer without prose (an address
 and opening hours are lines, not prose) beside a title that has text of its

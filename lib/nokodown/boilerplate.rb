@@ -21,9 +21,12 @@ module Nokodown
     # "with-navigation", "content-and-menu", "sidebar-enabled--true". The
     # head of a compound names the wrapper, so "menu-and-content" stays a
     # menu. "no-print" names what is left out of print, so it stays too.
+    # Nor does the layout it is laid out in: "layout-sidebar-left",
+    # "one-right-sidebar", "two-sidebars".
     MODIFIER = /
       (?:(?<![\w-])(?:has|with|without|no(?!-?print))|-(?:and|with|without))-[\w-]+|
-      (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])
+      (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])|
+      (?<![\w-])(?:layout|one|two)-[\w-]+|(?<![\w-])[\w-]+-layout(?![\w-])
     /x.freeze
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
@@ -120,7 +123,17 @@ module Nokodown
     def title_holder?(node)
       return false unless node.name == "footer" || node.name == "aside" || node["role"] == "complementary"
 
-      @single_h1 && !node.at_css("h1").nil? && @stats.text_chars(node) >= @total * TITLE_HOLDER_SHARE
+      holds_title?(node)
+    end
+
+    # So is a block named like furniture: page builders wrap the whole page
+    # in "dialog-off-canvas-main-canvas" or "sidebar-fixed". A site's name in
+    # a sidebar links to its home page.
+    def holds_title?(node)
+      return false unless @single_h1 && @stats.text_chars(node) >= @total * TITLE_HOLDER_SHARE
+
+      h1 = node.at_css("h1")
+      !h1.nil? && h1.css("a[href]").none? { |link| Metadata.home_link?(link["href"].strip) }
     end
 
     # A trail stands apart from the text around it; one that words lead into
@@ -197,7 +210,7 @@ module Nokodown
     def class_noise?(node)
       return false if !@prose_blocks.empty? && prose_part?(node)
 
-      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node))
+      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node)) && !holds_title?(node)
     end
 
     # Fine print about the site is furniture, but a note on the content right

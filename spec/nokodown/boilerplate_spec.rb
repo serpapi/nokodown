@@ -575,4 +575,25 @@ RSpec.describe Nokodown::Boilerplate do
       ["Members can log in to see", "ShopLogin", "Register for the outdoor expo"].each { |line| text.should include(line) }
     end
   end
+
+  describe "blocks that hold the page's title" do
+    it "keeps a block named like furniture that holds the page's only title, not a sidebar headed by the site's name" do
+      studio = "<p>Branding and web studio in Riyadh, open Sunday to Thursday.</p>"
+      canvas = "<div class=\"dialog-off-canvas-main-canvas\"><h1>Visual identity</h1><p>Logos and type for the Asir fair.</p></div>" \
+               "<div class=\"sidebar\">#{studio}</div>"
+      sidebar = "<div class=\"sidebar\"><h1><a href=\"/\">Fikra</a></h1>#{studio}</div><h2>Visual identity</h2><p>Logos and type.</p>"
+
+      remaining(canvas).should include("Visual identity")
+      remaining(sidebar).should_not include("Fikra")
+    end
+
+    it "does not read the layout a list is laid out in as its name" do
+      html = "<h1>News</h1>#{prose('The parade', 1)}<div class=\"posts-list one-right-sidebar\">#{prose('The jury', 2)}</div>" \
+             "<div class=\"product-grid layout-sidebar-left\">#{prose('The costume', 2)}</div>"
+
+      text = remaining(html)
+      text.should include("The jury is explained")
+      text.should include("The costume is explained")
+    end
+  end
 end
