@@ -108,6 +108,15 @@ RSpec.describe Nokodown::Pruner do
       pruned("<section>#{report}<footer><p>26 Park Road, Tel 031-730-3500</p></footer></section>").should_not include("Park Road")
     end
 
+    it "walks back over a thread of thousands of footers in one section in time linear in its text" do
+      post = "<div class=\"comment\"><p>#{'The ferry was late again, and the queue reached the harbour gate. ' * 16}</p><footer>Reply</footer></div>"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = pruned("<section>#{post * 5000}</section>")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 2
+      text.should start_with("The ferry was late again")
+    end
+
     it "does not read a shop category's name as a footer" do
       products = %w[Insoles Separators Splint Socks].map do |name|
         "<li class=\"product type-product product_cat-foot-care\"><h2>#{name}</h2><p>Soft support for tired feet, $19.00</p></li>"
