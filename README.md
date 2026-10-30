@@ -275,7 +275,7 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    of different names, each over text of its own), is written as those
    sections, and its items without a heading as a list. An ordered one
    keeps its numbers on the heading that opens each item, after a product
-   photo ("## 4. Acme Drill"), unless the heading has a rank of its own,
+   photo ("## 4. Acme Drill"), unless every heading has a rank of its own,
    and stays a numbered list if an item opens with anything else.
 
 ## Quality

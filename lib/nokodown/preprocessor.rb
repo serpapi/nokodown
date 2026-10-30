@@ -297,11 +297,20 @@ module Nokodown
       slider_marks?(input, wrapper) ? wrapper.children.each(&:remove) : input.remove
     end
 
-    # A before-and-after photo slider holds its two photos, and a player's
-    # seek bar can share its wrapper with the download link.
     def slider_marks?(input, wrapper)
-      input["type"].to_s.casecmp?("range") && wrapper&.element? &&
-        few_marks?(wrapper) && wrapper.at_css("img, iframe").nil? && !linked?(wrapper)
+      input["type"].to_s.casecmp?("range") && wrapper&.element? && marks_only?(wrapper)
+    end
+
+    # A before-and-after photo slider holds its two photos, and a player's
+    # seek bar can share its wrapper with the download link. Removing a
+    # slider changes none of these, nor the wrapper's text, so the sliders
+    # of one wrapper share its verdict instead of each reading the wrapper.
+    def marks_only?(wrapper)
+      unless wrapper == @slider_wrapper
+        @slider_wrapper = wrapper
+        @marks_only = few_marks?(wrapper) && wrapper.at_css("img, iframe").nil? && !linked?(wrapper)
+      end
+      @marks_only
     end
 
     # The marks at a font size slider's ends can be links that lead nowhere.
