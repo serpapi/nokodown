@@ -5,6 +5,7 @@ module Nokodown
   class Pruner
     CLUSTER_CONTAINERS = "ul, ol, menu, dl, div, section, p, td, li, span, table, header, footer"
     TEXT_BLOCKS = "p, div, span, li, h1, h2, h3, h4, h5, h6, small, section, aside, figcaption, b, strong, em, i"
+    CARD_MEDIA = "img, picture, video"
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
     # A class names a button when that is its last word, before a modifier,
@@ -237,10 +238,26 @@ module Nokodown
         text = Dom.text(node)
         next if text.empty? || text.length > 200
 
-        boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
+        boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT) && !label_beside_picture?(node, text)
         copyright = text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
         remove(node) if boilerplate || copyright
       end
+    end
+
+    # A card whose only words left are its button ("Add to cart", "В
+    # корзину") keeps its picture: the block that holds the label alone is
+    # removed on its own. An icon in the label's own element goes with it.
+    def label_beside_picture?(node, text)
+      return false if node.css(CARD_MEDIA).none? { |media| card_picture?(media) }
+
+      node.css(TEXT_BLOCKS).any? { |child| Dom.text(child) == text && child.at_css(CARD_MEDIA).nil? }
+    end
+
+    # A card's picture links to the card's page; a logo links home.
+    def card_picture?(media)
+      link = Dom.ancestors_named(media, "a").first
+      href = link && destination(link)
+      !href.nil? && !Metadata.home_link?(href)
     end
 
     # Links and boxes styled as buttons ("Add to cart", "Book a demo") are
