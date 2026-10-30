@@ -388,17 +388,27 @@ RSpec.describe Nokodown::Boilerplate do
     end
 
     it "keeps a wider grid column, and a narrower one beside a title's column with prose, more text or the title" do
-      guides = Array.new(12) { |index| "<li><a href=\"/guide-#{index}/\">Fellowship guide, part #{index + 1}</a></li>" }
-      side = "<div class=\"col-md-4\"><h4>Guides</h4><ul>#{guides.join}</ul></div>"
+      guides = Array.new(12) { |index| "<h3><a href=\"/guide-#{index}/\">Fellowship guide, part #{index + 1}</a></h3>" }
+      side = "<div class=\"col-md-4\"><h4>Guides</h4>#{guides.join}</div>"
       trail = "<p>Home › Fellowships › Germany</p>"
       rows = ["<div class=\"col-md-8\">#{trail}<h1>Konstanz Fellowship</h1>#{prose('The fellowship', 1)}</div>#{side}",
-              "<div class=\"col-md-8\"><h1>Sakura Clinic</h1>#{hours}</div>" \
-              "<div class=\"col-md-4\"><a href=\"/guide-12/\">Guide, part 12</a></div>",
+              "<div class=\"col-md-8\"><h1>Sakura Clinic</h1>#{hours}</div><div class=\"col-md-4\">#{guides.last(3).join}</div>",
               "<div class=\"col-md-8\"><h1>Konstanz Fellowship</h1></div>#{side}",
               "<div class=\"col-md-4\">#{trail}<h1>Konstanz Fellowship</h1></div>#{side.sub('col-md-4', 'col-md-8')}"]
       rows.each do |row|
         remaining("<div class=\"row\">#{row}</div>").should include("part 12")
       end
+    end
+
+    it "keeps a narrower grid column of the page's own links, as a profile's publications" do
+      papers = ["Tidal mixing in shallow harbors", "Sediment transport under ferry wakes", "A model of quay wall erosion",
+                "Salt marsh recovery after dredging", "Measuring wave energy at breakwaters", "Harbor seiches in closed basins"]
+      links = papers.map { |paper| "<li><a href=\"/papers/#{paper.downcase.tr(' ', '-')}\">#{paper}</a></li>" }
+      html = "<div class=\"row\"><div class=\"col-md-8\"><p>Home › People › Ana Puig</p><h1>Dr. Ana Puig</h1>" \
+             "<ul><li>Professor of coastal engineering</li><li>Room 3.14, Harbor Building</li></ul></div>" \
+             "<div class=\"col-md-4\"><h4>Publications</h4><ul>#{links.join}</ul></div></div>"
+
+      remaining(html).should include("Harbor seiches in closed basins")
     end
 
     it "removes a site header above the title that holds addresses in lines" do
