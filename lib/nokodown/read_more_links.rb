@@ -160,11 +160,14 @@ module Nokodown
       text.length > label.text.length && text.match?(/\p{L}/) && !text.match?(EXCERPT_END) && Dom.text(before).end_with?(text)
     end
 
-    # The element right before the node on its line, with no text between.
+    # The element right before the node on its line, with no text between;
+    # one that holds a line break may end the line before the node.
     def previous_inline(node)
       sibling = node.previous_sibling
       sibling = sibling.previous_sibling while sibling && !sibling.element? && Dom.text(sibling).empty?
-      sibling if sibling&.element? && !Dom.block?(sibling) && sibling.css("*").none? { |child| Dom.block?(child) }
+      return unless sibling&.element? && !Dom.block?(sibling)
+
+      sibling if sibling.css("*").none? { |child| child.name == "br" || Dom.block?(child) }
     end
 
     # A link in words can name its page. A term of a definition list is

@@ -64,8 +64,10 @@ RSpec.describe Nokodown::ReadMoreLinks do
     html = "<div><a href='/posts/12'>Philosophy of life: a life shaped by curiosity </a>" \
            "<span><a href='/posts/12'><b>- Vijay Joshi</b></a><span></span></span></div>" \
            "<div><a href='/posts/9'>The harbor bridge reopens!</a><span><a href='/posts/9'>Details</a></span></div>" \
-           "<div><a href='/posts/7'>Crews finish early</a><br><span><a href='/posts/7'>Details</a></span></div>"
-    text_after(html).should == "Philosophy of life: a life shaped by curiosity - Vijay JoshiThe harbor bridge reopens!Crews finish early"
+           "<div><a href='/posts/7'>Crews finish early</a><br><span><a href='/posts/7'>Details</a></span></div>" \
+           "<div><a href='/posts/5'>Ferry times change<br></a><span><a href='/posts/5'>Details</a></span></div>"
+    text_after(html).should == "Philosophy of life: a life shaped by curiosity - Vijay JoshiThe harbor bridge reopens!" \
+                               "Crews finish earlyFerry times change"
   end
 
   it "keeps the entries of a breadcrumb or a table of contents" do
