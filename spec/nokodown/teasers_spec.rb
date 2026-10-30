@@ -13,6 +13,11 @@ RSpec.describe Nokodown::Teasers do
     described_class.new(body, url, Nokodown::UrlResolver.new(url), type).call
   end
 
+  # Not wall time, which a loaded machine stretches.
+  def cpu_time
+    Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID)
+  end
+
   def story(count)
     sentence = "The harbor bridge reopened on Tuesday after crews replaced the cracked bearings. "
     Array.new(count) { |index| "<p>#{sentence * 3}Part #{index + 1}.</p>" }.join
@@ -34,6 +39,18 @@ RSpec.describe Nokodown::Teasers do
       "<div class='card'><img src='/img/#{slug}.jpg' alt=''><h3><a href='#{path}#{slug}'>#{title}</a></h3>" \
         "<span>12.04.2026</span>#{excerpt}</div>"
     end.join
+  end
+
+  # A listing under its column's title, after a sidebar, with its pager.
+  def listing(pages)
+    products = Array.new(6) do |index|
+      "<li><span><a href='/products/show2846#{660 + index}.html'><img src='/img/#{index}.png' alt=''></a></span>" \
+        "<a href='/products/show2846#{660 + index}.html'>Methyl ester number #{index}</a></li>"
+    end.join
+    links = pages.map { |text, href| "<a href='#{href}'>#{text}</a>" }.join
+    "<div class='side'><span>Contact us</span><ul><li>Contact: Li Fang</li><li>Phone: 139 8604 1085</li>" \
+      "<li>Address: group one, Ximiao village, Huangtan</li></ul></div><div class='main'><div class='head'>" \
+      "<span>Product showroom</span></div><ul class='list'>#{products}</ul><div class='pages'>#{links}</div></div>"
   end
 
   let(:stories) do
@@ -160,6 +177,44 @@ RSpec.describe Nokodown::Teasers do
            "<p>Giao hàng toàn quốc trong ba ngày, đổi trả miễn phí trong bảy ngày.</p>"
 
     blocks(html, "https://shop.example.com/san-pham/tra-sam-27", :product).should be_empty
+  end
+
+  it "keeps a listing whose column title and pager sit around its list, after a sidebar" do
+    pages = [["&lt; Prev", 2], ["1", 1], ["2", 2], ["3", 3], ["4", 4], ["Next &gt;", 4]].map do |text, page|
+      [text, "/products/list-catid-139257_--p#{page}.html"]
+    end
+
+    blocks(listing(pages), "https://chem.example.com/products/list-catid-139257_--p3.html", nil).should be_empty
+  end
+
+  it "keeps a listing whose pager adds the page's number to its address" do
+    pages = [["1", ""], ["2", "?page=2"], ["3", "?page=3"], ["4", "?page=4"], ["Next &gt;", "?page=2"]]
+    pages = pages.map { |text, query| [text, "/products/list-catid-139257.html#{query}"] }
+
+    blocks(listing(pages), "https://chem.example.com/products/list-catid-139257.html", nil).should be_empty
+  end
+
+  it "does not take the view counts of coded pages for a pager" do
+    videos = Array.new(6) do |index|
+      "<div class='item'><a href='/9331#{index}.html'><img src='/img/#{index}.jpg' alt=''></a>" \
+        "<a href='/9331#{index}.html'>#{450 + index}</a> <span>09-21</span>" \
+        "<h3><a href='/9331#{index}.html'>Harbor video number #{index}</a></h3></div>"
+    end.join
+    html = "<h1>Harbor video</h1>#{story(1)}<div class='box'><div class='title'>You may also like</div>" \
+           "<div class='grid'>#{videos}</div></div>"
+
+    blocks(html, "https://video.example.com/85967.html").should_not be_empty
+  end
+
+  it "does not take links that change two of this page's numbers for its pager" do
+    volumes = [[1, 1], [3, 27], [4, 40], [5, 52]].map do |volume, chapter|
+      href = "/read/harbor/vol-#{volume}/ch-#{chapter}.html"
+      "<div class='volume'><a href='#{href}'><img src='/img/#{volume}.jpg' alt=''></a>" \
+        "<a href='#{href}'>#{volume}</a></div>"
+    end.join
+    html = "<h1>Harbor, chapter 14</h1>#{story(2)}<div class='box'><h3>More volumes</h3>#{volumes}</div>"
+
+    blocks(html, "https://manga.example.com/read/harbor/vol-2/ch-14.html").should_not be_empty
   end
 
   it "removes pages like this one listed under its text in the same container" do
@@ -353,5 +408,80 @@ RSpec.describe Nokodown::Teasers do
   it "finds no teaser blocks on a site's home page" do
     blocks(article, article_url).should_not be_empty
     blocks(article, "https://news.example.com/en/").should be_empty
+  end
+
+  it "looks for the titles of runs side by side in time linear in their wrapper" do
+    photos = Array.new(1000) do |run|
+      shape = run.to_s(26).tr("0-9a-p", "a-z")
+      Array.new(3) do |index|
+        "<div class='#{shape}'><a href='/photos/#{run}-#{index}'><img src='/img/#{run}-#{index}.jpg' alt=''></a></div>"
+      end.join
+    end
+    started = cpu_time
+    found = blocks("<h1>Harbor photos</h1><div class='wall'>#{photos.join}</div>", "https://news.example.com/photos/harbor")
+
+    (cpu_time - started).should < 2
+    found.should be_empty
+  end
+
+  it "asks whether the wrappers of runs hold the page's heading in time linear in the page" do
+    groups = Array.new(2000) do |group|
+      photos = Array.new(3) do |index|
+        "<div class='photo'><a href='/photos/#{group}-#{index}'><img src='/img/#{group}-#{index}.jpg' alt=''></a></div>"
+      end
+      "<div class='group'>#{photos.join}</div>"
+    end
+    html = "<h1>Harbor photos</h1><div class='wall'><h2>Photos</h2>#{groups.join}</div>"
+    started = cpu_time
+    found = blocks(html, "https://news.example.com/photos/harbor")
+
+    (cpu_time - started).should < 2
+    found.should be_empty
+  end
+
+  it "asks about the copies of a misnested formatting element in time linear in their number" do
+    groups = Array.new(5000) do |group|
+      photos = Array.new(3) do |index|
+        "<a href='/photos/#{group}-#{index}'><img src='/img/#{group}-#{index}.jpg' alt=''></a>"
+      end
+      "<p>#{photos.join}<span itemprop='articleBody'>Harbor</span></p>"
+    end
+    html = "<h1>Harbor photos</h1><p><font face='Arial'>Photos of the harbor</p>#{groups.join}"
+    started = cpu_time
+    found = blocks(html, "https://news.example.com/photos/harbor")
+
+    (cpu_time - started).should < 3
+    found.should be_empty
+  end
+
+  it "drops blocks from the copies of a misnested formatting element in time linear in their number" do
+    boxes = Array.new(6000) do |index|
+      "<p><a class='box' href='/news/#{index}'>Story number #{index}</a> Caption of the harbor story.</p>"
+    end
+    html = "<div class='main'><p><font face='Arial'>Photos of the harbor</p>#{boxes.join}</div>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    Nokodown::Dom.assign_keys(body)
+    keys = body.css(".box").map { |box| Nokodown::Dom.key(box) }.to_set
+    started = cpu_time
+    main = described_class.strip([body.at_css(".main")], keys).first
+
+    (cpu_time - started).should < 1
+    main.at_css(".box").should be_nil
+    main.css("font").size.should == 6001
+  end
+
+  it "drops many blocks from one column in time linear in the column" do
+    photos = "<figure><img src='/img/harbor.jpg' alt=''></figure>" * 1000
+    boxes = Array.new(1000) { |index| "<div class='box'><a href='/news/#{index}'>Story number #{index}</a></div>" }
+    html = "<html><body><div class='main'><div class='column'>#{photos}#{boxes.join}#{story(5)}</div></div></body></html>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    Nokodown::Dom.assign_keys(body)
+    keys = body.css(".box").map { |box| Nokodown::Dom.key(box) }.to_set
+    started = cpu_time
+    column = described_class.strip([body.at_css(".main")], keys).first.at_css(".column")
+
+    (cpu_time - started).should < 1
+    column.at_css(".box").should be_nil
+    column.css("figure").size.should == 1000
   end
 end

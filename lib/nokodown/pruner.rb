@@ -861,6 +861,7 @@ module Nokodown
       @tail_limit = [@tail_total * TAIL_SHARE, TAIL_CHARS].max
       @footer_budget = @tail_total * MAX_TAIL_SHARE
       @footers = []
+      @sections = {}
       after = 0
       @nodes.reverse_each { |root| after += walk_back(root, after) }
       @footers.each { |node| remove(node) }
@@ -923,7 +924,20 @@ module Nokodown
       return false if QUOTES.include?(node.parent&.name)
 
       section = node.ancestors.find { |ancestor| ancestor.element? && SECTIONS.include?(ancestor.name) }
-      section.nil? || Dom.char_count(section.content) >= @tail_total * MAX_TAIL_SHARE
+      section.nil? || section_chars(section) >= @tail_total * MAX_TAIL_SHARE
+    end
+
+    # The walk removes nothing, and each post of a long thread has a footer
+    # in the one comments section, so a section is measured once. Keys can
+    # repeat (elements added later have none), so the node is kept with it.
+    def section_chars(section)
+      key = Dom.key(section)
+      measured = @sections[key]
+      return measured.last if measured&.first == section
+
+      chars = Dom.char_count(section.content)
+      @sections[key] = [section, chars]
+      chars
     end
 
     # Every rule removes through here: nothing inside code is furniture.
