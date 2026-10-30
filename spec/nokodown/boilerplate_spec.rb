@@ -209,12 +209,14 @@ RSpec.describe Nokodown::Boilerplate do
     end
 
     it "removes a trail in a font element, but not the copies the parser makes of it around the content" do
-      html = '<p><font face="Arial"><a href="/">Home</a> › <a href="/lab/">Laboratory</a> › Stirrer</p>' \
-             "<h1>Stirrer</h1><div>#{prose('The stirrer', 1)}</div></font>"
+      trail = '<a href="/">Home</a> › <a href="/lab/">Laboratory</a> › Stirrer'
+      html = "<p><font face=\"Arial\">#{trail}</p><h1>Stirrer</h1><div>#{prose('The stirrer', 1)}</div></font>"
       text = remaining(html)
 
       text.should_not include("Laboratory")
       text.should include("The stirrer is explained")
+      remaining("<p><font face=\"Arial\">#{trail}</p><h1>Stirrer</h1><div>#{prose('The stirrer', 2)}</div><p>#{trail}</p></font>")
+        .should_not include("Laboratory")
     end
 
     it "keeps a category link followed by the post's date" do

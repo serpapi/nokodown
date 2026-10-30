@@ -38,16 +38,20 @@ module Nokodown
     module_function
 
     # Link farms point hundreds of links at home pages from one container,
-    # so each container is judged once.
+    # so each container is judged once. The parser's copies of a formatting
+    # element share its key, so the node is kept with it.
     def trails(body)
-      checked = Set.new
+      checked = {}
       links = body.css("a[href]")
       site = site_host(links)
       links.filter_map do |link|
-        next if !link["href"].strip.match?(HOME) || checked.include?(Dom.key(link.parent))
+        next if !link["href"].strip.match?(HOME) || checked[Dom.key(link.parent)] == link.parent
 
         node = container(link)
-        node if node && checked.add?(Dom.key(node)) && trail_at?(node, link, site)
+        next if node.nil? || checked[Dom.key(node)] == node
+
+        checked[Dom.key(node)] = node
+        node if trail_at?(node, link, site)
       end
     end
 
