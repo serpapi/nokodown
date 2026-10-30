@@ -67,6 +67,18 @@ RSpec.describe Nokodown::ReadMoreLinks do
     text_after(html).should == "#{passage.strip}WeiterlesenThe ferry runs late on Sunday."
   end
 
+  it "keeps a label when the longer link wraps a list, a quote, code or a data table, but not a line after them" do
+    specs = "<table><tr><th>Drill</th><th>Power</th></tr><tr><td>Acme</td><td>18 V</td></tr><tr><td>Bolt</td><td>650 W</td></tr></table>"
+    html = "<div><a href='/p/1'><ul><li>Acme Drill</li><li>Cordless, 18 V</li></ul></a><p><a href='/p/1'>Details</a></p></div>" \
+           "<div><a href='/p/2'><blockquote><h3>Bolt Driver</h3><p>Corded, 650 W</p></blockquote></a><p><a href='/p/2'>Details</a></p></div>" \
+           "<div><a href='/p/3'><dl><dt>Hand Saw</dt><dd>Steel, 550 mm</dd></dl></a><p><a href='/p/3'>Details</a></p></div>" \
+           "<div><a href='/p/4'>#{specs}</a><p><a href='/p/4'>Details</a></p></div>" \
+           "<div><a href='/p/5'><pre>drill --speed 3</pre></a><p><a href='/p/5'>Details</a></p></div>" \
+           "<div><a href='/p/6'><ul><li>New</li></ul><p>Bench Vise</p></a><p><a href='/p/6'>Details</a></p></div>"
+    text_after(html).should == "Acme DrillCordless, 18 VDetailsBolt DriverCorded, 650 WDetailsHand SawSteel, 550 mmDetails" \
+                               "DrillPowerAcme18 VBolt650 WDetailsdrill --speed 3DetailsNewBench Vise"
+  end
+
   it "reads a link around many levels of blocks in time linear in its text" do
     body = "<p>The bridge over the inner basin opens again on Monday after three months of repairs.</p>" * 10_000
     html = "<div><a href='/news/bridge'>#{'<div>' * 200}<p>The harbor bridge reopens</p>#{body}#{'</div>' * 200}</a>" \
