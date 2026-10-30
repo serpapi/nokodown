@@ -851,6 +851,18 @@ RSpec.describe "Markdown conversion" do
         "- [Trail boot](https://example.com/p/1)\n  Leather\n\n1. \\> 1 pick"
     end
 
+    it "writes list items that hold whole sections, as tab panels do, as sections" do
+      panels = "<ul><li><h2>Product details</h2><h3>Description</h3><p>Photos of the boot beside the original pair.</p><h3>Product facts</h3>" \
+               '<table><tr><th scope="row">Material</th><td>Suede</td></tr><tr><th scope="row">Colour</th><td>Brown</td></tr></table></li>' \
+               "<li><h2>Delivery and returns</h2><h3>Delivery</h3><p>International post</p><h3>Returns</h3><p>Within 7 days</p></li></ul>"
+      convert(panels).should == "## Product details\n\n### Description\n\nPhotos of the boot beside the original pair.\n\n### Product facts\n\n" \
+                                "- Material: Suede\n- Colour: Brown\n\n## Delivery and returns\n\n### Delivery\n\nInternational post\n\n" \
+                                "### Returns\n\nWithin 7 days"
+      outline = %w[Review Overview].map { |title| "<li><span>01</span><h3>#{title}</h3><p>The theme, aims and contents of the report, with a look back.</p></li>" }
+      convert("<ol>#{outline.join}</ol>").should == "1. 01 Review\n   The theme, aims and contents of the report, with a look back.\n" \
+                                                   "2. 01 Overview\n   The theme, aims and contents of the report, with a look back."
+    end
+
     it "looks through wrappers between the list and its items" do
       convert("<ul><div><li>a</li><li>b</li></div></ul>").should == "- a\n- b"
     end

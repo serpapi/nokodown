@@ -18,6 +18,8 @@ module Nokodown
       # Heading-anchor markup puts a permalink before or after the text.
       # A sign before a number is the heading's own: "§ 1 Geltungsbereich".
       PERMALINK = /\A[#¶§🔗]\s+(?!\d)|\s+[#¶§🔗]\z/.freeze
+      # Characters of a paragraph that a section holds and a card does not.
+      SECTION_TEXT = 80
 
       def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images,
@@ -152,8 +154,26 @@ module Nokodown
           owner ? owner.concat(blocks) : items << blocks
         end
         items.reject!(&:empty?)
+        return items.flatten(1) if items.any? { |blocks| sections?(blocks) }
+
         start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
         format_list(items, start)
+      end
+
+      # Tab panels and accordions set whole sections in list items: a
+      # heading, its text, then a heading of another name. Their headings
+      # stay headings, outside a list. A card repeats its one title, and a
+      # contact list heads a phone number.
+      def sections?(blocks)
+        names = blocks.select { |block| block.kind == :heading }.map { |block| block.text.sub(/\A#+ /, "") }
+        return false if names.uniq.size < 2
+
+        body = blocks.drop_while { |block| block.kind != :heading }.drop_while { |block| block.kind == :heading }
+        body.any? { |block| block.kind == :heading } && body.any? { |block| section_text?(block) }
+      end
+
+      def section_text?(block)
+        %i[table list].include?(block.kind) || (block.kind == :paragraph && block.text.length >= SECTION_TEXT)
       end
 
       # A nested list belongs to the item before it, also when a site wraps
