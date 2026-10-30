@@ -924,6 +924,18 @@ RSpec.describe "Markdown conversion" do
       convert("<ol><li><h2>Drills</h2>#{picks}</li><li><h2>Saws</h2>#{picks}</li></ol>").should start_with("## 1. Drills\n\n### Acme Drill\n\n")
     end
 
+    it "renders numbered lists of sections that stay lists, nested in each other, in linear time" do
+      review = ("<p>Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.</p>" \
+                "<h3>Pros</h3><ul><li>Light</li><li>Quiet</li></ul>") * 3
+      html = ""
+      120.times { |level| html = "<ol><li><p>Picks #{level}</p><h2>Level #{level}</h2>#{review}#{html}</li><li>Other #{level}</li></ol>" }
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert(html)
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      markdown.should start_with("1. Picks 119\n   Level 119\n")
+      markdown.should include("1. Picks 0\n")
+    end
+
     it "writes the heading that closes a list of sections as text" do
       lead = "Emits the event to every listener, in the order they were added, and returns the emitter."
       html = "<ul><li><h4>Parameters</h4><ul><li>event: string</li></ul><h4>Returns Emitter</h4><p>#{lead}</p></li><li><h4>Returns void</h4></li></ul>"

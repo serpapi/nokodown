@@ -30,6 +30,7 @@ module Nokodown
         @contains_block = {}
         @in_cell = false
         @keep_lists = false
+        @kept_lists = {}
       end
 
       def render(nodes)
@@ -152,13 +153,23 @@ module Nokodown
       # so the sections of a list nested in an item would run together. Its
       # items are rendered again, and each nested list stays a list.
       def list(node)
-        items = list_items(node)
         start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
-        return format_list(items, start) if @keep_lists
-        return sections(unlisted(items, start)) if sections_list?(items, start)
+        return kept_list(node, start) if @keep_lists
 
-        items = keeping_lists { list_items(node) } if items.any? { |blocks| sections?(blocks) }
-        format_list(items, start)
+        items = list_items(node)
+        return sections(unlisted(items, start)) if sections_list?(items, start)
+        return format_list(items, start) unless items.any? { |blocks| sections?(blocks) }
+
+        keeping_lists { kept_list(node, start) }
+      end
+
+      # Each list around it that stays a list renders it again, so nested
+      # lists would be rendered once for every level above them.
+      def kept_list(node, start)
+        key = Dom.key(node)
+        return format_list(list_items(node), start) unless key
+
+        (@kept_lists[[key, @in_cell]] ||= format_list(list_items(node), start)).map(&:dup)
       end
 
       def list_items(node)
