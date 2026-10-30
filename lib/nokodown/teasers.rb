@@ -66,6 +66,9 @@ module Nokodown
     # The root, a language's root ("/en/", "/pt-br/") or its index file.
     HOME = %r{\A/*(?:[a-z]{2}(?:[-_][a-z]{2})?/*)?(?:index\.\w+)?\z}i.freeze
     FILE = /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|docx?|xlsx?|pptx?|mp[34])\z/i.freeze
+    # A pager's links name page numbers ("1 2 4 5").
+    PAGE_NUMBER = /\A\d{1,4}\z/.freeze
+    MIN_PAGES = 2
 
     # Keys survive the copy article cleaning works on. Content that would be
     # left with a heading and a line or two keeps its blocks: on a listing
@@ -182,11 +185,51 @@ module Nokodown
     # rows of an item's recipes, each a link to another item.
     def removable?(block, body)
       return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
+      return false if pager?(block)
       return false if InPageLinks.listed?(block.nodes.first)
       return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
       return text_before(block) >= MIN_TEXT_BEFORE if block.alike
 
       @declared && body && !dominant?(block)
+    end
+
+    # A block holding the pager to this page's other pages ("1 2 4 5" to
+    # "list-catid-139257_--p2.html" from "..._--p3.html") is the listing
+    # itself, its title the column's: a box of teasers beside the content
+    # does not page through the page it is on.
+    def pager?(block)
+      pages = 0
+      block.nodes.each do |node|
+        node.css("a[href]").each do |link|
+          number = Dom.text(link)
+          next unless number.match?(PAGE_NUMBER)
+
+          uri = target(link["href"])
+          pages += 1 if uri && page_of_this?(uri, number)
+          return true if pages >= MIN_PAGES
+        end
+      end
+      false
+    end
+
+    # This page's address with the link's number in place of one of its
+    # own ("--p3" to "--p2"), or added to its query ("?cat=5&page=2"). A
+    # view count linking to another coded page ("459" to "/93319.html") is
+    # not.
+    def page_of_this?(uri, number)
+      own = address(@page)
+      other = address(uri)
+      if own.gsub(/\d+/, "0") == other.gsub(/\d+/, "0")
+        changed = own.scan(/\d+/).zip(other.scan(/\d+/)).reject { |mine, theirs| mine == theirs }
+        return changed.size == 1 && changed.first.last.to_i == number.to_i
+      end
+      added = params(uri) - params(@page)
+      uri.path == @page.path && params(@page).all? { |pair| params(uri).include?(pair) } &&
+        added.size == 1 && added.first.last == number
+    end
+
+    def address(uri)
+      "#{uri.path}?#{params(uri).sort.map { |pair| pair.join("=") }.join("&")}"
     end
 
     # Not matches?, which Nokolexbor runs over the whole document.

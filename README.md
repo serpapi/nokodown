@@ -89,8 +89,9 @@ with `main_content: false`, `:none` for a document without a body.
   text, or its own list, outweighs them. They stay on home pages, in hubs of
   sections built alike, in forum posts (attachments), in a section that the
   page's own table of contents lists, when they link to pages below this
-  one, and when the content would be left with fewer than 20 words outside
-  headings.
+  one, when they hold the pager to this page's other pages (a listing under
+  its column's title), and when the content would be left with fewer than 20
+  words outside headings.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut

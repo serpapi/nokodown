@@ -162,6 +162,33 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, "https://shop.example.com/san-pham/tra-sam-27", :product).should be_empty
   end
 
+  it "keeps a listing whose column title and pager sit around its list, after a sidebar" do
+    products = Array.new(6) do |index|
+      "<li><span><a href='/products/show2846#{660 + index}.html'><img src='/img/#{index}.png' alt=''></a></span>" \
+        "<a href='/products/show2846#{660 + index}.html'>Methyl ester number #{index}</a></li>"
+    end.join
+    pages = [["&lt; Prev", 2], ["1", 1], ["2", 2], ["3", 3], ["4", 4], ["Next &gt;", 4]].map do |text, page|
+      "<a href='/products/list-catid-139257_--p#{page}.html'>#{text}</a>"
+    end.join
+    html = "<div class='side'><span>Contact us</span><ul><li>Contact: Li Fang</li><li>Phone: 139 8604 1085</li>" \
+           "<li>Address: group one, Ximiao village, Huangtan</li></ul></div><div class='main'><div class='head'>" \
+           "<span>Product showroom</span></div><ul class='list'>#{products}</ul><div class='pages'>#{pages}</div></div>"
+
+    blocks(html, "https://chem.example.com/products/list-catid-139257_--p3.html", nil).should be_empty
+  end
+
+  it "does not take the view counts of coded pages for a pager" do
+    videos = Array.new(6) do |index|
+      "<div class='item'><a href='/9331#{index}.html'><img src='/img/#{index}.jpg' alt=''></a>" \
+        "<a href='/9331#{index}.html'>#{450 + index}</a> <span>09-21</span>" \
+        "<h3><a href='/9331#{index}.html'>Harbor video number #{index}</a></h3></div>"
+    end.join
+    html = "<h1>Harbor video</h1>#{story(1)}<div class='box'><div class='title'>You may also like</div>" \
+           "<div class='grid'>#{videos}</div></div>"
+
+    blocks(html, "https://video.example.com/85967.html").should_not be_empty
+  end
+
   it "removes pages like this one listed under its text in the same container" do
     items = stories.each_with_index.map do |title, index|
       "<div class='row'><img src='/img/#{index}.jpg' alt=''><b>12.08.2026</b> " \
