@@ -45,6 +45,27 @@ RSpec.describe Nokodown::PostAttribution do
     ["#1", "/members/", "Well-known member", "Messages", "avatars"].each { |noise| markdown.should_not include(noise) }
   end
 
+  # XenForo prints the name twice: in the member panel beside the post and in
+  # the header with the date.
+  it "writes one line for a post whose member panel sits apart from its header" do
+    posts = [["wren", question], ["basil", answer]].map do |name, body|
+      user = "<h4 class='message-name'><a class='username' href='/members/#{name}'>#{name}</a></h4>"
+      "<article class='message'>" \
+        "<section class='message-user'><a class='avatar' href='/members/#{name}'><img src='/avatars/#{name}.jpg' alt='#{name}'></a>" \
+        "#{user}<dl class='pairs'><dt>Joined</dt><dd>Jan 2020</dd></dl></section>" \
+        "<div class='message-main'><header class='message-attribution'>#{user}" \
+        "<a href='/posts/1'><time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></a></header>" \
+        "<div class='message-content'><div class='bbWrapper'>#{body}</div></div></div></article>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+    markdown.scan("**wren**").size.should == 1
+    markdown.scan("**basil**").size.should == 1
+    markdown.should_not include("Joined")
+  end
+
   it "shows a full date where the page shows a relative one" do
     markdown = thread([
       post("wren", "<time datetime='2024-04-02T05:03:15Z'><span>April 2, 2024</span><span>1 yr</span></time>", question),
