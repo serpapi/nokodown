@@ -218,7 +218,7 @@ module Nokodown
       # title, the date under a card's excerpt heads at most an icon, and
       # a contact list heads a phone number.
       def sections?(blocks)
-        names = blocks.each_cons(2).filter_map { |block, following| block.text.sub(/\A#+ /, "") if heads_text?(block, following) }
+        names = blocks.each_cons(2).filter_map { |block, following| block.content if heads_text?(block, following) }
         return false if names.uniq.size < 2
 
         blocks.drop_while { |block| block.kind != :heading }.any? { |block| section_text?(block) }
@@ -291,7 +291,7 @@ module Nokodown
       # reference's closing "Returns void", and is a line of its text.
       def sections(blocks)
         last = blocks.last
-        last.kind == :heading ? blocks[0...-1] << item_paragraph(last.text.sub(/\A#+ /, "")) : blocks
+        last.kind == :heading ? blocks[0...-1] << item_paragraph(last.content) : blocks
       end
 
       # A nested list belongs to the item before it, also when a site wraps
