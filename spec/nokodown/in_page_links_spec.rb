@@ -55,4 +55,13 @@ RSpec.describe Nokodown::InPageLinks do
 
     (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
   end
+
+  it "reads the text of no link that leads off the page" do
+    links = nested_links(3000)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    links.back_links.should be_empty
+
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+  end
 end

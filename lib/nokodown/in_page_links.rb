@@ -149,19 +149,21 @@ module Nokodown
     end
 
     # A short link alone on its line, to the top or to a point above it
-    # outside the link's own section.
+    # outside the link's own section. The href rules out most links before
+    # their text and ancestors are read.
     def back?(link)
+      href = link["href"].strip
+      return false unless href.match?(TOP) || target(link)
+
       text = Dom.text(link)
       return false if text.scan(WORDS).size > MAX_BACK_WORDS || !text.match?(LETTER)
       return false if Dom.ancestors_named(link, *TITLES).any?
 
-      href = link["href"].strip
       (href.match?(TOP) || above?(link, href)) && alone?(link, text)
     end
 
+    # Asked only of a link into the page.
     def above?(link, href)
-      return false unless target(link)
-
       position = @anchors[fragment(href)]
       position < Dom.key(link).to_i && link.ancestors.none? { |ancestor| ancestor.element? && Dom.key(ancestor).to_i == position }
     end
