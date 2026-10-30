@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://serpapi.com">
+    <img src="https://serpapi.com/assets/media_kit/logo-with-wordmark-gradient.svg" alt="SerpApi" width="220">
+  </a>
+</p>
+
 # nokodown
 
 Any web page to main-content Markdown, at Nokolexbor speed.
@@ -8,8 +14,13 @@ language). It works on articles and on everything else: home pages, search
 results, product and pricing pages, documentation, forums.
 
 Built on [Nokolexbor](https://github.com/serpapi/nokolexbor), for the
-`include_markdown` option of SerpApi's Extract API. The name is Nokolexbor's
-"noko" plus Markdown's "down".
+`include_markdown` option of SerpApi's [Extract API][extract]. The name is
+Nokolexbor's "noko" plus Markdown's "down".
+
+> **Don't want to fetch the pages yourself?** SerpApi's [Extract API][extract]
+> takes a URL and returns the page's Markdown as JSON, along with its meta
+> tags, structured data, links and images.
+> [Try the Extract API][extract].
 
 ## Installation
 
@@ -230,5 +241,6 @@ Apache License 2.0. The scoring and cleaning heuristics are adapted from
 [Readability.js][mozilla]; see [NOTICE](NOTICE).
 
 [benchmark]: https://github.com/scrapinghub/article-extraction-benchmark
+[extract]: https://serpapi.com/extract-api
 [mozilla]: https://github.com/mozilla/readability
 [wcxb]: https://github.com/Murrough-Foley/web-content-extraction-benchmark
