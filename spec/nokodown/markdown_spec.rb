@@ -883,6 +883,15 @@ RSpec.describe "Markdown conversion" do
           %(<h3>2025-09-0#{id}</h3><img src="/icon6.png" alt=""></li>)
       end
       convert("<ul>#{news.join}</ul>").should start_with("- [Story 1](https://example.com/n/1)\n  The theme")
+      contacts = [["Main office", "Harbor Building", "0100"], ["Workshop", "Quay Road 4", "0199"]].map do |name, address, phone|
+        "<li><h3>#{name}</h3><p>#{address}</p><h4>Phone</h4><p>+1 555 #{phone}</p></li>"
+      end
+      convert("<ul>#{contacts.join}</ul>").should start_with("- Main office\n  Harbor Building\n  Phone\n")
+      cards = [["Acme Drill", "$129"], ["Bolt Driver", "$99"]].map do |name, price|
+        "<li><h3>#{name}</h3><p>Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.</p>" \
+          "<h4>#{name}</h4><p>#{price}</p></li>"
+      end
+      convert("<ul>#{cards.join}</ul>").should start_with("- Acme Drill\n  Light enough")
     end
 
     it "keeps the rank of an ordered list of sections on each item's heading" do
