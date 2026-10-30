@@ -503,6 +503,15 @@ RSpec.describe Nokodown do
       convert(html).should == "Episode 12\n\n[Download](https://example.com/ep12.mp3)"
     end
 
+    it "keeps the photos beside many sliders in time linear in the sliders" do
+      html = "<p>Kitchen</p><div><img src='/before.jpg' alt='Before'><img src='/after.jpg' alt='After'>#{"<input type='range'>" * 5000}</div>"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert(html)
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      markdown.should == "Kitchen\n\n![Before](https://example.com/before.jpg)![After](https://example.com/after.jpg)"
+    end
+
     it "reports :full mode" do
       Nokodown.extract("<p>x</p>", main_content: false).mode.should == :full
     end
