@@ -94,11 +94,17 @@ with `main_content: false`, `:none` for a document without a body.
   numbers, a player's "0:00"), and form labels left without their fields.
   A read-more link that is the only way to its page, a number a label
   explains or that sits in a row of numbers, and a fact repeated on every
-  card ("In stock") stay.
+  card ("In stock") stay. A card whose only words are a shop button's
+  label ("Add to cart", "В корзину") keeps its linked picture when the
+  label goes.
 - Tracking pixels, spacers, icons, placeholders and loading spinners
   (`no-image.png`, `img_load.gif`), README badges, click-tracking URL
   parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors, English
-  "Read more" and "Continue reading" links wherever they are, code line numbers, and repeated responsive copies of the same image.
+  "Read more" and "Continue reading" links wherever they are, code line
+  numbers, and repeated responsive copies of the same image.
+- Headings left at the end of the content with nothing under them, once
+  what they headed is removed, unless one states a figure (a price, a
+  score, a year).
 - Markdown that costs tokens without meaning: horizontal rules, blank lines
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators
@@ -107,7 +113,8 @@ with `main_content: false`, `:none` for a document without a body.
   change the rendering. A card's repeated links to its own page keep their
   text without the URL (its title keeps the link), and a button such as
   "Read more", a text the page uses once for each of several pages, goes when
-  it ends its line (judged across all cards, in any language); texts that take turns from card to card ("Sold",
+  it ends its line (judged across all cards, in any language); texts that
+  take turns from card to card ("Sold",
   "Available") are values and stay.
 - In the main content, images whose alt text does not say what they show, at
   any size and in any wrapper (a figure keeps its caption): no alt text, a
