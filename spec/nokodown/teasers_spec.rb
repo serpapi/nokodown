@@ -41,6 +41,18 @@ RSpec.describe Nokodown::Teasers do
     end.join
   end
 
+  # A listing under its column's title, after a sidebar, with its pager.
+  def listing(pages)
+    products = Array.new(6) do |index|
+      "<li><span><a href='/products/show2846#{660 + index}.html'><img src='/img/#{index}.png' alt=''></a></span>" \
+        "<a href='/products/show2846#{660 + index}.html'>Methyl ester number #{index}</a></li>"
+    end.join
+    links = pages.map { |text, href| "<a href='#{href}'>#{text}</a>" }.join
+    "<div class='side'><span>Contact us</span><ul><li>Contact: Li Fang</li><li>Phone: 139 8604 1085</li>" \
+      "<li>Address: group one, Ximiao village, Huangtan</li></ul></div><div class='main'><div class='head'>" \
+      "<span>Product showroom</span></div><ul class='list'>#{products}</ul><div class='pages'>#{links}</div></div>"
+  end
+
   let(:stories) do
     ["School board approves the budget for next year", "Fishing season opens two weeks early this spring",
      "Library extends its opening hours on weekends"]
@@ -168,18 +180,18 @@ RSpec.describe Nokodown::Teasers do
   end
 
   it "keeps a listing whose column title and pager sit around its list, after a sidebar" do
-    products = Array.new(6) do |index|
-      "<li><span><a href='/products/show2846#{660 + index}.html'><img src='/img/#{index}.png' alt=''></a></span>" \
-        "<a href='/products/show2846#{660 + index}.html'>Methyl ester number #{index}</a></li>"
-    end.join
     pages = [["&lt; Prev", 2], ["1", 1], ["2", 2], ["3", 3], ["4", 4], ["Next &gt;", 4]].map do |text, page|
-      "<a href='/products/list-catid-139257_--p#{page}.html'>#{text}</a>"
-    end.join
-    html = "<div class='side'><span>Contact us</span><ul><li>Contact: Li Fang</li><li>Phone: 139 8604 1085</li>" \
-           "<li>Address: group one, Ximiao village, Huangtan</li></ul></div><div class='main'><div class='head'>" \
-           "<span>Product showroom</span></div><ul class='list'>#{products}</ul><div class='pages'>#{pages}</div></div>"
+      [text, "/products/list-catid-139257_--p#{page}.html"]
+    end
 
-    blocks(html, "https://chem.example.com/products/list-catid-139257_--p3.html", nil).should be_empty
+    blocks(listing(pages), "https://chem.example.com/products/list-catid-139257_--p3.html", nil).should be_empty
+  end
+
+  it "keeps a listing whose pager adds the page's number to its address" do
+    pages = [["1", ""], ["2", "?page=2"], ["3", "?page=3"], ["4", "?page=4"], ["Next &gt;", "?page=2"]]
+    pages = pages.map { |text, query| [text, "/products/list-catid-139257.html#{query}"] }
+
+    blocks(listing(pages), "https://chem.example.com/products/list-catid-139257.html", nil).should be_empty
   end
 
   it "does not take the view counts of coded pages for a pager" do
@@ -192,6 +204,17 @@ RSpec.describe Nokodown::Teasers do
            "<div class='grid'>#{videos}</div></div>"
 
     blocks(html, "https://video.example.com/85967.html").should_not be_empty
+  end
+
+  it "does not take links that change two of this page's numbers for its pager" do
+    volumes = [[1, 1], [3, 27], [4, 40], [5, 52]].map do |volume, chapter|
+      href = "/read/harbor/vol-#{volume}/ch-#{chapter}.html"
+      "<div class='volume'><a href='#{href}'><img src='/img/#{volume}.jpg' alt=''></a>" \
+        "<a href='#{href}'>#{volume}</a></div>"
+    end.join
+    html = "<h1>Harbor, chapter 14</h1>#{story(2)}<div class='box'><h3>More volumes</h3>#{volumes}</div>"
+
+    blocks(html, "https://manga.example.com/read/harbor/vol-2/ch-14.html").should_not be_empty
   end
 
   it "removes pages like this one listed under its text in the same container" do
