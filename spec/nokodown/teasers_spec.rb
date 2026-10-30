@@ -294,6 +294,25 @@ RSpec.describe Nokodown::Teasers do
     blocks(html, "https://library.example.org/index.php?lvl=categ_see&id=83018", nil).should be_empty
   end
 
+  it "keeps a block in a section that the page's table of contents lists" do
+    rows = %w[ranger scholar sage soldier].map do |order|
+      "<a href='/db/item/boots_#{order}'><img src='/icons/boots_#{order}.webp' alt=''>" \
+        "<div>Shadow boots of the #{order} order</div><div>III</div><div>0</div></a>"
+    end.join
+    header = "<div><div>Name</div><button>Tier</button><button>Level</button></div>"
+    toc = "<nav><ul><li><a href='#about'>About</a></li><li><a href='#recipes'>Recipes</a></li>" \
+          "<li><a href='#pictures'>Pictures</a></li></ul></nav>"
+    html = "<h1>Watcher boots</h1><p>Heavy boots of gear score 350, tier three, bound on pickup. They drop from " \
+           "the watchers in the eastern ruins and are crafted at an outfitting station.</p>#{toc}" \
+           "<section id='about'><h2>About</h2><p>Bound on pickup.</p></section>" \
+           "<section id='recipes'><h2>Used in recipes</h2><div>#{header}<div>#{rows}</div></div></section>" \
+           "<section id='pictures'><h2>Pictures</h2><p>No pictures yet.</p></section>"
+    url = "https://db.example.net/db/item/boots_watcher"
+
+    markdown(html, url).should include("[Shadow boots of the sage order](https://db.example.net/db/item/boots_sage)")
+    markdown(html.sub(toc, ""), url).should_not include("Shadow boots of the sage order")
+  end
+
   it "finds no block in the cards spread between the paragraphs of an article" do
     figures = stories.map { |title| "#{cards([title], '/blog/')}#{story(1)}" }
     html = "<h1>Bridge reopens</h1><div class='entry'>#{story(1)}<p>See our earlier report.</p>#{figures.join}</div>"

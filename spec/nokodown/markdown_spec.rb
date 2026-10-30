@@ -394,6 +394,27 @@ RSpec.describe "Markdown conversion" do
       convert("<ul>#{products.join}</ul>").should == expected.join("\n")
     end
 
+    it "keeps the link of each item of a list written as lines, however many items share a file" do
+      html = '<h3>Peaks</h3><p><a href="/d/north.pdf">North Hill pdf, 392 kB.</a><br><a href="/d/east.pdf">Tall Ridge pdf, 1.9 MB.</a><br>' \
+             '<a href="/d/east.pdf">Flag Hill at Eastby pdf, 1.9 MB.</a></p><p><a href="/d/south.pdf">Around Bottom Hill, 3 km</a><br>' \
+             'Start: Village hall.<br><a href="/d/south.pdf">Hedum water, 2,5 km</a><br>Start: Hedum.</p>'
+      convert(html).should == "### Peaks\n\n[North Hill pdf, 392 kB.](https://example.com/d/north.pdf)\n" \
+                              "[Tall Ridge pdf, 1.9 MB.](https://example.com/d/east.pdf)\n" \
+                              "[Flag Hill at Eastby pdf, 1.9 MB.](https://example.com/d/east.pdf)\n\n" \
+                              "[Around Bottom Hill, 3 km](https://example.com/d/south.pdf)\nStart: Village hall.\n" \
+                              "[Hedum water, 2,5 km](https://example.com/d/south.pdf)\nStart: Hedum."
+      cards = %w[a b].map do |page|
+        %(<p><a href="/#{page}">Post #{page}</a><br><a href="/#{page}">May 30, 2018</a><br><a href="/#{page}">12 comments</a><br>) +
+          %(<a href="/#{page}">Read more</a></p>)
+      end
+      convert(cards.join).should == "[Post a](https://example.com/a)\nMay 30, 2018\n12 comments\n\n[Post b](https://example.com/b)\nMay 30, 2018\n12 comments"
+      teasers = { "a" => "Headaches are among the most common complaints.", "b" => "Back pain is common." }.map do |page, text|
+        %(<h4><a href="/#{page}">Cure #{page}</a></h4><p><a href="/#{page}">#{text}</a><br><a href="/#{page}">Details</a></p>)
+      end
+      convert(teasers.join).should == "#### [Cure a](https://example.com/a)\n\nHeadaches are among the most common complaints.\n\n" \
+                                      "#### [Cure b](https://example.com/b)\n\nBack pain is common."
+    end
+
     it "leaves links written in code alone" do
       html = "<ol><li><p>Call the handler:</p><pre><code>handlers[name](event);\nhandlers[type](event);</code></pre></li></ol>" \
              "<p><code>[text](https://example.com/docs)</code> or <code>[the docs](https://example.com/docs)</code></p>"
@@ -736,6 +757,20 @@ RSpec.describe "Markdown conversion" do
           "# Gallery\n\n![](https://example.com/IMG_1.jpg)![](https://example.com/IMG_2.jpg)"
       end
 
+      it "keeps the one picture of a photo's own page that links to its full size" do
+        photo = '<p><a href="/uploads/wedding-28.jpg"><img src="/uploads/wedding-28-300x200.jpg" alt=""></a></p>'
+        footer = "<p>September 11, 2024</p><p>Wedding and portrait photography in Sometown</p>" \
+                 "<ul><li>Anna Example</li><li>Long Lane 3</li><li>97996 Sometown</li><li>Tel.: 0152 5365126</li></ul>" \
+                 '<p><a href="/imprint/">Imprint</a> <a href="/privacy/">Privacy</a></p>'
+        extract("<main><h1>Vineyard wedding 28</h1>#{photo}#{footer}</main>").should ==
+          "# Vineyard wedding 28\n\n![](https://example.com/uploads/wedding-28-300x200.jpg)\n\nSeptember 11, 2024\n\n" \
+          "Wedding and portrait photography in Sometown\n\n- Anna Example\n- Long Lane 3\n- 97996 Sometown\n- Tel.: 0152 5365126\n\n" \
+          "[Imprint](https://example.com/imprint/) [Privacy](https://example.com/privacy/)"
+        text = "<p>We dressed the long tables in linen and vine leaves, and lit the courtyard with lanterns as the evening drew on.</p>"
+        extract("<main><h1>Vineyard wedding</h1>#{text}#{photo}</main>").should_not include(".jpg")
+        extract("<main><h1>Vineyard wedding</h1>#{photo}#{photo.gsub('28', '29')}#{footer}</main>").should_not include(".jpg")
+      end
+
       it "drops images whose alt text names nothing" do
         alts = ["IMG_6175.JPG", "DSC_0264", "DSC08251s", "Screenshot 2025-10-31 at 5.19.44 PM", "image", "Foto 2", "描述", "صورة",
                 "9f86d081884c7d65", "Cargando..."]
@@ -832,6 +867,31 @@ RSpec.describe "Markdown conversion" do
     it "writes the headings of list items as their text" do
       convert('<ul><li><h3><a href="/p/1">Trail boot</a></h3><p>Leather</p></li></ul><ol><li><h2>&gt; 1 pick</h2></li></ol>').should ==
         "- [Trail boot](https://example.com/p/1)\n  Leather\n\n1. \\> 1 pick"
+    end
+
+    it "writes list items that hold whole sections, as tab panels do, as sections" do
+      panels = "<ul><li><h2>Product details</h2><h3>Description</h3><p>Photos of the boot beside the original pair.</p><h3>Product facts</h3>" \
+               '<table><tr><th scope="row">Material</th><td>Suede</td></tr><tr><th scope="row">Colour</th><td>Brown</td></tr></table></li>' \
+               "<li><h2>Delivery and returns</h2><h3>Delivery</h3><p>International post</p><h3>Returns</h3><p>Within 7 days</p></li></ul>"
+      convert(panels).should == "## Product details\n\n### Description\n\nPhotos of the boot beside the original pair.\n\n### Product facts\n\n" \
+                                "- Material: Suede\n- Colour: Brown\n\n## Delivery and returns\n\n### Delivery\n\nInternational post\n\n" \
+                                "### Returns\n\nWithin 7 days"
+      outline = %w[Review Overview].map do |title|
+        "<li><span>01</span><h3>#{title}</h3><p>The theme, aims and contents of the report, with a look back.</p></li>"
+      end
+      convert("<ol>#{outline.join}</ol>").should == "1. 01 Review\n   The theme, aims and contents of the report, with a look back.\n" \
+                                                   "2. 01 Overview\n   The theme, aims and contents of the report, with a look back."
+      news = %w[1 2].map do |id|
+        %(<li><h2><a href="/n/#{id}">Story #{id}</a></h2><p>The theme, aims and contents of the report, with a look back at the whole of the year.</p>) +
+          %(<h3>2025-09-0#{id}</h3><img src="/icon6.png" alt=""></li>)
+      end
+      convert("<ul>#{news.join}</ul>").should start_with("- [Story 1](https://example.com/n/1)\n  The theme")
+    end
+
+    it "writes the heading that closes a list of sections as text" do
+      lead = "Emits the event to every listener, in the order they were added, and returns the emitter."
+      html = "<ul><li><h4>Parameters</h4><ul><li>event: string</li></ul><h4>Returns Emitter</h4><p>#{lead}</p></li><li><h4>Returns void</h4></li></ul>"
+      convert(html).should == "#### Parameters\n\n- event: string\n\n#### Returns Emitter\n\n#{lead}\n\nReturns void"
     end
 
     it "looks through wrappers between the list and its items" do
@@ -1148,6 +1208,12 @@ RSpec.describe "Markdown conversion" do
 
     it "drops a trailing heading left without content" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
+    end
+
+    it "keeps a trailing price heading, and the title over it, when the label after it is dropped" do
+      html = "<p>#SKU: HW73826</p><h1>Coffee set x12</h1><h3 class='price'>$ 24.284,10</h3><div><span>Cantidad</span></div>"
+      convert(html).should == "#SKU: HW73826\n\n# Coffee set x12\n\n### $ 24.284,10"
+      convert("<h2>Intro</h2><p>Text</p><h2>Top 10 picks</h2>").should == "## Intro\n\nText"
     end
 
     it "keeps the last card's linked title when the control after it is removed" do
