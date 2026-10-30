@@ -65,7 +65,7 @@ module Nokodown
     # and an item or a span among other links part of a menu, which goes or
     # stays whole.
     def line(link, site, tops, title, verdicts)
-      found = Dom.outermost_accepted(link, verdicts) do |node|
+      found, = Dom.outermost_accepted(link, verdicts) do |node|
         !tops.include?(Dom.key(node)) && holds_only_services?(node, site, title)
       end
       found if found && Dom.block?(found) && !ITEMS.include?(found.name)
@@ -96,6 +96,7 @@ module Nokodown
       links = node.css("a[href]")
       return false if links.size > MAX_LINKS || !links.all? { |link| service_link?(link, site) }
       return false if node.css(CONTENT).any? { |media| Dom.ancestors_named(media, "a").empty? }
+      return false if links.any? { |link| card?(link) }
 
       prompt?(node, title)
     end
@@ -113,6 +114,14 @@ module Nokodown
 
     def names_page?(prompt, title)
       !title.nil? && !prompt.empty? && Dom.similarity(prompt, title) >= TITLE_SIMILARITY
+    end
+
+    # A label is a few words, in a heading or not. A link that holds a
+    # heading and text beside it wraps a card, such as an event's that links
+    # its title and dates to its sign-up page.
+    def card?(link)
+      heading = link.at_css(Dom::HEADING_SELECTOR)
+      !heading.nil? && Dom.char_count(link.content) > Dom.char_count(heading.content)
     end
 
     def unlinked_text(node)

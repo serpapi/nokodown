@@ -33,6 +33,7 @@ module Nokodown
     # taken off once the forms are marked.
     REGION_TEXT = "data-nokodown-region-text"
     SENDER_INPUTS = ["", "text", "email"].freeze
+    TABLE_CELLS = %w[td th].freeze
     QUANTITY = /qty|quantity/i.freeze
     FORM_CONTENT = "h1, main, article, [role=main], video, iframe"
     FORM_PAGE_TEXT = 100
@@ -43,16 +44,28 @@ module Nokodown
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
-    # Injected link spam, honeypot fields and hidden copies of the page are
-    # placed far off screen or in a strip one pixel high; collapsed panels
-    # have no height. A box clipped to one pixel where it stands is
-    # screen-reader text, which can be the only copy of a price. Moved off
-    # screen as well, such boxes held only spam, skip links and copies.
+    # Injected link spam, honeypot fields, keyword lists and hidden copies of
+    # the page are placed far off screen or in a strip one pixel high;
+    # collapsed panels have no height. A box clipped to one pixel where it
+    # stands is screen-reader text, which can be the only copy of a price.
     POSITIONED_STYLE = /(?:\A|;)\s*position\s*:\s*(?:absolute|fixed)/i.freeze
     OFFSCREEN_STYLE = /(?:\A|;)\s*(?:left|top)\s*:\s*-(?:\d{4,}(?:\.\d+)?px|999px|\d{3,}(?:\.\d+)?r?em)/i.freeze
     PIXEL_STRIP_STYLE = /(?:\A|;)\s*height\s*:\s*1px/i.freeze
     PIXEL_WIDE_STYLE = /(?:\A|;)\s*width\s*:\s*1px/i.freeze
     OVERFLOW_HIDDEN = /(?:\A|;)\s*overflow\s*:\s*hidden/i.freeze
+    # Sixshop stores write each review and blog post off screen for search
+    # engines and render the visible copy by script, so a box there that
+    # holds a paragraph of prose stays, unless the page shows the same
+    # paragraphs elsewhere. Spam links somewhere and a honeypot is a field;
+    # keyword lists, headings, link hints and the raw text of <noframes>
+    # have no paragraph. Message forms are marked before the junk goes, so
+    # a text box or a select is a field too.
+    OFFSCREEN_TRAPS = "a, input, textarea, select"
+    OFFSCREEN_TRAP_NAMES = %w[a input textarea select].freeze
+    OFFSCREEN_PROSE_WORDS = 8
+    OFFSCREEN_PROSE_CJK = 20
+    WORD = /[\p{L}\p{N}]+/.freeze
+    CJK = /[\p{Han}\p{Hiragana}\p{Katakana}]/.freeze
 
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
 
@@ -68,6 +81,7 @@ module Nokodown
 
     def initialize(body)
       @body = body
+      @offscreen_copies = []
     end
 
     def call
@@ -226,6 +240,7 @@ module Nokodown
 
         node.remove
       end
+      remove_shown_copies
     end
 
     def panel_ids
@@ -254,15 +269,43 @@ module Nokodown
     def hidden?(node)
       return !disclosure?(node) if node.key?("hidden") && node["hidden"] != "until-found"
       return !node["class"].to_s.include?("fallback-image") && !closed_panel?(node) if node["aria-hidden"] == "true"
-      return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE) || out_of_sight?(node["style"].to_s)
+      return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE) || out_of_sight?(node)
 
       hidden_by_class?(node) && !disclosure?(node)
     end
 
-    def out_of_sight?(style)
-      return true if style.match?(OFFSCREEN_STYLE) && style.match?(POSITIONED_STYLE)
+    def out_of_sight?(node)
+      style = node["style"].to_s
+      return !offscreen_copy?(node) if style.match?(OFFSCREEN_STYLE) && style.match?(POSITIONED_STYLE)
 
       style.match?(PIXEL_STRIP_STYLE) && style.match?(OVERFLOW_HIDDEN) && !style.match?(PIXEL_WIDE_STYLE)
+    end
+
+    # Whether the page also shows the copy is known only once everything
+    # hidden is gone, so it is noted for remove_shown_copies. The name is
+    # read because Nokolexbor answers matches? by querying the whole
+    # document; at_css only looks below the node.
+    def offscreen_copy?(node)
+      return false if OFFSCREEN_TRAP_NAMES.include?(node.name) || node.at_css(OFFSCREEN_TRAPS) || !prose?(node)
+
+      @offscreen_copies << node
+    end
+
+    def prose?(node)
+      text = node.css("p").map(&:content).join(" ")
+      text.scan(WORD).size >= OFFSCREEN_PROSE_WORDS || text.scan(CJK).size >= OFFSCREEN_PROSE_CJK
+    end
+
+    # A copy whose paragraphs the page shows elsewhere is the hidden copy of
+    # the page (an editor's paste bin, a copy for search engines).
+    def remove_shown_copies
+      return if @offscreen_copies.empty?
+
+      shown = @body.css("p").map { |p| Dom.text(p) }.tally
+      @offscreen_copies.each do |copy|
+        own = copy.css("p").map { |p| Dom.text(p) }.tally
+        copy.remove if own.any? { |text, count| !text.empty? && shown.fetch(text, 0) > count }
+      end
     end
 
     def hidden_by_class?(node)
@@ -336,12 +379,25 @@ module Nokodown
     def message_form?(form)
       return false if form.parent&.name == "body" || form.at_css(FORM_CONTENT)
       return false if Dom.char_count(form.content) >= UTILITY_FORM_TEXT
-      return false if form.content.match?(MessageForms::CONTACT_DETAIL)
+      return false if form.content.match?(MessageForms::CONTACT_DETAIL) || form.css("table").any? { |table| data_rows?(table) }
 
       inputs = form.css("input")
       return false if inputs.none? { |input| SENDER_INPUTS.include?(input["type"].to_s.downcase) }
 
       inputs.none? { |input| quantity?(input) } && !page_form?(form)
+    end
+
+    # A table of what the form asks about, as an inquiry form shows the flat
+    # it asks about: a row of headers over a row of text, without the text
+    # boxes of a form laid out in a table.
+    def data_rows?(table)
+      rows = table.css("tr").map { |row| row.element_children.select { |cell| TABLE_CELLS.include?(cell.name) } }
+      rows.any? { |cells| cells.size >= 2 && cells.all? { |cell| cell.name == "th" } } &&
+        rows.any? { |cells| cells.size >= 2 && cells.all? { |cell| cell.name == "td" && data_cell?(cell) } }
+    end
+
+    def data_cell?(cell)
+      !Dom.squish(cell.content).empty? && cell.css("input, textarea, select").all? { |control| control["type"].to_s.casecmp?("hidden") }
     end
 
     def quantity?(input)

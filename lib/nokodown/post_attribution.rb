@@ -63,6 +63,10 @@ module Nokodown
       return self unless dated_above?(posts)
 
       posts.each { |post| mark(post) }
+      # A member panel that repeats the post's date (XenForo themes) is a post
+      # of its own inside the post, with the same author: removing its panels
+      # first would detach the author the outer post reads.
+      posts.each { |post| remove_member_panels(post.node, post.placement.body) }
       ads.each { |ad| ad.node[REPLACED] = "" }
       self
     end
@@ -222,7 +226,6 @@ module Nokodown
       shown = date_text(post.date)
       body[DATE] = shown if shown
       replaced(post).each { |node| node[REPLACED] = "" }
-      remove_member_panels(post.node, body)
     end
 
     # Boilerplate removal would reduce each to a line naming the poster

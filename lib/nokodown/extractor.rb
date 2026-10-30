@@ -71,21 +71,31 @@ module Nokodown
       else
         Pruner.new(nodes, :page, urls: urls).call
       end
-      remove_site_lines(nodes, metadata[:title])
+      remove_site_lines(nodes, metadata[:title], urls)
       [Teasers.strip(nodes, teasers), selection.mode]
     end
 
     # Message forms and sign-in or cart lines go once the content is chosen
     # and pruned, so that their few lines sway neither, but never all of it:
     # a contact page may hold nothing but its form.
-    def remove_site_lines(nodes, title)
+    def remove_site_lines(nodes, title, urls)
       lines = MessageForms.blocks(nodes) + ServiceLinks.blocks(nodes, @url, title)
-      lines.each(&:remove) if leaves_content?(nodes, lines)
+      lines.each(&:remove) if leaves_content?(nodes, lines, urls)
     end
 
-    def leaves_content?(nodes, lines)
+    # A spacer left beside the lines is not content.
+    def leaves_content?(nodes, lines, urls)
       text = nodes.sum { |node| Dom.char_count(node.content) } - lines.sum { |line| Dom.char_count(line.content) }
-      text.positive? || nodes.sum { |node| node.css("img").size } > lines.sum { |line| line.css("img").size }
+      text.positive? || nodes.sum { |node| shown_images(node, urls) } > lines.sum { |line| shown_images(line, urls) }
+    end
+
+    # The pictures the Markdown shows, by the source it renders: a spacer, or
+    # a data: URI it has no address for, is not one.
+    def shown_images(node, urls)
+      node.css("img").count do |img|
+        src = Markdown::Image.source(img, urls)
+        !src.nil? && !Markdown::Image.decorative?(img, src, Dom.squish(img["alt"].to_s))
+      end
     end
 
     # Like Readability, fall back to lighter cleaning when conditional cleaning
@@ -167,10 +177,23 @@ module Nokodown
     end
 
     def without_site_heading(blocks, site)
-      heading = blocks.first(TITLE_BLOCKS).find do |block|
+      opening = blocks.first(TITLE_BLOCKS)
+      heading = opening.find do |block|
         block.kind == :heading && site.name?(Markdown::Cleanup.heading_text(block))
       end
-      heading ? blocks.reject { |block| block.equal?(heading) } : blocks
+      heading && logo_heading?(opening, heading) ? blocks.reject { |block| block.equal?(heading) } : blocks
+    end
+
+    # A logo is an H1, links to the site's root or opens the content; an
+    # image above it does not count, so images: false, which leaves the
+    # image out, decides alike. A lower heading below other headings or text
+    # that names the site labels a section of its own, as a company's name
+    # does above its address, or an author's name that links to the
+    # author's page above a biography.
+    def logo_heading?(opening, heading)
+      return true if heading.level == 1 || heading.links_home
+
+      opening.find { |block| !block.text.match?(Markdown::Cleanup::IMAGE_ONLY) }.equal?(heading)
     end
 
     # When the page's title block is left out of the content, the first H1

@@ -52,7 +52,7 @@ as unclosed tags on broken pages leave them, keep only their text.
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
 | `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
-| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section, or names a section that the page's URL, which names the title, does not mention. Away from the home page, a heading that only names the site gives way to the page title, and a title that only names the site does not head content that has a heading of its own. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. With `false`, an `<h1>` the content holds, such as the article's own headline, still opens it. |
+| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section, or names a section that the page's URL, which names the title, does not mention. Away from the home page, a heading that only names the site gives way to the page title when it is an `<h1>`, opens the content, below nothing but images, or links to the site's root, whatever `images` and `links` are set to; a lower one below other content, such as a company's name above its address or an author's name that links to the author's page, stays. A title that only names the site does not head content that has a heading of its own. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. With `false`, an `<h1>` the content holds, such as the article's own headline, still opens it. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |
 
@@ -75,20 +75,24 @@ with `main_content: false`, `:none` for a document without a body.
   home page, then links down the site with separators), a line of links to
   the site's tag or label archives ("Tags: a, b") with at most a short label
   ending in a colon and a category kicker above the title, unless the page
-  repeats the line (a card's tags) or is such an archive, and copyright and
-  licence lines in the major web languages.
+  repeats the line (a card's tags) or is such an archive or the index of
+  all tags or categories, and copyright and licence lines in the major web
+  languages.
 - Once the content is chosen and pruned, so that they cannot sway either, a
   line of links to the site's sign-in, registration, account, cart or feeds
   ("您需要登录后才可以回帖 登录 | 注册", "View Cart (0)", "Subscribe to:
-  Posts (Atom)") by where they point, unless a sentence, a heading, the
-  page's title, a date, a table or a picture sits with them or they are
+  Posts (Atom)") by where they point, unless a sentence, a heading (one
+  inside a link too, with text beside it, as a card's title has its dates),
+  the page's title, a date, a table or a picture sits with them or they are
   items of a larger menu, and comment, review and contact forms (a visible
   text box, a name or e-mail field and little text) with the title above
   them, and a note under that title, in any language. A form stays when it
   wraps the page (ASP.NET), holds its title or main region, holds an e-mail
-  address or a phone number, asks how many (an order with a note), or is
-  all an application or sign-up page's main region holds, and neither kind
-  goes when it is all the content holds.
+  address or a phone number, holds a table of what it asks about (a row of
+  headers over a row of text, as an inquiry shows the flat it is about),
+  asks how many (an order with a note), or is all an application or
+  sign-up page's main region holds, and neither kind goes when it is all
+  the content holds, spacer images aside.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
@@ -112,10 +116,12 @@ with `main_content: false`, `:none` for a document without a body.
 
   Blocks stay on home pages, in hubs of sections built alike, in forum posts,
   in a section that the page's own table of contents lists, under a title the
-  page's address names, when they link below this page, and when the content
-  would be left with fewer than 20 words outside headings. Lists of bare links
-  also stay on listings, under a letter of an index, among three or more
-  headed lists of links (a site map), and when they hold most of the page.
+  page's address names, when they link below this page, when they hold the
+  pager to this page's other pages (a listing under its column's title), and
+  when the content would be left with fewer than 20 words outside headings.
+  Lists of bare links also stay on listings, under a letter of an index, among
+  three or more headed lists of links (a site map), and when they hold most of
+  the page.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
@@ -126,10 +132,12 @@ with `main_content: false`, `:none` for a document without a body.
 - Invisible elements (`hidden`, `aria-hidden`, inline `display: none`,
   screen-reader-only and other hiding classes, and elements placed far off
   screen or in a one-pixel strip, where hacked sites hide link spam), keeping
-  collapsed accordions, tab panels and FAQ answers. Content that React streams
-  into hidden containers at the end of the page is put back where the page
-  shows it, unless it is mostly links, as carousels of recommended products
-  are.
+  collapsed accordions, tab panels and FAQ answers, and paragraphs placed off
+  screen with no link or field that the page shows nowhere else: shop
+  builders write reviews and posts there for search engines and show them by
+  script. Content that React streams into hidden containers at the end of the
+  page is put back where the page shows it, unless it is mostly links, as
+  carousels of recommended products are.
 - Sections rendered twice, such as a desktop and a mobile copy: the mobile
   copy goes and the desktop one stays.
 - Repeated text and the labels of controls, in the major web languages:
@@ -154,7 +162,9 @@ with `main_content: false`, `:none` for a document without a body.
   numbers, and repeated responsive copies of the same image.
 - Headings left at the end of the content with nothing under them, once
   what they headed is removed, unless one states a figure (a price, a
-  score, a year).
+  score, a year), or reads as a sentence on a page with almost no text
+  outside its headings. An H1, a call to subscribe or follow, a comment
+  heading ("One thought on “…”") or a line of #tags is no such sentence.
 - Markdown that costs tokens without meaning: horizontal rules, blank lines
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators
@@ -217,16 +227,26 @@ furniture (`dialog-off-canvas-main-canvas`) that also holds prose, unless it
 is named as a breadcrumb trail or a menu.
 Three kinds of named furniture go however much of a short page they hold: a
 site header above the title, a sidebar or footer without prose beside a title
-that has text of its own (not a block whose BEM modifier names its layout,
-`catalog-grid--sidebar`), and a cookie banner that one of its names calls a
+that has text of its own, and a cookie banner that one of its names calls a
 banner, a bar or a dialog along with the cookies (`cookie-notice`,
 `cmplz-cookiebanner`), or a consent manager, or that is laid over the page,
-unless it holds the page's `<h1>` or the page is about cookies. A shop's or a
-blog's tags (`product_tag-cookies`) name what it lists, not the block. A grid
-column narrower than the title's and beside it ("col-md-4" beside "col-md-8")
-goes the same way, whatever its names, when it holds three or more linked
-headings and no prose, as the latest posts beside an empty tag archive do,
-unless most link below the page's own address, as a show's episodes do.
+unless it holds the page's `<h1>` or the page is about cookies. A shop's or
+a blog's tags (`product_tag-cookies`) name what it lists, not the block, and
+a name for the room a page leaves for the banner (`cookiebot-padding-bottom`)
+names the wrapper of its content, which stays when it holds most of the page.
+No sidebar is a block whose BEM modifier names its layout
+(`catalog-grid--sidebar`), or one whose nearest grid column short of the full
+row is wider than half of it: a shop's grid named `shopsidebarwidth` inside
+`col-lg-9` is in the main column, and a `col-md-4` nested there is a sidebar
+again. Nor is the layout that holds a sidebar beside the column with most of
+its text, when that column is named for the layout (`main`, `content-area`) or
+with the sidebar's prefix (`dprime-wf-content` beside `dprime-wf-sidebar`); a
+`widget-content` beside a `sidebar-title`, or a `tab-content` beside
+`sidebar-tabs`, is part of the sidebar. A grid column narrower than the
+title's and beside it ("col-md-4" beside "col-md-8") goes the same way,
+whatever its names, when it holds three or more linked headings and no prose,
+as the latest posts beside an empty tag archive do, unless most link below the
+page's own address, as a show's episodes do.
 Prose here is two sentences' worth of lines of 80 characters or
 more in any block, not counting link text or what an `<address>` holds:
 opening hours and contact details are lines, not prose.
@@ -280,7 +300,10 @@ opening hours and contact details are lines, not prose.
    above its title, and the side columns its table declares narrower. Such
    a menu goes from other pages too, but not from a section that the page's
    own table of contents lists, where it is content: the pieces of a set,
-   this item among them. In
+   this item among them. Once a menu goes, the boxes around it are judged
+   as clusters again, up to one that still holds a heading: a card whose
+   tag line it was, and a run of cards is the listing. A heading that went
+   with the menu, its label or one of its entries, makes no card. In
    both modes, short links and boxes styled as buttons ("Add to cart", "Book
    a demo") are removed, except for disclosure toggles, buttons inside a
    sentence and titles or labels styled as buttons, and so is the line a
