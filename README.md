@@ -54,7 +54,7 @@ as unclosed tags on broken pages leave them, keep only their text.
 | `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
 | `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section, or names a section that the page's URL, which names the title, does not mention. Away from the home page, a heading that only names the site gives way to the page title, and a title that only names the site does not head content that has a heading of its own. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. With `false`, an `<h1>` the content holds, such as the article's own headline, still opens it. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
-| `links` | `true` | Keep links. A link that repeats the text and address of an earlier one keeps only its text, so each address is written where it is first named. `false` keeps only the text of every link. |
+| `links` | `true` | Keep links. A link that repeats the text and address of an earlier one keeps only its text, so each address is written where it is first named; a label the page links to several addresses, such as "Official site", keeps every link. `false` keeps only the text of every link, and the separators the page put between links. |
 
 `mode` says how the content was chosen: `:article` when the page was narrowed
 to one body of prose, `:page` when the whole main region was kept, `:full`

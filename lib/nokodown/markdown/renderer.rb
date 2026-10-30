@@ -29,9 +29,11 @@ module Nokodown
       TYPED_RANK = /\A\d+[.)]\s/.freeze
 
       # links: false leaves out video embeds, which are only their link.
-      # Other links lose their addresses after Cleanup (LinkAddresses).
+      # Other links are written either way, for Cleanup to read, and lose
+      # their addresses there (LinkAddresses).
       def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
-        @inline = Inline.new(urls, images: images, redundant_images: redundant_images, main_content: main_content)
+        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images,
+                                   main_content: main_content)
         @links = links
         @depth = 0
         @contains_block = {}
@@ -78,7 +80,7 @@ module Nokodown
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          lines = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) || (line if sign?(line)) }
+          lines = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line, links: @links) || (line if sign?(line)) }
           chunk = Labels.lines(lines.join("\n").strip)
           next if chunk.empty?
 
@@ -96,6 +98,10 @@ module Nokodown
 
       def rendered_images
         @inline.rendered_images
+      end
+
+      def links?
+        @links
       end
 
       def block_level?(node)
@@ -507,7 +513,9 @@ module Nokodown
         blocks = children_blocks(node)
         url = @inline.link_url(node["href"].to_s)
         target = url && link_target(blocks)
-        return blocks unless target
+        # Without links, a passage keeps its line breaks: the link would only
+        # be taken off again.
+        return blocks unless target && (@links || !target.text.include?("\n"))
 
         if target.kind == :heading
           hashes, text = target.text.split(" ", 2)

@@ -36,8 +36,10 @@ module Nokodown
         string.gsub(INVISIBLE, "").tr(Dom::UNICODE_SPACES, " ").squeeze(" ")
       end
 
+      # A backslash that ends the text is escaped too: the next node may
+      # write a bracket or an asterisk after it.
       def escape(string)
-        string = string.gsub(/\\(?=[!-\/:-@\[-`{-~])/, "\\\\\\\\")
+        string = string.gsub(/\\(?=[!-\/:-@\[-`{-~]|\s*\z)/, "\\\\\\\\")
         string = string.gsub("`", "\\\\`")
         string = string.gsub(/(?<!\s)\*|\*(?!\s)/, "\\\\*")
         string = string.gsub(/(?<![\p{L}\p{N}\p{M}\\])_|_(?![\p{L}\p{N}\p{M}])/, "\\\\_")
@@ -88,15 +90,18 @@ module Nokodown
         "`" * [3, longest + 1].max
       end
 
+      # Pairs of brackets stay as written ("[1]"); a lone bracket, or pairs
+      # nested deeper than LINK_TEXT reads, would end the text early.
       def link_text(text)
-        return text if text.count("[") == text.count("]")
+        bare = text.gsub(/\\./, "")
+        return text if bare.count("[") == bare.count("]") && !bare.match?(/\[[^\]]*\[/)
 
         text.gsub(/(?<!\\)([\[\]])/, "\\\\\\1")
       end
 
       def destination(url)
         url = url.gsub(" ", "%20").gsub("<", "%3C").gsub(">", "%3E")
-        url = url.gsub("(", "%28").gsub(")", "%29") unless url.count("(") == url.count(")")
+        url = url.gsub("(", "%28").gsub(")", "%29") unless url.count("(") == url.count(")") && !url.match?(/\([^)]*\(/)
         url.gsub(ENCODED_NON_ASCII) { |run| readable(run) }
       end
 

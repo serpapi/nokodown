@@ -448,6 +448,46 @@ RSpec.describe "Markdown conversion" do
                               "## Contact\n\nWrite to [our editor](https://example.com/team/ann)."
     end
 
+    it "keeps the links of a label the page links to several addresses" do
+      tools = [%w[Cursor cursor.com], %w[Zed zed.dev], ["Cursor Agent", "cursor.com"]].map do |name, site|
+        %(<h2>#{name}</h2><p>An editor named #{name}.</p><p><a href="https://#{site}">Official site</a></p>)
+      end
+      convert(tools.join).should == "## Cursor\n\nAn editor named Cursor.\n\n[Official site](https://cursor.com)\n\n" \
+                                    "## Zed\n\nAn editor named Zed.\n\n[Official site](https://zed.dev)\n\n" \
+                                    "## Cursor Agent\n\nAn editor named Cursor Agent.\n\n[Official site](https://cursor.com)"
+    end
+
+    it "keeps neighbouring repeats apart once they lose their links" do
+      posts = [%w[1 Scaling], %w[2 Stores]].map do |id, name|
+        %(<h2><a href="/p/#{id}">#{name}</a></h2><p>A post about #{name.downcase}.</p>) +
+          '<p><a href="/t/ml">Machine Learning</a> | <a href="/t/ds">Data Science</a></p>'
+      end
+      convert(posts.join).should == "## [Scaling](https://example.com/p/1)\n\nA post about scaling.\n\n" \
+                                    "[Machine Learning](https://example.com/t/ml) [Data Science](https://example.com/t/ds)\n\n" \
+                                    "## [Stores](https://example.com/p/2)\n\nA post about stores.\n\nMachine Learning · Data Science"
+    end
+
+    it "escapes a repeat that opens its line once it loses its link" do
+      html = '<p>Replies are listed below, oldest first.</p><p><a href="/r/5">&gt;&gt;5</a><br>I agree.</p><p>Some text between.</p>' \
+             '<p><a href="/r/5">&gt;&gt;5</a><br>Me too.</p>'
+      convert(html).should == "Replies are listed below, oldest first.\n\n[>>5](https://example.com/r/5)\nI agree.\n\n" \
+                              "Some text between.\n\n\\>>5\nMe too."
+    end
+
+    it "keeps a \"!\" from making an image of the link after it" do
+      html = '<h2>A</h2><p>Words about a.</p><p>By <a href="/y">Yahoo!</a> today</p><h2>B</h2><p>Words about b.</p>' \
+             '<p>Via <a href="/y">Yahoo!</a><a href="/n">News</a> today</p><p>Big news!<a href="/sale">Spring sale</a> starts Monday.</p>'
+      convert(html).should == "## A\n\nWords about a.\n\nBy [Yahoo!](https://example.com/y) today\n\n## B\n\nWords about b.\n\n" \
+                              "Via Yahoo! [News](https://example.com/n) today\n\nBig news\\![Spring sale](https://example.com/sale) starts Monday."
+    end
+
+    it "writes links whose text ends in a backslash or nests brackets, and addresses that nest parentheses" do
+      html = '<p>Open <a href="/x">C:\\</a> or Longfeng\\<a href="/d">Daqing</a>, see <a href="/wiki/Foo_(bar_(baz))">Foo</a> ' \
+             'and <a href="/w/Main">[[Main Page]]</a>.</p>'
+      convert(html).should == "Open [C:\\\\](https://example.com/x) or Longfeng\\\\[Daqing](https://example.com/d), " \
+                              "see [Foo](https://example.com/wiki/Foo_%28bar_%28baz%29%29) and [\\[\\[Main Page\\]\\]](https://example.com/w/Main)."
+    end
+
     it "leaves links written in code alone" do
       html = "<ol><li><p>Call the handler:</p><pre><code>handlers[name](event);\nhandlers[type](event);</code></pre></li></ol>" \
              "<p><code>[text](https://example.com/docs)</code> or <code>[the docs](https://example.com/docs)</code></p>"

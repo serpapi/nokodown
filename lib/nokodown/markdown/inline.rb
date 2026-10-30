@@ -96,10 +96,11 @@ module Nokodown
 
       # redundant_images: RedundantImages#call. main_content: keep only images
       # that say what they show.
-      def initialize(urls, images:, redundant_images: {}, main_content: false)
+      def initialize(urls, images:, links:, redundant_images: {}, main_content: false)
         @urls = urls
         @images = images
         @main_content = main_content
+        @links = links
         @redundant_images = redundant_images
         @rendered_images = {}
         @emphasis = Hash.new(0)
@@ -154,6 +155,8 @@ module Nokodown
       # text decides its own spacing.
       def append(out, piece, previous, node)
         out << " " if glued?(previous, piece) && !script?(node)
+        # A "!" right before a link would make an image of it.
+        out.insert(-2, "\\") if piece.start_with?("[") && out.end_with?("!") && !out.end_with?("\\!")
         out << piece
       end
 
@@ -272,10 +275,17 @@ module Nokodown
 
         text = Emphasis.unwrap(text)
         return text if shown?(text, url)
-        return url if same_as_url?(text, url)
+        return @links ? url : text if same_as_url?(text, url)
         return text if same_address?(text, url)
 
-        address_markup(text, url) || "[#{Text.link_text(text)}](#{Text.destination(url)})"
+        address = address_markup(text, url)
+        address ? shown_address(address, text) : "[#{Text.link_text(text)}](#{Text.destination(url)})"
+      end
+
+      # Without links, a text that shows an address stays as the page wrote
+      # it.
+      def shown_address(address, text)
+        @links ? address : text
       end
 
       # In a byline or a post's meta line ("By Ann in News"), not as an entry

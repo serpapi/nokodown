@@ -648,6 +648,37 @@ RSpec.describe Nokodown do
     it "keeps a bracket that ends the text from opening a link with what follows" do
       convert('<p>See <a href="/n/1">[1]</a>(page 4).</p>', links: false).should == "See [1\\](page 4)."
     end
+
+    it "keeps the separators between links" do
+      html = '<p>Trails for every walker.</p><p><a href="/">Home</a> / <a href="/guides">Guides</a> / <a href="/north">North Rim</a></p>' \
+             '<p>Footer: <a href="/a">Privacy</a> · <a href="/b">Terms</a></p>'
+      convert(html, links: false).should == "Trails for every walker.\n\nHome / Guides / North Rim\n\nFooter: Privacy · Terms"
+    end
+
+    it "judges a block by its text, not by its link" do
+      html = "<p>Our library holds over two million volumes across six campuses.</p><p><a href=\"/comments\">12</a></p>" \
+             "<p>Opening hours vary over the summer break, so check the calendar.</p>" \
+             '<p><a href="/g1">Read our guide to winter tyres</a></p><p><a href="/g2">Read our guide to winter tyres</a></p>'
+      convert(html, links: false).should == "Our library holds over two million volumes across six campuses.\n\n" \
+                                            "Opening hours vary over the summer break, so check the calendar.\n\nRead our guide to winter tyres"
+    end
+
+    it "reads a linked name in a two-column table as a name" do
+      html = '<p>Module notes.</p><table><tr><th><a href="/d#a">Description:</a></th><td>Compress content</td></tr>' \
+             '<tr><th><a href="/d#s">Status:</a></th><td>Extension</td></tr></table>'
+      convert(html, links: false).should == "Module notes.\n\n- Description: Compress content\n- Status: Extension"
+    end
+
+    it "keeps a text that shows an address as the page wrote it" do
+      html = '<p>Thread: <a href="https://example.com/showthread.php?t=1&amp;page=2">example.com/showthread.p...</a></p>' \
+             '<p>Visit <a href="https://www.example.org/">www.example.org</a> today.</p>'
+      convert(html, links: false).should == "Thread: example.com/showthread.p...\n\nVisit www.example.org today."
+    end
+
+    it "keeps brackets as written once their link is gone, and an image whose alt holds brackets" do
+      html = '<p>See <a href="/w/Main">[[Main Page]]</a> now.</p><p><img alt="Chart [Q1](2024)" src="/c.png"></p>'
+      convert(html, links: false).should == "See [[Main Page]] now.\n\n![Chart \\[Q1\\](2024)](https://example.com/c.png)"
+    end
   end
 
   describe "conditional cleaning" do

@@ -10,6 +10,7 @@ module Nokodown
       MAX_NAME = 80
       NAMED_ROWS = 0.8
       LINK_OR_IMAGE = /\A!?\[/.freeze
+      LINK = /(?<!!)\[(#{Text::LINK_TEXT})\]\(#{Text::DESTINATION}\)/.freeze
 
       def initialize(renderer, node)
         @renderer = renderer
@@ -72,7 +73,7 @@ module Nokodown
       # of the list instead, and a row across the table, which names the
       # rows below it, stays in its place.
       def name_values(grid)
-        grid.map { |row| "- #{name_value(*row.map { |cell| Dom.squish(cell.gsub("\\|", "|")) })}" }.join("\n")
+        grid.map { |name, value| "- #{name_value(*[name(name), value].map { |cell| Dom.squish(cell.gsub("\\|", "|")) })}" }.join("\n")
       end
 
       # Names are short text, not pictures or links: two columns of those
@@ -80,8 +81,13 @@ module Nokodown
       def names?(grid)
         return false unless grid.first.size == 2
 
-        names = grid.map(&:first).reject(&:empty?)
+        names = grid.map { |row| name(row.first) }.reject(&:empty?)
         names.size >= grid.size * NAMED_ROWS && names.all? { |name| name.length <= MAX_NAME && !name.match?(LINK_OR_IMAGE) }
+      end
+
+      # Without links, a linked name is its text.
+      def name(cell)
+        @renderer.links? ? cell : cell.gsub(LINK, '\1')
       end
 
       def name_value(name, value)
