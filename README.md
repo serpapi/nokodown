@@ -118,7 +118,8 @@ with `main_content: false`, `:none` for a document without a body.
   label the page uses once goes too), labels of controls ("Menu",
   "Loading...", "Back to top", "Quantity:", "prev / next"), counters
   without a label (view and comment counts, FAQ and step badges, slide
-  numbers, a player's "0:00"), and form labels left without their fields.
+  numbers, a player's "0:00"), form labels left without their fields, and
+  the marks at a slider's ends ("A A", "0 100").
   A read-more link that is the only way to its page, a number a label
   explains or that sits in a row of numbers, and a fact repeated on every
   card ("In stock") stay.
