@@ -235,10 +235,39 @@ module Nokodown
       "#{uri.path}?#{params(uri).sort.map { |pair| pair.join("=") }.join("&")}"
     end
 
-    # Not matches?, which Nokolexbor runs over the whole document.
+    # Not matches?, which Nokolexbor runs over the whole document. Widening
+    # asks about the same large wrappers for every run inside them, so the
+    # elements that hold a protected one are listed once.
     def protected?(node)
       main = %w[h1 main].include?(node.name) || node["role"] == "main"
-      main || node["itemprop"].to_s.split.include?("articleBody") || !node.at_css(PROTECTED).nil?
+      main || node["itemprop"].to_s.split.include?("articleBody") || holds_protected?(node)
+    end
+
+    def holds_protected?(node)
+      key = Dom.key(node)
+      return !node.at_css(PROTECTED).nil? if key.nil?
+
+      @holders ||= protected_holders
+      @holders.fetch(key, []).any? { |holder| holder == node }
+    end
+
+    # The ancestors of protected elements, by key. The parser's copies of a
+    # misnested <b> or <font> share its attributes, key included, so each
+    # element is told apart from its copies. A climb stops at an element
+    # already listed, whose own ancestors are listed with it.
+    def protected_holders
+      @body.css(PROTECTED).each_with_object({}) do |found, holders|
+        node = found
+        while (node = node.parent)&.element?
+          key = Dom.key(node)
+          next if key.nil?
+
+          same = holders[key] ||= []
+          break if same.any? { |holder| holder == node }
+
+          same << node
+        end
+      end
     end
 
     # A post's body and its parent, which also holds its attachments.

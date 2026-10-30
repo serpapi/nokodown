@@ -400,4 +400,19 @@ RSpec.describe Nokodown::Teasers do
     (cpu_time - started).should < 2
     found.should be_empty
   end
+
+  it "asks whether the wrappers of runs hold the page's heading in time linear in the page" do
+    groups = Array.new(2000) do |group|
+      photos = Array.new(3) do |index|
+        "<div class='photo'><a href='/photos/#{group}-#{index}'><img src='/img/#{group}-#{index}.jpg' alt=''></a></div>"
+      end
+      "<div class='group'>#{photos.join}</div>"
+    end
+    html = "<h1>Harbor photos</h1><div class='wall'><h2>Photos</h2>#{groups.join}</div>"
+    started = cpu_time
+    found = blocks(html, "https://news.example.com/photos/harbor")
+
+    (cpu_time - started).should < 2
+    found.should be_empty
+  end
 end
