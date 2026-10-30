@@ -195,7 +195,8 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    list of links (a standfirst, key facts, a price) sits between the page's
    `<h1>` and the article, the article reaches up to the headline, unless that
    `<h1>` links to the home page, does not match the title, or a heading below
-   matches the title better (a blog's name, a journal's, a section label). On forum
+   matches the title better (a blog's name, a journal's, a section
+   label). On forum
    threads (schema.org types or the forum software's generator tag) replies
    are content even in comment-named containers, and on forums and Q&A pages
    where no single post holds the page, the whole main region is cleaned as an
