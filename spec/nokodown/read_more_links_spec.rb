@@ -115,6 +115,15 @@ RSpec.describe Nokodown::ReadMoreLinks do
     text_after(html).should == "A quick guide to building appsIntroSetupBasics"
   end
 
+  it "judges a list of thousands of one-link entries in time linear in its entries" do
+    html = "<ul>#{(1..4000).map { |i| "<li><a href='/tags/#{i}'>Stoves</a></li>" }.join}</ul>"
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    text = text_after(html)
+
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+    text.should == "Stoves" * 4000
+  end
+
   it "keeps a source's domain and a dataset's format after the title" do
     html = card("The harbor bridge reopens", "<p><a href='/posts/25'>vice.com</a></p>") +
            card("Crews finish early", "<ul><li><a href='/posts/18' data-format='csv'>CSV</a></li></ul>")

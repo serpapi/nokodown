@@ -39,6 +39,7 @@ module Nokodown
       @root = root
       @chars = {}
       @data_tables = {}
+      @menus = {}
     end
 
     def call
@@ -122,9 +123,20 @@ module Nokodown
     end
 
     # A link alone in an item of a list is an entry of a menu, a breadcrumb
-    # or a table of contents, whose other entries lead elsewhere.
+    # or a table of contents, whose other entries lead elsewhere. A tag
+    # index lists thousands of such items, so each list is counted once.
     def menu_entry?(holder)
-      holder.name == "li" && holder.parent.element_children.count { |child| child.name == "li" } >= MENU_ENTRIES
+      return false unless holder.name == "li"
+
+      list = holder.parent
+      key = Dom.key(list)
+      return menu?(list) if key.nil?
+
+      @menus.key?(key) ? @menus[key] : (@menus[key] = menu?(list))
+    end
+
+    def menu?(list)
+      list.element_children.count { |child| child.name == "li" } >= MENU_ENTRIES
     end
 
     # On a line of its own, at the end of an excerpt or in a row of
