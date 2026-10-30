@@ -60,6 +60,13 @@ RSpec.describe Nokodown::ReadMoreLinks do
     text_after(html).should == "LeonesVSOsosFinishedTigres against LobosVS"
   end
 
+  it "keeps a label when the longer link wraps a paragraph too long for a title" do
+    passage = "The bridge over the inner basin opens again on Monday after three months of repairs. " * 4
+    html = "<div class='notice'><a href='/news/bridge'><p>#{passage.strip}</p></a><p><a href='/news/bridge'>Weiterlesen</a></p></div>" \
+           "<div class='notice'><a href='/news/ferry'><p>The ferry runs late on Sunday.</p></a><p><a href='/news/ferry'>Weiterlesen</a></p></div>"
+    text_after(html).should == "#{passage.strip}WeiterlesenThe ferry runs late on Sunday."
+  end
+
   it "keeps a name that goes on from the title's link, but not a label after a sentence or a line break" do
     html = "<div><a href='/posts/12'>Philosophy of life: a life shaped by curiosity </a>" \
            "<span><a href='/posts/12'><b>- Vijay Joshi</b></a><span></span></span></div>" \
