@@ -236,12 +236,16 @@ module Nokodown
         blocks.none? { |block| block.kind == :heading && !block.equal?(heading) && block.level <= heading.level }
       end
 
+      # A rating ("★★★★☆") or a price ("$$$") has no letter either, and
+      # outside the list a line without one would be dropped.
       def picture?(block)
-        block.kind == :paragraph && !block.text.gsub(ImageCleanup::IMAGE, "").match?(/[\p{L}\p{N}]/)
+        text = block.text
+        block.kind == :paragraph && text.match?(ImageCleanup::IMAGE) && !text.gsub(ImageCleanup::IMAGE, "").match?(/[\p{L}\p{N}]/)
       end
 
       def unlisted(items, start)
         return headed_items(items) unless start
+        return items.flatten(1) if ranked_by_site?(items)
 
         items.each_with_index.flat_map do |blocks, index|
           heading = opening(blocks)
@@ -260,11 +264,17 @@ module Nokodown
         blocks.any? { |block| block.kind == :heading }
       end
 
-      # A site may type the number into the heading already, or a rank of
-      # its own that the list does not set, as a countdown does.
+      # A countdown, or a ranking's second page, types into every heading a
+      # rank that the list does not set. A name can open with a number too
+      # ("1. FC Union Berlin"), so one heading's number is not a rank.
+      def ranked_by_site?(items)
+        items.all? { |blocks| opening(blocks).text.split(" ", 2).last.match?(TYPED_RANK) }
+      end
+
+      # A site may type the number into the heading already.
       def ranked(heading, number)
         hashes, text = heading.text.split(" ", 2)
-        return heading if text.match?(/\A#{number}\b/) || text.match?(TYPED_RANK)
+        return heading if text.match?(/\A#{number}\b/)
 
         Block.new(:heading, "#{hashes} #{number}. #{text}", heading.level)
       end
