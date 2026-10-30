@@ -216,7 +216,10 @@ region, or most of the page's text, is never removed because of its class name.
    mostly links, beside a column of 7/12 or more that holds the title. An
    index page, whose link clusters hold most of its text, keeps them but for
    its menus: lists of links holding one to the page itself, the clusters
-   above its title, and the side columns its table declares narrower. In
+   above its title, and the side columns its table declares narrower. Such
+   a menu goes from other pages too, but not from a section that the page's
+   own table of contents lists, where it is content: the pieces of a set,
+   this item among them. In
    both modes, short links and boxes styled as buttons ("Add to cart", "Book
    a demo") are removed, except for disclosure toggles, buttons inside a
    sentence and titles or labels styled as buttons. If article cleaning
