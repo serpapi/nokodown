@@ -377,14 +377,19 @@ RSpec.describe Nokodown::Boilerplate do
         "<div class=\"module\"><a href=\"/category/#{index}/\">Fully Funded</a>" \
           "<h3><a href=\"/post-#{index}/\">#{post} 2027</a></h3></div>"
       end
-      html = "<div class=\"row\"><div class=\"col-12 col-md-8\"><p>Home › Tags › Konstanz Fellowship</p>" \
-             "<h1>Tag: Konstanz Fellowship</h1><p>No posts to display</p></div>" \
-             "<div class=\"col-12 col-md-4\"><h4>Latest Articles</h4>#{cards.join}</div></div>"
+      bare = posts.map.with_index do |post, index|
+        "<div><h3><a href=\"/post-#{index}/\">#{post} 2027</a></h3><time>Oct #{20 - index}, 2026</time></div>"
+      end
+      [cards, bare].each do |column|
+        html = "<div class=\"row\"><div class=\"col-12 col-md-8\"><p>Home › Tags › Konstanz Fellowship</p>" \
+               "<h1>Tag: Konstanz Fellowship</h1><p>No posts to display</p></div>" \
+               "<div class=\"col-12 col-md-4\"><h4>Latest Articles</h4>#{column.join}</div></div>"
 
-      text = remaining(html)
-      text.should include("No posts to display")
-      text.should_not include("Latest Articles")
-      text.should_not include("Gordon University")
+        text = remaining(html, url: "https://example.com/tag/konstanz-fellowship/")
+        text.should include("No posts to display")
+        text.should_not include("Latest Articles")
+        text.should_not include("Gordon University")
+      end
     end
 
     it "keeps a wider grid column, and a narrower one beside a title's column with prose, more text or the title" do
@@ -409,6 +414,20 @@ RSpec.describe Nokodown::Boilerplate do
              "<div class=\"col-md-4\"><h4>Publications</h4><ul>#{links.join}</ul></div></div>"
 
       remaining(html).should include("Harbor seiches in closed basins")
+    end
+
+    it "keeps a narrower grid column of titles linked below the page, as a show's episodes" do
+      episodes = ["Tidal mixing in shallow harbors", "Sediment transport under ferry wakes", "A model of quay wall erosion",
+                  "Salt marsh recovery after dredging", "Measuring wave energy at breakwaters", "Harbor seiches in closed basins"]
+      cards = episodes.map.with_index do |episode, index|
+        "<div class=\"episode\"><h3><a href=\"/harbor-talk/#{48 - index}/\">#{episode}</a></h3>" \
+          "<span>Oct #{21 - index}, 2026 · 41 min</span></div>"
+      end
+      html = "<div class=\"row\"><div class=\"col-12 col-md-8\"><h1>Harbor Talk</h1>" \
+             "<p>Hosted by Ana Puig · Weekly · 48 episodes</p></div>" \
+             "<div class=\"col-12 col-md-4\"><h2>Episodes</h2>#{cards.join}</div></div>"
+
+      remaining(html, url: "https://example.com/harbor-talk/").should include("Harbor seiches in closed basins")
     end
 
     it "keeps a listing that wraps below a full-width title column in its row" do
