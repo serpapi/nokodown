@@ -127,6 +127,10 @@ module Nokodown
         node.css("a[href]").any? { |link| Metadata.home_link?(link["href"].strip) }
       end
 
+      def mark_links_home(blocks)
+        blocks.each { |block| block.links_home = true if block.kind == :heading }
+      end
+
       def list(node)
         items = []
         list_children(node).each do |child|
@@ -336,10 +340,6 @@ module Nokodown
           target.text = "[#{Text.link_text(target.text.tr("\n", ' '))}](#{Text.destination(url)})"
         end
         blocks
-      end
-
-      def mark_links_home(blocks)
-        blocks.each { |block| block.links_home = true if block.kind == :heading }
       end
 
       def link_target(blocks)
