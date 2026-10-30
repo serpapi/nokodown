@@ -11,6 +11,14 @@ RSpec.describe Nokodown::InPageLinks do
     "<section id='#{id}'><a href='##{id}'><header><h2>#{heading}</h2></header></a><p>#{heading} of the boots.</p></section>"
   end
 
+  # Unclosed tags nest each link one level below the one before.
+  def nested_links(count)
+    page = (1..count).map { |number| "<div><a href='/items/#{number}'>Item #{number}</a> " }.join
+    root = Nokolexbor::HTML("<body>#{page}</body>").at_css("body")
+    Nokodown::Dom.assign_keys(root)
+    described_class.new(root, described_class.anchors(root.document), nil)
+  end
+
   let(:sections) { section("set", "Full set") + section("recipes", "Used in recipes") + section("pictures", "Pictures") }
 
   it "marks the sections that a table of contents lists" do
@@ -37,5 +45,14 @@ RSpec.describe Nokodown::InPageLinks do
           "<li><a href='#recipes'>Recipes</a></li><li><a href='#pictures'>Pictures</a></li></ol>"
 
     listed("#{toc}<main id='main'><h1>Boots</h1>#{sections}</main>").should == %w[set recipes pictures]
+  end
+
+  it "reads the links of no container on a page without links into it" do
+    links = nested_links(3000)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    links.contents.should be_empty
+
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
   end
 end

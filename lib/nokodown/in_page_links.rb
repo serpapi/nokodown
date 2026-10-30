@@ -97,10 +97,19 @@ module Nokodown
       @root = root
       @anchors = anchors
       @urls = urls
+      @targets = {}
     end
 
+    # Only a container around links into the page, and around no other link,
+    # can be one. Reading every container's links costs as much as its
+    # subtree, so the others are ruled out by key first.
     def contents
-      tables = @root.css(CONTAINERS).select { |node| contents?(node) }
+      candidates = candidate_keys
+      return [] if candidates.empty?
+
+      tables = @root.css(CONTAINERS).select do |node|
+        (Dom.key(node).nil? || candidates.include?(Dom.key(node))) && contents?(node)
+      end
       keys = tables.map { |node| Dom.key(node) }.to_set
       tables.reject { |node| node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) } }
     end
@@ -110,6 +119,26 @@ module Nokodown
     end
 
     private
+
+    # Keys of the elements around a link into the page and around no other
+    # link, once the page has MIN_ENTRIES links into it.
+    def candidate_keys
+      targets, others = @root.css("a[href]").partition { |link| target(link) }
+      return Set.new if targets.size < MIN_ENTRIES
+
+      keys_around(targets) - keys_around(others)
+    end
+
+    # Each element is added once: a walk up stops where an earlier one went.
+    def keys_around(links)
+      links.each_with_object(Set.new) do |link, keys|
+        node = link
+        while (node = node.parent)&.element?
+          key = Dom.key(node)
+          break unless key.nil? || keys.add?(key)
+        end
+      end
+    end
 
     def contents?(node)
       links = node.css("a[href]")
@@ -142,8 +171,14 @@ module Nokodown
       line.nil? || Dom.text(line).sub(text, "").match?(SEPARATORS)
     end
 
+    # Every link is asked about, and resolving an href costs more than the
+    # rest, so each href is judged once.
     def target(link)
       href = link["href"].strip
+      @targets.fetch(href) { @targets[href] = into_page?(href) }
+    end
+
+    def into_page?(href)
       name = fragment(href)
       return false if name.nil? || name.empty? || !@anchors.key?(name)
 
