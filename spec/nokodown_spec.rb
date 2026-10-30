@@ -85,6 +85,15 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html, url: "https://kdroofing.example/contact/").should == "# Contact\n\n42 Penbrook Avenue"
     end
 
+    it "drops a lower heading that names the site below only an image, with images or without" do
+      body = "<p><img src='/storefront.jpg' alt='Our storefront'></p><h4>K&amp;D Roofing</h4><p>42 Penbrook Avenue</p>"
+      html = "<title>Contact - K&amp;D Roofing</title><body><article>#{body}</article></body>"
+      url = "https://kdroofing.example/contact/"
+
+      Nokodown.to_markdown(html, url: url).should == "# Contact\n\n![Our storefront](https://kdroofing.example/storefront.jpg)\n\n42 Penbrook Avenue"
+      Nokodown.to_markdown(html, url: url, images: false).should == "# Contact\n\n42 Penbrook Avenue"
+    end
+
     it "drops a lower heading that names the site and links home below other content, with links or without" do
       ["<h4><a href='/'>K&amp;D Roofing</a></h4>", "<a href='https://kdroofing.example/'><h4>K&amp;D Roofing</h4></a>"].each do |heading|
         html = "<title>Contact - K&amp;D Roofing</title><body><article><p>Call now</p>#{heading}<p>42 Penbrook Avenue</p></article></body>"
