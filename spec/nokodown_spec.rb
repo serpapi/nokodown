@@ -373,14 +373,29 @@ RSpec.describe Nokodown do
       convert(html).should == "Open daily."
     end
 
-    it "keeps text placed off screen with no link or field, which can be the page's only copy of it" do
-      copy = "A neat ring for every day, though the gold engraving is a little loud on the silver."
-      html = "<h1>Ring review</h1><div style=\"position:absolute !important; top:-999999px !important; left:-999999px !important\">#{copy}</div>" \
+    it "keeps a paragraph placed off screen that the page shows nowhere else, as Sixshop writes its reviews there" do
+      review = "A neat ring for every day, though the gold engraving is a little loud on the silver."
+      html = "<h1>Ring review</h1><div style=\"position:absolute !important; top:-999999px !important; left:-999999px !important\">" \
+             "<h2>Pearl ring</h2><p>#{review}</p></div>" \
              '<div style="position:absolute; left:-9999px"><a href="https://spam.example">casino bonus</a></div>' \
              '<div style="position:absolute; left:-5000px"><input name="b_42" tabindex="-1" value="">Leave this empty</div>' \
              '<p><img src="https://counter.example/watch/1" style="position:absolute; left:-9999px;" alt=""></p>'
 
-      convert(html).should == "# Ring review\n\n#{copy}"
+      convert(html).should == "# Ring review\n\n## Pearl ring\n\n#{review}"
+    end
+
+    it "drops off-screen text that is no paragraph of prose, or a copy of paragraphs the page shows" do
+      text = ["The harbour ferry leaves at noon and returns before dark every day from pier four.",
+              "Tickets are sold on board and cost twelve euros for adults, and children travel free."]
+      paragraphs = text.map { |line| "<p>#{line}</p>" }.join
+      html = "<h1>Ferry times</h1>#{paragraphs}" \
+             '<p>Read the <a href="/fares">fare table<span style="position:absolute;left:-9999px"> (opens in a new window)</span></a>.</p>' \
+             "<div style=\"position:absolute;left:-9999px\">#{paragraphs}</div>" \
+             '<div style="position:absolute;top:-10000px">buy cheap replica watches online best price replica rolex omega cartier store</div>' \
+             '<h2 style="position:absolute; top:-1000px;">Harbour ferry times and harbour ferry tickets</h2>' \
+             '<div style="position:fixed;left:-9000px;top:-9000px;"><noframes><progress id="zr"><noframes id="zr"></noframes></div>'
+
+      convert(html).should == "# Ferry times\n\n#{text.join("\n\n")}\n\nRead the [fare table](https://example.com/fares)."
     end
 
     it "keeps screen-reader text clipped to one pixel in place, which can be the only copy of a price" do

@@ -28,23 +28,27 @@ module Nokodown
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
-    # Injected link spam, honeypot fields and hidden copies of the page are
-    # placed far off screen or in a strip one pixel high; collapsed panels
-    # have no height. A box clipped to one pixel where it stands is
-    # screen-reader text, which can be the only copy of a price. Moved off
-    # screen as well, such boxes held only spam, skip links and copies.
+    # Injected link spam, honeypot fields, keyword lists and hidden copies of
+    # the page are placed far off screen or in a strip one pixel high;
+    # collapsed panels have no height. A box clipped to one pixel where it
+    # stands is screen-reader text, which can be the only copy of a price.
     POSITIONED_STYLE = /(?:\A|;)\s*position\s*:\s*(?:absolute|fixed)/i.freeze
     OFFSCREEN_STYLE = /(?:\A|;)\s*(?:left|top)\s*:\s*-(?:\d{4,}(?:\.\d+)?px|999px|\d{3,}(?:\.\d+)?r?em)/i.freeze
     PIXEL_STRIP_STYLE = /(?:\A|;)\s*height\s*:\s*1px/i.freeze
     PIXEL_WIDE_STYLE = /(?:\A|;)\s*width\s*:\s*1px/i.freeze
     OVERFLOW_HIDDEN = /(?:\A|;)\s*overflow\s*:\s*hidden/i.freeze
-    # Off screen, injected spam still links somewhere, a honeypot is still a
-    # field and a tracking pixel has no text. Text with neither is the copy
-    # of the page some shop and blog builders write for search engines, or
-    # an editor's paste bin, and can be the page's only copy of its text.
-    # Textareas and selects are junk, gone before this check.
+    # Sixshop stores write each review and blog post off screen for search
+    # engines and render the visible copy by script, so a box there that
+    # holds a paragraph of prose stays, unless the page shows the same
+    # paragraphs elsewhere. Spam links somewhere and a honeypot is a field;
+    # keyword lists, headings, link hints and the raw text of <noframes>
+    # have no paragraph. Textareas and selects are junk, gone by then.
     OFFSCREEN_TRAPS = "a, input"
     OFFSCREEN_TRAP_NAMES = %w[a input].freeze
+    OFFSCREEN_PROSE_WORDS = 8
+    OFFSCREEN_PROSE_CJK = 20
+    WORD = /[\p{L}\p{N}]+/.freeze
+    CJK = /[\p{Han}\p{Hiragana}\p{Katakana}]/.freeze
 
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
 
@@ -207,6 +211,7 @@ module Nokodown
     def remove_hidden
       total = Dom.char_count(@body.content)
       @panel_ids = @body.css("[aria-controls]").flat_map { |control| control["aria-controls"].split }.to_set
+      @offscreen_copies = []
       @body.css(HIDDEN_CANDIDATES).each do |node|
         next unless hidden?(node)
         # A hidden wrapper around most of the page is an anti-flicker snippet
@@ -215,6 +220,7 @@ module Nokodown
 
         node.remove
       end
+      remove_shown_copies
     end
 
     def page_like?(node)
@@ -231,15 +237,36 @@ module Nokodown
 
     def out_of_sight?(node)
       style = node["style"].to_s
-      return offscreen_trap?(node) if style.match?(OFFSCREEN_STYLE) && style.match?(POSITIONED_STYLE)
+      return !offscreen_copy?(node) if style.match?(OFFSCREEN_STYLE) && style.match?(POSITIONED_STYLE)
 
       style.match?(PIXEL_STRIP_STYLE) && style.match?(OVERFLOW_HIDDEN) && !style.match?(PIXEL_WIDE_STYLE)
     end
 
-    # Nokolexbor answers matches? by querying the whole document, once per
-    # off-screen element; at_css only looks below the node.
-    def offscreen_trap?(node)
-      OFFSCREEN_TRAP_NAMES.include?(node.name) || !node.at_css(OFFSCREEN_TRAPS).nil? || Dom.squish(node.content).empty?
+    # Whether the page also shows the copy is known only once everything
+    # hidden is gone, so it is noted for remove_shown_copies. The name is
+    # read because Nokolexbor answers matches? by querying the whole
+    # document; at_css only looks below the node.
+    def offscreen_copy?(node)
+      return false if OFFSCREEN_TRAP_NAMES.include?(node.name) || node.at_css(OFFSCREEN_TRAPS) || !prose?(node)
+
+      @offscreen_copies << node
+    end
+
+    def prose?(node)
+      text = node.css("p").map(&:content).join(" ")
+      text.scan(WORD).size >= OFFSCREEN_PROSE_WORDS || text.scan(CJK).size >= OFFSCREEN_PROSE_CJK
+    end
+
+    # A copy whose paragraphs the page shows elsewhere is the hidden copy of
+    # the page (an editor's paste bin, a copy for search engines).
+    def remove_shown_copies
+      return if @offscreen_copies.empty?
+
+      shown = @body.css("p").map { |p| Dom.text(p) }.tally
+      @offscreen_copies.each do |copy|
+        own = copy.css("p").map { |p| Dom.text(p) }.tally
+        copy.remove if own.any? { |text, count| !text.empty? && shown.fetch(text, 0) > count }
+      end
     end
 
     def hidden_by_class?(node)
