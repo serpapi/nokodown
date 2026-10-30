@@ -92,12 +92,30 @@ RSpec.describe Nokodown::MessageForms do
     markdown(html).should include("Minatomachi")
   end
 
-  it "keeps a form when only spacers would be left beside it" do
-    html = '<table><tr><td><img src="/images/spacer.gif" width="1" height="1"></td><td><form><h3>Send this postcard</h3>' \
-           '<img src="/media/girls-773.jpg" alt="Girls on the beach"><p>Sender</p><input type="text" name="name">' \
-           "<textarea></textarea></form></td></tr></table>"
+  it "removes a comment form laid out in a table, its labels in headers or in cells" do
+    headers = '<tr><th>Your name</th><th>Your website</th></tr><tr><td><input type="text" name="author"> required</td>' \
+              '<td><input type="text" name="url"> optional</td></tr>'
+    cells = '<tr><td>Your name</td><td>Your website</td></tr><tr><td><input type="text" name="author"></td>' \
+            '<td><input type="text" name="url"></td></tr>'
 
-    markdown(html).should include("Girls on the beach")
+    [headers, cells].each do |rows|
+      form = '<div class="box"><h3>Leave a Reply</h3><form><p>Your email address will not be published.</p>' \
+             "<table>#{rows}</table><textarea></textarea></form></div>"
+      markdown("<div class=\"post\">#{story}#{form}</div>").should end_with("by the reeds.")
+    end
+  end
+
+  it "keeps a form when only spacers would be left beside it, and removes it beside a picture" do
+    form = '<form><h3>Send this postcard</h3><img src="/media/girls-773.jpg" alt="Girls on the beach"><p>Sender</p>' \
+           '<input type="text" name="name"><textarea></textarea></form>'
+    gif = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+    ['<img src="/images/spacer.gif" width="1" height="1">', "<img src=\"#{gif}\">"].each do |spacer|
+      markdown("<table><tr><td>#{spacer}</td><td>#{form}</td></tr></table>").should include("Girls on the beach")
+    end
+
+    text = markdown("<table><tr><td><img src=\"/media/beach-12.jpg\" alt=\"The beach at Bávaro\"></td><td>#{form}</td></tr></table>")
+    text.should include("The beach at Bávaro")
+    text.should_not include("Send this postcard")
   end
 
   it "keeps a contact page that holds nothing but its form" do

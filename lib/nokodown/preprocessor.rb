@@ -33,6 +33,7 @@ module Nokodown
     # taken off once the forms are marked.
     REGION_TEXT = "data-nokodown-region-text"
     SENDER_INPUTS = ["", "text", "email"].freeze
+    TABLE_CELLS = %w[td th].freeze
     QUANTITY = /qty|quantity/i.freeze
     FORM_CONTENT = "h1, main, article, [role=main], video, iframe"
     FORM_PAGE_TEXT = 100
@@ -348,7 +349,7 @@ module Nokodown
     # it asks about: a row of headers over a row of text, without the text
     # boxes of a form laid out in a table.
     def data_rows?(table)
-      rows = table.css("tr").map { |row| row.element_children.select { |cell| %w[td th].include?(cell.name) } }
+      rows = table.css("tr").map { |row| row.element_children.select { |cell| TABLE_CELLS.include?(cell.name) } }
       rows.any? { |cells| cells.size >= 2 && cells.all? { |cell| cell.name == "th" } } &&
         rows.any? { |cells| cells.size >= 2 && cells.all? { |cell| cell.name == "td" && data_cell?(cell) } }
     end
