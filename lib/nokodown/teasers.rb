@@ -25,6 +25,9 @@ module Nokodown
     Block = Struct.new(:nodes, :title, :alike, :below, :chars)
     # An item with its headings and the keys of the links in them.
     Card = Struct.new(:node, :headings, :title_links)
+    # A wrapper, the keys of its elements walked so far, those left as a
+    # stack, and the title the walk stopped at.
+    Walk = Struct.new(:node, :passed, :stack, :title)
 
     MIN_ITEMS = 3
     MAX_ITEM_CHARS = 400
@@ -509,15 +512,41 @@ module Nokodown
     end
 
     # The first title before the items, however deep: old layouts put it in
-    # the first row of a table around them. Nokolexbor's css("*") is over ten
-    # times slower than this XPath, which walks in the same order.
+    # the first row of a table around them. Runs side by side widen into the
+    # same wrapper, and each walked past all the runs before it, so the walk
+    # of a wrapper in document order is kept and resumed: what it has passed
+    # holds no title but the one it stopped at. It stops before an item, so
+    # the next run still asks whether that element is a title.
     def title_in(node, run)
       items = run.items.map { |item| Dom.key(item) }.to_set
-      node.xpath(".//*").each do |descendant|
+      walk = walk_of(node)
+      return nil if items.any? { |key| walk.passed.include?(key) }
+      return walk.title if walk.title
+
+      until walk.stack.empty?
+        descendant = walk.stack.last
         return nil if items.include?(Dom.key(descendant))
-        return descendant if title?(descendant)
+
+        walk.stack.pop
+        walk.passed << Dom.key(descendant)
+        walk.stack.concat(descendant.element_children.to_a.reverse)
+        return walk.title = descendant if title?(descendant)
       end
       nil
+    end
+
+    # By key, told apart from the parser's copies of a misnested <font>,
+    # which share its attributes.
+    def walk_of(node)
+      key = Dom.key(node)
+      return new_walk(node) if key.nil?
+
+      same = (@walks ||= {})[key] ||= []
+      same.find { |walk| walk.node == node } || new_walk(node).tap { |walk| same << walk }
+    end
+
+    def new_walk(node)
+      Walk.new(node, Set.new, node.element_children.to_a.reverse, nil)
     end
 
     # Only an element right before the block, with no text between them.

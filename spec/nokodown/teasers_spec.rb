@@ -13,6 +13,11 @@ RSpec.describe Nokodown::Teasers do
     described_class.new(body, url, Nokodown::UrlResolver.new(url), type).call
   end
 
+  # Not wall time, which a loaded machine stretches.
+  def cpu_time
+    Process.clock_gettime(Process::CLOCK_PROCESS_CPUTIME_ID)
+  end
+
   def story(count)
     sentence = "The harbor bridge reopened on Tuesday after crews replaced the cracked bearings. "
     Array.new(count) { |index| "<p>#{sentence * 3}Part #{index + 1}.</p>" }.join
@@ -380,5 +385,19 @@ RSpec.describe Nokodown::Teasers do
   it "finds no teaser blocks on a site's home page" do
     blocks(article, article_url).should_not be_empty
     blocks(article, "https://news.example.com/en/").should be_empty
+  end
+
+  it "looks for the titles of runs side by side in time linear in their wrapper" do
+    photos = Array.new(1000) do |run|
+      shape = run.to_s(26).tr("0-9a-p", "a-z")
+      Array.new(3) do |index|
+        "<div class='#{shape}'><a href='/photos/#{run}-#{index}'><img src='/img/#{run}-#{index}.jpg' alt=''></a></div>"
+      end.join
+    end
+    started = cpu_time
+    found = blocks("<h1>Harbor photos</h1><div class='wall'>#{photos.join}</div>", "https://news.example.com/photos/harbor")
+
+    (cpu_time - started).should < 2
+    found.should be_empty
   end
 end
