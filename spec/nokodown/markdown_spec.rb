@@ -868,6 +868,12 @@ RSpec.describe "Markdown conversion" do
                                                    "2. 01 Overview\n   The theme, aims and contents of the report, with a look back."
     end
 
+    it "writes the heading that closes a list of sections as text" do
+      lead = "Sets the value of this element, whose type must be the underlying type of this object."
+      convert("<ul><li><p>#{lead}</p><h4>Parameters</h4><ul><li>value: Date</li></ul><h4>Returns void</h4></li></ul>").should ==
+        "#{lead}\n\n#### Parameters\n\n- value: Date\n\nReturns void"
+    end
+
     it "looks through wrappers between the list and its items" do
       convert("<ul><div><li>a</li><li>b</li></div></ul>").should == "- a\n- b"
     end

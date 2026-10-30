@@ -154,7 +154,7 @@ module Nokodown
           owner ? owner.concat(blocks) : items << blocks
         end
         items.reject!(&:empty?)
-        return items.flatten(1) if items.any? { |blocks| sections?(blocks) }
+        return sections(items.flatten(1)) if items.any? { |blocks| sections?(blocks) }
 
         start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
         format_list(items, start)
@@ -174,6 +174,13 @@ module Nokodown
 
       def section_text?(block)
         %i[table list].include?(block.kind) || (block.kind == :paragraph && block.text.length >= SECTION_TEXT)
+      end
+
+      # A heading that ends the list heads nothing in it, as an API
+      # reference's closing "Returns void", and is a line of its text.
+      def sections(blocks)
+        last = blocks.last
+        last.kind == :heading ? blocks[0...-1] << item_paragraph(last.text.sub(/\A#+ /, "")) : blocks
       end
 
       # A nested list belongs to the item before it, also when a site wraps
