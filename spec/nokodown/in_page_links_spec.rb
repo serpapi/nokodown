@@ -11,7 +11,22 @@ RSpec.describe Nokodown::InPageLinks do
     "<section id='#{id}'><a href='##{id}'><header><h2>#{heading}</h2></header></a><p>#{heading} of the boots.</p></section>"
   end
 
+  def in_page_links(html)
+    root = Nokolexbor::HTML("<body>#{html}</body>").at_css("body")
+    Nokodown::Dom.assign_keys(root)
+    described_class.new(root, described_class.anchors(root.document), nil)
+  end
+
+  # Unclosed tags nest each link one level below the one before.
+  def nested_links(count, before = "")
+    in_page_links(before + (1..count).map { |number| "<div><a href='/items/#{number}'>Item #{number}</a> " }.join)
+  end
+
   let(:sections) { section("set", "Full set") + section("recipes", "Used in recipes") + section("pictures", "Pictures") }
+  let(:contents_list) do
+    "<ul><li><a href='#set'>Full set</a></li><li><a href='#recipes'>Recipes</a></li>" \
+      "<li><a href='#pictures'>Pictures</a></li></ul>"
+  end
 
   it "marks the sections that a table of contents lists" do
     toc = "<nav><ul><li><a href='#set'>Full set</a></li><li><a href='#recipes'>Recipes</a></li>" \
@@ -37,5 +52,38 @@ RSpec.describe Nokodown::InPageLinks do
           "<li><a href='#recipes'>Recipes</a></li><li><a href='#pictures'>Pictures</a></li></ol>"
 
     listed("#{toc}<main id='main'><h1>Boots</h1>#{sections}</main>").should == %w[set recipes pictures]
+  end
+
+  it "finds a table of contents in the clones of a font left open, which share one key" do
+    links = in_page_links("<p id='top'><font face='Arial'>Boots. <a href='#top'>Top</a>#{contents_list}#{sections}")
+
+    links.contents.map(&:name).should == %w[ul]
+  end
+
+  it "reads the links of no container on a page without links into it" do
+    links = nested_links(3000)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    links.contents.should be_empty
+
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+  end
+
+  it "reads the links of no container around a link that leads off the page" do
+    links = nested_links(3000, contents_list + sections)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    links.contents.map(&:name).should == %w[ul]
+
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+  end
+
+  it "reads the text of no link that leads off the page" do
+    links = nested_links(3000)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    links.back_links.should be_empty
+
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
   end
 end

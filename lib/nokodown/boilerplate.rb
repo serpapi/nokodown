@@ -43,8 +43,8 @@ module Nokodown
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
       @single_h1 = @body.css("h1").size == 1
-      @trails = Breadcrumbs.trails(@body).map { |trail| Dom.key(trail) }.to_set
-      @taxonomy = Taxonomy.blocks(@body, @url)
+      @trails = Breadcrumbs.trails(@body).group_by { |trail| Dom.key(trail) }
+      @taxonomy = Taxonomy.blocks(@body, @url).group_by { |block| Dom.key(block) }
       @last_h1 = @body.css("h1").map { |h1| Dom.key(h1).to_i }.max.to_i
       # Card grids repeat the same class list hundreds of times.
       @names = Hash.new { |cache, signature| cache[signature] = signature.gsub(MODIFIER, " ") }
@@ -101,7 +101,7 @@ module Nokodown
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if (chrome_element?(node) || chrome_role?(node)) && !title_holder?(node)
       return if dominant?(node) && !header_above_title?(node)
-      return :guess if trail?(node) || @taxonomy.include?(Dom.key(node))
+      return :guess if trail?(node) || found?(@taxonomy, node)
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
@@ -120,9 +120,16 @@ module Nokodown
     # A trail stands apart from the text around it; one that words lead into
     # or out of is part of a sentence ("Open Home › Account and pick...").
     def trail?(node)
-      return false unless @trails.include?(Dom.key(node))
+      return false unless found?(@trails, node)
 
       [node.previous_sibling, node.next_sibling].none? { |sibling| sibling&.text? && !Dom.squish(sibling.content).empty? }
+    end
+
+    # The parser reopens a formatting element (a <font> around blocks) as
+    # copies that share its attributes, and so its key: the key finds the
+    # copies, and only the node itself is the one found.
+    def found?(index, node)
+      index.fetch(Dom.key(node), []).any? { |found| found == node }
     end
 
     # A link or span in the middle of running text is part of that text,
