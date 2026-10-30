@@ -80,11 +80,12 @@ with `main_content: false`, `:none` for a document without a body.
 - Once the content is chosen and pruned, so that they cannot sway either, a
   line of links to the site's sign-in, registration, account, cart or feeds
   ("您需要登录后才可以回帖 登录 | 注册", "View Cart (0)", "Subscribe to:
-  Posts (Atom)") by where they point, unless a sentence, a heading, the
-  page's title, a date, a table or a picture sits with them or they are
-  items of a larger menu, and comment, review and contact forms (a visible
-  text box, a name or e-mail field and little text) with the title above
-  them, and a note under that title, in any language. A form stays when it
+  Posts (Atom)") by where they point, unless a sentence, a heading (one
+  inside a link too, which wraps a card), the page's title, a date, a table
+  or a picture sits with them or they are items of a larger menu, and
+  comment, review and contact forms (a visible text box, a name or e-mail
+  field and little text) with the title above them, and a note under that
+  title, in any language. A form stays when it
   wraps the page (ASP.NET), holds its title or main region, holds an e-mail
   address or a phone number, holds a table of what it asks about (a row of
   headers over a row of text, as an inquiry shows the flat it is about),

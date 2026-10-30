@@ -96,6 +96,7 @@ module Nokodown
       links = node.css("a[href]")
       return false if links.size > MAX_LINKS || !links.all? { |link| service_link?(link, site) }
       return false if node.css(CONTENT).any? { |media| Dom.ancestors_named(media, "a").empty? }
+      return false if links.any? { |link| card?(link) }
 
       prompt?(node, title)
     end
@@ -113,6 +114,13 @@ module Nokodown
 
     def names_page?(prompt, title)
       !title.nil? && !prompt.empty? && Dom.similarity(prompt, title) >= TITLE_SIMILARITY
+    end
+
+    # A label is a few words. A link that holds a heading wraps a card, such
+    # as an event's that links to its sign-up page, and the heading is the
+    # card's title.
+    def card?(link)
+      !link.at_css(Dom::HEADING_SELECTOR).nil?
     end
 
     def unlinked_text(node)

@@ -59,6 +59,13 @@ RSpec.describe Nokodown::ServiceLinks do
     markdown(html).should include("Synopsis | Trail stove")
   end
 
+  it "keeps an event's card that links to its sign-up page" do
+    card = '<div class="col-md-4"><a href="/event/basic-training-558/register"><article class="card">' \
+           "<h5>Basic training</h5><span>1 and 2 September 2026, online</span></article></a></div>"
+
+    lines(card).should be_empty
+  end
+
   it "keeps a block of more than a handful of service links, and everything on a page that is itself a service" do
     links = %w[login register cart checkout wishlist my-account feed].map { |path| "<a href=\"/#{path}\">#{path}</a>" }.join(" ")
     reset = '<p>Forgot your password? <a href="/lost-password">Reset it</a></p>'
