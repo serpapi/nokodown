@@ -18,8 +18,8 @@ RSpec.describe Nokodown::InPageLinks do
   end
 
   # Unclosed tags nest each link one level below the one before.
-  def nested_links(count)
-    in_page_links((1..count).map { |number| "<div><a href='/items/#{number}'>Item #{number}</a> " }.join)
+  def nested_links(count, before = "")
+    in_page_links(before + (1..count).map { |number| "<div><a href='/items/#{number}'>Item #{number}</a> " }.join)
   end
 
   let(:sections) { section("set", "Full set") + section("recipes", "Used in recipes") + section("pictures", "Pictures") }
@@ -65,6 +65,15 @@ RSpec.describe Nokodown::InPageLinks do
     started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
 
     links.contents.should be_empty
+
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+  end
+
+  it "reads the links of no container around a link that leads off the page" do
+    links = nested_links(3000, contents_list + sections)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    links.contents.map(&:name).should == %w[ul]
 
     (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
   end
