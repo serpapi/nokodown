@@ -179,14 +179,15 @@ module Nokodown
     end
 
     # Markdown::Renderer writes a link around blocks on their heading, or on
-    # their first line of text when that holds no image or link; around
-    # anything else (a team's name beside its logo) the link is lost.
+    # their first line of text when that holds no image or link and is short
+    # enough for a title; around anything else (a team's name beside its
+    # logo, a whole paragraph) the link is lost.
     def written?(node)
       blocks = node.css("*").select { |child| Dom.block?(child) }
       return true if blocks.empty? || blocks.any? { |block| Dom.heading?(block) }
 
       line = blocks.find { |block| !Dom.text(block).empty? && block.css("*").none? { |child| Dom.block?(child) } }
-      !line.nil? && line.at_css("img, a").nil?
+      !line.nil? && line.at_css("img, a").nil? && Dom.text(line).length <= Markdown::Renderer::LINK_TARGET
     end
 
     # Controls follow what they act on, so the nearest longer links before
