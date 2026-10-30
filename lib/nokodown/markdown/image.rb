@@ -32,6 +32,7 @@ module Nokodown
       LOADING_WORD = /\A(?:ajax|img|image|lazy|load|loading|loader|spinner|\d+)\z/.freeze
       SPINNER_WORD = /\A(?:loading|loader|spinner)\z/.freeze
       PHOTO = /\.(?:jpe?g|webp|avif|heic)\z/i.freeze
+      PICTURE = /\.(?:jpe?g|png|gif|webp|avif|heic)\z/i.freeze
       # Icons, logos and avatars, by file name words, folder, class or alt.
       # Some icon words also name things an alt can describe ("Granite
       # kitchen counter"), and count only beside a short alt.
@@ -105,6 +106,13 @@ module Nokodown
 
         words = file_words(src)
         words.any? { |word| word.match?(ICON_WORD) } || (alt.split.size <= SHAPE_ALT_WORDS && words.any? { |word| word.match?(SHAPE_WORD) })
+      end
+
+      # A link to a picture's file opens it full size, as on a photo's own
+      # page or in a lightbox.
+      def full_size_link?(node)
+        link = node.ancestors.find { |ancestor| ancestor.element? && ancestor.name == "a" }
+        !link.nil? && path(link["href"].to_s.strip).match?(PICTURE)
       end
 
       def icon_class?(node)

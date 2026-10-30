@@ -285,6 +285,24 @@ RSpec.describe Nokodown do
       markdown.should include("## [The lagoon wall opens](https://example.com/notes/lagoon)")
     end
 
+    it "keeps a list that links to the page itself in a section that the table of contents lists" do
+      pieces = %w[helmet cuirass gauntlets boots].map do |piece|
+        href = piece == "boots" ? "/page" : "/items/#{piece}"
+        "<a href=\"#{href}\"><li><div>Watcher scribe #{piece}</div><div>heavy armor</div></li></a>"
+      end
+      intro = "<h1>Watcher scribe boots</h1><p>Heavy boots of gear score 350, tier three, bound on pickup. " \
+              "They drop from the watchers in the eastern ruins and are crafted at an outfitting station.</p>"
+      toc = '<nav><ul><li><a href="#set">Full set</a></li><li><a href="#crafts">Crafts</a></li>' \
+            '<li><a href="#pictures">Pictures</a></li></ul></nav>'
+      sections = "<section id=\"set\"><h2>Full set</h2><ul><div>#{pieces.join}</div></ul></section>" \
+                 "<section id=\"crafts\"><h2>Crafts</h2><p>Sewn at a workbench.</p></section>" \
+                 "<section id=\"pictures\"><h2>Pictures</h2><p>No pictures yet.</p></section>"
+
+      markdown = extract("<main>#{intro}#{toc}#{sections}</main>")
+
+      markdown.should include("## Full set\n\n- - Watcher scribe helmet\n    heavy armor\n  - Watcher scribe cuirass")
+    end
+
     it "drops the heading over a box of links it drops" do
       kinds = %w[Notebooks Pens Folders Markers Erasers Rulers]
       links = kinds.map { |kind| "<li><a href=\"/shop/#{kind.downcase}\">#{kind}</a></li>" }.join
@@ -463,6 +481,13 @@ RSpec.describe Nokodown do
       html = "<p>Visible</p><script>alert(1)</script><p hidden>Hidden</p><div style='display: none'>Gone</div><input value='x'>"
 
       Nokodown.extract(html, main_content: false, title: false).markdown.should == "Visible"
+    end
+
+    it "drops a slider with the marks at its ends, but keeps the photos of a before and after slider" do
+      html = "<p>Kitchen</p><div><input type='range'><span>0</span> <span>100</span></div>" \
+             "<div><img src='/before.jpg' alt='Before'><img src='/after.jpg' alt='After'><input type='range'></div>"
+
+      convert(html).should == "Kitchen\n\n![Before](https://example.com/before.jpg)![After](https://example.com/after.jpg)"
     end
 
     it "reports :full mode" do
@@ -793,6 +818,27 @@ RSpec.describe Nokodown do
       markdown.should include("525,000 €")
       markdown.should include("3 May 2026")
       %w[Homes Barcelona Book].each { |label| markdown.should_not include(label) }
+    end
+
+    it "leaves out the marks at a font size slider's ends between the headline and the body" do
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      slider = "<div class='font-size'><input type='range' min='10' max='18'><span>A</span> <span>A</span><span class='bar'></span></div>"
+      html = "<main><div class='listing'><div class='intro'><h1>Flat for sale in the Eixample</h1></div>#{slider}" \
+             "<div class='description'>#{prose}</div></div></main>"
+
+      Nokodown.to_markdown(html).should start_with("# Flat for sale in the Eixample\n\nThe flat sits")
+    end
+
+    it "leaves out a letter avatar's initial between the headline and the body, but not a dash in a table" do
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      head = "<h1>Flat for sale in the Eixample</h1><div><div class='avatar'>a</div><span>Ana Puig</span></div>" \
+             "<div><time>3 May 2026</time> · 7 min read</div><table><tr><th>Rooms</th><th>Lift</th><th>Floor</th></tr>" \
+             "<tr><td>2</td><td>–</td><td>3</td></tr></table>"
+      html = "<main><article><header>#{head}</header><div class='description'>#{prose}</div></article></main>"
+
+      markdown = Nokodown.to_markdown(html)
+      markdown.should start_with("# Flat for sale in the Eixample\n\nAna Puig\n\n3 May 2026 · 7 min read")
+      markdown.should include("| 2 | – | 3 |")
     end
 
     it "keeps the whole table of results when one row outscores the others" do
