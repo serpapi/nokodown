@@ -215,20 +215,26 @@ furniture (`dialog-off-canvas-main-canvas`) that also holds prose, unless it
 is named as a breadcrumb trail or a menu.
 Three kinds of named furniture go however much of a short page they hold: a
 site header above the title, a sidebar or footer without prose beside a title
-that has text of its own (not a block whose BEM modifier names its layout,
-`catalog-grid--sidebar`, one inside a grid column wider than half the row,
-or the layout that holds a sidebar beside a column named main, content or
-primary with most of its text, `tmpl_two_col_sidebar`), and a cookie banner
-that one of its names calls a banner, a bar or a dialog along with the
-cookies (`cookie-notice`, `cmplz-cookiebanner`), or a consent manager, or
-that is laid over the page, unless it holds the page's `<h1>` or the page is
-about cookies. A shop's or a blog's tags (`product_tag-cookies`) name what it
-lists, not the block, and a name for the room a page leaves for the banner
-(`cookiebot-padding-bottom`) names the wrapper of its content. A grid
-column narrower than the title's and beside it ("col-md-4" beside "col-md-8")
-goes the same way, whatever its names, when it holds three or more linked
-headings and no prose, as the latest posts beside an empty tag archive do,
-unless most link below the page's own address, as a show's episodes do.
+that has text of its own, and a cookie banner that one of its names calls a
+banner, a bar or a dialog along with the cookies (`cookie-notice`,
+`cmplz-cookiebanner`), or a consent manager, or that is laid over the page,
+unless it holds the page's `<h1>` or the page is about cookies. A shop's or
+a blog's tags (`product_tag-cookies`) name what it lists, not the block, and
+a name for the room a page leaves for the banner (`cookiebot-padding-bottom`)
+names the wrapper of its content. No sidebar is a block whose BEM modifier
+names its layout (`catalog-grid--sidebar`), or one whose nearest grid column
+short of the full row is wider than half of it: a shop's grid named
+`shopsidebarwidth` inside `col-lg-9` is in the main column, and a `col-md-4`
+nested there is a sidebar again. Nor is the layout that holds a sidebar
+beside the column with most of its text, when that column is named for the
+layout (`main`, `content-area`) or with the sidebar's prefix
+(`dprime-wf-content` beside `dprime-wf-sidebar`); a `widget-content` beside
+a `sidebar-title`, or a `tab-content` beside `sidebar-tabs`, is part of the
+sidebar. A grid column narrower than the title's and beside it ("col-md-4"
+beside "col-md-8") goes the same way, whatever its names, when it holds three
+or more linked headings and no prose, as the latest posts beside an empty tag
+archive do, unless most link below the page's own address, as a show's
+episodes do.
 Prose here is two sentences' worth of lines of 80 characters or
 more in any block, not counting link text or what an `<address>` holds:
 opening hours and contact details are lines, not prose.

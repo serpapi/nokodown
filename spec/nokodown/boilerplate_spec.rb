@@ -369,8 +369,27 @@ RSpec.describe Nokodown::Boilerplate do
                 "<aside class=\"col-lg-3\"></aside></div>"
       around = "#{header}<div class=\"torso tmpl_two_col_sidebar\"><div class=\"sidebar\"><p>Filters</p></div>" \
                "<div class=\"main\">#{products.join}</div></div>"
+      prefixed = "#{header}<div class=\"dprime-wf-app dprime-wf-sidebar-left\"><aside class=\"dprime-wf-sidebar\"><p>Filters</p></aside>" \
+                 "<div class=\"dprime-wf-content\">#{products.join}</div></div>"
 
-      [in_main, around].each { |html| remaining(html).should include("Aloe vera gel, 10 gallons") }
+      [in_main, around, prefixed].each { |html| remaining(html).should include("Aloe vera gel, 10 gallons") }
+    end
+
+    it "removes a sidebar in a narrow grid column, or one holding a widget, beside the title" do
+      title = "<h1>Fully booked on Friday</h1><p>The morning slots are taken.</p>"
+      nested = "<div class=\"title\">#{title}</div><div class=\"row\"><div class=\"col-md-9\"><div class=\"row\">" \
+               "<div class=\"col-md-8 entry\"><p>Call us.</p></div><div class=\"col-md-4 sidebar\">#{hours}</div></div></div></div>"
+      beside = "<div class=\"row\"><div class=\"col-md-8\">#{title}</div><div class=\"col-md-4\"><div id=\"sidebar\">#{hours}</div></div></div>"
+      widget = "<div class=\"main\">#{title}</div><div class=\"sidebar\"><div class=\"widget\">" \
+               "<h3 class=\"sidebar-title\">Contact</h3><div class=\"widget-content\">#{hours}</div></div></div>"
+      tabs = "<div class=\"main\">#{title}</div><div class=\"sidebar\"><ul class=\"sidebar-tabs\"><li>Contact</li></ul>" \
+             "<div class=\"tab-content\">#{hours}</div></div>"
+
+      [nested, beside, widget, tabs].each do |html|
+        text = remaining(html)
+        text.should include("The morning slots are taken.")
+        text.should_not include("Sakura Clinic")
+      end
     end
 
     it "looks for the layout around a sidebar in time linear in the sidebar's items" do

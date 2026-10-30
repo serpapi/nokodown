@@ -16,7 +16,12 @@ module Nokodown
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     SIDE_FURNITURE = /sidebar|#{Patterns::WORD_START}footer#{Patterns::WORD_END}/.freeze
     SIDEBAR = /sidebar/.freeze
-    MAIN_COLUMN = /(?<![a-z])(?:main|content|primary)(?![a-z])/.freeze
+    # A main column is named for the layout ("main", "content-area",
+    # "l-main-content"), after any prefix: "dprime-wf-content".
+    MAIN_COLUMN = /
+      (?:\A|(?<=[-_]))(?:(?:site|page|l)[-_])?(?:main|content|primary)
+      (?:[-_](?:main|content|area|column|col|container|wrap|wrapper|inner))*\z
+    /x.freeze
     # A BEM modifier names a variant of the block: "catalog-grid--sidebar" is
     # the grid laid out beside a sidebar.
     BEM_MODIFIER = /--[\w-]+/.freeze
@@ -400,40 +405,56 @@ module Nokodown
       !in_main_column?(node, branch.parent) && !around_sidebar?(node)
     end
 
-    # A grid column wider than half the row and narrower than all of it is
-    # the main one, beside which a sidebar sits: a shop's product grid named
-    # "shopsidebarwidth" for the room a sidebar leaves it is inside it.
+    # The nearest grid column short of the full row tells which one the
+    # node is in. One wider than half the row is the main one, beside which
+    # a sidebar sits: a shop's product grid named "shopsidebarwidth" for the
+    # room a sidebar leaves it is inside it. A narrower column, the node's
+    # own or one nested in the main one, holds a sidebar again.
     def in_main_column?(node, shared)
-      node.ancestors.each do |ancestor|
-        break if !ancestor.element? || Dom.key(ancestor) == Dom.key(shared)
+      column = node
+      while column.element? && Dom.key(column) != Dom.key(shared)
+        width = Dom.grid_width(column)
+        return width > Dom::FULL_WIDTH / 2 if width && width < Dom::FULL_WIDTH
 
-        width = Dom.grid_width(ancestor)
-        return true if width && width > Dom::FULL_WIDTH / 2 && width < Dom::FULL_WIDTH
+        column = column.parent
       end
       false
     end
 
     # The layout around a sidebar holds it beside the main column, which
     # holds most of the text: "tmpl_two_col_sidebar" around "sidebar" and
-    # "main". A sidebar's own parts ("sidebar-top" beside its widgets) are
-    # not named for the main column. On each level one child at most holds
-    # more than half the text, so the walk down to the column follows it.
+    # "main". On each level one child at most holds more than half the
+    # text, so the walk down to the column follows it.
     def around_sidebar?(node)
       half = @stats.text_chars(node) / 2
       column = node
       while (column = column.element_children.find { |child| @stats.text_chars(child) > half })
-        return true if main_column_name?(column) && column.parent.element_children.any? { |side| sidebar_name?(side) }
+        prefixes = main_column_prefixes(column)
+        return true if prefixes.any? && column.parent.element_children.any? { |side| sidebar_beside?(side, prefixes) }
       end
       false
     end
 
-    def sidebar_name?(node)
-      @names[Dom.signature(node)].gsub(BEM_MODIFIER, " ").match?(SIDEBAR)
+    # What a main column's names put before the layout's word: nothing in
+    # "main", "dprime-wf-" in "dprime-wf-content". A column named as
+    # furniture is not the main one.
+    def main_column_prefixes(column)
+      signature = Dom.signature(column)
+      return [] if @names[signature].match?(SIDE_FURNITURE) || @furniture[signature]
+
+      @names[signature].gsub(BEM_MODIFIER, " ").split.filter_map do |token|
+        layout = token.match(MAIN_COLUMN)
+        token[0, layout.begin(0)] if layout
+      end
     end
 
-    def main_column_name?(column)
-      name = @names[Dom.signature(column)]
-      name.match?(MAIN_COLUMN) && !name.match?(SIDE_FURNITURE) && !@furniture[Dom.signature(column)]
+    # A theme gives the sidebar the prefix it gives the main column:
+    # "dprime-wf-sidebar" beside "dprime-wf-content". A sidebar's parts are
+    # named for themselves, so "sidebar-title" beside "widget-content" or
+    # "sidebar-tabs" beside "tab-content" is a widget, not a layout.
+    def sidebar_beside?(side, prefixes)
+      names = @names[Dom.signature(side)].gsub(BEM_MODIFIER, " ").split.grep(SIDEBAR)
+      names.any? { |name| prefixes.any? { |prefix| name.start_with?(prefix) } }
     end
 
     # The title's ancestor that sits beside the node, under the parent they share.
