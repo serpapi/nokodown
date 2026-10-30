@@ -373,6 +373,18 @@ RSpec.describe Nokodown::Boilerplate do
       [in_main, around].each { |html| remaining(html).should include("Aloe vera gel, 10 gallons") }
     end
 
+    it "looks for the layout around a sidebar in time linear in the sidebar's items" do
+      items = Array.new(2000) { |index| "<li class=\"sidebar-item\"><a href=\"/c/#{index}\">City #{index}</a> (#{index % 97} listings)</li>" }
+      html = "<div class=\"page-title\"><h1>Plumbers</h1><p>Updated 3 June 2026 by the editors</p></div><div class=\"wrap\">" \
+             "<div class=\"entry\"><p>No plumbers listed here yet.</p></div><div class=\"sidebar\"><ul>#{items.join}</ul></div></div>"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining(html)
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      text.should include("No plumbers listed here yet.")
+      text.should_not include("City 1999")
+    end
+
     it "keeps a block laid out beside a sidebar" do
       products = Array.new(6) do |index|
         "<li><a href=\"/disc-#{index}\">Diamond disc #{index + 1}25 mm</a> Segmented rim for granite and concrete, #{index + 3}50 UAH</li>"

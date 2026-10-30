@@ -395,9 +395,9 @@ module Nokodown
       return false unless node.at_css("h1").nil? && !prose_lines?(node)
 
       branch = title_branch(node)
-      return false if branch.nil? || in_main_column?(node, branch.parent) || around_sidebar?(node)
+      return false if branch.nil? || @stats.text_chars(branch) - @stats.text_chars(@title) < TITLED_TEXT
 
-      @stats.text_chars(branch) - @stats.text_chars(@title) >= TITLED_TEXT
+      !in_main_column?(node, branch.parent) && !around_sidebar?(node)
     end
 
     # A grid column wider than half the row and narrower than all of it is
@@ -416,16 +416,19 @@ module Nokodown
     # The layout around a sidebar holds it beside the main column, which
     # holds most of the text: "tmpl_two_col_sidebar" around "sidebar" and
     # "main". A sidebar's own parts ("sidebar-top" beside its widgets) are
-    # not named for the main column.
+    # not named for the main column. On each level one child at most holds
+    # more than half the text, so the walk down to the column follows it.
     def around_sidebar?(node)
       half = @stats.text_chars(node) / 2
-      node.css("*").any? do |inner|
-        next false unless @names[Dom.signature(inner)].gsub(BEM_MODIFIER, " ").match?(SIDEBAR)
-
-        inner.parent.element_children.any? do |column|
-          Dom.key(column) != Dom.key(inner) && @stats.text_chars(column) > half && main_column_name?(column)
-        end
+      column = node
+      while (column = column.element_children.find { |child| @stats.text_chars(child) > half })
+        return true if main_column_name?(column) && column.parent.element_children.any? { |side| sidebar_name?(side) }
       end
+      false
+    end
+
+    def sidebar_name?(node)
+      @names[Dom.signature(node)].gsub(BEM_MODIFIER, " ").match?(SIDEBAR)
     end
 
     def main_column_name?(column)
