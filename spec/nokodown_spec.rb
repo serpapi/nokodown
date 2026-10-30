@@ -74,6 +74,55 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html, url: "http://bonten.example/calendar/671515").should start_with("# Friends from afar\n\nWe caught")
     end
 
+    it "keeps a lower heading that names the site below the content's opening, as above an address" do
+      body = "<p>Call now</p><h4>K&amp;D Roofing</h4><p>42 Penbrook Avenue, Bangor</p>"
+      html = "<title>Contact - K&amp;D Roofing</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://kdroofing.example/contact/")
+              .should == "# Contact\n\nCall now\n\n#### K&D Roofing\n\n42 Penbrook Avenue, Bangor"
+    end
+
+    it "drops a heading that names the site below other content when it is an H1" do
+      html = "<title>Contact - K&amp;D Roofing</title><body><article><p>Call now</p><h1>K&amp;D Roofing</h1><p>42 Penbrook Avenue</p></article></body>"
+
+      Nokodown.to_markdown(html, url: "https://kdroofing.example/contact/").should == "# Contact\n\nCall now\n\n42 Penbrook Avenue"
+    end
+
+    it "drops a lower heading that names the site when it opens the content" do
+      html = "<title>Contact - K&amp;D Roofing</title><body><article><h4>K&amp;D Roofing</h4><p>42 Penbrook Avenue</p></article></body>"
+
+      Nokodown.to_markdown(html, url: "https://kdroofing.example/contact/").should == "# Contact\n\n42 Penbrook Avenue"
+    end
+
+    it "drops a lower heading that names the site below only an image, with images or without" do
+      body = "<p><img src='/storefront.jpg' alt='Our storefront'></p><h4>K&amp;D Roofing</h4><p>42 Penbrook Avenue</p>"
+      html = "<title>Contact - K&amp;D Roofing</title><body><article>#{body}</article></body>"
+      url = "https://kdroofing.example/contact/"
+
+      Nokodown.to_markdown(html, url: url).should == "# Contact\n\n![Our storefront](https://kdroofing.example/storefront.jpg)\n\n42 Penbrook Avenue"
+      Nokodown.to_markdown(html, url: url, images: false).should == "# Contact\n\n42 Penbrook Avenue"
+    end
+
+    it "drops a lower heading that names the site and links home below other content, with links or without" do
+      ["<h4><a href='/'>K&amp;D Roofing</a></h4>", "<a href='https://kdroofing.example/'><h4>K&amp;D Roofing</h4></a>"].each do |heading|
+        html = "<title>Contact - K&amp;D Roofing</title><body><article><p>Call now</p>#{heading}<p>42 Penbrook Avenue</p></article></body>"
+
+        [true, false].each do |links|
+          Nokodown.to_markdown(html, url: "https://kdroofing.example/contact/", links: links)
+                  .should == "# Contact\n\nCall now\n\n42 Penbrook Avenue"
+        end
+      end
+    end
+
+    it "keeps a lower heading that names the site and links to another page below other content, as an author's name" do
+      body = "<p>Drink more water.</p><h5><a href='/author/rodrigo/'>Rodrigo Coelho</a></h5><p>Rodrigo writes about health.</p>"
+      html = "<title>Water - Rodrigo Coelho</title><body><article>#{body}</article></body>"
+      url = "https://rodrigocoelho.example/water/"
+
+      Nokodown.to_markdown(html, url: url).should include("\n\n##### [Rodrigo Coelho](https://rodrigocoelho.example/author/rodrigo/)\n\n")
+      Nokodown.to_markdown(html, url: url, links: false).should include("\n\n##### Rodrigo Coelho\n\n")
+    end
+
     it "puts the title above a section's name when the URL names the title" do
       body = "<h1>Transparencia</h1><p>Reporte abril 2023</p><p>#{'The public consultations held in April, with their dates and documents. ' * 3}</p>"
       html = "<title>Reporte abril 2023</title><body><article>#{body}</article></body>"

@@ -34,6 +34,8 @@ module Nokodown
       HASHTAG = /#[\p{L}\p{N}_]+/.freeze
       # A currency code or a unit beside the digits.
       FIGURE_LETTERS = 3
+      QUESTION_END = /[?？]\s*\z/.freeze
+      QUESTION_WORDS = 4
       QUOTE_GRAM = 6
       REPEATED_BLOCK_MIN = 100
       REPEATED_RUN_MIN = 2
@@ -46,6 +48,7 @@ module Nokodown
 
       # images: the Renderer's rendered_images.
       def call(blocks, images = {})
+        asked = asked_questions(blocks)
         blocks = CodeBlock.without_labels(blocks.reject { |block| noise?(block) })
         blocks = Lists.call(blocks)
         blocks = dedupe(blocks)
@@ -53,7 +56,7 @@ module Nokodown
         blocks = shorten_repeated_quotes(blocks)
         # Labels joins a counter to its label and CardLinks unlinks a card's
         # repeated "Read more", so both make noise the first pass missed.
-        blocks = drop_empty_sections(CardLinks.new(blocks).call.reject { |block| noise?(block) })
+        blocks = drop_empty_sections(CardLinks.new(blocks).call.reject { |block| noise?(block) }, asked)
         images.empty? ? blocks : ImageCleanup.new(images, unnamed: !image_page?(blocks, images)).call(blocks)
       end
 
@@ -204,8 +207,9 @@ module Nokodown
       # A heading followed by nothing, or by a heading at the same or a higher
       # level, lost its section during extraction. Title lists are content in
       # their own right, and a page that is only its headline keeps it.
-      def drop_empty_sections(blocks)
-        titles = title_list_indexes(blocks) | card_titles(blocks) | figures(blocks) | prose_headings(blocks)
+      def drop_empty_sections(blocks, asked = Set.new)
+        titles = title_list_indexes(blocks) | card_titles(blocks) | figures(blocks) | prose_headings(blocks) |
+                 questions(blocks, asked)
         kept = blocks.each_index.reject { |index| !titles.include?(index) && empty_section?(blocks, index) }
         kept.pop while kept.any? && blocks[kept.last].kind == :heading && !titles.include?(kept.last)
         return blocks.values_at(*kept) if kept.any?
@@ -252,6 +256,27 @@ module Nokodown
 
       def figure?(text)
         text.match?(/\p{N}/) && text.scan(/\p{L}/).size <= FIGURE_LETTERS
+      end
+
+      # A heading that asks a question in a sentence ("How many days does
+      # the clay dry?") with only a line the noise filter takes under it
+      # ("Comments are closed.") is the post's own text, such as a teacher's
+      # prompt, not a section label that lost its content in extraction.
+      # Its text is noted before the noise goes.
+      def asked_questions(blocks)
+        blocks.each_cons(2).filter_map do |block, following|
+          block.text if block.kind == :heading && question?(heading_text(block)) && noise?(following)
+        end.to_set
+      end
+
+      def questions(blocks, asked)
+        return Set.new if asked.empty?
+
+        blocks.each_index.select { |index| blocks[index].kind == :heading && asked.include?(blocks[index].text) }.to_set
+      end
+
+      def question?(text)
+        text.match?(QUESTION_END) && words(text).size >= QUESTION_WORDS
       end
 
       def linked_title?(heading)
