@@ -105,11 +105,17 @@ with `main_content: false`, `:none` for a document without a body.
   numbers, a player's "0:00"), and form labels left without their fields.
   A read-more link that is the only way to its page, a number a label
   explains or that sits in a row of numbers, and a fact repeated on every
-  card ("In stock") stay.
+  card ("In stock") stay. A card whose only words are a shop button's
+  label ("Add to cart", "В корзину") keeps its linked picture when the
+  label goes.
 - Tracking pixels, spacers, icons, placeholders and loading spinners
   (`no-image.png`, `img_load.gif`), README badges, click-tracking URL
   parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors, English
-  "Read more" and "Continue reading" links wherever they are, code line numbers, and repeated responsive copies of the same image.
+  "Read more" and "Continue reading" links wherever they are, code line
+  numbers, and repeated responsive copies of the same image.
+- Headings left at the end of the content with nothing under them, once
+  what they headed is removed, unless one states a figure (a price, a
+  score, a year).
 - Markdown that costs tokens without meaning: horizontal rules, blank lines
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators
@@ -118,8 +124,12 @@ with `main_content: false`, `:none` for a document without a body.
   change the rendering. A card's repeated links to its own page keep their
   text without the URL (its title keeps the link), and a button such as
   "Read more", a text the page uses once for each of several pages, goes when
-  it ends its line (judged across all cards, in any language); texts that take turns from card to card ("Sold",
+  it ends its line (judged across all cards, in any language); texts that
+  take turns from card to card ("Sold",
   "Available") are values and stay.
+  Lines of one paragraph that each open with a link are a list written
+  without its markup, and every item keeps its link, even where several
+  link to the same file.
 - In the main content, images whose alt text does not say what they show, at
   any size and in any wrapper (a figure keeps its caption): no alt text, a
   file or camera name ("IMG_6175.JPG"), a hash, or a word for "image" or
@@ -127,7 +137,9 @@ with `main_content: false`, `:none` for a document without a body.
   file name ("QDLogoBlue.gif"), folder (`/icons/`), class or alt text. An image
   alone in a text-free cell of a data table, such as a tick in a comparison
   table, stays, and so do all images of a page with fewer than 20 words
-  besides them. An image with alt text that is marked decorative
+  besides them. So does the one picture of a photo's own page, linked to its
+  full-size file, when the paragraphs hold fewer than 20 words besides
+  their links. An image with alt text that is marked decorative
   (`role="presentation"` or `role="none"`) goes unless it sits in a figure, an
   image link or a text-free paragraph or table cell, or declares a width or
   height of 300 pixels or more; and card thumbnails go while the Markdown
@@ -200,6 +212,12 @@ region, or most of the page's text, is never removed because of its class name.
    numbers and dates that adjacent elements run together are spaced
    ("20.07 2026"). Text is escaped only where it would otherwise change
    meaning.
+   A list whose items hold whole sections, as tab panels do (two headings
+   of different names, each over text of its own), is written as those
+   sections, and its items without a heading as a list. An ordered one
+   keeps its numbers on the heading that opens each item, after a product
+   photo ("## 4. Acme Drill"), unless the heading has a rank of its own,
+   and stays a numbered list if an item opens with anything else.
 
 ## Quality
 
