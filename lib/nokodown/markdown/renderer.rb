@@ -118,13 +118,14 @@ module Nokodown
 
       # A table that falls back to its layout renders its cells again, so
       # without this a table nested n deep would be rendered 2^n times. A
-      # cell renders its content apart from the layout, so each table is
-      # rendered once in each.
+      # cell renders its content apart from the layout, and a list that
+      # stays a list renders its items again with their lists kept, so each
+      # table is rendered once in each.
       def table(node)
         key = Dom.key(node)
         return Table.new(self, node).blocks unless key
 
-        (@tables[[key, @in_cell]] ||= Table.new(self, node).blocks).map(&:dup)
+        (@tables[[key, @in_cell, @keep_lists]] ||= Table.new(self, node).blocks).map(&:dup)
       end
 
       def block_element?(node)

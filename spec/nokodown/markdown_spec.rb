@@ -1046,6 +1046,15 @@ RSpec.describe "Markdown conversion" do
       convert("<ol><li><h2>Drills</h2>#{picks}</li><li><h2>Saws</h2>#{picks}</li></ol>").should start_with("## 1. Drills\n\n### Acme Drill\n\n")
     end
 
+    it "keeps a list of sections in a layout table inside an item of a numbered list that stays a list" do
+      review = "<p>Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.</p>" \
+               "<h3>Pros</h3><ul><li>Light</li><li>Quiet</li></ul>"
+      text = "Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.\n     Pros\n     - Light\n     - Quiet"
+      picks = "<table><tr><td><ul><li><h3>Acme Drill</h3>#{review}</li><li><h3>Bolt Driver</h3>#{review}</li></ul></td></tr></table>"
+      convert("<ol><li><p>Our picks</p>#{picks}</li><li>Other picks</li></ol>").should ==
+        "1. Our picks\n   - Acme Drill\n     #{text}\n   - Bolt Driver\n     #{text}\n2. Other picks"
+    end
+
     it "renders numbered lists of sections that stay lists, nested in each other, in linear time" do
       review = ("<p>Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.</p>" \
                 "<h3>Pros</h3><ul><li>Light</li><li>Quiet</li></ul>") * 3
