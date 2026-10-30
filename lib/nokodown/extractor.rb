@@ -135,11 +135,12 @@ module Nokodown
       heading && logo_heading?(opening, heading) ? blocks.reject { |block| block.equal?(heading) } : blocks
     end
 
-    # A logo is an H1, links home or opens the content. A lower heading
-    # below other headings or text that names the site labels a section of
-    # its own, as a company's name does above its address.
+    # A logo is an H1, links to the site's root or opens the content. A
+    # lower heading below other headings or text that names the site labels
+    # a section of its own, as a company's name does above its address, or
+    # an author's name that links to the author's page above a biography.
     def logo_heading?(opening, heading)
-      heading.level == 1 || heading.text.match?(Markdown::Cleanup::LINKED_HEADING) || opening.first.equal?(heading)
+      heading.level == 1 || heading.links_home || opening.first.equal?(heading)
     end
 
     # When the page's title block is left out of the content, the first H1
