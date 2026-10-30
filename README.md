@@ -139,7 +139,9 @@ region, or most of the page's text, is never removed because of its class name.
 
 [WCXB][wcxb] has 2,008 human-reviewed pages: 1,050 articles and 958 product,
 collection, listing, forum, documentation and service (SaaS, pricing) pages,
-split into a development set (1,497) and a held-out test set (511). Scores use
+split into a development set (1,497) and a test set (511). The test set was
+not held out: some of its pages were studied while tuning nokodown, and 139
+of them have the same HTML as a development page. Scores use
 its metric: word-level F1 against the reference main content, plus the share
 of "must include" snippets found and of boilerplate snippets leaked. All
 systems ran on the same pages with links, images and tables on; their Markdown
