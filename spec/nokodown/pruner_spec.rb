@@ -498,6 +498,13 @@ RSpec.describe Nokodown::Pruner do
       Nokodown::Dom.text(root).should_not match(/корзину|cart/)
     end
 
+    it "removes the box of an advertisement's label with the banner it links" do
+      root = pruned("<div class='box'><span>Advertisement</span><a href='/partners/acme-lab'><img src='/ads/acme.jpg' alt='Acme Lab'></a></div>" \
+                    "<div class='box'><span>Sponsored</span><a href='https://acme.example'><img src='/ads/sale.jpg' alt='Sale'></a></div>")
+
+      root.css("img").should be_empty
+    end
+
     it "removes an icon in the label's own element and a logo that links home" do
       root = pruned("<div><a href='https://twitter.com/intent/tweet'><img src='/x.svg' alt=''> Share</a></div>" \
                     "<div><a href='/'><img src='/logo.png' alt='Acme'></a><span>Skip to content</span></div>")

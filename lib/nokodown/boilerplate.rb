@@ -46,6 +46,8 @@ module Nokodown
       _(?:has|with|without)_[\w-]+
     /x.freeze
     MIN_CARD_RUN = 3
+    # A page's path without its closing slash: the pages below it add a slash and a segment.
+    PAGE_PATH = %r{\A/[^?#]*[^/?#]}.freeze
     MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
     TITLE_HOLDER_SHARE = 0.25
@@ -420,15 +422,27 @@ module Nokodown
       return false if column.nil? || Dom.key(column) == Dom.key(node) || !narrower?(node, column)
       return false unless node.at_css("h1").nil? && @stats.link_density(node) >= 0.5 && !prose_lines?(node)
       return false if @stats.chars(node) <= @stats.chars(column) || prose_lines?(column)
-      return false if node.css(Dom::HEADING_SELECTOR).count { |heading| heading.at_css("a[href]") } < MIN_CARD_RUN
+      links = node.css(Dom::HEADING_SELECTOR).filter_map { |heading| heading.at_css("a[href]") }
+      return false if links.size < MIN_CARD_RUN || own_parts?(links)
 
       @stats.text_chars(column) - @stats.text_chars(@title) >= TITLED_TEXT
     end
 
+    # Titles linked below the page's own address are its parts: a show's
+    # episodes, a course's lessons, a book's chapters.
+    def own_parts?(links)
+      path = @url.to_s.sub(Taxonomy::ADDRESS, "")[PAGE_PATH]
+      return false if path.nil?
+
+      links.count { |link| link["href"].strip.sub(Taxonomy::ADDRESS, "").start_with?("#{path}/") } * 2 > links.size
+    end
+
+    # Columns that fill more than a row between them stack, as a full-width
+    # header above the listing and its sidebar does.
     def narrower?(node, column)
       width = Dom.grid_width(node)
       other = Dom.grid_width(column)
-      !width.nil? && !other.nil? && width < other
+      !width.nil? && !other.nil? && width < other && width + other <= Dom::FULL_WIDTH
     end
 
     # A cookie banner is named for what it is as well as for the cookies, or

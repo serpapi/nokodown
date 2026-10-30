@@ -377,17 +377,22 @@ RSpec.describe Nokodown::Boilerplate do
         "<div class=\"module\"><a href=\"/category/#{index}/\">Fully Funded</a>" \
           "<h3><a href=\"/post-#{index}/\">#{post} 2027</a></h3></div>"
       end
-      html = "<div class=\"row\"><div class=\"col-12 col-md-8\"><p>Home › Tags › Konstanz Fellowship</p>" \
-             "<h1>Tag: Konstanz Fellowship</h1><p>No posts to display</p></div>" \
-             "<div class=\"col-12 col-md-4\"><h4>Latest Articles</h4>#{cards.join}</div></div>"
+      bare = posts.map.with_index do |post, index|
+        "<div><h3><a href=\"/post-#{index}/\">#{post} 2027</a></h3><time>Oct #{20 - index}, 2026</time></div>"
+      end
+      [cards, bare].each do |column|
+        html = "<div class=\"row\"><div class=\"col-12 col-md-8\"><p>Home › Tags › Konstanz Fellowship</p>" \
+               "<h1>Tag: Konstanz Fellowship</h1><p>No posts to display</p></div>" \
+               "<div class=\"col-12 col-md-4\"><h4>Latest Articles</h4>#{column.join}</div></div>"
 
-      text = remaining(html)
-      text.should include("No posts to display")
-      text.should_not include("Latest Articles")
-      text.should_not include("Gordon University")
+        text = remaining(html, url: "https://example.com/tag/konstanz-fellowship/")
+        text.should include("No posts to display")
+        text.should_not include("Latest Articles")
+        text.should_not include("Gordon University")
+      end
     end
 
-    it "keeps a wider grid column, and a narrower one beside a title's column with prose, more text or the title" do
+    it "keeps a wider grid column, and a narrower one of two cards or beside a title's column with prose, more text or the title" do
       guides = Array.new(12) { |index| "<h3><a href=\"/guide-#{index}/\">Fellowship guide, part #{index + 1}</a></h3>" }
       side = "<div class=\"col-md-4\"><h4>Guides</h4>#{guides.join}</div>"
       trail = "<p>Home › Fellowships › Germany</p>"
@@ -398,6 +403,14 @@ RSpec.describe Nokodown::Boilerplate do
       rows.each do |row|
         remaining("<div class=\"row\">#{row}</div>").should include("part 12")
       end
+
+      cards = ["Taiwan Graduate Scholarships", "Stirling Vice Chancellor Scholarship"].map.with_index do |post, index|
+        "<div class=\"module\"><a href=\"/category/#{index}/\">Fully Funded</a><h3><a href=\"/post-#{index}/\">#{post}</a></h3>" \
+          "<p><a href=\"/post-#{index}/\">Applications open in March for students of any subject</a></p></div>"
+      end
+      html = "<div class=\"row\"><div class=\"col-md-8\">#{trail}<h1>Tag: Konstanz Fellowship</h1><p>No posts to display</p>" \
+             "</div><div class=\"col-md-4\"><h4>Latest Articles</h4>#{cards.join}</div></div>"
+      remaining(html).should include("Stirling Vice")
     end
 
     it "keeps a narrower grid column of the page's own links, as a profile's publications" do
@@ -409,6 +422,35 @@ RSpec.describe Nokodown::Boilerplate do
              "<div class=\"col-md-4\"><h4>Publications</h4><ul>#{links.join}</ul></div></div>"
 
       remaining(html).should include("Harbor seiches in closed basins")
+    end
+
+    it "keeps a narrower grid column of titles linked below the page, as a show's episodes" do
+      episodes = ["Tidal mixing in shallow harbors", "Sediment transport under ferry wakes", "A model of quay wall erosion",
+                  "Salt marsh recovery after dredging", "Measuring wave energy at breakwaters", "Harbor seiches in closed basins"]
+      cards = episodes.map.with_index do |episode, index|
+        "<div class=\"episode\"><h3><a href=\"/harbor-talk/#{48 - index}/\">#{episode}</a></h3>" \
+          "<span>Oct #{21 - index}, 2026 · 41 min</span></div>"
+      end
+      html = "<div class=\"row\"><div class=\"col-12 col-md-8\"><h1>Harbor Talk</h1>" \
+             "<p>Hosted by Ana Puig · Weekly · 48 episodes</p></div>" \
+             "<div class=\"col-12 col-md-4\"><h2>Episodes</h2>#{cards.join}</div></div>"
+
+      remaining(html, url: "https://example.com/harbor-talk/").should include("Harbor seiches in closed basins")
+    end
+
+    it "keeps a listing that wraps below a full-width title column in its row" do
+      posts = ["How ports plan for rising seas", "Inside a container terminal at night", "Why harbor pilots still matter"]
+      articles = posts.map.with_index do |post, index|
+        "<article><h2><a href=\"/2026/10/post-#{index}/\">#{post}</a></h2><div>Oct #{20 - index}, 2026</div></article>"
+      end
+      popular = Array.new(5) { |index| "<li><a href=\"/popular-#{index}/\">Popular post #{index + 1}</a></li>" }
+      [%w[col-12 col-lg-8 col-lg-4], %w[col-md-12 col-md-8 col-md-4]].each do |head, listing, side|
+        html = "<div class=\"row\"><div class=\"#{head}\"><h1>Category: Ports</h1><p>Stories about the harbor and " \
+               "its ports.</p></div><div class=\"#{listing}\">#{articles.join}</div>" \
+               "<div class=\"#{side}\"><h3>Popular</h3><ul>#{popular.join}</ul></div></div>"
+
+        remaining(html).should include("Why harbor pilots still matter")
+      end
     end
 
     it "removes a site header above the title that holds addresses in lines" do

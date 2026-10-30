@@ -514,6 +514,13 @@ RSpec.describe "Markdown conversion" do
       convert('<a href="/post"><h3>Headline</h3><p>Summary text</p></a>').should == "### [Headline](https://example.com/post)\n\nSummary text"
     end
 
+    it "measures a card's title by its text, without its heading marks or emphasis" do
+      title = "#{'The ferry runs late on Sunday. ' * 9}Bridge works end at"
+      html = "<a href='/n/1'><h3>#{title}</h3><p>Summary</p></a><a href='/n/2'><p>#{title.sub('Sunday', '<b>Sunday</b>')}</p></a>"
+      convert(html).should == "### [#{title}](https://example.com/n/1)\n\nSummary\n\n" \
+                              "[#{title.sub('Sunday', '**Sunday**')}](https://example.com/n/2)"
+    end
+
     it "encodes spaces and unbalanced parentheses in URLs" do
       convert('<p><a href="/a b(c">x</a> <a href="/wiki/Ruby_(language)">y</a></p>').should ==
         "[x](https://example.com/a%20b%28c) [y](https://example.com/wiki/Ruby_(language))"
@@ -789,6 +796,10 @@ RSpec.describe "Markdown conversion" do
         text = "<p>We dressed the long tables in linen and vine leaves, and lit the courtyard with lanterns as the evening drew on.</p>"
         extract("<main><h1>Vineyard wedding</h1>#{text}#{photo}</main>").should_not include(".jpg")
         extract("<main><h1>Vineyard wedding</h1>#{photo}#{photo.gsub('28', '29')}#{footer}</main>").should_not include(".jpg")
+        gallery = photo.sub("/uploads/wedding-28.jpg", "/gallery/wedding/")
+        extract("<main><h1>Vineyard wedding 28</h1>#{gallery}#{footer}</main>").should_not include(".jpg")
+        tags = (1..8).map { |number| %(<a href="/tag/#{number}">Vineyard wedding photos #{number}</a>) }.join(" ")
+        extract("<main><h1>Vineyard wedding 28</h1>#{photo}<p>#{tags}</p></main>").should include("wedding-28-300x200.jpg")
       end
 
       it "drops images whose alt text names nothing" do
@@ -981,6 +992,9 @@ RSpec.describe "Markdown conversion" do
       convert(panels).should == "## Product details\n\n### Description\n\nPhotos of the boot beside the original pair.\n\n### Product facts\n\n" \
                                 "- Material: Suede\n- Colour: Brown\n\n## Delivery and returns\n\n### Delivery\n\nInternational post\n\n" \
                                 "### Returns\n\nWithin 7 days"
+      extras = "<li>Free returns within 30 days</li><li>Gift wrapping available</li>"
+      convert(panels.sub(%r{</ul>\z}, "#{extras}</ul>")).should end_with("### Returns\n\nWithin 7 days\n\n" \
+                                                                          "- Free returns within 30 days\n- Gift wrapping available")
       outline = %w[Review Overview].map do |title|
         "<li><span>01</span><h3>#{title}</h3><p>The theme, aims and contents of the report, with a look back.</p></li>"
       end
@@ -991,6 +1005,15 @@ RSpec.describe "Markdown conversion" do
           %(<h3>2025-09-0#{id}</h3><img src="/icon6.png" alt=""></li>)
       end
       convert("<ul>#{news.join}</ul>").should start_with("- [Story 1](https://example.com/n/1)\n  The theme")
+      contacts = [["Main office", "Harbor Building", "0100"], ["Workshop", "Quay Road 4", "0199"]].map do |name, address, phone|
+        "<li><h3>#{name}</h3><p>#{address}</p><h4>Phone</h4><p>+1 555 #{phone}</p></li>"
+      end
+      convert("<ul>#{contacts.join}</ul>").should start_with("- Main office\n  Harbor Building\n  Phone\n")
+      cards = [["Acme Drill", "$129"], ["Bolt Driver", "$99"]].map do |name, price|
+        "<li><h3>#{name}</h3><p>Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.</p>" \
+          "<h4>#{name}</h4><p>#{price}</p></li>"
+      end
+      convert("<ul>#{cards.join}</ul>").should start_with("- Acme Drill\n  Light enough")
     end
 
     it "keeps the rank of an ordered list of sections on each item's heading" do
@@ -999,8 +1022,40 @@ RSpec.describe "Markdown conversion" do
       text = "Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.\n\n### Pros\n\n- Light\n- Quiet"
       html = "<ol start='4'><li><h2>Acme Drill</h2>#{review}</li><li><h2>5. Bolt Driver</h2>#{review}</li></ol>"
       convert(html).should == "## 4. Acme Drill\n\n#{text}\n\n## 5. Bolt Driver\n\n#{text}"
+      convert(html.gsub("h2>", "h3>")).should start_with("### 4. Acme Drill\n\n")
+      countdown = ["3. Acme Drill", "2. Bolt Driver", "1. Cord Saw"].map { |name| "<li><h2>#{name}</h2>#{review}</li>" }
+      convert("<ol>#{countdown.join}</ol>").scan(/^## .*/).should == ["## 3. Acme Drill", "## 2. Bolt Driver", "## 1. Cord Saw"]
       unranked = "<ol><li><h2>Acme Drill</h2>#{review}</li><li><p>Bolt Driver, the quiet one.</p>#{review}</li></ol>"
       convert(unranked).should start_with("1. Acme Drill\n")
+      photos = %w[Acme Bolt].map { |name| %(<li><img src="/#{name}.jpg" alt="#{name} Drill"><h2>#{name} Drill</h2>#{review}</li>) }
+      convert("<ol>#{photos.join}</ol>").should start_with("![Acme Drill](https://example.com/Acme.jpg)\n\n## 1. Acme Drill\n\n#{text}\n\n![Bolt")
+      logos = %w[Acme Bolt].map do |name|
+        %(<li><a href="/app/#{name}"><img src="/#{name}.png" alt="#{name} Notes"></a><h4>Cost / License</h4><p>Free</p>) +
+          "<h4>Platforms</h4><ul><li>Windows</li><li>Mac</li></ul></li>"
+      end
+      convert("<ol>#{logos.join}</ol>").should start_with("1. ![Acme Notes](https://example.com/Acme.png)\n   Cost / License\n")
+    end
+
+    it "keeps a list of sections in an item of a numbered list that stays a list" do
+      review = "<p>Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.</p>" \
+               "<h3>Pros</h3><ul><li>Light</li><li>Quiet</li></ul>"
+      text = "Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.\n     Pros\n     - Light\n     - Quiet"
+      picks = "<ul><li><h3>Acme Drill</h3>#{review}</li><li><h3>Bolt Driver</h3>#{review}</li></ul>"
+      convert("<ol><li><p>Our picks</p>#{picks}</li><li>Other picks</li></ol>").should ==
+        "1. Our picks\n   - Acme Drill\n     #{text}\n   - Bolt Driver\n     #{text}\n2. Other picks"
+      convert("<ol><li><h2>Drills</h2>#{picks}</li><li><h2>Saws</h2>#{picks}</li></ol>").should start_with("## 1. Drills\n\n### Acme Drill\n\n")
+    end
+
+    it "renders numbered lists of sections that stay lists, nested in each other, in linear time" do
+      review = ("<p>Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.</p>" \
+                "<h3>Pros</h3><ul><li>Light</li><li>Quiet</li></ul>") * 3
+      html = ""
+      120.times { |level| html = "<ol><li><p>Picks #{level}</p><h2>Level #{level}</h2>#{review}#{html}</li><li>Other #{level}</li></ol>" }
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert(html)
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      markdown.should start_with("1. Picks 119\n   Level 119\n")
+      markdown.should include("1. Picks 0\n")
     end
 
     it "writes the heading that closes a list of sections as text" do
