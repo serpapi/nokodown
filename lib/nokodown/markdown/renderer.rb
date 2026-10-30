@@ -28,6 +28,7 @@ module Nokodown
         @depth = 0
         @contains_block = {}
         @in_cell = false
+        @keep_lists = false
       end
 
       def render(nodes)
@@ -146,18 +147,34 @@ module Nokodown
         [Block.new(:heading, "#{'#' * level} #{text}", level)]
       end
 
+      # A list that stays a list writes the headings of its items as lines,
+      # so the sections of a list nested in an item would run together. Its
+      # items are rendered again, and each nested list stays a list.
       def list(node)
+        items = list_items(node)
+        start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
+        return format_list(items, start) if @keep_lists
+        return sections(unlisted(items, start)) if sections_list?(items, start)
+
+        items = keeping_lists { list_items(node) } if items.any? { |blocks| sections?(blocks) }
+        format_list(items, start)
+      end
+
+      def list_items(node)
         items = []
         list_children(node).each do |child|
           blocks = list_item(child)
           owner = list_owner(items, wrapped: child.name == "li") if sublist?(child, blocks)
           owner ? owner.concat(blocks) : items << blocks
         end
-        items.reject!(&:empty?)
-        start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
-        return sections(unlisted(items, start)) if sections_list?(items, start)
+        items.reject(&:empty?)
+      end
 
-        format_list(items, start)
+      def keeping_lists
+        @keep_lists = true
+        yield
+      ensure
+        @keep_lists = false
       end
 
       # Tab panels and accordions set whole sections in list items: two
