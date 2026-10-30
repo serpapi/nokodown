@@ -885,6 +885,8 @@ RSpec.describe "Markdown conversion" do
       html = "<ol start='4'><li><h2>Acme Drill</h2>#{review}</li><li><h2>5. Bolt Driver</h2>#{review}</li></ol>"
       convert(html).should == "## 4. Acme Drill\n\n#{text}\n\n## 5. Bolt Driver\n\n#{text}"
       convert(html.gsub("h2>", "h3>")).should start_with("### 4. Acme Drill\n\n")
+      countdown = ["3. Acme Drill", "2. Bolt Driver", "1. Cord Saw"].map { |name| "<li><h2>#{name}</h2>#{review}</li>" }
+      convert("<ol>#{countdown.join}</ol>").scan(/^## .*/).should == ["## 3. Acme Drill", "## 2. Bolt Driver", "## 1. Cord Saw"]
       unranked = "<ol><li><h2>Acme Drill</h2>#{review}</li><li><p>Bolt Driver, the quiet one.</p>#{review}</li></ol>"
       convert(unranked).should start_with("1. Acme Drill\n")
       photos = %w[Acme Bolt].map { |name| %(<li><img src="/#{name}.jpg" alt="#{name} Drill"><h2>#{name} Drill</h2>#{review}</li>) }

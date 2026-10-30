@@ -20,6 +20,7 @@ module Nokodown
       PERMALINK = /\A[#¶§🔗]\s+(?!\d)|\s+[#¶§🔗]\z/.freeze
       # Characters of a paragraph that a section holds and a card does not.
       SECTION_TEXT = 80
+      TYPED_RANK = /\A\d+[.)]\s/.freeze
 
       def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images,
@@ -232,10 +233,13 @@ module Nokodown
         end
       end
 
-      # A site may type the number into the heading already.
+      # A site may type the number into the heading already, or a rank of
+      # its own that the list does not set, as a countdown does.
       def ranked(heading, number)
         hashes, text = heading.text.split(" ", 2)
-        text.match?(/\A#{number}\b/) ? heading : Block.new(:heading, "#{hashes} #{number}. #{text}", heading.level)
+        return heading if text.match?(/\A#{number}\b/) || text.match?(TYPED_RANK)
+
+        Block.new(:heading, "#{hashes} #{number}. #{text}", heading.level)
       end
 
       # A heading that ends the list heads nothing in it, as an API
