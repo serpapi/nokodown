@@ -866,6 +866,9 @@ RSpec.describe "Markdown conversion" do
       convert(panels).should == "## Product details\n\n### Description\n\nPhotos of the boot beside the original pair.\n\n### Product facts\n\n" \
                                 "- Material: Suede\n- Colour: Brown\n\n## Delivery and returns\n\n### Delivery\n\nInternational post\n\n" \
                                 "### Returns\n\nWithin 7 days"
+      extras = "<li>Free returns within 30 days</li><li>Gift wrapping available</li>"
+      convert(panels.sub(%r{</ul>\z}, "#{extras}</ul>")).should end_with("### Returns\n\nWithin 7 days\n\n" \
+                                                                          "- Free returns within 30 days\n- Gift wrapping available")
       outline = %w[Review Overview].map do |title|
         "<li><span>01</span><h3>#{title}</h3><p>The theme, aims and contents of the report, with a look back.</p></li>"
       end

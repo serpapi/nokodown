@@ -225,12 +225,23 @@ module Nokodown
       end
 
       def unlisted(items, start)
-        return items.flatten(1) unless start
+        return headed_items(items) unless start
 
         items.each_with_index.flat_map do |blocks, index|
           heading = opening(blocks)
           blocks.map { |block| block.equal?(heading) ? ranked(block, start + index) : block }
         end
+      end
+
+      # Items without a heading would read as text of the section before
+      # them, so each run of them stays a list.
+      def headed_items(items)
+        runs = items.slice_when { |item, following| headed?(item) || headed?(following) }
+        runs.flat_map { |run| headed?(run.first) ? run.first : format_list(run, nil) }
+      end
+
+      def headed?(blocks)
+        blocks.any? { |block| block.kind == :heading }
       end
 
       # A site may type the number into the heading already, or a rank of
