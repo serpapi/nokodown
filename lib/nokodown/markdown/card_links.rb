@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "strscan"
-
 module Nokodown
   module Markdown
     # A card links its page from its title and again from a date, a price, a
@@ -12,11 +10,6 @@ module Nokodown
     # uses it for several pages; ReadMoreLinks already took the read-more
     # labels it can tell from the DOM.
     class CardLinks
-      LINK = /\[(#{Text::LINK_TEXT})\]\((#{Text::DESTINATION})\)/.freeze
-      # Escapes, image openers and code spans are text, so neither an escaped
-      # bracket, an image nor a link written in code is read as a link.
-      PLAIN = /\\.|!\[|[^\\!\[`]+/.freeze
-      CODE_SPAN = /(`+)(?>[^`]+|(?!\1(?!`))`+)*+\1(?!`)/.freeze
       ITEM = /\A(?:[-*+]|\d+\.) /.freeze
       MARKERS = /\A\s*(?:(?:[-*+]|\d+\.)(?:\s+|\z))*\z/.freeze
       # A button follows the end of a sentence or of another link.
@@ -29,8 +22,6 @@ module Nokodown
       NUMBER = /\d+(?:[.,:]\d+)*/.freeze
       SEPARATE = %i[list table].freeze
       INITIALS = /\A\p{Lu}{1,4}\z/.freeze
-      WORD_START = /\A[*_~`]*[\p{L}\p{N}]/.freeze
-      WORD_END = /[\p{L}\p{N}][*_~`]*\z/.freeze
 
       # segment: the link's index among the pieces of its line, which
       # alternate text and links.
@@ -106,27 +97,9 @@ module Nokodown
       end
 
       def line_links(line, place, heading)
-        parts, found = segments(line)
+        parts, found = LinkLine.split(line)
         @segments[place.last(2)] = parts unless found.empty?
         found.map { |segment, text, destination| Link.new(*place, segment, text, destination, heading) }
-      end
-
-      # The line split into text and links in turn, and each link's segment,
-      # text and destination. Offsets into a long line of non-ASCII text
-      # cost as much as the line, so the line is cut up once.
-      def segments(line)
-        scanner = StringScanner.new(line)
-        parts = [+""]
-        found = []
-        until scanner.eos?
-          if scanner.scan(LINK)
-            found << [parts.size, scanner[1], scanner[2]]
-            parts << scanner.matched << +""
-          else
-            parts[-1] << (scanner.scan(PLAIN) || scanner.scan(CODE_SPAN) || scanner.getch)
-          end
-        end
-        [parts, found]
       end
 
       # Occurrences close together in one card.
@@ -245,39 +218,9 @@ module Nokodown
         lines.each_with_index.filter_map do |line, number|
           next line unless edits.key?(number)
 
-          result = edited_line(@segments[[index, number]], edits[number])
+          result = LinkLine.join(@segments[[index, number]], edits[number])
           result unless result.match?(MARKERS) && !line.match?(MARKERS)
         end.join("\n")
-      end
-
-      def edited_line(parts, replacements)
-        replacements.each { |segment, text| parts[segment - 1] = parts[segment - 1].sub(/ +\z/, "") if text.empty? }
-        parts.each_with_index.map do |part, segment|
-          text = replacements[segment]
-          text ? spaced(text, parts, replacements, segment) : part
-        end.join
-      end
-
-      # Links set side by side were told apart by their brackets; a text
-      # that would run into the words of the link beside it needs a space.
-      # A text after it puts in its own.
-      def spaced(text, parts, replacements, segment)
-        return text if text.empty?
-
-        before = parts[segment - 1]
-        after = parts[segment + 1]
-        left = replacements.fetch(segment - 2) { link_text(parts, segment - 2) }
-        right = replacements.key?(segment + 2) ? "" : link_text(parts, segment + 2)
-        "#{' ' if before.empty? ? beside?(left, text) : before.match?(/[)\]]\z/)}#{text}" \
-          "#{' ' if after.empty? ? beside?(text, right) : after.match?(/\A[\[!]/)}"
-      end
-
-      def beside?(left, right)
-        left.match?(WORD_END) && right.match?(WORD_START)
-      end
-
-      def link_text(parts, segment)
-        segment.between?(1, parts.size - 1) ? parts[segment][LINK, 1] : ""
       end
     end
   end
