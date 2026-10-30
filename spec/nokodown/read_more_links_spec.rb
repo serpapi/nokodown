@@ -124,6 +124,15 @@ RSpec.describe Nokodown::ReadMoreLinks do
     text.should == "Stoves" * 4000
   end
 
+  it "judges the links of an item left open around the page in time linear in its links" do
+    cards = (1..6000).map { |i| "<div><p>Post #{i}</p><p><a href='/p/#{i}'>Open</a></p></div>" }.join
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    text = text_after("<ul><li><a href='/'>Home</a>#{cards}</li></ul>")
+
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+    text.should end_with("Post 6000Open")
+  end
+
   it "keeps a source's domain and a dataset's format after the title" do
     html = card("The harbor bridge reopens", "<p><a href='/posts/25'>vice.com</a></p>") +
            card("Crews finish early", "<ul><li><a href='/posts/18' data-format='csv'>CSV</a></li></ul>")

@@ -40,6 +40,7 @@ module Nokodown
       @chars = {}
       @data_tables = {}
       @menus = {}
+      @submenus = {}
     end
 
     def call
@@ -82,9 +83,23 @@ module Nokodown
 
       ancestors = link.node.ancestors.select(&:element?)
       return false if ancestors.any? { |node| LABEL_HOLDERS.include?(node.name) }
-      return false if ancestors.find { |node| node.name == "li" }&.at_css("ul, ol")
+      item = ancestors.find { |node| node.name == "li" }
+      return false if item && submenu?(item)
 
       ancestors.none? { |node| node.name == "table" && data_table?(node) }
+    end
+
+    # A broken page can leave one item open around thousands of links, so
+    # each item is searched once.
+    def submenu?(item)
+      key = Dom.key(item)
+      return list_in?(item) if key.nil?
+
+      @submenus.key?(key) ? @submenus[key] : (@submenus[key] = list_in?(item))
+    end
+
+    def list_in?(item)
+      !item.at_css("ul, ol").nil?
     end
 
     # A reference table can hold thousands of links, so each table is
