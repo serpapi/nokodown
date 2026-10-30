@@ -67,6 +67,15 @@ RSpec.describe Nokodown::ReadMoreLinks do
     text_after(html).should == "#{passage.strip}WeiterlesenThe ferry runs late on Sunday."
   end
 
+  it "keeps a label when the longer link's heading is empty or too long for a title" do
+    heading = "#{'The ferry runs late on Sunday. ' * 10}Bridge works end"
+    passage = ("The bridge over the inner basin opens again on Monday after three months of repairs. " * 4).strip
+    html = "<div><a href='/news/ferry'><h3>#{heading}</h3></a><p><a href='/news/ferry'>Weiterlesen</a></p></div>" \
+           "<div><a href='/news/bridge'><h3><img src='/bridge.png' alt=''></h3><p>#{passage}</p></a>" \
+           "<p><a href='/news/bridge'>Weiterlesen</a></p></div>"
+    text_after(html).should == "#{heading}Weiterlesen#{passage}Weiterlesen"
+  end
+
   it "keeps a label when the longer link wraps a list, a quote, code or a data table, but not a line after them" do
     specs = "<table><tr><th>Drill</th><th>Power</th></tr><tr><td>Acme</td><td>18 V</td></tr><tr><td>Bolt</td><td>650 W</td></tr></table>"
     html = "<div><a href='/p/1'><ul><li>Acme Drill</li><li>Cordless, 18 V</li></ul></a><p><a href='/p/1'>Details</a></p></div>" \

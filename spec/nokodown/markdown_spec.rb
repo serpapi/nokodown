@@ -488,6 +488,13 @@ RSpec.describe "Markdown conversion" do
       convert('<a href="/post"><h3>Headline</h3><p>Summary text</p></a>').should == "### [Headline](https://example.com/post)\n\nSummary text"
     end
 
+    it "measures a card's title by its text, without its heading marks or emphasis" do
+      title = "#{'The ferry runs late on Sunday. ' * 9}Bridge works end at"
+      html = "<a href='/n/1'><h3>#{title}</h3><p>Summary</p></a><a href='/n/2'><p>#{title.sub('Sunday', '<b>Sunday</b>')}</p></a>"
+      convert(html).should == "### [#{title}](https://example.com/n/1)\n\nSummary\n\n" \
+                              "[#{title.sub('Sunday', '**Sunday**')}](https://example.com/n/2)"
+    end
+
     it "encodes spaces and unbalanced parentheses in URLs" do
       convert('<p><a href="/a b(c">x</a> <a href="/wiki/Ruby_(language)">y</a></p>').should ==
         "[x](https://example.com/a%20b%28c) [y](https://example.com/wiki/Ruby_(language))"
