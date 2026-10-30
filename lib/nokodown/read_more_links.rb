@@ -147,7 +147,19 @@ module Nokodown
     # written without its link, so it does not, and neither does a date,
     # which can be longer than an event's name.
     def namer?(link)
-      link.text.match?(/\p{L}/) && !link.text.match?(DATE_OR_TIME) && Dom.ancestors_named(link.node, "dt").empty?
+      link.text.match?(/\p{L}/) && !link.text.match?(DATE_OR_TIME) && Dom.ancestors_named(link.node, "dt").empty? &&
+        written?(link.node)
+    end
+
+    # Markdown::Renderer writes a link around blocks on their heading, or on
+    # their first line of text when that holds no image or link; around
+    # anything else (a team's name beside its logo) the link is lost.
+    def written?(node)
+      blocks = node.css("*").select { |child| Dom.block?(child) }
+      return true if blocks.empty? || blocks.any? { |block| Dom.heading?(block) }
+
+      line = blocks.find { |block| !Dom.text(block).empty? && block.css("*").none? { |child| Dom.block?(child) } }
+      !line.nil? && line.at_css("img, a").nil?
     end
 
     # Controls follow what they act on, so the nearest longer links before

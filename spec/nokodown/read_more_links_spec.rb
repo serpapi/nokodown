@@ -53,6 +53,13 @@ RSpec.describe Nokodown::ReadMoreLinks do
     text_after(html).should == "The harbor bridge reopens"
   end
 
+  it "keeps a label when the longer link around blocks is one Markdown does not write" do
+    teams = "<p><span>Leones</span><img src='/leones.png' alt='Leones'></p><div><p>VS</p></div><p><span>Osos</span><img src='/osos.png' alt='Osos'></p>"
+    html = "<div class='match'><a href='/cup/1'>#{teams}</a><p><a href='/cup/1'>Finished</a></p></div>" \
+           "<div class='match'><a href='/cup/2'><p>Tigres against Lobos</p><p>VS</p></a><p><a href='/cup/2'>Details</a></p></div>"
+    text_after(html).should == "LeonesVSOsosFinishedTigres against LobosVS"
+  end
+
   it "keeps the entries of a breadcrumb or a table of contents" do
     html = "<nav><a href='/guide/intro'>A quick guide to building apps</a><ol><li><a href='/guide/intro'>Intro</a></li>" \
            "<li><a href='/guide/setup'>Setup</a></li><li><a href='/guide/basics'>Basics</a></li></ol></nav>"
