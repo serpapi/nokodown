@@ -38,16 +38,20 @@ module Nokodown
     module_function
 
     # Link farms point hundreds of links at home pages from one container,
-    # so each container is judged once.
+    # so each container is judged once. The parser's copies of a formatting
+    # element share its key, so the node is kept with it.
     def trails(body)
-      checked = Set.new
+      checked = {}
       links = body.css("a[href]")
       site = site_host(links)
       links.filter_map do |link|
-        next if !link["href"].strip.match?(HOME) || checked.include?(Dom.key(link.parent))
+        next if !link["href"].strip.match?(HOME) || checked[Dom.key(link.parent)] == link.parent
 
         node = container(link)
-        node if node && checked.add?(Dom.key(node)) && trail_at?(node, link, site)
+        next if node.nil? || checked[Dom.key(node)] == node
+
+        checked[Dom.key(node)] = node
+        node if trail_at?(node, link, site)
       end
     end
 
@@ -86,17 +90,26 @@ module Nokodown
     end
 
     # Children are judged one by one, so a container of many links stops the
-    # walk at its first other link.
+    # walk at its first other link. They are read one at a time too: listing
+    # them first listed a link farm's thousands of home links for each one.
     def wrapper?(node, path)
       key = Dom.key(path)
-      node.children.all? do |child|
-        if child.text?
-          Dom.squish(child.content).match?(ONLY_SEPARATORS)
-        elsif child.element?
-          Dom.key(child) == key || separator_element?(child)
-        else
-          true
-        end
+      child = node.child
+      while child
+        return false unless wrapped?(child, key)
+
+        child = child.next_sibling
+      end
+      true
+    end
+
+    def wrapped?(child, key)
+      if child.text?
+        Dom.squish(child.content).match?(ONLY_SEPARATORS)
+      elsif child.element?
+        Dom.key(child) == key || separator_element?(child)
+      else
+        true
       end
     end
 
@@ -111,22 +124,28 @@ module Nokodown
     # The text before, between and after the links, one string per gap.
     def gaps(node)
       gaps = [+""]
-      node.traverse do |child|
-        if child.element? && child.name == "a" && child["href"]
-          gaps << +""
-        elsif child.text? && !inside_link?(child, node)
-          gaps.last << " " << child.content
-        end
-      end
+      gather(node, Dom.key(node), false, gaps)
       gaps.map { |gap| Dom.squish(gap) }
     end
 
-    def inside_link?(text_node, root)
-      text_node.ancestors.each do |ancestor|
-        return false if Dom.key(ancestor) == Dom.key(root)
-        return true if ancestor.name == "a" && ancestor["href"]
+    # Visits children before their parent, as traverse does, and carries
+    # down whether a link below the root holds the text instead of looking
+    # up from each text node: Taxonomy asks for the gaps of every ancestor
+    # of every archive link on deep pages. An element with the root's key
+    # stands for the root, whose own link holds none of it.
+    def gather(node, root_key, linked, gaps)
+      if node.text?
+        gaps.last << " " << node.content unless linked
+      elsif node.element?
+        link = node.name == "a" && node["href"]
+        inside = Dom.key(node) == root_key ? false : linked || link
+        child = node.child
+        while child
+          gather(child, root_key, inside, gaps)
+          child = child.next_sibling
+        end
+        gaps << +"" if link
       end
-      false
     end
 
     # A lone home link needs the page's name after it, and so does an

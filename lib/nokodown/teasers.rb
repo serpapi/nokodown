@@ -32,6 +32,9 @@ module Nokodown
     Block = Struct.new(:nodes, :title, :alike, :named, :below, :chars, :bare)
     # An item with its headings and the keys of the links in them.
     Card = Struct.new(:node, :headings, :title_links)
+    # A wrapper, the keys of its elements walked so far, those left as a
+    # stack, and the title the walk stopped at.
+    Walk = Struct.new(:node, :passed, :stack, :title)
 
     MIN_ITEMS = 3
     MAX_ITEM_CHARS = 400
@@ -65,6 +68,8 @@ module Nokodown
     MIN_WORDS_LEFT = 20
     BODIES = %i[article product forum qa].freeze
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
+    # A key that several elements holding a protected one carry.
+    COPIES = :copies
     HEADING = "h1, h2, h3, h4, h5, h6, [role=heading]"
     MEDIA = "img, picture, time"
     KEPT = "h1, img, picture, video, audio, iframe, object, embed, table, pre, math"
@@ -85,6 +90,9 @@ module Nokodown
     # The root, a language's root ("/en/", "/pt-br/") or its index file.
     HOME = %r{\A/*(?:[a-z]{2}(?:[-_][a-z]{2})?/*)?(?:index\.\w+)?\z}i.freeze
     FILE = /\.(?:jpe?g|png|gif|webp|avif|svg|pdf|zip|docx?|xlsx?|pptx?|mp[34])\z/i.freeze
+    # A pager's links name page numbers ("1 2 4 5").
+    PAGE_NUMBER = /\A\d{1,4}\z/.freeze
+    MIN_PAGES = 2
 
     # Keys survive the copy article cleaning works on. Content that would be
     # left with a heading and a line or two keeps its blocks: on a listing
@@ -102,20 +110,51 @@ module Nokodown
       parents = found.map(&:parent)
       found.each(&:remove)
       roots = nodes.map { |root| Dom.key(root) }
-      parents.each { |parent| remove_emptied(parent, roots) }
+      worded = {}
+      parents.each { |parent| remove_emptied(parent, roots, worded) }
       nodes
     end
 
     # A heading over several blocks ("Previous matches" over a column per
-    # team) is left with nothing under it.
-    def self.remove_emptied(node, roots)
-      while node&.element? && !roots.include?(Dom.key(node)) && words(node).zero? && !node.at_css(KEPT)
+    # team) is left with nothing under it. Removing an element without
+    # words leaves the words of the others as they were, so a parent found
+    # to have some is not read again for the next block removed from it.
+    def self.remove_emptied(node, roots, worded)
+      while node&.element? && !roots.include?(Dom.key(node)) && !worded?(node, worded) && !node.at_css(KEPT)
         parent = node.parent
         node.remove
         node = parent
       end
     end
     private_class_method :remove_emptied
+
+    # Remembered by key for the first element found with it. The parser's
+    # copies of a misnested formatting element share its attributes, key
+    # included; telling thousands of them apart costs more than reading each.
+    def self.worded?(node, worded)
+      key = Dom.key(node)
+      return true if worded[key] == node
+      return false unless any_words?(node)
+
+      worded[key] ||= node
+      true
+    end
+    private_class_method :worded?
+
+    # Whether words(node) is above zero, stopping at the first word.
+    def self.any_words?(node)
+      return node.content.match?(WORD) if node.text?
+      return false if !node.element? || Dom.heading?(node) || node["role"] == "heading"
+
+      child = node.child
+      while child
+        return true if any_words?(child)
+
+        child = child.next_sibling
+      end
+      false
+    end
+    private_class_method :any_words?
 
     # Words outside headings.
     def self.words(node)
@@ -208,6 +247,7 @@ module Nokodown
     # rows of an item's recipes, each a link to another item.
     def removable?(block, listing)
       return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
+      return false if pager?(block)
       return false if InPageLinks.listed?(block.nodes.first)
       return false if block.bare && (!list_title?(block.title) || dominant?(block) || index?(block))
       return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
@@ -264,10 +304,75 @@ module Nokodown
       !node.at_css(HEADING).nil? && !node.at_css(LISTS).nil? && @stats.link_density(node) >= SECTION_LINKS
     end
 
-    # Not matches?, which Nokolexbor runs over the whole document.
+    # A block holding the pager to this page's other pages ("1 2 4 5" to
+    # "list-catid-139257_--p2.html" from "..._--p3.html") is the listing
+    # itself, its title the column's: a box of teasers beside the content
+    # does not page through the page it is on.
+    def pager?(block)
+      pages = 0
+      block.nodes.each do |node|
+        node.css("a[href]").each do |link|
+          number = Dom.text(link)
+          next unless number.match?(PAGE_NUMBER)
+
+          uri = target(link["href"])
+          pages += 1 if uri && page_of_this?(uri, number)
+          return true if pages >= MIN_PAGES
+        end
+      end
+      false
+    end
+
+    # This page's address with the link's number in place of one of its
+    # own ("--p3" to "--p2"), or added to its query ("?cat=5&page=2"). A
+    # view count linking to another coded page ("459" to "/93319.html") is
+    # not.
+    def page_of_this?(uri, number)
+      own = address(@page)
+      other = address(uri)
+      if own.gsub(/\d+/, "0") == other.gsub(/\d+/, "0")
+        changed = own.scan(/\d+/).zip(other.scan(/\d+/)).reject { |mine, theirs| mine == theirs }
+        return changed.size == 1 && changed.first.last.to_i == number.to_i
+      end
+      added = params(uri) - params(@page)
+      uri.path == @page.path && params(@page).all? { |pair| params(uri).include?(pair) } &&
+        added.size == 1 && added.first.last == number
+    end
+
+    def address(uri)
+      "#{uri.path}?#{params(uri).sort.map { |pair| pair.join("=") }.join("&")}"
+    end
+
+    # Not matches?, which Nokolexbor runs over the whole document. Widening
+    # asks about the same large wrappers for every run inside them, so the
+    # elements that hold a protected one are listed once.
     def protected?(node)
       main = %w[h1 main].include?(node.name) || node["role"] == "main"
-      main || node["itemprop"].to_s.split.include?("articleBody") || !node.at_css(PROTECTED).nil?
+      main || node["itemprop"].to_s.split.include?("articleBody") || holds_protected?(node)
+    end
+
+    def holds_protected?(node)
+      @holders ||= protected_holders
+      holder = @holders[Dom.key(node)]
+      COPIES == holder ? !node.at_css(PROTECTED).nil? : holder == node
+    end
+
+    # The ancestors of protected elements, by key. The parser's copies of a
+    # misnested formatting element share its attributes, key included: a key
+    # stands for the first element found with it, and once a copy holds a
+    # protected element too, for COPIES, each then asked on its own. A climb
+    # stops at an element already listed, whose own ancestors are listed
+    # with it.
+    def protected_holders
+      @body.css(PROTECTED).each_with_object({}) do |found, holders|
+        node = found
+        while (node = node.parent)&.element?
+          holder = holders[Dom.key(node)]
+          break if holder == node
+
+          holders[Dom.key(node)] = holder.nil? ? node : COPIES
+        end
+      end
     end
 
     # A post's body and its parent, which also holds its attachments.
@@ -603,15 +708,39 @@ module Nokodown
     end
 
     # The first title before the items, however deep: old layouts put it in
-    # the first row of a table around them. Nokolexbor's css("*") is over ten
-    # times slower than this XPath, which walks in the same order.
+    # the first row of a table around them. Runs side by side widen into the
+    # same wrapper, and each walked past all the runs before it, so the walk
+    # of a wrapper in document order is kept and resumed: what it has passed
+    # holds no title but the one it stopped at. It stops before an item, so
+    # the next run still asks whether that element is a title.
     def title_in(node, run)
       items = run.items.map { |item| Dom.key(item) }.to_set
-      node.xpath(".//*").each do |descendant|
+      walk = walk_of(node)
+      return nil if items.any? { |key| walk.passed.include?(key) }
+      return walk.title if walk.title
+
+      until walk.stack.empty?
+        descendant = walk.stack.last
         return nil if items.include?(Dom.key(descendant))
-        return descendant if title?(descendant)
+
+        walk.stack.pop
+        walk.passed << Dom.key(descendant)
+        walk.stack.concat(descendant.element_children.to_a.reverse)
+        return walk.title = descendant if title?(descendant)
       end
       nil
+    end
+
+    # Kept by key for the first wrapper found with it. The parser's copies of
+    # a misnested formatting element share its attributes, key included;
+    # telling thousands of them apart costs more than walking each afresh.
+    def walk_of(node)
+      walk = (@walks ||= {})[Dom.key(node)] ||= new_walk(node)
+      walk.node == node ? walk : new_walk(node)
+    end
+
+    def new_walk(node)
+      Walk.new(node, Set.new, node.element_children.to_a.reverse, nil)
     end
 
     # Only an element right before the block, with no text between them.

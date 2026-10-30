@@ -405,23 +405,63 @@ module Nokodown
     #
     # Elsewhere menus go after the clusters, so a menu does not split the
     # cluster around it ("Posted in News | Tagged a, b | Comment") and leave
-    # pieces of it behind, and the list a submenu hung from is judged again.
+    # pieces of it behind, and the boxes the menus sat in, such as the list a
+    # submenu hung from, are judged again.
     def remove_link_clusters(root, clusters, index)
       return remove_menus(root, clusters_above_title(root, clusters) + current_page_menus(root)) if index
 
       # Removal can only start at a cluster, so none means nothing to remove.
       repeated = repeated_shapes(clusters)
       remove_clusters(root, repeated) unless clusters.empty?
-      remove_clusters(root, repeated) if remove_menus(root, current_page_menus(root))
+      menus = current_page_menus(root)
+      chains = menus.map { |menu| boxes_around(menu, root) }
+      return unless remove_menus(root, menus)
+
+      boxes = untitled_boxes(chains)
+      remove_clusters(root, repeated, boxes) unless boxes.empty?
     end
 
     def index?(root, clusters)
       !clusters.empty? && clusters_dominate?(root, clusters)
     end
 
-    def remove_clusters(root, repeated)
+    # only: the keys of the elements to judge, or nil for all.
+    def remove_clusters(root, repeated, only = nil)
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
+        next if only && !only.include?(Dom.key(node))
+
         remove_with_label(node, root, repeated) if link_cluster?(node) && !in_data_table?(node) && !teaser_header?(node)
+      end
+    end
+
+    # The boxes a menu sits in below the root, innermost first. Taken
+    # before the menu goes, which cuts it from them.
+    def boxes_around(menu, root)
+      boxes = []
+      node = menu
+      boxes << node until (node = node.parent).nil? || node == root
+      boxes
+    end
+
+    # The keys of the boxes around the removed menus, up to the first that
+    # still holds a heading: that is a card whose tag line linked to the
+    # page itself ("<h2>Minutes 5</h2> 07.01.2025 Admin Read more"), and a
+    # run of cards is the listing. The menu's label and the headings among
+    # its entries went with it. A walk that reaches a box an earlier one
+    # went through stops there; the parser's clones of a <font face> share
+    # one key, so the box itself is compared.
+    def untitled_boxes(chains)
+      seen = Hash.new { |boxes, key| boxes[key] = [] }
+      chains.each_with_object(Set.new) do |chain, keys|
+        chain.each do |box|
+          key = Dom.key(box)
+          break if seen[key].any? { |other| other == box }
+
+          seen[key] << box
+          break if box.at_css(ContainerCheck::HEADINGS)
+
+          keys << key if key
+        end
       end
     end
 
@@ -900,6 +940,7 @@ module Nokodown
       @tail_limit = [@tail_total * TAIL_SHARE, TAIL_CHARS].max
       @footer_budget = @tail_total * MAX_TAIL_SHARE
       @footers = []
+      @sections = {}
       after = 0
       @nodes.reverse_each { |root| after += walk_back(root, after) }
       @footers.each { |node| remove(node) }
@@ -962,7 +1003,20 @@ module Nokodown
       return false if QUOTES.include?(node.parent&.name)
 
       section = node.ancestors.find { |ancestor| ancestor.element? && SECTIONS.include?(ancestor.name) }
-      section.nil? || Dom.char_count(section.content) >= @tail_total * MAX_TAIL_SHARE
+      section.nil? || section_chars(section) >= @tail_total * MAX_TAIL_SHARE
+    end
+
+    # The walk removes nothing, and each post of a long thread has a footer
+    # in the one comments section, so a section is measured once. Keys can
+    # repeat (elements added later have none), so the node is kept with it.
+    def section_chars(section)
+      key = Dom.key(section)
+      measured = @sections[key]
+      return measured.last if measured&.first == section
+
+      chars = Dom.char_count(section.content)
+      @sections[key] = [section, chars]
+      chars
     end
 
     # Every rule removes through here: nothing inside code is furniture.

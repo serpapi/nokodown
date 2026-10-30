@@ -9,6 +9,7 @@ module Nokodown
   # an archive page such lines are its listing, so nothing goes there.
   module Taxonomy
     TAG_PATH = %r{/(?:tags?|labels?|topics)/[^/?#]}i.freeze
+    ARCHIVE_INDEX = %r{\A(?:https?:)?//[^/?#]+(?:/[^?#]*)?/(?:tags?|labels?|topics|categor(?:y|ies))(?:/|\.\w{2,5})?(?:[?#]|\z)}i.freeze
     # Shops file products under "/product-category/", "/categoria-producto/".
     CATEGORY_PATH = %r{/[^/?#]*[ck]ategor[^/?#]*/[^/?#]}i.freeze
     TAG_QUERY = /[?&]tag=[^&#]/.freeze
@@ -27,20 +28,27 @@ module Nokodown
 
     module_function
 
-    # Keys of the outermost elements that hold only such a line. Lines of
+    # The outermost elements that hold only such a line. Lines of
     # one shape repeated are the category of every card in a listing, or
     # the facts of a product linked to their filters, so they stay.
     def blocks(body, url)
       page = url.to_s
-      return Set.new if page.match?(TAG_PATH) || page.match?(CATEGORY_PATH) || page.match?(TAG_QUERY) || page.match?(CATEGORY_QUERY)
+      return [] if archive_page?(page)
 
       site = page[ADDRESS, 1]&.downcase || Breadcrumbs.site_host(body.css("a[href]"))
       title = body.at_css("h1")
       judged = {}
       lines = body.css("a[href]").filter_map { |link| outermost(link, site, judged) if archive(link, site) }
-      lines = lines.uniq { |node| Dom.key(node) }.select { |node| judged[Dom.key(node)] == :tag || kicker?(node, title) }
+      lines = lines.uniq { |node, _| Dom.key(node) }.filter_map { |node, kind| node if kind == :tag || kicker?(node, title) }
       repeated = lines.group_by { |node| shape(node) }.select { |_, alike| alike.size >= MIN_REPEATS }.keys
-      lines.reject { |node| repeated.include?(shape(node)) }.map { |node| Dom.key(node) }.to_set
+      lines.reject { |node| repeated.include?(shape(node)) }
+    end
+
+    # An archive, or the index of all tags or categories ("/tags?view=popular",
+    # "/tags.html", "/category"), is made of such lines.
+    def archive_page?(page)
+      page.match?(TAG_PATH) || page.match?(CATEGORY_PATH) || page.match?(TAG_QUERY) || page.match?(CATEGORY_QUERY) ||
+        page.match?(ARCHIVE_INDEX)
     end
 
     def shape(node)
@@ -67,18 +75,31 @@ module Nokodown
       :tag if local.match?(TAG_PATH) || local.match?(TAG_QUERY)
     end
 
+    # The outermost line around the link, with its kind.
     def outermost(link, site, judged)
       found = nil
       node = link.parent
       while node&.element? && node.name != "body"
-        key = Dom.key(node)
-        judged[key] = line(node, site) unless judged.key?(key)
-        break unless judged[key]
+        kind = judge(node, site, judged)
+        break unless kind
 
-        found = node
+        found = [node, kind]
         node = node.parent
       end
       found
+    end
+
+    # Each tag of a line walks up through the same elements, so each is
+    # judged once. The parser's copies of a formatting element share its
+    # key, so the node is kept with its verdict and a copy is judged anew.
+    def judge(node, site, judged)
+      key = Dom.key(node)
+      seen = judged[key]
+      return seen.last if seen&.first == node
+
+      kind = line(node, site)
+      judged[key] = [node, kind]
+      kind
     end
 
     # :tag when every link is a tag, :category when any is a category.

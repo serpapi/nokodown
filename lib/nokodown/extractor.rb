@@ -150,10 +150,23 @@ module Nokodown
     end
 
     def without_site_heading(blocks, site)
-      heading = blocks.first(TITLE_BLOCKS).find do |block|
+      opening = blocks.first(TITLE_BLOCKS)
+      heading = opening.find do |block|
         block.kind == :heading && site.name?(Markdown::Cleanup.heading_text(block))
       end
-      heading ? blocks.reject { |block| block.equal?(heading) } : blocks
+      heading && logo_heading?(opening, heading) ? blocks.reject { |block| block.equal?(heading) } : blocks
+    end
+
+    # A logo is an H1, links to the site's root or opens the content; an
+    # image above it does not count, so images: false, which leaves the
+    # image out, decides alike. A lower heading below other headings or text
+    # that names the site labels a section of its own, as a company's name
+    # does above its address, or an author's name that links to the
+    # author's page above a biography.
+    def logo_heading?(opening, heading)
+      return true if heading.level == 1 || heading.links_home
+
+      opening.find { |block| !block.text.match?(Markdown::Cleanup::IMAGE_ONLY) }.equal?(heading)
     end
 
     # When the page's title block is left out of the content, the first H1
