@@ -29,6 +29,9 @@ module Nokodown
     # A shop's or a blog's tags and categories name the products or posts it
     # lists ("product_tag-buy-cookies-online", "category-cookies").
     LISTED_TAXONOMY = /(?<![\w-])(?:\w+_)?(?:tag|cat|category)-[\w-]+/.freeze
+    # The room a page leaves for the banner, named on the wrapper of its
+    # content: "cookiebot-padding-bottom".
+    ROOM_FOR_BANNER = /padding|margin|spacer|spacing|offset/.freeze
     OVERLAY_ROLES = %w[dialog alertdialog].freeze
     OVERLAY_STYLE = /(?:\A|;)\s*position\s*:\s*(?:fixed|sticky)/i.freeze
     TRAIL_OR_MENU = /breadcrumb|crumbs|trail|#{Patterns::WORD_START}nav|menu/.freeze
@@ -457,6 +460,8 @@ module Nokodown
     end
 
     def consent_name?(token)
+      return false if token.match?(ROOM_FOR_BANNER)
+
       token.match?(CONSENT_MANAGER) || (token.match?(Patterns::CONSENT) && token.sub(Patterns::CONSENT, " ").match?(CONSENT_PROMPT))
     end
 

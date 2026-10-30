@@ -173,6 +173,16 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should include("Robotic mower KR500")
     end
 
+    it "keeps a post whose wrapper is named for the room a consent banner leaves" do
+      reply = "<p>The link is in the first post. I had never seen screw plugs for tyres before, and nobody here sells them.</p>" * 3
+      html = "<div class=\"content-holder cookiebot-padding-bottom\"><h2>Re: Screw type tire plugs</h2>#{reply}</div>" \
+             "<div class=\"cookie-notice\"><p>We use cookies.</p></div>"
+
+      text = remaining(html)
+      text.should include("screw plugs")
+      text.should_not include("We use cookies")
+    end
+
     it "keeps the largest guessed block when a cookie banner that outweighs it goes" do
       products = Array.new(6) { |index| "<a href=\"/mower-#{index}\">Robotic mower KR#{index}00 for lawns up to #{index + 1} acres</a>" }
       notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 6
