@@ -102,13 +102,15 @@ module Nokodown
 
     # Only a container around links into the page, and around no other link,
     # can be one. Reading every container's links costs as much as its
-    # subtree, so the others are ruled out by key first.
+    # subtree, so the others are ruled out by key first. A key that clones
+    # share rules out nothing.
     def contents
       candidates = candidate_keys
       return [] if candidates.empty?
 
       tables = @root.css(CONTAINERS).select do |node|
-        (Dom.key(node).nil? || candidates.include?(Dom.key(node))) && contents?(node)
+        key = Dom.key(node)
+        (key.nil? || shared_keys.include?(key) || candidates.include?(key)) && contents?(node)
       end
       keys = tables.map { |node| Dom.key(node) }.to_set
       tables.reject { |node| node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) } }
@@ -129,14 +131,26 @@ module Nokodown
       keys_around(targets) - keys_around(others)
     end
 
-    # Each element is added once: a walk up stops where an earlier one went.
+    # Each element is added once: a walk up stops at an element an earlier
+    # walk went through, which went on from there to the root. Only a key
+    # that one element holds tells that.
     def keys_around(links)
       links.each_with_object(Set.new) do |link, keys|
         node = link
-        while (node = node.parent)&.element?
+        until (node = node.parent).nil? || node == @root
           key = Dom.key(node)
-          break unless key.nil? || keys.add?(key)
+          next if key.nil? || shared_keys.include?(key)
+          break unless keys.add?(key)
         end
+      end
+    end
+
+    # The parser clones a formatting element left open, such as a
+    # <font face>, and the clones share their attributes, key included.
+    def shared_keys
+      @shared_keys ||= begin
+        counts = @root.css("*").filter_map { |node| Dom.key(node) }.tally
+        counts.select { |_, count| count > 1 }.keys.to_set
       end
     end
 

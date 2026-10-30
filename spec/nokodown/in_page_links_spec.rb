@@ -11,15 +11,22 @@ RSpec.describe Nokodown::InPageLinks do
     "<section id='#{id}'><a href='##{id}'><header><h2>#{heading}</h2></header></a><p>#{heading} of the boots.</p></section>"
   end
 
-  # Unclosed tags nest each link one level below the one before.
-  def nested_links(count)
-    page = (1..count).map { |number| "<div><a href='/items/#{number}'>Item #{number}</a> " }.join
-    root = Nokolexbor::HTML("<body>#{page}</body>").at_css("body")
+  def in_page_links(html)
+    root = Nokolexbor::HTML("<body>#{html}</body>").at_css("body")
     Nokodown::Dom.assign_keys(root)
     described_class.new(root, described_class.anchors(root.document), nil)
   end
 
+  # Unclosed tags nest each link one level below the one before.
+  def nested_links(count)
+    in_page_links((1..count).map { |number| "<div><a href='/items/#{number}'>Item #{number}</a> " }.join)
+  end
+
   let(:sections) { section("set", "Full set") + section("recipes", "Used in recipes") + section("pictures", "Pictures") }
+  let(:contents_list) do
+    "<ul><li><a href='#set'>Full set</a></li><li><a href='#recipes'>Recipes</a></li>" \
+      "<li><a href='#pictures'>Pictures</a></li></ul>"
+  end
 
   it "marks the sections that a table of contents lists" do
     toc = "<nav><ul><li><a href='#set'>Full set</a></li><li><a href='#recipes'>Recipes</a></li>" \
@@ -45,6 +52,12 @@ RSpec.describe Nokodown::InPageLinks do
           "<li><a href='#recipes'>Recipes</a></li><li><a href='#pictures'>Pictures</a></li></ol>"
 
     listed("#{toc}<main id='main'><h1>Boots</h1>#{sections}</main>").should == %w[set recipes pictures]
+  end
+
+  it "finds a table of contents in the clones of a font left open, which share one key" do
+    links = in_page_links("<p id='top'><font face='Arial'>Boots. <a href='#top'>Top</a>#{contents_list}#{sections}")
+
+    links.contents.map(&:name).should == %w[ul]
   end
 
   it "reads the links of no container on a page without links into it" do
