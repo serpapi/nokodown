@@ -999,7 +999,8 @@ RSpec.describe "Markdown conversion" do
       text = "Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.\n\n### Pros\n\n- Light\n- Quiet"
       html = "<ol start='4'><li><h2>Acme Drill</h2>#{review}</li><li><h2>5. Bolt Driver</h2>#{review}</li></ol>"
       convert(html).should == "## 4. Acme Drill\n\n#{text}\n\n## 5. Bolt Driver\n\n#{text}"
-      convert("<ol><li><h2>Acme Drill</h2>#{review}</li><li><p>Bolt Driver</p></li></ol>").should start_with("1. Acme Drill\n")
+      unranked = "<ol><li><h2>Acme Drill</h2>#{review}</li><li><p>Bolt Driver, the quiet one.</p>#{review}</li></ol>"
+      convert(unranked).should start_with("1. Acme Drill\n")
     end
 
     it "writes the heading that closes a list of sections as text" do

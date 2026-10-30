@@ -202,22 +202,20 @@ module Nokodown
         %i[table list].include?(block.kind) || (block.kind == :paragraph && block.text.length >= SECTION_TEXT)
       end
 
-      # An ordered list ranks its items, so each number goes on its item's
-      # first heading ("## 4. Acme Drill"). An item without a heading has
-      # nowhere to keep its number, and the list stays a list.
+      # An ordered list ranks its items, so each number goes on the heading
+      # that opens its item ("## 4. Acme Drill"). A heading further down is
+      # a label inside the item ("Cost / License"), not its name, so an item
+      # that opens with anything else keeps the list.
       def sections_list?(items, start)
         return false unless items.any? { |blocks| sections?(blocks) }
 
-        start.nil? || items.all? { |blocks| blocks.any? { |block| block.kind == :heading } }
+        start.nil? || items.all? { |blocks| blocks.first.kind == :heading }
       end
 
       def unlisted(items, start)
         return items.flatten(1) unless start
 
-        items.each_with_index.flat_map do |blocks, index|
-          first = blocks.index { |block| block.kind == :heading }
-          blocks.each_with_index.map { |block, position| position == first ? ranked(block, start + index) : block }
-        end
+        items.each_with_index.flat_map { |blocks, index| [ranked(blocks.first, start + index), *blocks.drop(1)] }
       end
 
       # A site may type the number into the heading already.
