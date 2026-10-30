@@ -31,6 +31,7 @@ module Nokodown
     # Enough for the marks at a slider's ends: "A" and "A", "0" and "100",
     # "Small" and "Large".
     SLIDER_MARKS = 12
+    PLACEHOLDER_HREF = /\A(?:#|javascript:|\z)/i.freeze
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
@@ -296,10 +297,16 @@ module Nokodown
       slider_marks?(input, wrapper) ? wrapper.children.each(&:remove) : input.remove
     end
 
-    # A before-and-after photo slider holds its two photos.
+    # A before-and-after photo slider holds its two photos, and a player's
+    # seek bar can share its wrapper with the download link.
     def slider_marks?(input, wrapper)
       input["type"].to_s.casecmp?("range") && wrapper&.element? &&
-        few_marks?(wrapper) && wrapper.at_css("img, iframe").nil?
+        few_marks?(wrapper) && wrapper.at_css("img, iframe").nil? && !linked?(wrapper)
+    end
+
+    # The marks at a font size slider's ends can be links that lead nowhere.
+    def linked?(wrapper)
+      wrapper.css("a[href]").any? { |link| !link["href"].strip.match?(PLACEHOLDER_HREF) }
     end
 
     # Stops at the limit: inputs set straight in a page's column would each
