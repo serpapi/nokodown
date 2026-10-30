@@ -465,6 +465,13 @@ RSpec.describe Nokodown do
       Nokodown.extract(html, main_content: false, title: false).markdown.should == "Visible"
     end
 
+    it "drops a slider with the marks at its ends, but keeps the photos of a before and after slider" do
+      html = "<p>Kitchen</p><div><input type='range'><span>0</span> <span>100</span></div>" \
+             "<div><img src='/before.jpg' alt='Before'><img src='/after.jpg' alt='After'><input type='range'></div>"
+
+      convert(html).should == "Kitchen\n\n![Before](https://example.com/before.jpg)![After](https://example.com/after.jpg)"
+    end
+
     it "reports :full mode" do
       Nokodown.extract("<p>x</p>", main_content: false).mode.should == :full
     end
@@ -793,6 +800,15 @@ RSpec.describe Nokodown do
       markdown.should include("525,000 €")
       markdown.should include("3 May 2026")
       %w[Homes Barcelona Book].each { |label| markdown.should_not include(label) }
+    end
+
+    it "leaves out the marks at a font size slider's ends between the headline and the body" do
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      slider = "<div class='font-size'><input type='range' min='10' max='18'><span>A</span> <span>A</span><span class='bar'></span></div>"
+      html = "<main><div class='listing'><div class='intro'><h1>Flat for sale in the Eixample</h1></div>#{slider}" \
+             "<div class='description'>#{prose}</div></div></main>"
+
+      Nokodown.to_markdown(html).should start_with("# Flat for sale in the Eixample\n\nThe flat sits")
     end
 
     it "keeps the whole table of results when one row outscores the others" do
