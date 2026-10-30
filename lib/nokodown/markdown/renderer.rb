@@ -2,7 +2,10 @@
 
 module Nokodown
   module Markdown
-    Block = Struct.new(:kind, :text, :level)
+    # links_home marks a heading that links to the site's root, or sits in
+    # such a link, read from the DOM so that links: false, which writes
+    # links as text, still tells a logo heading.
+    Block = Struct.new(:kind, :text, :level, :links_home)
 
     # Turns DOM nodes into Markdown blocks. Runs of inline content become
     # paragraphs; block elements are rendered by tag.
@@ -146,7 +149,15 @@ module Nokodown
         return [Block.new(:paragraph, text)] if text.length > 300
 
         level = node.name[1].to_i
-        [Block.new(:heading, "#{'#' * level} #{text}", level)]
+        [Block.new(:heading, "#{'#' * level} #{text}", level, links_home?(node))]
+      end
+
+      def links_home?(node)
+        node.css("a[href]").any? { |link| Metadata.home_link?(link["href"].strip) }
+      end
+
+      def mark_links_home(blocks)
+        blocks.each { |block| block.links_home = true if block.kind == :heading }
       end
 
       # A list that stays a list writes the headings of its items as lines,
@@ -481,6 +492,7 @@ module Nokodown
       # Cards that wrap a whole block in one link keep the URL on the headline.
       def linked_blocks(node)
         blocks = children_blocks(node)
+        mark_links_home(blocks) if Metadata.home_link?(node["href"].to_s.strip)
         url = @inline.link_url(node["href"].to_s)
         target = url && @links && link_target(blocks)
         return blocks unless target

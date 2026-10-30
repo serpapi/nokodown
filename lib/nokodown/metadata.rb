@@ -35,6 +35,13 @@ module Nokodown
     BYLINE_KEYS = %w[dc:creator dcterm:creator author parsely-author].freeze
     EXCERPT_KEYS = %w[dc:description dcterm:description og:description weibo:article:description weibo:webpage:description description twitter:description].freeze
 
+    # An empty href, or one that starts with a fragment or query, links to
+    # the page itself, as a permalink does. A query on a script links to any
+    # page: wikis link every page as "index.php?Page".
+    def self.home_link?(href)
+      !href.empty? && !href.start_with?("#", "?") && href.match?(HOME_LINK) && !href.match?(SCRIPT_QUERY)
+    end
+
     def initialize(doc, url = nil)
       @doc = doc
       @url = url
@@ -332,14 +339,7 @@ module Nokodown
       nodes = [heading] + heading.css("[class], [id]").to_a
       return true if nodes.any? { |node| "#{node["class"]} #{node["id"]}".match?(names) }
 
-      heading.css("a[href]").any? { |link| home_link?(link["href"].strip) }
-    end
-
-    # An empty href, or one that starts with a fragment or query, links to
-    # the page itself, as a permalink does. A query on a script links to any
-    # page: wikis link every page as "index.php?Page".
-    def home_link?(href)
-      !href.empty? && !href.start_with?("#", "?") && href.match?(HOME_LINK) && !href.match?(SCRIPT_QUERY)
+      heading.css("a[href]").any? { |link| Metadata.home_link?(link["href"].strip) }
     end
 
     # Split before downcasing, like the title's words, which are scanned first
