@@ -120,22 +120,28 @@ module Nokodown
     # The text before, between and after the links, one string per gap.
     def gaps(node)
       gaps = [+""]
-      node.traverse do |child|
-        if child.element? && child.name == "a" && child["href"]
-          gaps << +""
-        elsif child.text? && !inside_link?(child, node)
-          gaps.last << " " << child.content
-        end
-      end
+      gather(node, Dom.key(node), false, gaps)
       gaps.map { |gap| Dom.squish(gap) }
     end
 
-    def inside_link?(text_node, root)
-      text_node.ancestors.each do |ancestor|
-        return false if Dom.key(ancestor) == Dom.key(root)
-        return true if ancestor.name == "a" && ancestor["href"]
+    # Visits children before their parent, as traverse does, and carries
+    # down whether a link below the root holds the text instead of looking
+    # up from each text node: Taxonomy asks for the gaps of every ancestor
+    # of every archive link on deep pages. An element with the root's key
+    # stands for the root, whose own link holds none of it.
+    def gather(node, root_key, linked, gaps)
+      if node.text?
+        gaps.last << " " << node.content unless linked
+      elsif node.element?
+        link = node.name == "a" && node["href"]
+        inside = Dom.key(node) == root_key ? false : linked || link
+        child = node.child
+        while child
+          gather(child, root_key, inside, gaps)
+          child = child.next_sibling
+        end
+        gaps << +"" if link
       end
-      false
     end
 
     # A lone home link needs the page's name after it, and so does an

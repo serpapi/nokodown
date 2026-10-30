@@ -456,6 +456,15 @@ RSpec.describe Nokodown::Boilerplate do
       %w[News boats tides Sea].each { |word| markdown.should_not include(word) }
     end
 
+    it "judges a tag line deep in nested blocks in time linear in its depth" do
+      tags = Array.new(50) { |index| "<a href=\"/tag/harbour-#{index}/\">harbour #{index}</a>" }.join(", ")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining("#{prose('Ferries', 2)}#{'<div>' * 200}<p>Tags: #{tags}</p>#{'</div>' * 200}")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      text.should_not include("harbour 1")
+    end
+
     it "keeps a line with other text, other links or another site's tags, and the lines of an archive itself" do
       meta = '<p>Filed in <a href="/category/news/">News</a> on 3 May by Ann</p>' \
              '<p>Tags: <a href="/tag/boats/">boats</a>, <a href="/boats-guide/">guide</a></p>' \
