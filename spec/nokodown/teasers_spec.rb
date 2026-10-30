@@ -416,6 +416,37 @@ RSpec.describe Nokodown::Teasers do
     found.should be_empty
   end
 
+  it "asks about the copies of a misnested formatting element in time linear in their number" do
+    groups = Array.new(5000) do |group|
+      photos = Array.new(3) do |index|
+        "<a href='/photos/#{group}-#{index}'><img src='/img/#{group}-#{index}.jpg' alt=''></a>"
+      end
+      "<p>#{photos.join}<span itemprop='articleBody'>Harbor</span></p>"
+    end
+    html = "<h1>Harbor photos</h1><p><font face='Arial'>Photos of the harbor</p>#{groups.join}"
+    started = cpu_time
+    found = blocks(html, "https://news.example.com/photos/harbor")
+
+    (cpu_time - started).should < 3
+    found.should be_empty
+  end
+
+  it "drops blocks from the copies of a misnested formatting element in time linear in their number" do
+    boxes = Array.new(6000) do |index|
+      "<p><a class='box' href='/news/#{index}'>Story number #{index}</a> Caption of the harbor story.</p>"
+    end
+    html = "<div class='main'><p><font face='Arial'>Photos of the harbor</p>#{boxes.join}</div>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    Nokodown::Dom.assign_keys(body)
+    keys = body.css(".box").map { |box| Nokodown::Dom.key(box) }.to_set
+    started = cpu_time
+    main = described_class.strip([body.at_css(".main")], keys).first
+
+    (cpu_time - started).should < 1
+    main.at_css(".box").should be_nil
+    main.css("font").size.should == 6001
+  end
+
   it "drops many blocks from one column in time linear in the column" do
     photos = "<figure><img src='/img/harbor.jpg' alt=''></figure>" * 1000
     boxes = Array.new(1000) { |index| "<div class='box'><a href='/news/#{index}'>Story number #{index}</a></div>" }

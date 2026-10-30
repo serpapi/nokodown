@@ -52,6 +52,8 @@ module Nokodown
     MIN_WORDS_LEFT = 20
     BODIES = %i[article product forum qa].freeze
     PROTECTED = "h1, main, [role=main], [itemprop~=articleBody]"
+    # A key that several elements holding a protected one carry.
+    COPIES = :copies
     HEADING = "h1, h2, h3, h4, h5, h6, [role=heading]"
     MEDIA = "img, picture, time"
     KEPT = "h1, img, picture, video, audio, iframe, object, embed, table, pre, math"
@@ -107,14 +109,15 @@ module Nokodown
     end
     private_class_method :remove_emptied
 
-    # By key, told apart from the parser's copies of a misnested <font>,
-    # which share its attributes.
+    # Remembered by key for the first element found with it. The parser's
+    # copies of a misnested formatting element share its attributes, key
+    # included; telling thousands of them apart costs more than reading each.
     def self.worded?(node, worded)
-      same = worded[Dom.key(node)] ||= []
-      return true if same.any? { |other| other == node }
+      key = Dom.key(node)
+      return true if worded[key] == node
       return false unless any_words?(node)
 
-      same << node
+      worded[key] ||= node
       true
     end
     private_class_method :worded?
@@ -274,28 +277,25 @@ module Nokodown
     end
 
     def holds_protected?(node)
-      key = Dom.key(node)
-      return !node.at_css(PROTECTED).nil? if key.nil?
-
       @holders ||= protected_holders
-      @holders.fetch(key, []).any? { |holder| holder == node }
+      holder = @holders[Dom.key(node)]
+      COPIES == holder ? !node.at_css(PROTECTED).nil? : holder == node
     end
 
     # The ancestors of protected elements, by key. The parser's copies of a
-    # misnested <b> or <font> share its attributes, key included, so each
-    # element is told apart from its copies. A climb stops at an element
-    # already listed, whose own ancestors are listed with it.
+    # misnested formatting element share its attributes, key included: a key
+    # stands for the first element found with it, and once a copy holds a
+    # protected element too, for COPIES, each then asked on its own. A climb
+    # stops at an element already listed, whose own ancestors are listed
+    # with it.
     def protected_holders
       @body.css(PROTECTED).each_with_object({}) do |found, holders|
         node = found
         while (node = node.parent)&.element?
-          key = Dom.key(node)
-          next if key.nil?
+          holder = holders[Dom.key(node)]
+          break if holder == node
 
-          same = holders[key] ||= []
-          break if same.any? { |holder| holder == node }
-
-          same << node
+          holders[Dom.key(node)] = holder.nil? ? node : COPIES
         end
       end
     end
@@ -594,14 +594,12 @@ module Nokodown
       nil
     end
 
-    # By key, told apart from the parser's copies of a misnested <font>,
-    # which share its attributes.
+    # Kept by key for the first wrapper found with it. The parser's copies of
+    # a misnested formatting element share its attributes, key included;
+    # telling thousands of them apart costs more than walking each afresh.
     def walk_of(node)
-      key = Dom.key(node)
-      return new_walk(node) if key.nil?
-
-      same = (@walks ||= {})[key] ||= []
-      same.find { |walk| walk.node == node } || new_walk(node).tap { |walk| same << walk }
+      walk = (@walks ||= {})[Dom.key(node)] ||= new_walk(node)
+      walk.node == node ? walk : new_walk(node)
     end
 
     def new_walk(node)
