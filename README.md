@@ -14,10 +14,17 @@ Built on [Nokolexbor](https://github.com/serpapi/nokolexbor), for the
 ## Installation
 
 ```ruby
-gem "nokodown", git: "git@github.com:serpapi/nokodown.git"
+gem "nokodown"
 ```
 
-Ruby 2.7 or newer, nokolexbor 0.6 or newer.
+Ruby 2.7 or newer, nokolexbor 0.6 or a later 0.x release. nokolexbor 0.7 and
+later need Ruby 3.1. Bundler picks 0.6.4 on older Rubies, but `gem install`
+does not, so install that version first:
+
+```sh
+gem install nokolexbor -v 0.6.4
+gem install nokodown
+```
 
 ## Usage
 
@@ -40,6 +47,9 @@ Nokodown.to_markdown(html, url: "https://example.com/post") # just the Markdown
 
 `html` is a string in any encoding. Binary strings are decoded using their
 `<meta charset>`, and invalid bytes are dropped.
+
+`Nokodown.extract`, `Nokodown.to_markdown` and `Nokodown::Result` are the
+public API. Other classes are internal and can change in any release.
 
 | Option | Default | |
 | --- | --- | --- |
