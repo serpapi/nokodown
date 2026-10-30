@@ -57,7 +57,6 @@ module Nokodown
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
     SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ").freeze
     MIN_SERIES = 3
-    HEADING_SELECTOR = "h1, h2, h3, h4, h5, h6"
     MEDIA = %w[img picture iframe].freeze
     MEDIA_SELECTOR = MEDIA.join(", ")
     # A CJK character says about as much as a short word.
@@ -388,7 +387,7 @@ module Nokodown
       repeated = repeated_shapes(clusters)
       remove_clusters(root, repeated) unless clusters.empty?
       menus = current_page_menus(root)
-      boxes = boxes_around(menus, root)
+      boxes = untitled_boxes(menus.map { |menu| boxes_around(menu, root) })
       remove_clusters(root, repeated, boxes) if remove_menus(root, menus) && !boxes.empty?
     end
 
@@ -405,20 +404,31 @@ module Nokodown
       end
     end
 
-    # The keys of the boxes around each menu, up to the first that holds a
+    # The boxes a menu sits in below the root, innermost first.
+    def boxes_around(menu, root)
+      boxes = []
+      node = menu
+      boxes << node until (node = node.parent).nil? || node == root
+      boxes
+    end
+
+    # The keys of the boxes around the menus, up to the first that holds a
     # heading: that is a card whose tag line linked to the page itself
     # ("<h2>Minutes 5</h2> 07.01.2025 Admin Read more"), and a run of cards
-    # is the listing.
-    def boxes_around(menus, root)
-      root_key = Dom.key(root)
-      titled = {}
-      menus.each_with_object(Set.new) do |menu, keys|
-        menu.ancestors.each do |node|
-          key = node.element? ? Dom.key(node) : nil
-          break if key.nil? || key == root_key || keys.include?(key)
-          break if titled.fetch(key) { titled[key] = !node.at_css(HEADING_SELECTOR).nil? }
+    # is the listing. A walk that reaches a box an earlier one went through
+    # stops there; the parser's clones of a <font face> share one key, so
+    # the box itself is compared.
+    def untitled_boxes(chains)
+      seen = Hash.new { |boxes, key| boxes[key] = [] }
+      chains.each_with_object(Set.new) do |chain, keys|
+        chain.each do |box|
+          key = Dom.key(box)
+          break if seen[key].any? { |other| other == box }
 
-          keys << key
+          seen[key] << box
+          break if box.at_css(ContainerCheck::HEADINGS)
+
+          keys << key if key
         end
       end
     end

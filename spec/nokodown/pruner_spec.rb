@@ -128,6 +128,18 @@ RSpec.describe Nokodown::Pruner do
       Nokodown::Dom.text(root).should_not include("Commission on planning")
     end
 
+    it "drops the links beside each menu set in the clones of a font left open, which share one key" do
+      menu = "<span><a href='/c/works'>Regulatory signs for highway works</a>, <a href='/page'>Warning</a>, " \
+             "<a href='/c/info'>Info</a></span>"
+      links = "<p><a href='/a'>Alpha</a> <a href='/b'>Beta</a></p><p><a href='/c'>Gamma</a></p>"
+      root = content("#{story}<div><p><font face='Verdana'>#{menu}</p></div><div><p>#{menu}</p>#{links}</div>")
+
+      described_class.new([root], :page, urls: urls).call
+
+      Nokodown::Dom.text(root).should include("The harbor bridge reopened")
+      ["Alpha", "Gamma"].each { |noise| Nokodown::Dom.text(root).should_not include(noise) }
+    end
+
     it "judges a list once however many of its links lead to the page itself" do
       entries = (1..500).map { |number| "<li><a href='/page'>Item #{number}</a> (#{number})</li>" }.join
       root = content("#{story}<ul>#{entries}</ul>")
