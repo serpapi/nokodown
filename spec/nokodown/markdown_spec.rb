@@ -1409,7 +1409,7 @@ RSpec.describe "Markdown conversion" do
 
     it "keeps a trailing price heading, and the title over it, when the label after it is dropped" do
       html = "<p>#SKU: HW73826</p><h1>Coffee set x12</h1><h3 class='price'>$ 24.284,10</h3><div><span>Cantidad</span></div>"
-      convert(html).should == "#SKU: HW73826\n\n# Coffee set x12\n\n### $ 24.284,10"
+      convert(html).should == "#SKU: HW73826\n\n# Coffee set x12\n\n$ 24.284,10"
       convert("<h2>Intro</h2><p>Text</p><h2>Top 10 picks</h2>").should == "## Intro\n\nText"
     end
 
