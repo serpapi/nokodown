@@ -392,7 +392,7 @@ RSpec.describe Nokodown::Boilerplate do
       end
     end
 
-    it "keeps a wider grid column, and a narrower one beside a title's column with prose, more text or the title" do
+    it "keeps a wider grid column, and a narrower one of two cards or beside a title's column with prose, more text or the title" do
       guides = Array.new(12) { |index| "<h3><a href=\"/guide-#{index}/\">Fellowship guide, part #{index + 1}</a></h3>" }
       side = "<div class=\"col-md-4\"><h4>Guides</h4>#{guides.join}</div>"
       trail = "<p>Home › Fellowships › Germany</p>"
@@ -403,6 +403,14 @@ RSpec.describe Nokodown::Boilerplate do
       rows.each do |row|
         remaining("<div class=\"row\">#{row}</div>").should include("part 12")
       end
+
+      cards = ["Taiwan Graduate Scholarships", "Stirling Vice Chancellor Scholarship"].map.with_index do |post, index|
+        "<div class=\"module\"><a href=\"/category/#{index}/\">Fully Funded</a><h3><a href=\"/post-#{index}/\">#{post}</a></h3>" \
+          "<p><a href=\"/post-#{index}/\">Applications open in March for students of any subject</a></p></div>"
+      end
+      html = "<div class=\"row\"><div class=\"col-md-8\">#{trail}<h1>Tag: Konstanz Fellowship</h1><p>No posts to display</p>" \
+             "</div><div class=\"col-md-4\"><h4>Latest Articles</h4>#{cards.join}</div></div>"
+      remaining(html).should include("Stirling Vice")
     end
 
     it "keeps a narrower grid column of the page's own links, as a profile's publications" do
