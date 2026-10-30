@@ -480,6 +480,32 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "boilerplate text" do
+    def pruned(html)
+      root = content(story + html)
+      described_class.new([root], :page).call
+      root
+    end
+
+    it "removes the cart button of a card whose only words it is, but keeps the card's picture" do
+      cards = %w[В\ корзину Add\ to\ cart].each_with_index.map do |label, index|
+        "<div class='item'><a href='/p/#{index}'><img src='/img/#{index}.jpg' alt='Diamond bur'></a>" \
+          "<div class='buy'><span class='btn'>#{label}</span></div></div>"
+      end
+      root = pruned("<div class='catalog'>#{cards.join}</div>")
+
+      root.css("img").size.should == 2
+      Nokodown::Dom.text(root).should_not match(/корзину|cart/)
+    end
+
+    it "removes an icon in the label's own element and a logo that links home" do
+      root = pruned("<div><a href='https://twitter.com/intent/tweet'><img src='/x.svg' alt=''> Share</a></div>" \
+                    "<div><a href='/'><img src='/logo.png' alt='Acme'></a><span>Skip to content</span></div>")
+
+      root.css("img").should be_empty
+    end
+  end
+
   describe "article pruning with conditional cleaning off" do
     let(:html) do
       "<p class='byline'>By Jo Pine</p>#{story}#{cards}" \

@@ -36,6 +36,9 @@ module Nokodown
     QUANTITY = /qty|quantity/i.freeze
     FORM_CONTENT = "h1, main, article, [role=main], video, iframe"
     FORM_PAGE_TEXT = 100
+    # Enough for the marks at a slider's ends: "A" and "A", "0" and "100",
+    # "Small" and "Large".
+    SLIDER_MARKS = 12
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
@@ -81,6 +84,7 @@ module Nokodown
       remove_hidden
       mark_titled_forms
       remove_form_controls
+      InPageLinks.mark_listed(@body)
       HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
       mark_wide_copies
@@ -282,7 +286,7 @@ module Nokodown
 
     def remove_form_controls
       @body.css("form").each { |form| form.remove if utility_form?(form) }
-      @body.css("input").each { |input| input.remove unless task_checkbox?(input) }
+      @body.css("input").each { |input| remove_input(input) unless task_checkbox?(input) }
       @body.css("button").each { |button| disclosure_button?(button) ? button.replace(button.children) : button.remove }
       @body.css("label").each { |label| label.remove if label["for"] || Dom.ancestors_named(label, "form").any? }
       @body.css("form").each { |form| form.remove if leftover_form?(form) }
@@ -383,6 +387,19 @@ module Nokodown
 
     def task_checkbox?(input)
       input["type"].to_s.casecmp?("checkbox") && input.parent&.name == "li"
+    end
+
+    # Without the slider, the marks at its ends would be left as a line of
+    # their own, such as "A A" between a headline and the article.
+    def remove_input(input)
+      wrapper = input.parent
+      slider_marks?(input, wrapper) ? wrapper.children.each(&:remove) : input.remove
+    end
+
+    # A before-and-after photo slider holds its two photos.
+    def slider_marks?(input, wrapper)
+      input["type"].to_s.casecmp?("range") && wrapper&.element? &&
+        Dom.char_count(wrapper.content) <= SLIDER_MARKS && wrapper.at_css("img, iframe").nil?
     end
 
     # Search boxes, sign-ups and logins. Forms that wrap real content (ASP.NET

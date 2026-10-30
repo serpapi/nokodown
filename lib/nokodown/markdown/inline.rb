@@ -2,7 +2,7 @@
 
 module Nokodown
   module Markdown
-    RenderedImage = Struct.new(:url, :redundant, :targets, :unnamed)
+    RenderedImage = Struct.new(:url, :redundant, :targets, :unnamed, :full_size)
 
     # Renders a run of inline nodes (text, emphasis, code, links, images) to
     # one string. Line breaks from <br> are kept as "\n".
@@ -383,10 +383,11 @@ module Nokodown
       # An image is redundant only if every copy of it is. Targets are the
       # pages whose text links make its thumbnail copies redundant.
       def record(markup, src, node, unnamed)
-        image = (@rendered_images[markup] ||= RenderedImage.new(src, true, Set.new, true))
+        image = (@rendered_images[markup] ||= RenderedImage.new(src, true, Set.new, true, false))
         key = Dom.key(node)
         image.redundant &&= @redundant_images.key?(key)
         image.unnamed &&= unnamed
+        image.full_size ||= Image.full_size_link?(node)
         target = @redundant_images[key]
         image.targets << target if target
       end
