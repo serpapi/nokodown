@@ -6,6 +6,11 @@ module Nokodown
     CLUSTER_CONTAINERS = "ul, ol, menu, dl, div, section, p, td, li, span, table, header, footer"
     TEXT_BLOCKS = "p, div, span, li, h1, h2, h3, h4, h5, h6, small, section, aside, figcaption, b, strong, em, i"
     CARD_MEDIA = "img, picture, video"
+    # A card's own buttons, which can be all the words it has left.
+    CART_LABEL = /
+      \A(?:#{Patterns::SHOP_CONTROL_TEXT}|add\sto\s(?:cart|bag|basket)|quick\s(?:shop|view|add)|(?:choose|select|view)\soptions)
+      [\s.:!…»›→>]*\z
+    /xi.freeze
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
     # A class names a button when that is its last word, before a modifier,
@@ -246,8 +251,10 @@ module Nokodown
 
     # A card whose only words left are its button ("Add to cart", "В
     # корзину") keeps its picture: the block that holds the label alone is
-    # removed on its own. An icon in the label's own element goes with it.
+    # removed on its own. An icon in the label's own element goes with it,
+    # and so does the banner an "Advertisement" box links.
     def label_beside_picture?(node, text)
+      return false unless text.match?(CART_LABEL)
       return false if node.css(CARD_MEDIA).none? { |media| card_picture?(media) }
 
       node.css(TEXT_BLOCKS).any? { |child| Dom.text(child) == text && child.at_css(CARD_MEDIA).nil? }
