@@ -86,9 +86,11 @@ with `main_content: false`, `:none` for a document without a body.
   text box, a name or e-mail field and little text) with the title above
   them, and a note under that title, in any language. A form stays when it
   wraps the page (ASP.NET), holds its title or main region, holds an e-mail
-  address or a phone number, asks how many (an order with a note), or is
-  all an application or sign-up page's main region holds, and neither kind
-  goes when it is all the content holds.
+  address or a phone number, holds a table of what it asks about (a row of
+  headers over a row of text, as an inquiry shows the flat it is about),
+  asks how many (an order with a note), or is all an application or
+  sign-up page's main region holds, and neither kind goes when it is all
+  the content holds.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note

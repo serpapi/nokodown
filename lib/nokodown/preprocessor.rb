@@ -336,12 +336,25 @@ module Nokodown
     def message_form?(form)
       return false if form.parent&.name == "body" || form.at_css(FORM_CONTENT)
       return false if Dom.char_count(form.content) >= UTILITY_FORM_TEXT
-      return false if form.content.match?(MessageForms::CONTACT_DETAIL)
+      return false if form.content.match?(MessageForms::CONTACT_DETAIL) || form.css("table").any? { |table| data_rows?(table) }
 
       inputs = form.css("input")
       return false if inputs.none? { |input| SENDER_INPUTS.include?(input["type"].to_s.downcase) }
 
       inputs.none? { |input| quantity?(input) } && !page_form?(form)
+    end
+
+    # A table of what the form asks about, as an inquiry form shows the flat
+    # it asks about: a row of headers over a row of text, without the text
+    # boxes of a form laid out in a table.
+    def data_rows?(table)
+      rows = table.css("tr").map { |row| row.element_children.select { |cell| %w[td th].include?(cell.name) } }
+      rows.any? { |cells| cells.size >= 2 && cells.all? { |cell| cell.name == "th" } } &&
+        rows.any? { |cells| cells.size >= 2 && cells.all? { |cell| cell.name == "td" && data_cell?(cell) } }
+    end
+
+    def data_cell?(cell)
+      !Dom.squish(cell.content).empty? && cell.css("input, textarea, select").all? { |control| control["type"].to_s.casecmp?("hidden") }
     end
 
     def quantity?(input)

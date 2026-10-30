@@ -84,6 +84,14 @@ RSpec.describe Nokodown::MessageForms do
     markdown(html).should include("Fields in bold must be filled in")
   end
 
+  it "keeps the table of what an inquiry form asks about" do
+    html = "#{story}<div class=\"inquiry\"><form><table><tr><th>Property</th><th>Type</th><th>Address</th></tr>" \
+           '<tr><td><input type="hidden" name="id" value="6136">F.L.A.G.</td><td>Apartment</td><td>Minatomachi, Sanyo-Onoda</td></tr>' \
+           '</table><table><tr><th>Name</th><td><input type="text" name="name"></td></tr></table><textarea></textarea></form></div>'
+
+    markdown(html).should include("Minatomachi")
+  end
+
   it "keeps a contact page that holds nothing but its form" do
     html = '<div id="center"><form><p>Please do not write to us about SEO services.</p><input type="text" name="email">' \
            "<textarea></textarea></form></div>"
