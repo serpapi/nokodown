@@ -160,16 +160,20 @@ module Nokodown
         format_list(items, start)
       end
 
-      # Tab panels and accordions set whole sections in list items: a
-      # heading, its text, then a heading of another name. Their headings
-      # stay headings, outside a list. A card repeats its one title, and a
-      # contact list heads a phone number.
+      # Tab panels and accordions set whole sections in list items: two
+      # headings of different names, each over text of its own. Their
+      # headings stay headings, outside a list. A card repeats its one
+      # title, the date under a card's excerpt heads at most an icon, and
+      # a contact list heads a phone number.
       def sections?(blocks)
-        names = blocks.select { |block| block.kind == :heading }.map { |block| block.text.sub(/\A#+ /, "") }
+        names = blocks.each_cons(2).filter_map { |block, following| block.text.sub(/\A#+ /, "") if heads_text?(block, following) }
         return false if names.uniq.size < 2
 
-        body = blocks.drop_while { |block| block.kind != :heading }.drop_while { |block| block.kind == :heading }
-        body.any? { |block| block.kind == :heading } && body.any? { |block| section_text?(block) }
+        blocks.drop_while { |block| block.kind != :heading }.any? { |block| section_text?(block) }
+      end
+
+      def heads_text?(block, following)
+        block.kind == :heading && following.kind != :heading && following.text.gsub(ImageCleanup::IMAGE, "").match?(/[\p{L}\p{N}]/)
       end
 
       def section_text?(block)

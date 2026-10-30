@@ -393,7 +393,10 @@ RSpec.describe "Markdown conversion" do
                               "[Flag Hill at Eastby pdf, 1.9 MB.](https://example.com/d/east.pdf)\n\n" \
                               "[Around Bottom Hill, 3 km](https://example.com/d/south.pdf)\nStart: Village hall.\n" \
                               "[Hedum water, 2,5 km](https://example.com/d/south.pdf)\nStart: Hedum."
-      cards = %w[a b].map { |page| %(<p><a href="/#{page}">Post #{page}</a><br><a href="/#{page}">May 30, 2018</a><br><a href="/#{page}">12 comments</a><br><a href="/#{page}">Read more</a></p>) }
+      cards = %w[a b].map do |page|
+        %(<p><a href="/#{page}">Post #{page}</a><br><a href="/#{page}">May 30, 2018</a><br><a href="/#{page}">12 comments</a><br>) +
+          %(<a href="/#{page}">Read more</a></p>)
+      end
       convert(cards.join).should == "[Post a](https://example.com/a)\nMay 30, 2018\n12 comments\n\n[Post b](https://example.com/b)\nMay 30, 2018\n12 comments"
       teasers = { "a" => "Headaches are among the most common complaints.", "b" => "Back pain is common." }.map do |page, text|
         %(<h4><a href="/#{page}">Cure #{page}</a></h4><p><a href="/#{page}">#{text}</a><br><a href="/#{page}">Details</a></p>)
@@ -863,15 +866,22 @@ RSpec.describe "Markdown conversion" do
       convert(panels).should == "## Product details\n\n### Description\n\nPhotos of the boot beside the original pair.\n\n### Product facts\n\n" \
                                 "- Material: Suede\n- Colour: Brown\n\n## Delivery and returns\n\n### Delivery\n\nInternational post\n\n" \
                                 "### Returns\n\nWithin 7 days"
-      outline = %w[Review Overview].map { |title| "<li><span>01</span><h3>#{title}</h3><p>The theme, aims and contents of the report, with a look back.</p></li>" }
+      outline = %w[Review Overview].map do |title|
+        "<li><span>01</span><h3>#{title}</h3><p>The theme, aims and contents of the report, with a look back.</p></li>"
+      end
       convert("<ol>#{outline.join}</ol>").should == "1. 01 Review\n   The theme, aims and contents of the report, with a look back.\n" \
                                                    "2. 01 Overview\n   The theme, aims and contents of the report, with a look back."
+      news = %w[1 2].map do |id|
+        %(<li><h2><a href="/n/#{id}">Story #{id}</a></h2><p>The theme, aims and contents of the report, with a look back at the whole of the year.</p>) +
+          %(<h3>2025-09-0#{id}</h3><img src="/icon6.png" alt=""></li>)
+      end
+      convert("<ul>#{news.join}</ul>").should start_with("- [Story 1](https://example.com/n/1)\n  The theme")
     end
 
     it "writes the heading that closes a list of sections as text" do
-      lead = "Sets the value of this element, whose type must be the underlying type of this object."
-      convert("<ul><li><p>#{lead}</p><h4>Parameters</h4><ul><li>value: Date</li></ul><h4>Returns void</h4></li></ul>").should ==
-        "#{lead}\n\n#### Parameters\n\n- value: Date\n\nReturns void"
+      lead = "Emits the event to every listener, in the order they were added, and returns the emitter."
+      html = "<ul><li><h4>Parameters</h4><ul><li>event: string</li></ul><h4>Returns Emitter</h4><p>#{lead}</p></li><li><h4>Returns void</h4></li></ul>"
+      convert(html).should == "#### Parameters\n\n- event: string\n\n#### Returns Emitter\n\n#{lead}\n\nReturns void"
     end
 
     it "looks through wrappers between the list and its items" do
