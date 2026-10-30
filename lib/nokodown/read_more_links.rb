@@ -45,6 +45,8 @@ module Nokodown
         next unless label?(link)
 
         holder = holder(link)
+        next if continues_link?(holder, link)
+
         holder if standalone?(holder) && !menu_entry?(holder) && named_in_card?(link, holder, namers[link.page])
       end
       holders.each { |holder| holder.remove unless Dom.in_code?(holder) }
@@ -141,6 +143,28 @@ module Nokodown
 
     def boundary?(node, stops)
       node.element? && (stops.include?(node.name) || Dom.block?(node))
+    end
+
+    # A second link to the same page right after a longer one, with nothing
+    # between them, goes on with its words: a title, then "- Author" in a
+    # wrapper of its own. A control follows an excerpt or a title that ends
+    # like a sentence, or stands on a line of its own.
+    def continues_link?(holder, label)
+      return false if Dom.block?(holder)
+
+      before = previous_inline(holder)
+      link = before && (before.name == "a" ? before : before.css("a[href]").last)
+      return false if link.nil? || page(link) != label.page
+
+      text = Dom.text(link)
+      text.length > label.text.length && text.match?(/\p{L}/) && !text.match?(EXCERPT_END) && Dom.text(before).end_with?(text)
+    end
+
+    # The element right before the node on its line, with no text between.
+    def previous_inline(node)
+      sibling = node.previous_sibling
+      sibling = sibling.previous_sibling while sibling && !sibling.element? && Dom.text(sibling).empty?
+      sibling if sibling&.element? && !Dom.block?(sibling) && sibling.css("*").none? { |child| Dom.block?(child) }
     end
 
     # A link in words can name its page. A term of a definition list is

@@ -60,6 +60,14 @@ RSpec.describe Nokodown::ReadMoreLinks do
     text_after(html).should == "LeonesVSOsosFinishedTigres against LobosVS"
   end
 
+  it "keeps a name that goes on from the title's link, but not a label after a sentence or a line break" do
+    html = "<div><a href='/posts/12'>Philosophy of life: a life shaped by curiosity </a>" \
+           "<span><a href='/posts/12'><b>- Vijay Joshi</b></a><span></span></span></div>" \
+           "<div><a href='/posts/9'>The harbor bridge reopens!</a><span><a href='/posts/9'>Details</a></span></div>" \
+           "<div><a href='/posts/7'>Crews finish early</a><br><span><a href='/posts/7'>Details</a></span></div>"
+    text_after(html).should == "Philosophy of life: a life shaped by curiosity - Vijay JoshiThe harbor bridge reopens!Crews finish early"
+  end
+
   it "keeps the entries of a breadcrumb or a table of contents" do
     html = "<nav><a href='/guide/intro'>A quick guide to building apps</a><ol><li><a href='/guide/intro'>Intro</a></li>" \
            "<li><a href='/guide/setup'>Setup</a></li><li><a href='/guide/basics'>Basics</a></li></ol></nav>"
