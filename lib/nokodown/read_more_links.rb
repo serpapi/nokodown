@@ -198,9 +198,9 @@ module Nokodown
 
     # Keeps the first heading under the node that can be a title and its
     # first line, a block with text and no block inside, and returns
-    # whether it holds a block.
-    # A link can wrap a whole page in many levels of blocks, so each element
-    # is read once, not once for every block around it.
+    # whether it holds a block. A link can wrap a whole page in many levels
+    # of blocks, so each element is read once, not once for every block
+    # around it.
     def read_title(node, title)
       node.element_children.reduce(false) do |holds, child|
         next true if own_lines?(child)
