@@ -52,7 +52,7 @@ as unclosed tags on broken pages leave them, keep only their text.
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
 | `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
-| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section, or names a section that the page's URL, which names the title, does not mention. Away from the home page, a heading that only names the site gives way to the page title, and a title that only names the site does not head content that has a heading of its own. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
+| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section, or names a section that the page's URL, which names the title, does not mention. Away from the home page, a heading that only names the site gives way to the page title when it is an `<h1>`, opens the content, below nothing but images, or links to the site's root, whatever `images` and `links` are set to; a lower one below other content, such as a company's name above its address or an author's name that links to the author's page, stays. A title that only names the site does not head content that has a heading of its own. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |
 
@@ -72,8 +72,9 @@ with `main_content: false`, `:none` for a document without a body.
   home page, then links down the site with separators), a line of links to
   the site's tag or label archives ("Tags: a, b") with at most a short label
   ending in a colon and a category kicker above the title, unless the page
-  repeats the line (a card's tags) or is such an archive, and
-  copyright and licence lines in the major web languages.
+  repeats the line (a card's tags) or is such an archive or the index of
+  all tags or categories, and copyright and licence lines in the major web
+  languages.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
@@ -102,10 +103,12 @@ with `main_content: false`, `:none` for a document without a body.
 - Invisible elements (`hidden`, `aria-hidden`, inline `display: none`,
   screen-reader-only and other hiding classes, and elements placed far off
   screen or in a one-pixel strip, where hacked sites hide link spam), keeping
-  collapsed accordions, tab panels and FAQ answers. Content that React streams
-  into hidden containers at the end of the page is put back where the page
-  shows it, unless it is mostly links, as carousels of recommended products
-  are.
+  collapsed accordions, tab panels and FAQ answers, and paragraphs placed off
+  screen with no link or field that the page shows nowhere else: shop
+  builders write reviews and posts there for search engines and show them by
+  script. Content that React streams into hidden containers at the end of the
+  page is put back where the page shows it, unless it is mostly links, as
+  carousels of recommended products are.
 - Sections rendered twice, such as a desktop and a mobile copy.
 - Repeated text and the labels of controls, in the major web languages:
   copies of the title (an H2 or bold line under the H1, a gallery label on
@@ -128,7 +131,9 @@ with `main_content: false`, `:none` for a document without a body.
   numbers, and repeated responsive copies of the same image.
 - Headings left at the end of the content with nothing under them, once
   what they headed is removed, unless one states a figure (a price, a
-  score, a year).
+  score, a year), or reads as a sentence on a page with almost no text
+  outside its headings. An H1, a call to subscribe or follow, a comment
+  heading ("One thought on “…”") or a line of #tags is no such sentence.
 - Markdown that costs tokens without meaning: horizontal rules, blank lines
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators

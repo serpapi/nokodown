@@ -57,12 +57,70 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should start_with("Photo by Ben Hon for Resy\n\n# The Resy Guide to the Michelin Winners")
     end
 
+    it "puts the title above content whose only H1 is a sentence or a line of tags at its end" do
+      html = "<title>Reel by Ann | Buzzer</title><body><p><a href='/u/ann'>Reel by Ann</a></p>"
+
+      Nokodown.to_markdown("#{html}<h1>#buzzer #viral #fyp #sports #daily #football #soccer #trending</h1></body>", url: "https://example.com/reels/7")
+              .should == "# Reel by Ann | Buzzer\n\n[Reel by Ann](https://example.com/u/ann)"
+      Nokodown.to_markdown("#{html}<h1>The best football and soccer moments of the day, every day</h1></body>", url: "https://example.com/reels/7")
+              .should == "# Reel by Ann | Buzzer\n\n[Reel by Ann](https://example.com/u/ann)"
+    end
+
     it "puts the page's title in place of a heading that only names the site" do
       body = "<p>#{'We caught twelve trout at the upper pond, and the water was cold and clear all day. ' * 3}</p>"
       html = "<title>Bonten Fishing Pond - Friends from afar</title><body><article>" \
              "<h1><a href='http://bonten.example/'>Bonten Fishing Pond</a></h1>#{body}</article></body>"
 
       Nokodown.to_markdown(html, url: "http://bonten.example/calendar/671515").should start_with("# Friends from afar\n\nWe caught")
+    end
+
+    it "keeps a lower heading that names the site below the content's opening, as above an address" do
+      body = "<p>Call now</p><h4>K&amp;D Roofing</h4><p>42 Penbrook Avenue, Bangor</p>"
+      html = "<title>Contact - K&amp;D Roofing</title><body><article>#{body}</article></body>"
+
+      Nokodown.to_markdown(html, url: "https://kdroofing.example/contact/")
+              .should == "# Contact\n\nCall now\n\n#### K&D Roofing\n\n42 Penbrook Avenue, Bangor"
+    end
+
+    it "drops a heading that names the site below other content when it is an H1" do
+      html = "<title>Contact - K&amp;D Roofing</title><body><article><p>Call now</p><h1>K&amp;D Roofing</h1><p>42 Penbrook Avenue</p></article></body>"
+
+      Nokodown.to_markdown(html, url: "https://kdroofing.example/contact/").should == "# Contact\n\nCall now\n\n42 Penbrook Avenue"
+    end
+
+    it "drops a lower heading that names the site when it opens the content" do
+      html = "<title>Contact - K&amp;D Roofing</title><body><article><h4>K&amp;D Roofing</h4><p>42 Penbrook Avenue</p></article></body>"
+
+      Nokodown.to_markdown(html, url: "https://kdroofing.example/contact/").should == "# Contact\n\n42 Penbrook Avenue"
+    end
+
+    it "drops a lower heading that names the site below only an image, with images or without" do
+      body = "<p><img src='/storefront.jpg' alt='Our storefront'></p><h4>K&amp;D Roofing</h4><p>42 Penbrook Avenue</p>"
+      html = "<title>Contact - K&amp;D Roofing</title><body><article>#{body}</article></body>"
+      url = "https://kdroofing.example/contact/"
+
+      Nokodown.to_markdown(html, url: url).should == "# Contact\n\n![Our storefront](https://kdroofing.example/storefront.jpg)\n\n42 Penbrook Avenue"
+      Nokodown.to_markdown(html, url: url, images: false).should == "# Contact\n\n42 Penbrook Avenue"
+    end
+
+    it "drops a lower heading that names the site and links home below other content, with links or without" do
+      ["<h4><a href='/'>K&amp;D Roofing</a></h4>", "<a href='https://kdroofing.example/'><h4>K&amp;D Roofing</h4></a>"].each do |heading|
+        html = "<title>Contact - K&amp;D Roofing</title><body><article><p>Call now</p>#{heading}<p>42 Penbrook Avenue</p></article></body>"
+
+        [true, false].each do |links|
+          Nokodown.to_markdown(html, url: "https://kdroofing.example/contact/", links: links)
+                  .should == "# Contact\n\nCall now\n\n42 Penbrook Avenue"
+        end
+      end
+    end
+
+    it "keeps a lower heading that names the site and links to another page below other content, as an author's name" do
+      body = "<p>Drink more water.</p><h5><a href='/author/rodrigo/'>Rodrigo Coelho</a></h5><p>Rodrigo writes about health.</p>"
+      html = "<title>Water - Rodrigo Coelho</title><body><article>#{body}</article></body>"
+      url = "https://rodrigocoelho.example/water/"
+
+      Nokodown.to_markdown(html, url: url).should include("\n\n##### [Rodrigo Coelho](https://rodrigocoelho.example/author/rodrigo/)\n\n")
+      Nokodown.to_markdown(html, url: url, links: false).should include("\n\n##### Rodrigo Coelho\n\n")
     end
 
     it "puts the title above a section's name when the URL names the title" do
@@ -367,9 +425,35 @@ RSpec.describe Nokodown do
       html = '<p>Open daily.</p><div style="position: absolute; left: -7786px;"><a href="https://spam.example">casino bonus</a></div>' \
              '<div style="position:fixed;top:-9000px"><a href="https://spam.example">live casino</a></div>' \
              '<div style="position:absolute;left:-999em"><a href="https://spam.example">slots</a></div>' \
-             '<div style="overflow:hidden;height:1px;"><a href="https://spam.example">no kyc casino</a></div>'
+             '<div style="overflow:hidden;height:1px;"><a href="https://spam.example">no kyc casino</a></div>' \
+             '<a href="https://spam.example" style="position:absolute;left:-9999px">cheap pills</a>'
 
       convert(html).should == "Open daily."
+    end
+
+    it "keeps a paragraph placed off screen that the page shows nowhere else, as Sixshop writes its reviews there" do
+      review = "A neat ring for every day, though the gold engraving is a little loud on the silver."
+      html = "<h1>Ring review</h1><div style=\"position:absolute !important; top:-999999px !important; left:-999999px !important\">" \
+             "<h2>Pearl ring</h2><p>#{review}</p></div>" \
+             '<div style="position:absolute; left:-9999px"><a href="https://spam.example">casino bonus</a></div>' \
+             '<div style="position:absolute; left:-5000px"><input name="b_42" tabindex="-1" value="">Leave this empty</div>' \
+             '<p><img src="https://counter.example/watch/1" style="position:absolute; left:-9999px;" alt=""></p>'
+
+      convert(html).should == "# Ring review\n\n## Pearl ring\n\n#{review}"
+    end
+
+    it "drops off-screen text that is no paragraph of prose, or a copy of paragraphs the page shows" do
+      text = ["The harbour ferry leaves at noon and returns before dark every day from pier four.",
+              "Tickets are sold on board and cost twelve euros for adults, and children travel free."]
+      paragraphs = text.map { |line| "<p>#{line}</p>" }.join
+      html = "<h1>Ferry times</h1>#{paragraphs}" \
+             '<p>Read the <a href="/fares">fare table<span style="position:absolute;left:-9999px"> (opens in a new window)</span></a>.</p>' \
+             "<div style=\"position:absolute;left:-9999px\">#{paragraphs}</div>" \
+             '<div style="position:absolute;top:-10000px">buy cheap replica watches online best price replica rolex omega cartier store</div>' \
+             '<h2 style="position:absolute; top:-1000px;">Harbour ferry times and harbour ferry tickets</h2>' \
+             '<div style="position:fixed;left:-9000px;top:-9000px;"><noframes><progress id="zr"><noframes id="zr"></noframes></div>'
+
+      convert(html).should == "# Ferry times\n\n#{text.join("\n\n")}\n\nRead the [fare table](https://example.com/fares)."
     end
 
     it "keeps screen-reader text clipped to one pixel in place, which can be the only copy of a price" do
