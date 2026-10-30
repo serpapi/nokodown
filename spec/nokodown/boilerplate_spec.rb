@@ -465,6 +465,16 @@ RSpec.describe Nokodown::Boilerplate do
       text.should_not include("harbour 1")
     end
 
+    it "removes a tag line in a font element, but not the parser's copy of it around a paragraph that links a tag" do
+      html = '<h1>Magnetic stirrer</h1><div><font face="Arial">Tags: <a href="/tag/lab/">lab</a></div>' \
+             '<p>Our stirrer spins a bar magnet at up to 1500 rpm; see the <a href="/tag/glassware/">glassware</a> we pair it with.</p>' \
+             "#{prose('The stirrer', 2)}</font>"
+      text = remaining(html)
+
+      text.should_not include("Tags")
+      text.should include("Our stirrer spins")
+    end
+
     it "keeps a line with other text, other links or another site's tags, and the lines of an archive itself" do
       meta = '<p>Filed in <a href="/category/news/">News</a> on 3 May by Ann</p>' \
              '<p>Tags: <a href="/tag/boats/">boats</a>, <a href="/boats-guide/">guide</a></p>' \
