@@ -99,11 +99,11 @@ with `main_content: false`, `:none` for a document without a body.
     outweighs.
 
   Blocks stay on home pages, in hubs of sections built alike, in forum posts,
-  under a title the page's address names, when they link below this page,
-  and when the content would be left with fewer than 20 words outside
-  headings. Lists of bare links also stay on listings, under a letter of an
-  index, among three or more headed lists of links (a site map), and when
-  they hold most of the page.
+  in a section that the page's own table of contents lists, under a title the
+  page's address names, when they link below this page, and when the content
+  would be left with fewer than 20 words outside headings. Lists of bare links
+  also stay on listings, under a letter of an index, among three or more
+  headed lists of links (a site map), and when they hold most of the page.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
