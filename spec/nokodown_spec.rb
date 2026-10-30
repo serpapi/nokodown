@@ -490,6 +490,19 @@ RSpec.describe Nokodown do
       convert(html).should == "Kitchen\n\n![Before](https://example.com/before.jpg)![After](https://example.com/after.jpg)"
     end
 
+    it "keeps a caption beside a slider when its parts together are longer than the marks" do
+      html = "<div><input type='range'><span><b>Water</b> level</span> <span>by decade</span></div>"
+
+      convert(html).should == "**Water** level by decade"
+    end
+
+    it "keeps the download link beside a player's seek bar, but drops a slider's marks that link nowhere" do
+      html = "<p>Episode 12</p><div><audio src='/ep12.mp3'></audio><input type='range'><a href='/ep12.mp3' download>Download</a></div>" \
+             "<div><a href='#'>A</a><input type='range'><a href='javascript:void(0)'>A</a></div>"
+
+      convert(html).should == "Episode 12\n\n[Download](https://example.com/ep12.mp3)"
+    end
+
     it "reports :full mode" do
       Nokodown.extract("<p>x</p>", main_content: false).mode.should == :full
     end
