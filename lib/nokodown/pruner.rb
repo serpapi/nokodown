@@ -57,6 +57,7 @@ module Nokodown
     SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
     SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ").freeze
     MIN_SERIES = 3
+    HEADING_SELECTOR = "h1, h2, h3, h4, h5, h6"
     MEDIA = %w[img picture iframe].freeze
     MEDIA_SELECTOR = MEDIA.join(", ")
     # A CJK character says about as much as a short word.
@@ -378,23 +379,47 @@ module Nokodown
     #
     # Elsewhere menus go after the clusters, so a menu does not split the
     # cluster around it ("Posted in News | Tagged a, b | Comment") and leave
-    # pieces of it behind, and the list a submenu hung from is judged again.
+    # pieces of it behind, and the boxes the menus sat in, such as the list a
+    # submenu hung from, are judged again.
     def remove_link_clusters(root, clusters, index)
       return remove_menus(root, clusters_above_title(root, clusters) + current_page_menus(root)) if index
 
       # Removal can only start at a cluster, so none means nothing to remove.
       repeated = repeated_shapes(clusters)
       remove_clusters(root, repeated) unless clusters.empty?
-      remove_clusters(root, repeated) if remove_menus(root, current_page_menus(root))
+      menus = current_page_menus(root)
+      boxes = boxes_around(menus, root)
+      remove_clusters(root, repeated, boxes) if remove_menus(root, menus) && !boxes.empty?
     end
 
     def index?(root, clusters)
       !clusters.empty? && clusters_dominate?(root, clusters)
     end
 
-    def remove_clusters(root, repeated)
+    # only: the keys of the elements to judge, or nil for all.
+    def remove_clusters(root, repeated, only = nil)
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
+        next if only && !only.include?(Dom.key(node))
+
         remove_with_label(node, root, repeated) if link_cluster?(node) && !in_data_table?(node)
+      end
+    end
+
+    # The keys of the boxes around each menu, up to the first that holds a
+    # heading: that is a card whose tag line linked to the page itself
+    # ("<h2>Minutes 5</h2> 07.01.2025 Admin Read more"), and a run of cards
+    # is the listing.
+    def boxes_around(menus, root)
+      root_key = Dom.key(root)
+      titled = {}
+      menus.each_with_object(Set.new) do |menu, keys|
+        menu.ancestors.each do |node|
+          key = node.element? ? Dom.key(node) : nil
+          break if key.nil? || key == root_key || keys.include?(key)
+          break if titled.fetch(key) { titled[key] = !node.at_css(HEADING_SELECTOR).nil? }
+
+          keys << key
+        end
       end
     end
 

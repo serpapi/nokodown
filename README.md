@@ -219,7 +219,9 @@ region, or most of the page's text, is never removed because of its class name.
    above its title, and the side columns its table declares narrower. Such
    a menu goes from other pages too, but not from a section that the page's
    own table of contents lists, where it is content: the pieces of a set,
-   this item among them. In
+   this item among them. Once a menu goes, the boxes around it are judged
+   as clusters again, up to a card with a heading, whose tag line it was:
+   a run of cards is the listing. In
    both modes, short links and boxes styled as buttons ("Add to cart", "Book
    a demo") are removed, except for disclosure toggles, buttons inside a
    sentence and titles or labels styled as buttons. If article cleaning

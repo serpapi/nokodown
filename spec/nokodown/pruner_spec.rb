@@ -84,6 +84,50 @@ RSpec.describe Nokodown::Pruner do
       ["Coastal engineering", "Tide", "Sea"].each { |noise| Nokodown::Dom.text(root).should_not include(noise) }
     end
 
+    it "drops the rest of a post's meta line once its tags that link to the page itself are gone" do
+      tags = "<span>Tagged <a href='/tags/arizona'>Arizona</a>, <a href='/tags/art'>art</a>, " \
+             "<a href='/page'>Jeep</a>, <a href='/tags/navajo'>Navajo</a></span>"
+      meta = "<footer><span>Posted in <a href='/c/days'>Days in My Life</a>, " \
+             "<a href='/c/travels'>Travels with Maria</a></span> | #{tags} | " \
+             "<a href='/post#comments'>6 Comments</a></footer>"
+      root = content("<article><h2>A rug from Arizona</h2>#{story}#{meta}</article>" * 3)
+
+      described_class.new([root], :page, urls: urls).call
+
+      Nokodown::Dom.text(root).should include("The harbor bridge reopened")
+      ["Travels with Maria", "Navajo", "6 Comments"].each { |noise| Nokodown::Dom.text(root).should_not include(noise) }
+    end
+
+    it "drops the list a submenu that links to the page itself hung from" do
+      submenu = "<ul><li><a href='/c/signs/info'>Information signs</a></li><li><a href='/page'>Warning signs</a></li>" \
+                "<li><a href='/c/signs/works'>Regulatory signs for highway works</a></li></ul>"
+      categories = %w[Bollards Barriers Cones Paint].map { |name| "<li><a href='/c/#{name}'>#{name}</a></li>" }.join
+      sidebar = "<div><h4>Product categories</h4>" \
+                "<ul>#{categories}<li><a href='/c/signs'>Signs</a>#{submenu}</li></ul></div>"
+      root = content(story + sidebar)
+
+      described_class.new([root], :page, urls: urls).call
+
+      Nokodown::Dom.text(root).should include("The harbor bridge reopened")
+      ["Bollards", "Product categories"].each { |noise| Nokodown::Dom.text(root).should_not include(noise) }
+    end
+
+    it "keeps a run of cards whose category lines link to the page itself" do
+      terms = "<span><a href='/page'>2024</a>, <a href='/c/budget'>Commission on planning, budget and finance</a>, " \
+              "<a href='/c/minutes'>Minutes</a></span>"
+      cards = (1..5).map do |number|
+        "<article><div><header><p>#{terms}</p><h2><a href='/minutes/#{number}'>Minutes #{number}</a></h2>" \
+          "<ul><li>07.01.2025</li><li><a href='/author/admin'>Admin</a></li></ul></header>" \
+          "<p><a href='/minutes/#{number}'>Continue reading</a></p></div></article>"
+      end
+      root = content("<h1>2024</h1>#{story}#{cards.join}")
+
+      described_class.new([root], :page, urls: urls).call
+
+      ["Minutes 1", "Minutes 5", "Admin"].each { |kept| Nokodown::Dom.text(root).should include(kept) }
+      Nokodown::Dom.text(root).should_not include("Commission on planning")
+    end
+
     it "judges a list once however many of its links lead to the page itself" do
       entries = (1..500).map { |number| "<li><a href='/page'>Item #{number}</a> (#{number})</li>" }.join
       root = content("#{story}<ul>#{entries}</ul>")
