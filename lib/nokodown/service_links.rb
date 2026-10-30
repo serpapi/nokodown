@@ -116,11 +116,12 @@ module Nokodown
       !title.nil? && !prompt.empty? && Dom.similarity(prompt, title) >= TITLE_SIMILARITY
     end
 
-    # A label is a few words. A link that holds a heading wraps a card, such
-    # as an event's that links to its sign-up page, and the heading is the
-    # card's title.
+    # A label is a few words, in a heading or not. A link that holds a
+    # heading and text beside it wraps a card, such as an event's that links
+    # its title and dates to its sign-up page.
     def card?(link)
-      !link.at_css(Dom::HEADING_SELECTOR).nil?
+      heading = link.at_css(Dom::HEADING_SELECTOR)
+      !heading.nil? && Dom.char_count(link.content) > Dom.char_count(heading.content)
     end
 
     def unlinked_text(node)

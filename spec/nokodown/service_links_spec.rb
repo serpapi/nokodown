@@ -66,6 +66,14 @@ RSpec.describe Nokodown::ServiceLinks do
     lines(card).should be_empty
   end
 
+  it "removes sign-in links whose labels sit in headings or spans" do
+    headings = '<div class="account"><a href="/login"><h4>Log in</h4></a> <a href="/register"><h4>Register</h4></a></div>'
+    spans = '<div class="account"><a href="/login"><span class="icon"></span><span>Log in</span></a> ' \
+            '<a href="/register"><span>Register</span></a></div>'
+
+    [headings, spans].each { |html| lines(html).should == ["Log in Register"] }
+  end
+
   it "keeps a block of more than a handful of service links, and everything on a page that is itself a service" do
     links = %w[login register cart checkout wishlist my-account feed].map { |path| "<a href=\"/#{path}\">#{path}</a>" }.join(" ")
     reset = '<p>Forgot your password? <a href="/lost-password">Reset it</a></p>'
