@@ -66,6 +66,25 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should_not include("Joined")
   end
 
+  # Some XenForo themes repeat the post's date under the name in the member
+  # panel, so the panel's cell reads as a post inside the post.
+  it "writes the lines when the member panel repeats the post's date" do
+    time = "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time>"
+    posts = [["wren", question], ["basil", answer]].map do |name, body|
+      "<article class='message'><div class='message-cell message-cell--user'><section class='message-user'>" \
+        "<div class='message-userDetails'><h4 class='message-name'><a class='username' href='/members/#{name}'>#{name}</a></h4>" \
+        "<div class='message-date'>#{time}</div></div>" \
+        "<div class='message-userExtras'>Messages 1,204 Reaction score 3,310</div></section></div>" \
+        "<div class='message-cell message-cell--main'><header class='message-attribution'><a href='/posts/1'>#{time}</a></header>" \
+        "<div class='message-content'><div class='bbWrapper'>#{body}</div></div></div></article>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+    markdown.should_not include("Reaction score")
+  end
+
   it "shows a full date where the page shows a relative one" do
     markdown = thread([
       post("wren", "<time datetime='2024-04-02T05:03:15Z'><span>April 2, 2024</span><span>1 yr</span></time>", question),
