@@ -888,6 +888,15 @@ RSpec.describe "Markdown conversion" do
       convert("<ul>#{news.join}</ul>").should start_with("- [Story 1](https://example.com/n/1)\n  The theme")
     end
 
+    it "keeps the rank of an ordered list of sections on each item's heading" do
+      review = "<p>Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.</p>" \
+               "<h3>Pros</h3><ul><li>Light</li><li>Quiet</li></ul>"
+      text = "Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.\n\n### Pros\n\n- Light\n- Quiet"
+      html = "<ol start='4'><li><h2>Acme Drill</h2>#{review}</li><li><h2>5. Bolt Driver</h2>#{review}</li></ol>"
+      convert(html).should == "## 4. Acme Drill\n\n#{text}\n\n## 5. Bolt Driver\n\n#{text}"
+      convert("<ol><li><h2>Acme Drill</h2>#{review}</li><li><p>Bolt Driver</p></li></ol>").should start_with("1. Acme Drill\n")
+    end
+
     it "writes the heading that closes a list of sections as text" do
       lead = "Emits the event to every listener, in the order they were added, and returns the emitter."
       html = "<ul><li><h4>Parameters</h4><ul><li>event: string</li></ul><h4>Returns Emitter</h4><p>#{lead}</p></li><li><h4>Returns void</h4></li></ul>"
