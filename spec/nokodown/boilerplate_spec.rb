@@ -252,6 +252,15 @@ RSpec.describe Nokodown::Boilerplate do
       text.should include("salaries by industry")
       text.should include("relocation guide")
     end
+
+    it "judges a list of thousands of home links in time linear in its links" do
+      links = Array.new(10_000) { |index| "<li><a href=\"/\">Partner #{index}</a></li>" }.join
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining("#{prose('Our partners', 2)}<ul>#{links}</ul>")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 2
+      text.should include("Partner 9999")
+    end
   end
 
   describe "site headers" do

@@ -86,17 +86,26 @@ module Nokodown
     end
 
     # Children are judged one by one, so a container of many links stops the
-    # walk at its first other link.
+    # walk at its first other link. They are read one at a time too: listing
+    # them first listed a link farm's thousands of home links for each one.
     def wrapper?(node, path)
       key = Dom.key(path)
-      node.children.all? do |child|
-        if child.text?
-          Dom.squish(child.content).match?(ONLY_SEPARATORS)
-        elsif child.element?
-          Dom.key(child) == key || separator_element?(child)
-        else
-          true
-        end
+      child = node.child
+      while child
+        return false unless wrapped?(child, key)
+
+        child = child.next_sibling
+      end
+      true
+    end
+
+    def wrapped?(child, key)
+      if child.text?
+        Dom.squish(child.content).match?(ONLY_SEPARATORS)
+      elsif child.element?
+        Dom.key(child) == key || separator_element?(child)
+      else
+        true
       end
     end
 
