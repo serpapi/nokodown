@@ -175,12 +175,14 @@ RSpec.describe Nokodown::Boilerplate do
 
     it "keeps a post whose wrapper is named for the room a consent banner leaves" do
       reply = "<p>The link is in the first post. I had never seen screw plugs for tyres before, and nobody here sells them.</p>" * 3
-      html = "<div class=\"content-holder cookiebot-padding-bottom\"><h2>Re: Screw type tire plugs</h2>#{reply}</div>" \
-             "<div class=\"cookie-notice\"><p>We use cookies.</p></div>"
+      %w[cookiebot-padding-bottom cookie-consent-margin-top].each do |room|
+        html = "<div class=\"content-holder #{room}\"><h2>Re: Screw type tire plugs</h2>#{reply}</div>" \
+               "<div class=\"cookie-notice\"><p>We use cookies.</p></div>"
 
-      text = remaining(html)
-      text.should include("screw plugs")
-      text.should_not include("We use cookies")
+        text = remaining(html)
+        text.should include("screw plugs")
+        text.should_not include("We use cookies")
+      end
     end
 
     it "keeps the largest guessed block when a cookie banner that outweighs it goes" do
