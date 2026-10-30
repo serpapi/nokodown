@@ -92,6 +92,14 @@ RSpec.describe Nokodown::MessageForms do
     markdown(html).should include("Minatomachi")
   end
 
+  it "keeps a form when only spacers would be left beside it" do
+    html = '<table><tr><td><img src="/images/spacer.gif" width="1" height="1"></td><td><form><h3>Send this postcard</h3>' \
+           '<img src="/media/girls-773.jpg" alt="Girls on the beach"><p>Sender</p><input type="text" name="name">' \
+           "<textarea></textarea></form></td></tr></table>"
+
+    markdown(html).should include("Girls on the beach")
+  end
+
   it "keeps a contact page that holds nothing but its form" do
     html = '<div id="center"><form><p>Please do not write to us about SEO services.</p><input type="text" name="email">' \
            "<textarea></textarea></form></div>"

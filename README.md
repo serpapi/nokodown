@@ -90,7 +90,7 @@ with `main_content: false`, `:none` for a document without a body.
   headers over a row of text, as an inquiry shows the flat it is about),
   asks how many (an order with a note), or is all an application or
   sign-up page's main region holds, and neither kind goes when it is all
-  the content holds.
+  the content holds, spacer images aside.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note

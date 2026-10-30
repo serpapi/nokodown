@@ -82,9 +82,14 @@ module Nokodown
       lines.each(&:remove) if leaves_content?(nodes, lines)
     end
 
+    # A spacer left beside the lines is not content.
     def leaves_content?(nodes, lines)
       text = nodes.sum { |node| Dom.char_count(node.content) } - lines.sum { |line| Dom.char_count(line.content) }
-      text.positive? || nodes.sum { |node| node.css("img").size } > lines.sum { |line| line.css("img").size }
+      text.positive? || nodes.sum { |node| shown_images(node) } > lines.sum { |line| shown_images(line) }
+    end
+
+    def shown_images(node)
+      node.css("img").count { |img| !Markdown::Image.decorative?(img, img["src"].to_s, img["alt"].to_s) }
     end
 
     # Like Readability, fall back to lighter cleaning when conditional cleaning
