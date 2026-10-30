@@ -89,20 +89,50 @@ module Nokodown
       parents = found.map(&:parent)
       found.each(&:remove)
       roots = nodes.map { |root| Dom.key(root) }
-      parents.each { |parent| remove_emptied(parent, roots) }
+      worded = {}
+      parents.each { |parent| remove_emptied(parent, roots, worded) }
       nodes
     end
 
     # A heading over several blocks ("Previous matches" over a column per
-    # team) is left with nothing under it.
-    def self.remove_emptied(node, roots)
-      while node&.element? && !roots.include?(Dom.key(node)) && words(node).zero? && !node.at_css(KEPT)
+    # team) is left with nothing under it. Removing an element without
+    # words leaves the words of the others as they were, so a parent found
+    # to have some is not read again for the next block removed from it.
+    def self.remove_emptied(node, roots, worded)
+      while node&.element? && !roots.include?(Dom.key(node)) && !worded?(node, worded) && !node.at_css(KEPT)
         parent = node.parent
         node.remove
         node = parent
       end
     end
     private_class_method :remove_emptied
+
+    # By key, told apart from the parser's copies of a misnested <font>,
+    # which share its attributes.
+    def self.worded?(node, worded)
+      same = worded[Dom.key(node)] ||= []
+      return true if same.any? { |other| other == node }
+      return false unless any_words?(node)
+
+      same << node
+      true
+    end
+    private_class_method :worded?
+
+    # Whether words(node) is above zero, stopping at the first word.
+    def self.any_words?(node)
+      return node.content.match?(WORD) if node.text?
+      return false if !node.element? || Dom.heading?(node) || node["role"] == "heading"
+
+      child = node.child
+      while child
+        return true if any_words?(child)
+
+        child = child.next_sibling
+      end
+      false
+    end
+    private_class_method :any_words?
 
     # Words outside headings.
     def self.words(node)

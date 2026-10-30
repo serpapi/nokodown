@@ -415,4 +415,19 @@ RSpec.describe Nokodown::Teasers do
     (cpu_time - started).should < 2
     found.should be_empty
   end
+
+  it "drops many blocks from one column in time linear in the column" do
+    photos = "<figure><img src='/img/harbor.jpg' alt=''></figure>" * 1000
+    boxes = Array.new(1000) { |index| "<div class='box'><a href='/news/#{index}'>Story number #{index}</a></div>" }
+    html = "<html><body><div class='main'><div class='column'>#{photos}#{boxes.join}#{story(5)}</div></div></body></html>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    Nokodown::Dom.assign_keys(body)
+    keys = body.css(".box").map { |box| Nokodown::Dom.key(box) }.to_set
+    started = cpu_time
+    column = described_class.strip([body.at_css(".main")], keys).first.at_css(".column")
+
+    (cpu_time - started).should < 1
+    column.at_css(".box").should be_nil
+    column.css("figure").size.should == 1000
+  end
 end
