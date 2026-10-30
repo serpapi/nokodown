@@ -65,7 +65,7 @@ module Nokodown
     # and an item or a span among other links part of a menu, which goes or
     # stays whole.
     def line(link, site, tops, title, verdicts)
-      found = Dom.outermost_accepted(link, verdicts) do |node|
+      found, = Dom.outermost_accepted(link, verdicts) do |node|
         !tops.include?(Dom.key(node)) && holds_only_services?(node, site, title)
       end
       found if found && Dom.block?(found) && !ITEMS.include?(found.name)

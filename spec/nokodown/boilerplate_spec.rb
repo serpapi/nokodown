@@ -277,6 +277,17 @@ RSpec.describe Nokodown::Boilerplate do
       end
     end
 
+    it "removes a trail in a font element, but not the copies the parser makes of it around the content" do
+      trail = '<a href="/">Home</a> › <a href="/lab/">Laboratory</a> › Stirrer'
+      html = "<p><font face=\"Arial\">#{trail}</p><h1>Stirrer</h1><div>#{prose('The stirrer', 1)}</div></font>"
+      text = remaining(html)
+
+      text.should_not include("Laboratory")
+      text.should include("The stirrer is explained")
+      remaining("<p><font face=\"Arial\">#{trail}</p><h1>Stirrer</h1><div>#{prose('The stirrer', 2)}</div><p>#{trail}</p></font>")
+        .should_not include("Laboratory")
+    end
+
     it "keeps a category link followed by the post's date" do
       remaining("<div><a href=\"/\">Home</a> | 20.07.2026 08:42</div>#{prose('Health', 2)}").should include("20.07.2026")
     end
@@ -311,6 +322,15 @@ RSpec.describe Nokodown::Boilerplate do
       text = remaining(html)
       text.should include("salaries by industry")
       text.should include("relocation guide")
+    end
+
+    it "judges a list of thousands of home links in time linear in its links" do
+      links = Array.new(10_000) { |index| "<li><a href=\"/\">Partner #{index}</a></li>" }.join
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining("#{prose('Our partners', 2)}<ul>#{links}</ul>")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 2
+      text.should include("Partner 9999")
     end
   end
 
@@ -728,6 +748,25 @@ RSpec.describe Nokodown::Boilerplate do
       %w[News boats tides Sea].each { |word| markdown.should_not include(word) }
     end
 
+    it "judges a tag line deep in nested blocks in time linear in its depth" do
+      tags = Array.new(50) { |index| "<a href=\"/tag/harbour-#{index}/\">harbour #{index}</a>" }.join(", ")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining("#{prose('Ferries', 2)}#{'<div>' * 200}<p>Tags: #{tags}</p>#{'</div>' * 200}")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      text.should_not include("harbour 1")
+    end
+
+    it "removes a tag line in a font element, but not the parser's copy of it around a paragraph that links a tag" do
+      html = '<h1>Magnetic stirrer</h1><div><font face="Arial">Tags: <a href="/tag/lab/">lab</a></div>' \
+             '<p>Our stirrer spins a bar magnet at up to 1500 rpm; see the <a href="/tag/glassware/">glassware</a> we pair it with.</p>' \
+             "#{prose('The stirrer', 2)}</font>"
+      text = remaining(html)
+
+      text.should_not include("Tags")
+      text.should include("Our stirrer spins")
+    end
+
     it "keeps a line with other text, other links or another site's tags, and the lines of an archive itself" do
       meta = '<p>Filed in <a href="/category/news/">News</a> on 3 May by Ann</p>' \
              '<p>Tags: <a href="/tag/boats/">boats</a>, <a href="/boats-guide/">guide</a></p>' \
@@ -738,6 +777,16 @@ RSpec.describe Nokodown::Boilerplate do
       markdown.should include("tides")
 
       article("https://example.com/category/news/", "").should include("News")
+    end
+
+    it "keeps the list of every tag on the index of the tags" do
+      tags = %w[harbour-walks old-boats spring-tides night-ferries fishing-nets sailing-clubs sea-shanties tall-ships]
+      html = "<html><body><h1>Tags</h1><div>#{tags.map { |tag| "<a href=\"/tag/#{tag}/\">#{tag.tr('-', ' ')}</a>" }.join(', ')}</div></body></html>"
+
+      %w[/tags?view=popular /tags.html /category].each do |path|
+        Nokodown.to_markdown(html, url: "https://example.com#{path}", title: false).should include("[night ferries]")
+      end
+      Nokodown.to_markdown(html, url: "https://example.com/2024/05/harbour/", title: false).should_not include("ferries")
     end
 
     it "keeps the category line of every card in a listing" do

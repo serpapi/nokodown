@@ -39,6 +39,11 @@ RSpec.describe Nokodown::Markdown::Orphans do
     convert("<p>Write to us.</p><h2>Contact us</h2><p>Your name:</p><p>E-mail:</p>").should == "Write to us."
   end
 
+  it "keeps a heading longer than a label over a label left without its value" do
+    description = "The stove boils a litre of water in three minutes on a full canister of gas"
+    convert("<p>Video.</p><h2>#{description}</h2><p>More videos:</p>").should == "Video.\n\n## #{description}"
+  end
+
   it "keeps a lone midnight slot and a row of departures" do
     departures = (0...24).map { |i| format("%<hour>d:%<minute>02d", hour: i / 4, minute: (i % 4) * 15) }.join(" ")
     convert("<p>00:00</p><p>Night news.</p><p>#{departures} (no service on holidays)</p>").should ==

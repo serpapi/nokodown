@@ -79,8 +79,8 @@ module Nokodown
       @shielded = shielded_keys
       h1s = @body.css("h1").to_a
       @single_h1 = h1s.size == 1
-      @trails = Breadcrumbs.trails(@body).map { |trail| Dom.key(trail) }.to_set
-      @taxonomy = Taxonomy.blocks(@body, @url)
+      @trails = Breadcrumbs.trails(@body).group_by { |trail| Dom.key(trail) }
+      @taxonomy = Taxonomy.blocks(@body, @url).group_by { |block| Dom.key(block) }
       @title = h1s.last
       @last_h1 = @title ? Dom.key(@title).to_i : 0
       @title_columns = title_columns
@@ -145,7 +145,7 @@ module Nokodown
       return :chrome if (chrome_element?(node) || chrome_role?(node)) && !title_holder?(node)
       return :furniture if side_column?(node)
       return if dominant?(node) && !furniture_however_large?(node)
-      return :guess if trail?(node) || @taxonomy.include?(Dom.key(node))
+      return :guess if trail?(node) || found?(@taxonomy, node)
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
       return :panel if MemberPanel.panel?(node)
@@ -181,9 +181,16 @@ module Nokodown
     # A trail stands apart from the text around it; one that words lead into
     # or out of is part of a sentence ("Open Home › Account and pick...").
     def trail?(node)
-      return false unless @trails.include?(Dom.key(node))
+      return false unless found?(@trails, node)
 
       [node.previous_sibling, node.next_sibling].none? { |sibling| sibling&.text? && !Dom.squish(sibling.content).empty? }
+    end
+
+    # The parser reopens a formatting element (a <font> around blocks) as
+    # copies that share its attributes, and so its key: the key finds the
+    # copies, and only the node itself is the one found.
+    def found?(index, node)
+      index.fetch(Dom.key(node), []).any? { |found| found == node }
     end
 
     # A link or span in the middle of running text is part of that text,

@@ -102,18 +102,22 @@ module Nokodown
     end
 
     # The outermost of a node's ancestors below the body that the block
-    # accepts, climbing until it refuses one. The links of one line ask about
-    # the same ancestors, so verdicts are kept by key.
+    # accepts, with the block's verdict on it, climbing until it refuses
+    # one. The links of one line ask about the same ancestors, so verdicts
+    # are kept by key. The parser's copies of a formatting element share
+    # its key, so the node is kept with its verdict and a copy is judged
+    # anew.
     def outermost_accepted(node, verdicts)
       found = nil
       node = node.parent
       while node&.element? && node.name != "body"
         key = key(node)
-        verdict = key && verdicts.key?(key) ? verdicts[key] : yield(node)
-        verdicts[key] = verdict if key
+        seen = verdicts[key]
+        verdict = seen&.first == node ? seen.last : yield(node)
+        verdicts[key] = [node, verdict]
         break unless verdict
 
-        found = node
+        found = [node, verdict]
         node = node.parent
       end
       found
