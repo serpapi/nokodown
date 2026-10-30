@@ -459,6 +459,14 @@ RSpec.describe Nokodown::Boilerplate do
       article("https://example.com/category/news/", "").should include("News")
     end
 
+    it "keeps the list of every tag on the index of the tags" do
+      tags = %w[harbour-walks old-boats spring-tides night-ferries fishing-nets sailing-clubs sea-shanties tall-ships]
+      html = "<html><body><h1>Tags</h1><div>#{tags.map { |tag| "<a href=\"/tag/#{tag}/\">#{tag.tr('-', ' ')}</a>" }.join(', ')}</div></body></html>"
+
+      Nokodown.to_markdown(html, url: "https://example.com/tags?view=popular", title: false).should include("[night ferries]")
+      Nokodown.to_markdown(html, url: "https://example.com/2024/05/harbour/", title: false).should_not include("ferries")
+    end
+
     it "keeps the category line of every card in a listing" do
       cards = %w[Bouldern Eisklettern Klettersteig].map do |name|
         "<div class='card'><h3><a href='/angebote/#{name.downcase}/'>#{name} course, two days</a></h3>" \

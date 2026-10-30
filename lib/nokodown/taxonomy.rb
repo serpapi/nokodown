@@ -9,6 +9,7 @@ module Nokodown
   # an archive page such lines are its listing, so nothing goes there.
   module Taxonomy
     TAG_PATH = %r{/(?:tags?|labels?|topics)/[^/?#]}i.freeze
+    ARCHIVE_INDEX = %r{\A(?:https?:)?//[^/?#]+(?:/[^?#]*)?/(?:tags?|labels?|topics|categories)/?(?:[?#]|\z)}i.freeze
     # Shops file products under "/product-category/", "/categoria-producto/".
     CATEGORY_PATH = %r{/[^/?#]*[ck]ategor[^/?#]*/[^/?#]}i.freeze
     TAG_QUERY = /[?&]tag=[^&#]/.freeze
@@ -32,7 +33,7 @@ module Nokodown
     # the facts of a product linked to their filters, so they stay.
     def blocks(body, url)
       page = url.to_s
-      return [] if page.match?(TAG_PATH) || page.match?(CATEGORY_PATH) || page.match?(TAG_QUERY) || page.match?(CATEGORY_QUERY)
+      return [] if archive_page?(page)
 
       site = page[ADDRESS, 1]&.downcase || Breadcrumbs.site_host(body.css("a[href]"))
       title = body.at_css("h1")
@@ -41,6 +42,13 @@ module Nokodown
       lines = lines.uniq { |node| Dom.key(node) }.select { |node| judged[Dom.key(node)] == :tag || kicker?(node, title) }
       repeated = lines.group_by { |node| shape(node) }.select { |_, alike| alike.size >= MIN_REPEATS }.keys
       lines.reject { |node| repeated.include?(shape(node)) }
+    end
+
+    # An archive, or the index of all tags ("/tags?view=popular"), is made
+    # of such lines.
+    def archive_page?(page)
+      page.match?(TAG_PATH) || page.match?(CATEGORY_PATH) || page.match?(TAG_QUERY) || page.match?(CATEGORY_QUERY) ||
+        page.match?(ARCHIVE_INDEX)
     end
 
     def shape(node)
