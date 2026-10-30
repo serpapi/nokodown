@@ -119,7 +119,8 @@ with `main_content: false`, `:none` for a document without a body.
 - Headings left at the end of the content with nothing under them, once
   what they headed is removed, unless one states a figure (a price, a
   score, a year), or reads as a sentence on a page with almost no text
-  outside its headings.
+  outside its headings. An H1, a call to subscribe or follow, a comment
+  heading ("One thought on “…”") or a line of #tags is no such sentence.
 - Markdown that costs tokens without meaning: horizontal rules, blank lines
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators

@@ -1288,6 +1288,23 @@ RSpec.describe "Markdown conversion" do
       convert("<h2>Harbour</h2>#{text}<h2>Other stories you might enjoy from our harbour desk this week</h2>").should_not include("Other stories")
     end
 
+    it "does not keep furniture, a linked title, a line of tags or an H1 as a heading of a sentence" do
+      lead = "<h1>Spring concert</h1><p>Photos below.</p>"
+      ["Subscribe to our newsletter for the latest news and events",
+       "Follow us on Facebook, Instagram and Twitter for more updates",
+       "Commented yet? Go on..you know you want to :)",
+       "One thought on “Spring concert at the old harbour hall”",
+       "Inga svar till “20 % i rabatt vid köp över 1400 kr”",
+       "#concert #harbour #spring #music #live #choir #brass #evening",
+       "More from the harbour hall and the town choir this spring",
+       '<a href="/news/41">Autumn concert at the old harbour hall with the town choir</a>'].each do |heading|
+        convert("#{lead}<h3>#{heading}</h3>").should == "# Spring concert\n\nPhotos below."
+      end
+      convert("<p>Photos below.</p><h1>Spring concert at the old harbour hall with the town choir</h1>").should == "Photos below."
+      convert("<p>写真</p><h3>港のホールで開かれた春の演奏会には町の合唱団と吹奏楽団が出演しました</h3>")
+        .should == "写真\n\n### 港のホールで開かれた春の演奏会には町の合唱団と吹奏楽団が出演しました"
+    end
+
     it "keeps the last card's linked title when the control after it is removed" do
       html = '<p>2026.08.21</p><h2><a href="/news/42">Café night</a></h2><p>2026.07.19</p><h2><a href="/news/40">Survey results</a></h2>' \
              "<p>Ver más</p><h2>Related</h2>"

@@ -57,6 +57,15 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should start_with("Photo by Ben Hon for Resy\n\n# The Resy Guide to the Michelin Winners")
     end
 
+    it "puts the title above content whose only H1 is a sentence or a line of tags at its end" do
+      html = "<title>Reel by Ann | Buzzer</title><body><p><a href='/u/ann'>Reel by Ann</a></p>"
+
+      Nokodown.to_markdown("#{html}<h1>#buzzer #viral #fyp #sports #daily #football #soccer #trending</h1></body>", url: "https://example.com/reels/7")
+              .should == "# Reel by Ann | Buzzer\n\n[Reel by Ann](https://example.com/u/ann)"
+      Nokodown.to_markdown("#{html}<h1>The best football and soccer moments of the day, every day</h1></body>", url: "https://example.com/reels/7")
+              .should == "# Reel by Ann | Buzzer\n\n[Reel by Ann](https://example.com/u/ann)"
+    end
+
     it "puts the page's title in place of a heading that only names the site" do
       body = "<p>#{'We caught twelve trout at the upper pond, and the water was cold and clear all day. ' * 3}</p>"
       html = "<title>Bonten Fishing Pond - Friends from afar</title><body><article>" \
