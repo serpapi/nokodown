@@ -231,8 +231,11 @@ module Nokodown
         blocks.none? { |block| block.kind == :heading && !block.equal?(heading) && block.level <= heading.level }
       end
 
+      # A rating ("★★★★☆") or a price ("$$$") has no letter either, and
+      # outside the list a line without one would be dropped.
       def picture?(block)
-        block.kind == :paragraph && !block.text.gsub(ImageCleanup::IMAGE, "").match?(/[\p{L}\p{N}]/)
+        text = block.text
+        block.kind == :paragraph && text.match?(ImageCleanup::IMAGE) && !text.gsub(ImageCleanup::IMAGE, "").match?(/[\p{L}\p{N}]/)
       end
 
       def unlisted(items, start)

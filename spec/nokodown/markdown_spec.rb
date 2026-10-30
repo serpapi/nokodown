@@ -907,6 +907,8 @@ RSpec.describe "Markdown conversion" do
       convert(unranked).should start_with("1. Acme Drill\n")
       photos = %w[Acme Bolt].map { |name| %(<li><img src="/#{name}.jpg" alt="#{name} Drill"><h2>#{name} Drill</h2>#{review}</li>) }
       convert("<ol>#{photos.join}</ol>").should start_with("![Acme Drill](https://example.com/Acme.jpg)\n\n## 1. Acme Drill\n\n#{text}\n\n![Bolt")
+      ratings = [%w[★★★★☆ Acme], %w[$$$ Bolt]].map { |mark, name| "<li><p>#{mark}</p><h2>#{name} Drill</h2>#{review}</li>" }
+      convert("<ol>#{ratings.join}</ol>").scan(/^\d\. .*/).should == ["1. ★★★★☆", "2. $$$"]
       logos = %w[Acme Bolt].map do |name|
         %(<li><a href="/app/#{name}"><img src="/#{name}.png" alt="#{name} Notes"></a><h4>Cost / License</h4><p>Free</p>) +
           "<h4>Platforms</h4><ul><li>Windows</li><li>Mac</li></ul></li>"
