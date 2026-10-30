@@ -154,9 +154,9 @@ module Nokodown
           owner ? owner.concat(blocks) : items << blocks
         end
         items.reject!(&:empty?)
-        return sections(items.flatten(1)) if items.any? { |blocks| sections?(blocks) }
-
         start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
+        return sections(unlisted(items, start)) if sections_list?(items, start)
+
         format_list(items, start)
       end
 
@@ -178,6 +178,30 @@ module Nokodown
 
       def section_text?(block)
         %i[table list].include?(block.kind) || (block.kind == :paragraph && block.text.length >= SECTION_TEXT)
+      end
+
+      # An ordered list ranks its items, so each number goes on its item's
+      # first heading ("## 4. Acme Drill"). An item without a heading has
+      # nowhere to keep its number, and the list stays a list.
+      def sections_list?(items, start)
+        return false unless items.any? { |blocks| sections?(blocks) }
+
+        start.nil? || items.all? { |blocks| blocks.any? { |block| block.kind == :heading } }
+      end
+
+      def unlisted(items, start)
+        return items.flatten(1) unless start
+
+        items.each_with_index.flat_map do |blocks, index|
+          first = blocks.index { |block| block.kind == :heading }
+          blocks.each_with_index.map { |block, position| position == first ? ranked(block, start + index) : block }
+        end
+      end
+
+      # A site may type the number into the heading already.
+      def ranked(heading, number)
+        hashes, text = heading.text.split(" ", 2)
+        text.match?(/\A#{number}\b/) ? heading : Block.new(:heading, "#{hashes} #{number}. #{text}", heading.level)
       end
 
       # A heading that ends the list heads nothing in it, as an API
