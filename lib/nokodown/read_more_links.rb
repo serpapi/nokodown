@@ -187,7 +187,7 @@ module Nokodown
       return true if blocks.empty? || blocks.any? { |block| Dom.heading?(block) }
 
       line = blocks.find { |block| !Dom.text(block).empty? && block.css("*").none? { |child| Dom.block?(child) } }
-      !line.nil? && line.at_css("img, a").nil? && Dom.text(line).length <= Markdown::Renderer::LINK_TARGET
+      !line.nil? && line.at_css("img, a").nil? && Dom.text(line).length <= Markdown::Renderer::MAX_LINK_TARGET
     end
 
     # Controls follow what they act on, so the nearest longer links before
