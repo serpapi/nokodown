@@ -45,10 +45,6 @@ module Nokodown
       (?<![\w-])(?:layout|one|two)-[\w-]+|(?<![\w-])[\w-]+-layout(?![\w-])|
       _(?:has|with|without)_[\w-]+
     /x.freeze
-    # A grid's name for a column's width, at a breakpoint or not: "col-md-4",
-    # "vc_col-sm-8", "td-pb-span4", "large-8". A zero ("col0") numbers a
-    # column rather than measuring it.
-    GRID_COLUMN = /\A((?:[\w-]*[-_])?(?:col(?:-[a-z]{2,3})?|span|small|medium|large))-?([1-9]\d?)\z/.freeze
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
@@ -412,36 +408,27 @@ module Nokodown
     end
 
     # A grid column narrower than the title's column in the same row is a
-    # sidebar, however its theme names it, when it holds links rather than
-    # prose. It passes for the content only when it outweighs that column
-    # and the column holds no prose, as on an empty archive; elsewhere its
-    # removal would only sway where the content is found. As beside a
-    # sidebar named so, a title standing alone may head it.
+    # sidebar, however its theme names it, when it holds a run of linked
+    # titles, teasers of other pages, rather than prose. A column of plain
+    # links can be the page's own list: a profile's publications, a
+    # product's downloads. It passes for the content only when it outweighs
+    # that column and the column holds no prose, as on an empty archive;
+    # elsewhere its removal would only sway where the content is found. As
+    # beside a sidebar named so, a title standing alone may head it.
     def side_column?(node)
       column = @title_columns[Dom.key(node.parent)]
       return false if column.nil? || Dom.key(column) == Dom.key(node) || !narrower?(node, column)
       return false unless node.at_css("h1").nil? && @stats.link_density(node) >= 0.5 && !prose_lines?(node)
       return false if @stats.chars(node) <= @stats.chars(column) || prose_lines?(column)
+      return false if node.css(Dom::HEADING_SELECTOR).count { |heading| heading.at_css("a[href]") } < MIN_CARD_RUN
 
       @stats.text_chars(column) - @stats.text_chars(@title) >= TITLED_TEXT
     end
 
-    # Grids name a width for each breakpoint ("col-12 col-md-4"): a column
-    # is narrower at some breakpoint and wider at none.
     def narrower?(node, column)
-      widths = grid_widths(node)
-      return false if widths.empty?
-
-      others = grid_widths(column)
-      shared = widths.keys & others.keys
-      shared.any? { |grid| widths[grid] < others[grid] } && shared.none? { |grid| widths[grid] > others[grid] }
-    end
-
-    def grid_widths(node)
-      node["class"].to_s.split.each_with_object({}) do |token, widths|
-        match = token.match(GRID_COLUMN)
-        widths[match[1]] = match[2].to_i if match
-      end
+      width = Dom.grid_width(node)
+      other = Dom.grid_width(column)
+      !width.nil? && !other.nil? && width < other
     end
 
     # A cookie banner is named for what it is as well as for the cookies, or

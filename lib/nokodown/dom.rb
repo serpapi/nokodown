@@ -37,6 +37,9 @@ module Nokodown
     UUID = /\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/.freeze
     ARBITRARY_VALUE = /\[[^\s\]]*\]/.freeze
     CSS_MODULE_HASH = /__(?=[\w-]{0,4}[A-Z\d])[\w-]{5}(?![\w-])/.freeze
+    GRID_CLASS = /\A(?:span|td-pb-span|col-(?:(xs|sm|md|lg|xl|xxl)-)?|(small|medium|large)-)(\d{1,2})\z/.freeze
+    BREAKPOINTS = [nil, "xs", "sm", "md", "lg", "xl", "xxl"].freeze
+    FOUNDATION = { "small" => "sm", "medium" => "md", "large" => "lg" }.freeze
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
@@ -167,6 +170,16 @@ module Nokodown
 
     def heading?(node)
       node.element? && HEADINGS.include?(node.name)
+    end
+
+    # A grid column's width in twelfths, from the widest breakpoint its
+    # classes name: "col-12 col-md-4" is 4, "td-pb-span8" is 8.
+    def grid_width(column)
+      widths = column["class"].to_s.split.filter_map do |name|
+        match = name.match(GRID_CLASS)
+        [BREAKPOINTS.index(match[1] || FOUNDATION[match[2]]), match[3].to_i] if match
+      end
+      widths.max_by(&:first)&.last
     end
 
     def char_count(string)

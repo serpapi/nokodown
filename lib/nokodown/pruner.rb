@@ -37,9 +37,6 @@ module Nokodown
     MIN_LEFT = 200
     SENTENCE_TEXT = 20
     MIN_PROSE_COLUMN = 100
-    GRID_CLASS = /\A(?:span|td-pb-span|col-(?:(xs|sm|md|lg|xl|xxl)-)?|(small|medium|large)-)(\d{1,2})\z/.freeze
-    BREAKPOINTS = [nil, "xs", "sm", "md", "lg", "xl", "xxl"].freeze
-    FOUNDATION = { "small" => "sm", "medium" => "md", "large" => "lg" }.freeze
     SIDE_CELL = /\A(?:side-border-(?:left|right)|left-side|right-side)\z/.freeze
     GRID_COLUMNS = "[class*=span], [class*=col-], [class*=large-], [class*=medium-], [class*=small-], [class*=side]"
     SIDE_WIDTH = 3
@@ -176,7 +173,7 @@ module Nokodown
       return [] unless columns.size.between?(2, 3)
 
       side_row = columns.any? { |column| side_cell?(column) }
-      widths = columns.map { |column| side_row ? (side_cell?(column) ? SIDE_WIDTH : FULL_WIDTH) : grid_width(column) }
+      widths = columns.map { |column| side_row ? (side_cell?(column) ? SIDE_WIDTH : FULL_WIDTH) : Dom.grid_width(column) }
       return [] if widths.include?(nil)
 
       main = widths.index(widths.max)
@@ -199,15 +196,6 @@ module Nokodown
 
     def side_cell?(column)
       column["class"].to_s.split.any? { |name| name.match?(SIDE_CELL) }
-    end
-
-    # Twelfths, from the widest breakpoint a class names.
-    def grid_width(column)
-      widths = column["class"].to_s.split.filter_map do |name|
-        match = name.match(GRID_CLASS)
-        [BREAKPOINTS.index(match[1] || FOUNDATION[match[2]]), match[3].to_i] if match
-      end
-      widths.max_by(&:first)&.last
     end
 
     # The widths a table declares tell a side column from the main one, which
