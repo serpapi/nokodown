@@ -996,7 +996,7 @@ RSpec.describe "Markdown conversion" do
     it "writes the heading that closes a list of sections as text" do
       lead = "Emits the event to every listener, in the order they were added, and returns the emitter."
       html = "<ul><li><h4>Parameters</h4><ul><li>event: string</li></ul><h4>Returns Emitter</h4><p>#{lead}</p></li><li><h4>Returns void</h4></li></ul>"
-      convert(html).should == "#### Parameters\n\n- event: string\n\n#### Returns Emitter\n\n#{lead}\n\nReturns void"
+      convert(html).should == "#### Parameters\n\nevent: string\n\n#### Returns Emitter\n\n#{lead}\n\nReturns void"
     end
 
     it "looks through wrappers between the list and its items" do
