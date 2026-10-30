@@ -42,7 +42,9 @@ module Nokodown
     # field and a tracking pixel has no text. Text with neither is the copy
     # of the page some shop and blog builders write for search engines, or
     # an editor's paste bin, and can be the page's only copy of its text.
-    OFFSCREEN_TRAPS = "a, input, textarea, select"
+    # Textareas and selects are junk, gone before this check.
+    OFFSCREEN_TRAPS = "a, input"
+    OFFSCREEN_TRAP_NAMES = %w[a input].freeze
 
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
 
@@ -234,8 +236,10 @@ module Nokodown
       style.match?(PIXEL_STRIP_STYLE) && style.match?(OVERFLOW_HIDDEN) && !style.match?(PIXEL_WIDE_STYLE)
     end
 
+    # Nokolexbor answers matches? by querying the whole document, once per
+    # off-screen element; at_css only looks below the node.
     def offscreen_trap?(node)
-      node.matches?(OFFSCREEN_TRAPS) || !node.at_css(OFFSCREEN_TRAPS).nil? || Dom.squish(node.content).empty?
+      OFFSCREEN_TRAP_NAMES.include?(node.name) || !node.at_css(OFFSCREEN_TRAPS).nil? || Dom.squish(node.content).empty?
     end
 
     def hidden_by_class?(node)

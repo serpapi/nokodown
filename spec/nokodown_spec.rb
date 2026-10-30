@@ -367,7 +367,8 @@ RSpec.describe Nokodown do
       html = '<p>Open daily.</p><div style="position: absolute; left: -7786px;"><a href="https://spam.example">casino bonus</a></div>' \
              '<div style="position:fixed;top:-9000px"><a href="https://spam.example">live casino</a></div>' \
              '<div style="position:absolute;left:-999em"><a href="https://spam.example">slots</a></div>' \
-             '<div style="overflow:hidden;height:1px;"><a href="https://spam.example">no kyc casino</a></div>'
+             '<div style="overflow:hidden;height:1px;"><a href="https://spam.example">no kyc casino</a></div>' \
+             '<a href="https://spam.example" style="position:absolute;left:-9999px">cheap pills</a>'
 
       convert(html).should == "Open daily."
     end
