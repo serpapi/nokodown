@@ -59,6 +59,17 @@ RSpec.describe Nokodown::MessageForms do
     markdown(html).should include("tune bhi had kar di")
   end
 
+  it "does not take a text box placed off screen beside a note for one readers can see" do
+    trap = '<div style="position:absolute;left:-9999px"><p>Leave this box empty if you are a person, it only ' \
+           'catches robots.</p><textarea name="hp"></textarea></div>'
+    html = "<div class=\"post\">#{story}<div class=\"box\"><h3>Leave a Reply</h3><form>" \
+           "<input type=\"text\" name=\"author\">#{trap}</form></div></div>"
+    body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
+    Nokodown::Preprocessor.new(body).call
+
+    body.css("[#{described_class::MARK}]").should be_empty
+  end
+
   it "keeps a product's order form, though it asks for a note" do
     html = "#{story}<form class=\"cart\"><p>Flavour: Vanilla or Red Velvet (AED30.00)</p><p>Cakes need 3 days' notice.</p>" \
            '<input type="text" name="name_on_cake"><textarea name="message"></textarea>' \

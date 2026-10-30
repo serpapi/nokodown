@@ -58,9 +58,10 @@ module Nokodown
     # holds a paragraph of prose stays, unless the page shows the same
     # paragraphs elsewhere. Spam links somewhere and a honeypot is a field;
     # keyword lists, headings, link hints and the raw text of <noframes>
-    # have no paragraph. Textareas and selects are junk, gone by then.
-    OFFSCREEN_TRAPS = "a, input"
-    OFFSCREEN_TRAP_NAMES = %w[a input].freeze
+    # have no paragraph. Message forms are marked before the junk goes, so
+    # a text box or a select is a field too.
+    OFFSCREEN_TRAPS = "a, input, textarea, select"
+    OFFSCREEN_TRAP_NAMES = %w[a input textarea select].freeze
     OFFSCREEN_PROSE_WORDS = 8
     OFFSCREEN_PROSE_CJK = 20
     WORD = /[\p{L}\p{N}]+/.freeze
@@ -80,6 +81,7 @@ module Nokodown
 
     def initialize(body)
       @body = body
+      @offscreen_copies = []
     end
 
     def call
@@ -230,7 +232,6 @@ module Nokodown
 
     def remove_hidden
       total = Dom.char_count(@body.content)
-      @offscreen_copies = []
       @body.css(HIDDEN_CANDIDATES).each do |node|
         next unless hidden?(node)
         # A hidden wrapper around most of the page is an anti-flicker snippet
