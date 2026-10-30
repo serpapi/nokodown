@@ -1279,6 +1279,15 @@ RSpec.describe "Markdown conversion" do
       convert("<h2>Intro</h2><p>Text</p><h2>Top 10 picks</h2>").should == "## Intro\n\nText"
     end
 
+    it "keeps headings of a sentence that end a page with no other text, as builders set whole pages in headings" do
+      html = "<p>SP</p><h1>Sébastien Poirier</h1><h4>CNOSF Comité national olympique et sportif français</h4>" \
+             "<h4>Vice-président du CNOSF en charge de la transformation économique</h4>"
+      convert(html).should == "SP\n\n# Sébastien Poirier\n\n#### CNOSF Comité national olympique et sportif français\n\n" \
+                              "#### Vice-président du CNOSF en charge de la transformation économique"
+      text = "<p>#{'The harbour is explained here in a sentence long enough to read like text. ' * 2}</p>"
+      convert("<h2>Harbour</h2>#{text}<h2>Other stories you might enjoy from our harbour desk this week</h2>").should_not include("Other stories")
+    end
+
     it "keeps the last card's linked title when the control after it is removed" do
       html = '<p>2026.08.21</p><h2><a href="/news/42">Café night</a></h2><p>2026.07.19</p><h2><a href="/news/40">Survey results</a></h2>' \
              "<p>Ver más</p><h2>Related</h2>"

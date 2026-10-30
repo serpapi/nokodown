@@ -118,7 +118,8 @@ with `main_content: false`, `:none` for a document without a body.
   numbers, and repeated responsive copies of the same image.
 - Headings left at the end of the content with nothing under them, once
   what they headed is removed, unless one states a figure (a price, a
-  score, a year).
+  score, a year), or reads as a sentence on a page with almost no text
+  outside its headings.
 - Markdown that costs tokens without meaning: horizontal rules, blank lines
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators
