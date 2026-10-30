@@ -89,7 +89,9 @@ with `main_content: false`, `:none` for a document without a body.
 - Invisible elements (`hidden`, `aria-hidden`, inline `display: none`,
   screen-reader-only and other hiding classes, and elements placed far off
   screen or in a one-pixel strip, where hacked sites hide link spam), keeping
-  collapsed accordions, tab panels and FAQ answers. Content that React streams
+  collapsed accordions, tab panels and FAQ answers, and text placed off
+  screen without a link or a field: shop and blog builders copy the page
+  there for search engines, and it can be the page's only copy. Content that React streams
   into hidden containers at the end of the page is put back where the page
   shows it, unless it is mostly links, as carousels of recommended products
   are.

@@ -38,6 +38,11 @@ module Nokodown
     PIXEL_STRIP_STYLE = /(?:\A|;)\s*height\s*:\s*1px/i.freeze
     PIXEL_WIDE_STYLE = /(?:\A|;)\s*width\s*:\s*1px/i.freeze
     OVERFLOW_HIDDEN = /(?:\A|;)\s*overflow\s*:\s*hidden/i.freeze
+    # Off screen, injected spam still links somewhere, a honeypot is still a
+    # field and a tracking pixel has no text. Text with neither is the copy
+    # of the page some shop and blog builders write for search engines, or
+    # an editor's paste bin, and can be the page's only copy of its text.
+    OFFSCREEN_TRAPS = "a, input, textarea, select"
 
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
 
@@ -217,15 +222,20 @@ module Nokodown
     def hidden?(node)
       return !disclosure?(node) if node.key?("hidden") && node["hidden"] != "until-found"
       return !node["class"].to_s.include?("fallback-image") && !closed_panel?(node) if node["aria-hidden"] == "true"
-      return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE) || out_of_sight?(node["style"].to_s)
+      return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE) || out_of_sight?(node)
 
       hidden_by_class?(node) && !disclosure?(node)
     end
 
-    def out_of_sight?(style)
-      return true if style.match?(OFFSCREEN_STYLE) && style.match?(POSITIONED_STYLE)
+    def out_of_sight?(node)
+      style = node["style"].to_s
+      return offscreen_trap?(node) if style.match?(OFFSCREEN_STYLE) && style.match?(POSITIONED_STYLE)
 
       style.match?(PIXEL_STRIP_STYLE) && style.match?(OVERFLOW_HIDDEN) && !style.match?(PIXEL_WIDE_STYLE)
+    end
+
+    def offscreen_trap?(node)
+      node.matches?(OFFSCREEN_TRAPS) || !node.at_css(OFFSCREEN_TRAPS).nil? || Dom.squish(node.content).empty?
     end
 
     def hidden_by_class?(node)

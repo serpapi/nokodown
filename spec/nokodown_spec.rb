@@ -372,6 +372,16 @@ RSpec.describe Nokodown do
       convert(html).should == "Open daily."
     end
 
+    it "keeps text placed off screen with no link or field, which can be the page's only copy of it" do
+      copy = "A neat ring for every day, though the gold engraving is a little loud on the silver."
+      html = "<h1>Ring review</h1><div style=\"position:absolute !important; top:-999999px !important; left:-999999px !important\">#{copy}</div>" \
+             '<div style="position:absolute; left:-9999px"><a href="https://spam.example">casino bonus</a></div>' \
+             '<div style="position:absolute; left:-5000px"><input name="b_42" tabindex="-1" value="">Leave this empty</div>' \
+             '<p><img src="https://counter.example/watch/1" style="position:absolute; left:-9999px;" alt=""></p>'
+
+      convert(html).should == "# Ring review\n\n#{copy}"
+    end
+
     it "keeps screen-reader text clipped to one pixel in place, which can be the only copy of a price" do
       html = '<p>Camp kettle</p><span style="position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden">Price: 30 euro</span>'
 
