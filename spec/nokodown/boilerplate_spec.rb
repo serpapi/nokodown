@@ -411,6 +411,21 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should include("Harbor seiches in closed basins")
     end
 
+    it "keeps a listing that wraps below a full-width title column in its row" do
+      posts = ["How ports plan for rising seas", "Inside a container terminal at night", "Why harbor pilots still matter"]
+      articles = posts.map.with_index do |post, index|
+        "<article><h2><a href=\"/2026/10/post-#{index}/\">#{post}</a></h2><div>Oct #{20 - index}, 2026</div></article>"
+      end
+      popular = Array.new(5) { |index| "<li><a href=\"/popular-#{index}/\">Popular post #{index + 1}</a></li>" }
+      [%w[col-12 col-lg-8 col-lg-4], %w[col-md-12 col-md-8 col-md-4]].each do |head, listing, side|
+        html = "<div class=\"row\"><div class=\"#{head}\"><h1>Category: Ports</h1><p>Stories about the harbor and " \
+               "its ports.</p></div><div class=\"#{listing}\">#{articles.join}</div>" \
+               "<div class=\"#{side}\"><h3>Popular</h3><ul>#{popular.join}</ul></div></div>"
+
+        remaining(html).should include("Why harbor pilots still matter")
+      end
+    end
+
     it "removes a site header above the title that holds addresses in lines" do
       html = "<div class=\"site-header\">#{hours * 2}</div><h1>Fully booked on Friday</h1>" \
              "<p>#{'The morning slots are taken. ' * 8}</p>"

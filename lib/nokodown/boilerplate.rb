@@ -425,10 +425,12 @@ module Nokodown
       @stats.text_chars(column) - @stats.text_chars(@title) >= TITLED_TEXT
     end
 
+    # Columns that fill more than a row between them stack, as a full-width
+    # header above the listing and its sidebar does.
     def narrower?(node, column)
       width = Dom.grid_width(node)
       other = Dom.grid_width(column)
-      !width.nil? && !other.nil? && width < other
+      !width.nil? && !other.nil? && width < other && width + other <= Dom::FULL_WIDTH
     end
 
     # A cookie banner is named for what it is as well as for the cookies, or

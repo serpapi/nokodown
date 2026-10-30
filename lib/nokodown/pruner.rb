@@ -40,7 +40,6 @@ module Nokodown
     SIDE_CELL = /\A(?:side-border-(?:left|right)|left-side|right-side)\z/.freeze
     GRID_COLUMNS = "[class*=span], [class*=col-], [class*=large-], [class*=medium-], [class*=small-], [class*=side]"
     SIDE_WIDTH = 3
-    FULL_WIDTH = 12
     NOT_COLUMNS = %w[style script noscript template link meta].freeze
     MIN_MAIN_WIDTH = 7
     MAX_RAIL_WIDTH = 5
@@ -173,7 +172,7 @@ module Nokodown
       return [] unless columns.size.between?(2, 3)
 
       side_row = columns.any? { |column| side_cell?(column) }
-      widths = columns.map { |column| side_row ? (side_cell?(column) ? SIDE_WIDTH : FULL_WIDTH) : Dom.grid_width(column) }
+      widths = columns.map { |column| side_row ? (side_cell?(column) ? SIDE_WIDTH : Dom::FULL_WIDTH) : Dom.grid_width(column) }
       return [] if widths.include?(nil)
 
       main = widths.index(widths.max)

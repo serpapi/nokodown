@@ -40,6 +40,7 @@ module Nokodown
     GRID_CLASS = /\A(?:span|td-pb-span|col-(?:(xs|sm|md|lg|xl|xxl)-)?|(small|medium|large)-)(\d{1,2})\z/.freeze
     BREAKPOINTS = [nil, "xs", "sm", "md", "lg", "xl", "xxl"].freeze
     FOUNDATION = { "small" => "sm", "medium" => "md", "large" => "lg" }.freeze
+    FULL_WIDTH = 12
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
