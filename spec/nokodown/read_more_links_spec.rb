@@ -67,6 +67,17 @@ RSpec.describe Nokodown::ReadMoreLinks do
     text_after(html).should == "#{passage.strip}WeiterlesenThe ferry runs late on Sunday."
   end
 
+  it "reads a link around many levels of blocks in time linear in its text" do
+    body = "<p>The bridge over the inner basin opens again on Monday after three months of repairs.</p>" * 10_000
+    html = "<div><a href='/news/bridge'>#{'<div>' * 200}<p>The harbor bridge reopens</p>#{body}#{'</div>' * 200}</a>" \
+           "<p><a href='/news/bridge'>Read more</a></p></div>"
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    text = text_after(html)
+
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+    text.should end_with("Read more")
+  end
+
   it "keeps a name that goes on from the title's link, but not a label after a sentence or a line break" do
     html = "<div><a href='/posts/12'>Philosophy of life: a life shaped by curiosity </a>" \
            "<span><a href='/posts/12'><b>- Vijay Joshi</b></a><span></span></span></div>" \

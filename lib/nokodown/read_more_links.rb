@@ -10,6 +10,7 @@ module Nokodown
   # Markdown::CardLinks leaves for not repeating across cards.
   class ReadMoreLinks
     Link = Struct.new(:node, :page, :text, :position)
+    Title = Struct.new(:heading, :line)
 
     MAX_LABEL = 30
     MAX_WORDS = 4
@@ -183,11 +184,26 @@ module Nokodown
     # enough for a title; around anything else (a team's name beside its
     # logo, a whole paragraph) the link is lost.
     def written?(node)
-      blocks = node.css("*").select { |child| Dom.block?(child) }
-      return true if blocks.empty? || blocks.any? { |block| Dom.heading?(block) }
+      title = Title.new
+      return true unless read_title(node, title) && title.heading.nil?
 
-      line = blocks.find { |block| !Dom.text(block).empty? && block.css("*").none? { |child| Dom.block?(child) } }
+      line = title.line
       !line.nil? && line.at_css("img, a").nil? && Dom.text(line).length <= Markdown::Renderer::MAX_LINK_TARGET
+    end
+
+    # Keeps the first heading under the node and its first line, a block
+    # with text and no block inside, and returns whether it holds a block.
+    # A link can wrap a whole page in many levels of blocks, so each element
+    # is read once, not once for every block around it.
+    def read_title(node, title)
+      node.element_children.reduce(false) do |holds, child|
+        inner = read_title(child, title)
+        next holds || inner unless Dom.block?(child)
+
+        title.heading ||= child if Dom.heading?(child)
+        title.line = child unless title.line || inner || Dom.text(child).empty?
+        true
+      end
     end
 
     # Controls follow what they act on, so the nearest longer links before
