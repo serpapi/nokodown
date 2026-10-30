@@ -384,6 +384,19 @@ RSpec.describe "Markdown conversion" do
       convert("<ul>#{products.join}</ul>").should == expected.join("\n")
     end
 
+    it "keeps the link of each item of a list written as lines, however many items share a file" do
+      html = '<h3>Peaks</h3><p><a href="/d/north.pdf">North Hill pdf, 392 kB.</a><br><a href="/d/east.pdf">Tall Ridge pdf, 1.9 MB.</a><br>' \
+             '<a href="/d/east.pdf">Flag Hill at Eastby pdf, 1.9 MB.</a></p><p><a href="/d/south.pdf">Around Bottom Hill, 3 km</a><br>' \
+             'Start: Village hall.<br><a href="/d/south.pdf">Hedum water, 2,5 km</a><br>Start: Hedum.</p>'
+      convert(html).should == "### Peaks\n\n[North Hill pdf, 392 kB.](https://example.com/d/north.pdf)\n" \
+                              "[Tall Ridge pdf, 1.9 MB.](https://example.com/d/east.pdf)\n" \
+                              "[Flag Hill at Eastby pdf, 1.9 MB.](https://example.com/d/east.pdf)\n\n" \
+                              "[Around Bottom Hill, 3 km](https://example.com/d/south.pdf)\nStart: Village hall.\n" \
+                              "[Hedum water, 2,5 km](https://example.com/d/south.pdf)\nStart: Hedum."
+      cards = %w[a b].map { |page| %(<p><a href="/#{page}">Post #{page}</a><br><a href="/#{page}">May 30, 2018</a><br><a href="/#{page}">12 comments</a><br><a href="/#{page}">Read more</a></p>) }
+      convert(cards.join).should == "[Post a](https://example.com/a)\nMay 30, 2018\n12 comments\n\n[Post b](https://example.com/b)\nMay 30, 2018\n12 comments"
+    end
+
     it "leaves links written in code alone" do
       html = "<ol><li><p>Call the handler:</p><pre><code>handlers[name](event);\nhandlers[type](event);</code></pre></li></ol>" \
              "<p><code>[text](https://example.com/docs)</code> or <code>[the docs](https://example.com/docs)</code></p>"

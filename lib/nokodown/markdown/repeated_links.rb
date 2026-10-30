@@ -20,6 +20,11 @@ module Nokodown
       # A button follows the end of a sentence or of another link.
       AFTER_SENTENCE = /[.…!?。！？:)\]*]\s*\z/.freeze
       CARD_UNITS = 4
+      # Lines of a paragraph that open with a link in words are the items of
+      # a list written without its markup.
+      ITEM_LINK = /\A\[[^\]]*\p{L}/.freeze
+      ITEM_LINES = 2
+      NUMBER = /\d+(?:[.,:]\d+)*/.freeze
       SEPARATE = %i[list table].freeze
       INITIALS = /\A\p{Lu}{1,4}\z/.freeze
       WORD_START = /\A[*_~`]*[\p{L}\p{N}]/.freeze
@@ -47,6 +52,7 @@ module Nokodown
 
       def call
         @lines = {}
+        @item_blocks = Set.new
         @segments = {}
         @edits = Hash.new { |edits, block| edits[block] = Hash.new { |lines, line| lines[line] = {} } }
         pages = links.group_by(&:page)
@@ -79,6 +85,7 @@ module Nokodown
 
           unit += 1
           lines = @lines[index] = block.text.split("\n", -1)
+          @item_blocks << index if block.kind == :paragraph && lines.count { |line| line.match?(ITEM_LINK) } >= ITEM_LINES
           code = CodeBlock.nested_code_lines(lines)
           lines.each_with_index.flat_map do |line, number|
             if number.positive? && piece?(block.kind, line)
@@ -178,13 +185,26 @@ module Nokodown
       end
 
       # Links to other sections of the title's page (#2 after #1) are not
-      # repeats.
+      # repeats. Nor is the link that opens an item of a list written as
+      # lines: each item names its own entry, however many share a file.
       def plan(card, keeper)
         card.each do |link|
           next if link.equal?(keeper) || (link.fragment && keeper.fragment && link.fragment != keeper.fragment)
 
-          @edits[link.block][link.line][link.segment] = button?(link, keeper) ? "" : link.text
+          button = button?(link, keeper)
+          next if !button && item?(link)
+
+          @edits[link.block][link.line][link.segment] = button ? "" : link.text
         end
+      end
+
+      # An item names a thing in words; a date or a count on the line under
+      # a title ("May 30, 2018", "12 comments") repeats the title's link.
+      def item?(link)
+        return false unless @item_blocks.include?(link.block) && link.segment == 1
+        return false unless @segments[[link.block, link.line]].first.strip.empty?
+
+        link.label.scan(/\p{L}+/).size > link.label.scan(NUMBER).size
       end
 
       def title?(link)
