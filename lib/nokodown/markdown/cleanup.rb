@@ -13,6 +13,8 @@ module Nokodown
       IMAGE_ONLY = /\A!\[([^\]]*)\]\([^)]*\)\z/.freeze
       LINKED_HEADING = /\A#+ \[.*\]\(.*\)\z/.freeze
       TITLE_LIST_MIN = 3
+      # A currency code or a unit beside the digits.
+      FIGURE_LETTERS = 3
       QUOTE_GRAM = 6
       REPEATED_BLOCK_MIN = 100
       REPEATED_RUN_MIN = 2
@@ -171,7 +173,7 @@ module Nokodown
       # level, lost its section during extraction. Title lists are content in
       # their own right, and a page that is only its headline keeps it.
       def drop_empty_sections(blocks)
-        titles = title_list_indexes(blocks) | card_titles(blocks)
+        titles = title_list_indexes(blocks) | card_titles(blocks) | figures(blocks)
         kept = blocks.each_index.reject { |index| !titles.include?(index) && empty_section?(blocks, index) }
         kept.pop while kept.any? && blocks[kept.last].kind == :heading && !titles.include?(kept.last)
         return blocks.values_at(*kept) if kept.any?
@@ -188,6 +190,19 @@ module Nokodown
           block = blocks[index]
           block.kind == :heading && linked_title?(block) && !levels.add?(block.level)
         end.to_set
+      end
+
+      # A heading that is a figure (a price, a score, a year) states a value;
+      # it is not a section waiting for its text.
+      def figures(blocks)
+        blocks.each_index.select do |index|
+          block = blocks[index]
+          block.kind == :heading && figure?(heading_text(block))
+        end.to_set
+      end
+
+      def figure?(text)
+        text.match?(/\p{N}/) && text.scan(/\p{L}/).size <= FIGURE_LETTERS
       end
 
       def linked_title?(heading)
