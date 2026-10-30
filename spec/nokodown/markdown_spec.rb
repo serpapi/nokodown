@@ -753,12 +753,12 @@ RSpec.describe "Markdown conversion" do
 
       it "keeps the one picture of a photo's own page that links to its full size" do
         photo = '<p><a href="/uploads/wedding-28.jpg"><img src="/uploads/wedding-28-300x200.jpg" alt=""></a></p>'
-        footer = "<p>September 11, 2024</p><p>Copyright 2021 © Example Design</p>" \
+        footer = "<p>September 11, 2024</p><p>Wedding and portrait photography in Sometown</p>" \
                  "<ul><li>Anna Example</li><li>Long Lane 3</li><li>97996 Sometown</li><li>Tel.: 0152 5365126</li></ul>" \
                  '<p><a href="/imprint/">Imprint</a> <a href="/privacy/">Privacy</a></p>'
         extract("<main><h1>Vineyard wedding 28</h1>#{photo}#{footer}</main>").should ==
           "# Vineyard wedding 28\n\n![](https://example.com/uploads/wedding-28-300x200.jpg)\n\nSeptember 11, 2024\n\n" \
-          "Copyright 2021 © Example Design\n\n- Anna Example\n- Long Lane 3\n- 97996 Sometown\n- Tel.: 0152 5365126\n\n" \
+          "Wedding and portrait photography in Sometown\n\n- Anna Example\n- Long Lane 3\n- 97996 Sometown\n- Tel.: 0152 5365126\n\n" \
           "[Imprint](https://example.com/imprint/) [Privacy](https://example.com/privacy/)"
         text = "<p>We dressed the long tables in linen and vine leaves, and lit the courtyard with lanterns as the evening drew on.</p>"
         extract("<main><h1>Vineyard wedding</h1>#{text}#{photo}</main>").should_not include(".jpg")
