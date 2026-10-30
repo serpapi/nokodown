@@ -156,7 +156,7 @@ point.
 | rs-trafilatura 0.1.1 | 0.838 | 0.873 | 12.7% | 87.7% | 2,664 | 18% |
 | Trafilatura 2.3.1 | 0.816 | 0.858 | 8.1% | 81.8% | 2,552 | 17% |
 | Readability.js 0.6 + Turndown | 0.770 | 0.830 | 10.0% | 76.5% | 2,899 | 23% |
-| Current Extract rule | 0.782 | 0.802 | 43.2% | 90.1% | 4,356 | 35% |
+| Main-region baseline | 0.782 | 0.802 | 43.2% | 90.1% | 4,356 | 35% |
 
 F1 by page type on the test set (257 articles; 28 to 59 pages of each other type):
 
@@ -166,12 +166,12 @@ F1 by page type on the test set (257 articles; 28 to 59 pages of each other type
 | rs-trafilatura 0.1.1 | 0.942 | 0.740 | 0.732 | 0.714 | 0.829 | 0.953 | 0.801 |
 | Trafilatura 2.3.1 | 0.934 | 0.719 | 0.589 | 0.757 | 0.786 | 0.941 | 0.817 |
 | Readability.js 0.6 + Turndown | 0.931 | 0.634 | 0.614 | 0.637 | 0.711 | 0.882 | 0.805 |
-| Current Extract rule | 0.874 | 0.666 | 0.647 | 0.727 | 0.679 | 0.906 | 0.727 |
+| Main-region baseline | 0.874 | 0.666 | 0.647 | 0.727 | 0.679 | 0.906 | 0.727 |
 
-"Current Extract rule" is the Extract API's present `include_markdown`
-behaviour (the page's `<main>`, else its only `<article>`, else `<body>`)
-reproduced with nokodown's converter. See
-[benchmark/compare](benchmark/compare/README.md) to reproduce the table.
+"Main-region baseline" converts the page's `<main>`, else its only
+`<article>`, else `<body>`, with nokodown's converter and no main-content
+detection. See [benchmark/compare](benchmark/compare/README.md) to reproduce
+the table.
 
 ```sh
 bundle exec ruby benchmark/wcxb.rb tmp/corpora/wcxb test
@@ -212,28 +212,15 @@ bundle exec rake benchmark:speed
 ruby benchmark/speed.rb DIRECTORY --per-page   # any folder of .html or .html.gz files
 ```
 
-## Using it in the Extract API
-
-The Extract API currently fills `text_content.markdown` from the page's
-`<main>`, its only `<article>`, or the whole body. With this gem:
-
-```ruby
-markdown = Nokodown.to_markdown(html, url: final_url)
-```
-
-`main_content: false` gives the whole-page conversion if a request needs it.
-Truncation to 50,000 characters stays in the engine, and `include_tags` /
-`exclude_tags` can be applied to the HTML before it is passed in.
-
 ## Development
 
 ```sh
 bundle install
 bundle exec rspec
-NOKOLEXBOR_VERSION=0.6.4 bundle exec rspec   # the version SerpApi runs
+NOKOLEXBOR_VERSION=0.6.4 bundle exec rspec   # the last nokolexbor for Ruby 2.7
 ```
 
-Specs use RSpec's `should` syntax, like the main SerpApi app.
+Specs use RSpec's `should` syntax.
 
 ## License
 

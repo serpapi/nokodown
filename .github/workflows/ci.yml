@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # SerpApi runs Ruby 2.7.8 with nokolexbor 0.6.4.
+          # The oldest supported Ruby, with the last nokolexbor that runs on it.
           - ruby: "2.7"
             nokolexbor: "0.6.4"
           - ruby: "3.4"
