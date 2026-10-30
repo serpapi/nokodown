@@ -96,11 +96,10 @@ module Nokodown
 
       # redundant_images: RedundantImages#call. main_content: keep only images
       # that say what they show.
-      def initialize(urls, images:, links:, redundant_images: {}, main_content: false)
+      def initialize(urls, images:, redundant_images: {}, main_content: false)
         @urls = urls
         @images = images
         @main_content = main_content
-        @links = links
         @redundant_images = redundant_images
         @rendered_images = {}
         @emphasis = Hash.new(0)
@@ -266,7 +265,7 @@ module Nokodown
       def link_markup(text, node)
         text = Separators.link_text(text)
         return "" if text.empty? || text.match?(Patterns::LINK_NOISE_TEXT)
-        return text if !@links || @in_link
+        return text if @in_link
 
         url = link_url(node["href"].to_s)
         return text if url.nil? || archive_in_line?(node, url)

@@ -28,9 +28,10 @@ module Nokodown
       SECTION_TEXT = 80
       TYPED_RANK = /\A\d+[.)]\s/.freeze
 
+      # links: false leaves out video embeds, which are only their link.
+      # Other links lose their addresses after Cleanup (LinkAddresses).
       def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
-        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images,
-                                   main_content: main_content)
+        @inline = Inline.new(urls, images: images, redundant_images: redundant_images, main_content: main_content)
         @links = links
         @depth = 0
         @contains_block = {}
@@ -505,7 +506,7 @@ module Nokodown
       def linked_blocks(node)
         blocks = children_blocks(node)
         url = @inline.link_url(node["href"].to_s)
-        target = url && @links && link_target(blocks)
+        target = url && link_target(blocks)
         return blocks unless target
 
         if target.kind == :heading

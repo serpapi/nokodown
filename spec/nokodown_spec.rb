@@ -644,6 +644,10 @@ RSpec.describe Nokodown do
     it "keeps link text only" do
       convert('<p>Read <a href="/docs">the docs</a>.</p>', links: false).should == "Read the docs."
     end
+
+    it "keeps a bracket that ends the text from opening a link with what follows" do
+      convert('<p>See <a href="/n/1">[1]</a>(page 4).</p>', links: false).should == "See [1\\](page 4)."
+    end
   end
 
   describe "conditional cleaning" do

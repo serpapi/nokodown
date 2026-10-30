@@ -35,7 +35,7 @@ module Nokodown
       blocks = with_title(blocks, metadata) if @title
       blocks = Markdown::Orphans.call(Markdown::Repeats.call(blocks))
       blocks = Markdown::Lists.single_items(Markdown::Headings.paragraphs(blocks))
-      result(blocks, metadata, mode)
+      result(Markdown::LinkAddresses.call(blocks, links: @links), metadata, mode)
     end
 
     private

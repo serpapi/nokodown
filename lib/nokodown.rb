@@ -52,6 +52,7 @@ require_relative "nokodown/markdown/cleanup"
 require_relative "nokodown/markdown/image_cleanup"
 require_relative "nokodown/markdown/repeats"
 require_relative "nokodown/markdown/orphans"
+require_relative "nokodown/markdown/link_addresses"
 require_relative "nokodown/result"
 require_relative "nokodown/extractor"
 
@@ -69,7 +70,8 @@ module Nokodown
   #   title:        prepend the page title as an H1 when the content has none;
   #                 a page with no content gives empty Markdown, not the title
   #   images:       include images
-  #   links:        keep links; false renders link text only
+  #   links:        keep links, a repeat of a link's text and address as
+  #                 text; false renders link text only
   def self.extract(html, **options)
     Extractor.new(html, **options).call
   end

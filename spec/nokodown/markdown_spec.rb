@@ -403,13 +403,14 @@ RSpec.describe "Markdown conversion" do
                                                      "[Beta](https://example.com/t/b)\n\nTags, Tags and more"
     end
 
-    it "keeps a text the page links again and again to a few pages" do
+    it "keeps a text the page links again and again to a few pages, with the address at its first link" do
       stores = %w[a a a a b]
       products = stores.each_with_index.map do |store, index|
         %(<li><a href="/p/#{index}">Boiler #{index}</a><p><a href="/s/#{store}">Shop #{store}</a></p><p><a href="/s/#{store}">Henan/Zhoukou</a></p></li>)
       end
       expected = stores.each_with_index.map do |store, index|
-        "- [Boiler #{index}](https://example.com/p/#{index})\n  [Shop #{store}](https://example.com/s/#{store})\n  Henan/Zhoukou"
+        shop = stores.index(store) == index ? "[Shop #{store}](https://example.com/s/#{store})" : "Shop #{store}"
+        "- [Boiler #{index}](https://example.com/p/#{index})\n  #{shop}\n  Henan/Zhoukou"
       end
       convert("<ul>#{products.join}</ul>").should == expected.join("\n")
     end
@@ -433,6 +434,18 @@ RSpec.describe "Markdown conversion" do
       end
       convert(teasers.join).should == "#### [Cure a](https://example.com/a)\n\nHeadaches are among the most common complaints.\n\n" \
                                       "#### [Cure b](https://example.com/b)\n\nBack pain is common."
+    end
+
+    it "writes an address once for the links that repeat its text" do
+      posts = %w[Tides Waves Storms].map do |name|
+        %(<h2>#{name}</h2><p>A note on #{name.downcase} from the coast.</p><p><a href="/team/ann">Ann Lee</a></p>)
+      end
+      html = "<p><code>[Ann Lee](https://example.com/team/ann)</code></p>#{posts.join}<h2>Contact</h2><p>Write to <a href=\"/team/ann\">our editor</a>.</p>"
+      convert(html).should == "`[Ann Lee](https://example.com/team/ann)`\n\n" \
+                              "## Tides\n\nA note on tides from the coast.\n\n[Ann Lee](https://example.com/team/ann)\n\n" \
+                              "## Waves\n\nA note on waves from the coast.\n\nAnn Lee\n\n" \
+                              "## Storms\n\nA note on storms from the coast.\n\nAnn Lee\n\n" \
+                              "## Contact\n\nWrite to [our editor](https://example.com/team/ann)."
     end
 
     it "leaves links written in code alone" do
@@ -684,8 +697,8 @@ RSpec.describe "Markdown conversion" do
     end
 
     describe "in the main content" do
-      def extract(html)
-        Nokodown.to_markdown("<body>#{html}</body>", url: "https://example.com/dir/page", title: false)
+      def extract(html, **options)
+        Nokodown.to_markdown("<body>#{html}</body>", url: "https://example.com/dir/page", title: false, **options)
       end
 
       it "drops card thumbnails beside a text link to the same page" do
@@ -699,6 +712,10 @@ RSpec.describe "Markdown conversion" do
                                 "- [Trail boot](https://example.com/p/1)\n  Waterproof leather for long days on rocky ground.\n" \
                                 "- [Ridge runner](https://example.com/p/2)\n  A light mesh boot for fast summer hikes.\n" \
                                 "- ![Boots on a mountain trail](https://example.com/lookbook-small.jpg)"
+        extract(html, links: false).should == "# Hiking boots\n\n" \
+                                              "- Trail boot\n  Waterproof leather for long days on rocky ground.\n" \
+                                              "- Ridge runner\n  A light mesh boot for fast summer hikes.\n" \
+                                              "- ![Boots on a mountain trail](https://example.com/lookbook-small.jpg)"
       end
 
       it "moves a card's list marker past a nested list of thumbnails" do

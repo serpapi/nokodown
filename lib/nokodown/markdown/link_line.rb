@@ -49,7 +49,8 @@ module Nokodown
 
       # Links set side by side were told apart by their brackets; a text
       # that would run into the words of the link beside it needs a space.
-      # A text after it puts in its own.
+      # A text after it puts in its own. A closing bracket before "(" would
+      # make a link of the two.
       def spaced(text, parts, replacements, segment)
         return text if text.empty?
 
@@ -57,6 +58,7 @@ module Nokodown
         after = parts[segment + 1]
         left = replacements.fetch(segment - 2) { link_text(parts, segment - 2) }
         right = replacements.key?(segment + 2) ? "" : link_text(parts, segment + 2)
+        text = text.sub(/(?<!\\)\]\z/, "\\]") if after.start_with?("(")
         "#{' ' if before.empty? ? beside?(left, text) : before.match?(/[)\]]\z/)}#{text}" \
           "#{' ' if after.empty? ? beside?(text, right) : after.match?(/\A[\[!]/)}"
       end
