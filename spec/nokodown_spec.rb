@@ -262,6 +262,24 @@ RSpec.describe Nokodown do
       markdown.should include("## [The lagoon wall opens](https://example.com/notes/lagoon)")
     end
 
+    it "keeps a list that links to the page itself in a section that the table of contents lists" do
+      pieces = %w[helmet cuirass gauntlets boots].map do |piece|
+        href = piece == "boots" ? "/page" : "/items/#{piece}"
+        "<a href=\"#{href}\"><li><div>Watcher scribe #{piece}</div><div>heavy armor</div></li></a>"
+      end
+      intro = "<h1>Watcher scribe boots</h1><p>Heavy boots of gear score 350, tier three, bound on pickup. " \
+              "They drop from the watchers in the eastern ruins and are crafted at an outfitting station.</p>"
+      toc = '<nav><ul><li><a href="#set">Full set</a></li><li><a href="#crafts">Crafts</a></li>' \
+            '<li><a href="#pictures">Pictures</a></li></ul></nav>'
+      sections = "<section id=\"set\"><h2>Full set</h2><ul><div>#{pieces.join}</div></ul></section>" \
+                 "<section id=\"crafts\"><h2>Crafts</h2><p>Sewn at a workbench.</p></section>" \
+                 "<section id=\"pictures\"><h2>Pictures</h2><p>No pictures yet.</p></section>"
+
+      markdown = extract("<main>#{intro}#{toc}#{sections}</main>")
+
+      markdown.should include("## Full set\n\n- - Watcher scribe helmet\n    heavy armor\n  - Watcher scribe cuirass")
+    end
+
     it "drops the heading over a box of links it drops" do
       kinds = %w[Notebooks Pens Folders Markers Erasers Rulers]
       links = kinds.map { |kind| "<li><a href=\"/shop/#{kind.downcase}\">#{kind}</a></li>" }.join

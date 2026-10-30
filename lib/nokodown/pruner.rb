@@ -439,7 +439,9 @@ module Nokodown
 
     # A list of links holding one to the page itself shows the reader where
     # they are: a menu, a breadcrumb trail, a pager. Links in one list share
-    # a holder, which is judged once.
+    # a holder, which is judged once. In a part of the page that its table
+    # of contents lists, such a list is content: the pieces of a set that
+    # holds this item.
     def current_page_menus(root)
       return [] unless @urls
 
@@ -447,7 +449,9 @@ module Nokodown
       holders = root.css("a[href]").filter_map do |link|
         link_holder(link, root, link_counts) if @urls.current_page?(link["href"])
       end
-      holders.uniq { |holder| Dom.key(holder) }.select { |holder| !in_data_table?(holder) && menu_entries?(holder) }
+      holders.uniq { |holder| Dom.key(holder) }.select do |holder|
+        !in_data_table?(holder) && !InPageLinks.listed?(holder) && menu_entries?(holder)
+      end
     end
 
     # The nearest ancestor below the root that holds three links or more.
