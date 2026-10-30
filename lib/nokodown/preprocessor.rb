@@ -299,7 +299,25 @@ module Nokodown
     # A before-and-after photo slider holds its two photos.
     def slider_marks?(input, wrapper)
       input["type"].to_s.casecmp?("range") && wrapper&.element? &&
-        Dom.char_count(wrapper.content) <= SLIDER_MARKS && wrapper.at_css("img, iframe").nil?
+        few_marks?(wrapper) && wrapper.at_css("img, iframe").nil?
+    end
+
+    # Stops at the limit: inputs set straight in a page's column would each
+    # read the whole column.
+    def few_marks?(wrapper)
+      chars = 0
+      stack = [wrapper.child]
+      until stack.empty?
+        node = stack.pop
+        next if node.nil?
+
+        stack << node.next_sibling
+        chars += Dom.char_count(node.content) if node.text? || node.cdata?
+        return false if chars > SLIDER_MARKS
+
+        stack << node.child if node.element?
+      end
+      true
     end
 
     # Search boxes, sign-ups and logins. Forms that wrap real content (ASP.NET

@@ -490,6 +490,12 @@ RSpec.describe Nokodown do
       convert(html).should == "Kitchen\n\n![Before](https://example.com/before.jpg)![After](https://example.com/after.jpg)"
     end
 
+    it "keeps a caption beside a slider when its parts together are longer than the marks" do
+      html = "<div><input type='range'><span><b>Water</b> level</span> <span>by decade</span></div>"
+
+      convert(html).should == "**Water** level by decade"
+    end
+
     it "reports :full mode" do
       Nokodown.extract("<p>x</p>", main_content: false).mode.should == :full
     end
