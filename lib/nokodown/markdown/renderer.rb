@@ -204,13 +204,32 @@ module Nokodown
       def sections_list?(items, start)
         return false unless items.any? { |blocks| sections?(blocks) }
 
-        start.nil? || items.all? { |blocks| blocks.first.kind == :heading }
+        start.nil? || items.all? { |blocks| opening(blocks) }
+      end
+
+      # A product photo may go before the heading that names its item. Past
+      # a photo, a heading names the item only when it outranks the item's
+      # other headings: an app card's logo goes before labels of one level.
+      def opening(blocks)
+        heading = blocks.find { |block| !picture?(block) }
+        heading if heading&.kind == :heading && (heading.equal?(blocks.first) || outranks?(heading, blocks))
+      end
+
+      def outranks?(heading, blocks)
+        blocks.none? { |block| block.kind == :heading && !block.equal?(heading) && block.level <= heading.level }
+      end
+
+      def picture?(block)
+        block.kind == :paragraph && !block.text.gsub(ImageCleanup::IMAGE, "").match?(/[\p{L}\p{N}]/)
       end
 
       def unlisted(items, start)
         return items.flatten(1) unless start
 
-        items.each_with_index.flat_map { |blocks, index| [ranked(blocks.first, start + index), *blocks.drop(1)] }
+        items.each_with_index.flat_map do |blocks, index|
+          heading = opening(blocks)
+          blocks.map { |block| block.equal?(heading) ? ranked(block, start + index) : block }
+        end
       end
 
       # A site may type the number into the heading already.

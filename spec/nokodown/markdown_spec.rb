@@ -884,8 +884,16 @@ RSpec.describe "Markdown conversion" do
       text = "Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.\n\n### Pros\n\n- Light\n- Quiet"
       html = "<ol start='4'><li><h2>Acme Drill</h2>#{review}</li><li><h2>5. Bolt Driver</h2>#{review}</li></ol>"
       convert(html).should == "## 4. Acme Drill\n\n#{text}\n\n## 5. Bolt Driver\n\n#{text}"
+      convert(html.gsub("h2>", "h3>")).should start_with("### 4. Acme Drill\n\n")
       unranked = "<ol><li><h2>Acme Drill</h2>#{review}</li><li><p>Bolt Driver, the quiet one.</p>#{review}</li></ol>"
       convert(unranked).should start_with("1. Acme Drill\n")
+      photos = %w[Acme Bolt].map { |name| %(<li><img src="/#{name}.jpg" alt="#{name} Drill"><h2>#{name} Drill</h2>#{review}</li>) }
+      convert("<ol>#{photos.join}</ol>").should start_with("![Acme Drill](https://example.com/Acme.jpg)\n\n## 1. Acme Drill\n\n#{text}\n\n![Bolt")
+      logos = %w[Acme Bolt].map do |name|
+        %(<li><a href="/app/#{name}"><img src="/#{name}.png" alt="#{name} Notes"></a><h4>Cost / License</h4><p>Free</p>) +
+          "<h4>Platforms</h4><ul><li>Windows</li><li>Mac</li></ul></li>"
+      end
+      convert("<ol>#{logos.join}</ol>").should start_with("1. ![Acme Notes](https://example.com/Acme.png)\n   Cost / License\n")
     end
 
     it "keeps a list of sections in an item of a numbered list that stays a list" do
