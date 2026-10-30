@@ -215,13 +215,15 @@ is named as a breadcrumb trail or a menu.
 Three kinds of named furniture go however much of a short page they hold: a
 site header above the title, a sidebar or footer without prose beside a title
 that has text of its own (not a block whose BEM modifier names its layout,
-`catalog-grid--sidebar`), and a cookie banner that one of its names calls a
-banner, a bar or a dialog along with the cookies (`cookie-notice`,
-`cmplz-cookiebanner`), or a consent manager, or that is laid over the page,
-unless it holds the page's `<h1>` or the page is about cookies. A shop's or a
-blog's tags (`product_tag-cookies`) name what it lists, not the block, and a
-name for the room a page leaves for the banner (`cookiebot-padding-bottom`)
-names the wrapper of its content. A grid
+`catalog-grid--sidebar`, one inside a grid column wider than half the row,
+or the layout that holds a sidebar beside a column named main, content or
+primary with most of its text, `tmpl_two_col_sidebar`), and a cookie banner
+that one of its names calls a banner, a bar or a dialog along with the
+cookies (`cookie-notice`, `cmplz-cookiebanner`), or a consent manager, or
+that is laid over the page, unless it holds the page's `<h1>` or the page is
+about cookies. A shop's or a blog's tags (`product_tag-cookies`) name what it
+lists, not the block, and a name for the room a page leaves for the banner
+(`cookiebot-padding-bottom`) names the wrapper of its content. A grid
 column narrower than the title's and beside it ("col-md-4" beside "col-md-8")
 goes the same way, whatever its names, when it holds three or more linked
 headings and no prose, as the latest posts beside an empty tag archive do,

@@ -358,6 +358,21 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should include("Monday 9:00")
     end
 
+    it "keeps a listing in the main grid column or in the layout around a sidebar" do
+      products = Array.new(10) do |index|
+        "<div class=\"product\"><h5><a href=\"/p/#{index}\">Aloe vera gel, #{index + 1} gallons</a></h5>" \
+          "As low as $#{index + 15}.50 a gallon, shipped to all states</div>"
+      end
+      header = "<div class=\"titleclass\"><h1>Carrier Oils</h1><p>Showing all 10 results, sorted by price</p></div>"
+      in_main = "#{header}<div class=\"row\"><div class=\"main col-lg-9\">" \
+                "<div class=\"products shopcolumn4 shopsidebarwidth\">#{products.join}</div></div>" \
+                "<aside class=\"col-lg-3\"></aside></div>"
+      around = "#{header}<div class=\"torso tmpl_two_col_sidebar\"><div class=\"sidebar\"><p>Filters</p></div>" \
+               "<div class=\"main\">#{products.join}</div></div>"
+
+      [in_main, around].each { |html| remaining(html).should include("Aloe vera gel, 10 gallons") }
+    end
+
     it "keeps a block laid out beside a sidebar" do
       products = Array.new(6) do |index|
         "<li><a href=\"/disc-#{index}\">Diamond disc #{index + 1}25 mm</a> Segmented rim for granite and concrete, #{index + 3}50 UAH</li>"

@@ -15,6 +15,8 @@ module Nokodown
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     SIDE_FURNITURE = /sidebar|#{Patterns::WORD_START}footer#{Patterns::WORD_END}/.freeze
+    SIDEBAR = /sidebar/.freeze
+    MAIN_COLUMN = /(?<![a-z])(?:main|content|primary)(?![a-z])/.freeze
     # A BEM modifier names a variant of the block: "catalog-grid--sidebar" is
     # the grid laid out beside a sidebar.
     BEM_MODIFIER = /--[\w-]+/.freeze
@@ -393,7 +395,42 @@ module Nokodown
       return false unless node.at_css("h1").nil? && !prose_lines?(node)
 
       branch = title_branch(node)
-      !branch.nil? && @stats.text_chars(branch) - @stats.text_chars(@title) >= TITLED_TEXT
+      return false if branch.nil? || in_main_column?(node, branch.parent) || around_sidebar?(node)
+
+      @stats.text_chars(branch) - @stats.text_chars(@title) >= TITLED_TEXT
+    end
+
+    # A grid column wider than half the row and narrower than all of it is
+    # the main one, beside which a sidebar sits: a shop's product grid named
+    # "shopsidebarwidth" for the room a sidebar leaves it is inside it.
+    def in_main_column?(node, shared)
+      node.ancestors.each do |ancestor|
+        break if !ancestor.element? || Dom.key(ancestor) == Dom.key(shared)
+
+        width = Dom.grid_width(ancestor)
+        return true if width && width > Dom::FULL_WIDTH / 2 && width < Dom::FULL_WIDTH
+      end
+      false
+    end
+
+    # The layout around a sidebar holds it beside the main column, which
+    # holds most of the text: "tmpl_two_col_sidebar" around "sidebar" and
+    # "main". A sidebar's own parts ("sidebar-top" beside its widgets) are
+    # not named for the main column.
+    def around_sidebar?(node)
+      half = @stats.text_chars(node) / 2
+      node.css("*").any? do |inner|
+        next false unless @names[Dom.signature(inner)].gsub(BEM_MODIFIER, " ").match?(SIDEBAR)
+
+        inner.parent.element_children.any? do |column|
+          Dom.key(column) != Dom.key(inner) && @stats.text_chars(column) > half && main_column_name?(column)
+        end
+      end
+    end
+
+    def main_column_name?(column)
+      name = @names[Dom.signature(column)]
+      name.match?(MAIN_COLUMN) && !name.match?(SIDE_FURNITURE) && !@furniture[Dom.signature(column)]
     end
 
     # The title's ancestor that sits beside the node, under the parent they share.
