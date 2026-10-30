@@ -53,6 +53,23 @@ RSpec.describe Nokodown::ReadMoreLinks do
     text_after(html).should == "The harbor bridge reopens"
   end
 
+  it "keeps a label when the longer link around blocks is one Markdown does not write" do
+    teams = "<p><span>Leones</span><img src='/leones.png' alt='Leones'></p><div><p>VS</p></div><p><span>Osos</span><img src='/osos.png' alt='Osos'></p>"
+    html = "<div class='match'><a href='/cup/1'>#{teams}</a><p><a href='/cup/1'>Finished</a></p></div>" \
+           "<div class='match'><a href='/cup/2'><p>Tigres against Lobos</p><p>VS</p></a><p><a href='/cup/2'>Details</a></p></div>"
+    text_after(html).should == "LeonesVSOsosFinishedTigres against LobosVS"
+  end
+
+  it "keeps a name that goes on from the title's link, but not a label after a sentence or a line break" do
+    html = "<div><a href='/posts/12'>Philosophy of life: a life shaped by curiosity </a>" \
+           "<span><a href='/posts/12'><b>- Vijay Joshi</b></a><span></span></span></div>" \
+           "<div><a href='/posts/9'>The harbor bridge reopens!</a><span><a href='/posts/9'>Details</a></span></div>" \
+           "<div><a href='/posts/7'>Crews finish early</a><br><span><a href='/posts/7'>Details</a></span></div>" \
+           "<div><a href='/posts/5'>Ferry times change<br></a><span><a href='/posts/5'>Details</a></span></div>"
+    text_after(html).should == "Philosophy of life: a life shaped by curiosity - Vijay JoshiThe harbor bridge reopens!" \
+                               "Crews finish earlyFerry times change"
+  end
+
   it "keeps the entries of a breadcrumb or a table of contents" do
     html = "<nav><a href='/guide/intro'>A quick guide to building apps</a><ol><li><a href='/guide/intro'>Intro</a></li>" \
            "<li><a href='/guide/setup'>Setup</a></li><li><a href='/guide/basics'>Basics</a></li></ol></nav>"

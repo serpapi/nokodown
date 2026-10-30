@@ -9,6 +9,7 @@ module Nokodown
     NOTICE_BLOCKS = "#{TEXT_BLOCKS}, #{LAYOUT_CELLS}"
     MAX_NOTICE = 200
     NO_WORDS = /\A[\p{P}\p{S}\p{N}\s]*\z/.freeze
+    CARD_MEDIA = "img, picture, video"
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
     # A class names a button when that is its last word, before a modifier,
@@ -463,7 +464,9 @@ module Nokodown
 
     # A list of links holding one to the page itself shows the reader where
     # they are: a menu, a breadcrumb trail, a pager. Links in one list share
-    # a holder, which is judged once.
+    # a holder, which is judged once. In a part of the page that its table
+    # of contents lists, such a list is content: the pieces of a set that
+    # holds this item.
     def current_page_menus(root)
       return [] unless @urls
 
@@ -471,7 +474,9 @@ module Nokodown
       holders = root.css("a[href]").filter_map do |link|
         link_holder(link, root, link_counts) if @urls.current_page?(link["href"])
       end
-      holders.uniq { |holder| Dom.key(holder) }.select { |holder| !in_data_table?(holder) && menu_entries?(holder) }
+      holders.uniq { |holder| Dom.key(holder) }.select do |holder|
+        !in_data_table?(holder) && !InPageLinks.listed?(holder) && menu_entries?(holder)
+      end
     end
 
     # The nearest ancestor below the root that holds three links or more.
@@ -675,7 +680,7 @@ module Nokodown
         next if text.empty? || text.length > MAX_NOTICE
 
         if text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
-          remove(node)
+          remove(node) unless label_beside_picture?(node, text)
         elsif copyright?(node, text)
           notices << node
         end
@@ -713,6 +718,22 @@ module Nokodown
 
         text_outside(child, skipped)
       end
+    end
+
+    # A card whose only words left are its button ("Add to cart", "В
+    # корзину") keeps its picture: the block that holds the label alone is
+    # removed on its own. An icon in the label's own element goes with it.
+    def label_beside_picture?(node, text)
+      return false if node.css(CARD_MEDIA).none? { |media| card_picture?(media) }
+
+      node.css(TEXT_BLOCKS).any? { |child| Dom.text(child) == text && child.at_css(CARD_MEDIA).nil? }
+    end
+
+    # A card's picture links to the card's page; a logo links home.
+    def card_picture?(media)
+      link = Dom.ancestors_named(media, "a").first
+      href = link && destination(link)
+      !href.nil? && !Metadata.home_link?(href)
     end
 
     # Links and boxes styled as buttons ("Add to cart", "Book a demo") are

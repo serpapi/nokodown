@@ -90,9 +90,10 @@ with `main_content: false`, `:none` for a document without a body.
   values that differ) after a line of the page's own text, or, on a page that
   declares itself an article, a product or a thread, when the page's own
   text, or its own list, outweighs them. They stay on home pages, in hubs of
-  sections built alike, in forum posts (attachments), when they link to pages
-  below this one, and when the content would be left with fewer than 20 words
-  outside headings.
+  sections built alike, in forum posts (attachments), in a section that the
+  page's own table of contents lists, when they link to pages below this
+  one, and when the content would be left with fewer than 20 words outside
+  headings.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
