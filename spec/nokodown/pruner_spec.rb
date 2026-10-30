@@ -128,6 +128,22 @@ RSpec.describe Nokodown::Pruner do
       Nokodown::Dom.text(root).should_not include("Commission on planning")
     end
 
+    it "drops the links beside a menu whose label or entries were the only headings around it" do
+      menu = { "/c/works" => "Regulatory signs for highway works", "/page" => "Warning", "/c/info" => "Info" }
+      items = menu.map { |href, text| "<li><a href='#{href}'>#{text}</a></li>" }.join
+      titles = menu.map { |href, text| "<h3><a href='#{href}'>#{text}</a></h3>" }.join
+      links = "<p><a href='/a'>Alpha</a> <a href='/b'>Beta</a></p><p><a href='/c'>Gamma</a></p>"
+
+      ["<div><h4>Categories</h4><ul>#{items}</ul></div>", "<div>#{titles}</div>"].each do |box|
+        root = content("#{story}<div class='sidebar'>#{links}#{box}</div>")
+
+        described_class.new([root], :page, urls: urls).call
+
+        Nokodown::Dom.text(root).should include("The harbor bridge reopened")
+        ["Alpha", "Gamma"].each { |noise| Nokodown::Dom.text(root).should_not include(noise) }
+      end
+    end
+
     it "drops the links beside each menu set in the clones of a font left open, which share one key" do
       menu = "<span><a href='/c/works'>Regulatory signs for highway works</a>, <a href='/page'>Warning</a>, " \
              "<a href='/c/info'>Info</a></span>"

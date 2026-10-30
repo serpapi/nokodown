@@ -387,8 +387,11 @@ module Nokodown
       repeated = repeated_shapes(clusters)
       remove_clusters(root, repeated) unless clusters.empty?
       menus = current_page_menus(root)
-      boxes = untitled_boxes(menus.map { |menu| boxes_around(menu, root) })
-      remove_clusters(root, repeated, boxes) if remove_menus(root, menus) && !boxes.empty?
+      chains = menus.map { |menu| boxes_around(menu, root) }
+      return unless remove_menus(root, menus)
+
+      boxes = untitled_boxes(chains)
+      remove_clusters(root, repeated, boxes) unless boxes.empty?
     end
 
     def index?(root, clusters)
@@ -404,7 +407,8 @@ module Nokodown
       end
     end
 
-    # The boxes a menu sits in below the root, innermost first.
+    # The boxes a menu sits in below the root, innermost first. Taken
+    # before the menu goes, which cuts it from them.
     def boxes_around(menu, root)
       boxes = []
       node = menu
@@ -412,12 +416,13 @@ module Nokodown
       boxes
     end
 
-    # The keys of the boxes around the menus, up to the first that holds a
-    # heading: that is a card whose tag line linked to the page itself
-    # ("<h2>Minutes 5</h2> 07.01.2025 Admin Read more"), and a run of cards
-    # is the listing. A walk that reaches a box an earlier one went through
-    # stops there; the parser's clones of a <font face> share one key, so
-    # the box itself is compared.
+    # The keys of the boxes around the removed menus, up to the first that
+    # still holds a heading: that is a card whose tag line linked to the
+    # page itself ("<h2>Minutes 5</h2> 07.01.2025 Admin Read more"), and a
+    # run of cards is the listing. The menu's label and the headings among
+    # its entries went with it. A walk that reaches a box an earlier one
+    # went through stops there; the parser's clones of a <font face> share
+    # one key, so the box itself is compared.
     def untitled_boxes(chains)
       seen = Hash.new { |boxes, key| boxes[key] = [] }
       chains.each_with_object(Set.new) do |chain, keys|
