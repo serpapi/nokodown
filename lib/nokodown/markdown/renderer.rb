@@ -18,6 +18,8 @@ module Nokodown
       # Heading-anchor markup puts a permalink before or after the text.
       # A sign before a number is the heading's own: "§ 1 Geltungsbereich".
       PERMALINK = /\A[#¶§🔗]\s+(?!\d)|\s+[#¶§🔗]\z/.freeze
+      # Characters of a paragraph that a section holds and a card does not.
+      SECTION_TEXT = 80
 
       def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images,
@@ -152,8 +154,37 @@ module Nokodown
           owner ? owner.concat(blocks) : items << blocks
         end
         items.reject!(&:empty?)
+        return sections(items.flatten(1)) if items.any? { |blocks| sections?(blocks) }
+
         start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
         format_list(items, start)
+      end
+
+      # Tab panels and accordions set whole sections in list items: two
+      # headings of different names, each over text of its own. Their
+      # headings stay headings, outside a list. A card repeats its one
+      # title, the date under a card's excerpt heads at most an icon, and
+      # a contact list heads a phone number.
+      def sections?(blocks)
+        names = blocks.each_cons(2).filter_map { |block, following| block.text.sub(/\A#+ /, "") if heads_text?(block, following) }
+        return false if names.uniq.size < 2
+
+        blocks.drop_while { |block| block.kind != :heading }.any? { |block| section_text?(block) }
+      end
+
+      def heads_text?(block, following)
+        block.kind == :heading && following.kind != :heading && following.text.gsub(ImageCleanup::IMAGE, "").match?(/[\p{L}\p{N}]/)
+      end
+
+      def section_text?(block)
+        %i[table list].include?(block.kind) || (block.kind == :paragraph && block.text.length >= SECTION_TEXT)
+      end
+
+      # A heading that ends the list heads nothing in it, as an API
+      # reference's closing "Returns void", and is a line of its text.
+      def sections(blocks)
+        last = blocks.last
+        last.kind == :heading ? blocks[0...-1] << item_paragraph(last.text.sub(/\A#+ /, "")) : blocks
       end
 
       # A nested list belongs to the item before it, also when a site wraps

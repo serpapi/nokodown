@@ -45,6 +45,8 @@ module Nokodown
         next unless label?(link)
 
         holder = holder(link)
+        next if continues_link?(holder, link)
+
         holder if standalone?(holder) && !menu_entry?(holder) && named_in_card?(link, holder, namers[link.page])
       end
       holders.each { |holder| holder.remove unless Dom.in_code?(holder) }
@@ -143,11 +145,48 @@ module Nokodown
       node.element? && (stops.include?(node.name) || Dom.block?(node))
     end
 
+    # A second link to the same page right after a longer one, with nothing
+    # between them, goes on with its words: a title, then "- Author" in a
+    # wrapper of its own. A control follows an excerpt or a title that ends
+    # like a sentence, or stands on a line of its own.
+    def continues_link?(holder, label)
+      return false if Dom.block?(holder)
+
+      before = previous_inline(holder)
+      link = before && (before.name == "a" ? before : before.css("a[href]").last)
+      return false if link.nil? || page(link) != label.page
+
+      text = Dom.text(link)
+      text.length > label.text.length && text.match?(/\p{L}/) && !text.match?(EXCERPT_END) && Dom.text(before).end_with?(text)
+    end
+
+    # The element right before the node on its line, with no text between;
+    # one that holds a line break may end the line before the node.
+    def previous_inline(node)
+      sibling = node.previous_sibling
+      sibling = sibling.previous_sibling while sibling && !sibling.element? && Dom.text(sibling).empty?
+      return unless sibling&.element? && !Dom.block?(sibling)
+
+      sibling if sibling.css("*").none? { |child| child.name == "br" || Dom.block?(child) }
+    end
+
     # A link in words can name its page. A term of a definition list is
     # written without its link, so it does not, and neither does a date,
     # which can be longer than an event's name.
     def namer?(link)
-      link.text.match?(/\p{L}/) && !link.text.match?(DATE_OR_TIME) && Dom.ancestors_named(link.node, "dt").empty?
+      link.text.match?(/\p{L}/) && !link.text.match?(DATE_OR_TIME) && Dom.ancestors_named(link.node, "dt").empty? &&
+        written?(link.node)
+    end
+
+    # Markdown::Renderer writes a link around blocks on their heading, or on
+    # their first line of text when that holds no image or link; around
+    # anything else (a team's name beside its logo) the link is lost.
+    def written?(node)
+      blocks = node.css("*").select { |child| Dom.block?(child) }
+      return true if blocks.empty? || blocks.any? { |block| Dom.heading?(block) }
+
+      line = blocks.find { |block| !Dom.text(block).empty? && block.css("*").none? { |child| Dom.block?(child) } }
+      !line.nil? && line.at_css("img, a").nil?
     end
 
     # Controls follow what they act on, so the nearest longer links before

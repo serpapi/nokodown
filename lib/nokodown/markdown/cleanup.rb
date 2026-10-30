@@ -10,9 +10,12 @@ module Nokodown
       # A page with fewer words than this is its images: a gallery, a
       # photo post.
       IMAGE_PAGE_WORDS = 20
+      LINK = /!?\[#{Text::LINK_TEXT}\]\(#{Text::DESTINATION}\)/.freeze
       IMAGE_ONLY = /\A!\[([^\]]*)\]\([^)]*\)\z/.freeze
       LINKED_HEADING = /\A#+ \[.*\]\(.*\)\z/.freeze
       TITLE_LIST_MIN = 3
+      # A currency code or a unit beside the digits.
+      FIGURE_LETTERS = 3
       QUOTE_GRAM = 6
       REPEATED_BLOCK_MIN = 100
       REPEATED_RUN_MIN = 2
@@ -33,12 +36,25 @@ module Nokodown
         # Labels joins a counter to its label and CardLinks unlinks a card's
         # repeated "Read more", so both make noise the first pass missed.
         blocks = drop_empty_sections(CardLinks.new(blocks).call.reject { |block| noise?(block) })
-        images.empty? ? blocks : ImageCleanup.new(images, unnamed: !image_page?(blocks)).call(blocks)
+        images.empty? ? blocks : ImageCleanup.new(images, unnamed: !image_page?(blocks, images)).call(blocks)
       end
 
-      def image_page?(blocks)
+      def image_page?(blocks, images)
+        few_words?(blocks.map(&:text)) || photo_page?(blocks, images)
+      end
+
+      # A photo's own page links its one picture to the full-size file. Its
+      # title, and the address list and links a site leaves beside it, say
+      # nothing about the photo; only the words of paragraphs count.
+      def photo_page?(blocks, images)
+        return false unless images.size == 1 && images.each_value.first.full_size
+
+        few_words?(blocks.filter_map { |block| block.text.gsub(LINK, " ") if block.kind == :paragraph })
+      end
+
+      def few_words?(texts)
         words = 0
-        blocks.none? { |block| (words += Text.plain(block.text).scan(/[\p{L}\p{N}]+/).size) >= IMAGE_PAGE_WORDS }
+        texts.none? { |text| (words += Text.plain(text).scan(/[\p{L}\p{N}]+/).size) >= IMAGE_PAGE_WORDS }
       end
 
       def noise?(block)
@@ -171,7 +187,7 @@ module Nokodown
       # level, lost its section during extraction. Title lists are content in
       # their own right, and a page that is only its headline keeps it.
       def drop_empty_sections(blocks)
-        titles = title_list_indexes(blocks) | card_titles(blocks)
+        titles = title_list_indexes(blocks) | card_titles(blocks) | figures(blocks)
         kept = blocks.each_index.reject { |index| !titles.include?(index) && empty_section?(blocks, index) }
         kept.pop while kept.any? && blocks[kept.last].kind == :heading && !titles.include?(kept.last)
         return blocks.values_at(*kept) if kept.any?
@@ -188,6 +204,19 @@ module Nokodown
           block = blocks[index]
           block.kind == :heading && linked_title?(block) && !levels.add?(block.level)
         end.to_set
+      end
+
+      # A heading that is a figure (a price, a score, a year) states a value;
+      # it is not a section waiting for its text.
+      def figures(blocks)
+        blocks.each_index.select do |index|
+          block = blocks[index]
+          block.kind == :heading && figure?(heading_text(block))
+        end.to_set
+      end
+
+      def figure?(text)
+        text.match?(/\p{N}/) && text.scan(/\p{L}/).size <= FIGURE_LETTERS
       end
 
       def linked_title?(heading)
