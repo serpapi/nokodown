@@ -45,6 +45,10 @@ module Nokodown
       (?<![\w-])(?:layout|one|two)-[\w-]+|(?<![\w-])[\w-]+-layout(?![\w-])|
       _(?:has|with|without)_[\w-]+
     /x.freeze
+    # A grid's name for a column's width, at a breakpoint or not: "col-md-4",
+    # "vc_col-sm-8", "td-pb-span4", "large-8". A zero ("col0") numbers a
+    # column rather than measuring it.
+    GRID_COLUMN = /\A((?:[\w-]*[-_])?(?:col(?:-[a-z]{2,3})?|span|small|medium|large))-?([1-9]\d?)\z/.freeze
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
@@ -71,6 +75,7 @@ module Nokodown
       @taxonomy = Taxonomy.blocks(@body, @url)
       @title = h1s.last
       @last_h1 = @title ? Dom.key(@title).to_i : 0
+      @title_columns = title_columns
       @consent_page = @url.to_s.sub(Taxonomy::ADDRESS, "").split("?").first.to_s.downcase.match?(Patterns::CONSENT)
       @prose_lines = {}
       # Card grids repeat the same class list hundreds of times.
@@ -130,6 +135,7 @@ module Nokodown
       # Side notes inside an article are content whatever their class says.
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if (chrome_element?(node) || chrome_role?(node)) && !title_holder?(node)
+      return :furniture if side_column?(node)
       return if dominant?(node) && !furniture_however_large?(node)
       return :guess if trail?(node) || @taxonomy.include?(Dom.key(node))
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
@@ -396,6 +402,46 @@ module Nokodown
         return branch if around.include?(Dom.key(parent))
       end
       nil
+    end
+
+    # Each ancestor of the title, by key, with its child that holds the title.
+    def title_columns
+      return {} unless @title
+
+      ([@title] + @title.ancestors.select(&:element?)).each_cons(2).to_h { |branch, parent| [Dom.key(parent), branch] }
+    end
+
+    # A grid column narrower than the title's column in the same row is a
+    # sidebar, however its theme names it, when it holds links rather than
+    # prose. It passes for the content only when it outweighs that column
+    # and the column holds no prose, as on an empty archive; elsewhere its
+    # removal would only sway where the content is found. As beside a
+    # sidebar named so, a title standing alone may head it.
+    def side_column?(node)
+      column = @title_columns[Dom.key(node.parent)]
+      return false if column.nil? || Dom.key(column) == Dom.key(node) || !narrower?(node, column)
+      return false unless node.at_css("h1").nil? && @stats.link_density(node) >= 0.5 && !prose_lines?(node)
+      return false if @stats.chars(node) <= @stats.chars(column) || prose_lines?(column)
+
+      @stats.text_chars(column) - @stats.text_chars(@title) >= TITLED_TEXT
+    end
+
+    # Grids name a width for each breakpoint ("col-12 col-md-4"): a column
+    # is narrower at some breakpoint and wider at none.
+    def narrower?(node, column)
+      widths = grid_widths(node)
+      return false if widths.empty?
+
+      others = grid_widths(column)
+      shared = widths.keys & others.keys
+      shared.any? { |grid| widths[grid] < others[grid] } && shared.none? { |grid| widths[grid] > others[grid] }
+    end
+
+    def grid_widths(node)
+      node["class"].to_s.split.each_with_object({}) do |token, widths|
+        match = token.match(GRID_COLUMN)
+        widths[match[1]] = match[2].to_i if match
+      end
     end
 
     # A cookie banner is named for what it is as well as for the cookies, or

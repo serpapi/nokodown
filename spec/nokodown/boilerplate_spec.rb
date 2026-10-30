@@ -371,6 +371,36 @@ RSpec.describe Nokodown::Boilerplate do
       end
     end
 
+    it "removes a narrower grid column of links that outweighs the title's column" do
+      posts = ["Taiwan Graduate Scholarships", "Stirling Vice Chancellor Scholarship", "Gordon University Scholarship"]
+      cards = posts.map.with_index do |post, index|
+        "<div class=\"module\"><a href=\"/category/#{index}/\">Fully Funded</a>" \
+          "<h3><a href=\"/post-#{index}/\">#{post} 2027</a></h3></div>"
+      end
+      html = "<div class=\"row\"><div class=\"col-12 col-md-8\"><p>Home › Tags › Konstanz Fellowship</p>" \
+             "<h1>Tag: Konstanz Fellowship</h1><p>No posts to display</p></div>" \
+             "<div class=\"col-12 col-md-4\"><h4>Latest Articles</h4>#{cards.join}</div></div>"
+
+      text = remaining(html)
+      text.should include("No posts to display")
+      text.should_not include("Latest Articles")
+      text.should_not include("Gordon University")
+    end
+
+    it "keeps a wider grid column, and a narrower one beside a title's column with prose, more text or the title" do
+      guides = Array.new(12) { |index| "<li><a href=\"/guide-#{index}/\">Fellowship guide, part #{index + 1}</a></li>" }
+      side = "<div class=\"col-md-4\"><h4>Guides</h4><ul>#{guides.join}</ul></div>"
+      trail = "<p>Home › Fellowships › Germany</p>"
+      rows = ["<div class=\"col-md-8\">#{trail}<h1>Konstanz Fellowship</h1>#{prose('The fellowship', 1)}</div>#{side}",
+              "<div class=\"col-md-8\"><h1>Sakura Clinic</h1>#{hours}</div>" \
+              "<div class=\"col-md-4\"><a href=\"/guide-12/\">Guide, part 12</a></div>",
+              "<div class=\"col-md-8\"><h1>Konstanz Fellowship</h1></div>#{side}",
+              "<div class=\"col-md-4\">#{trail}<h1>Konstanz Fellowship</h1></div>#{side.sub('col-md-4', 'col-md-8')}"]
+      rows.each do |row|
+        remaining("<div class=\"row\">#{row}</div>").should include("part 12")
+      end
+    end
+
     it "removes a site header above the title that holds addresses in lines" do
       html = "<div class=\"site-header\">#{hours * 2}</div><h1>Fully booked on Friday</h1>" \
              "<p>#{'The morning slots are taken. ' * 8}</p>"
