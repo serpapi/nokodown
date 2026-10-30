@@ -177,9 +177,12 @@ module Nokodown
     end
 
     # Links to pages below this one are its own sections, and attachments are
-    # part of the post that holds them.
+    # part of the post that holds them. A section that the page's own table
+    # of contents lists is part of the page whatever it holds, such as the
+    # rows of an item's recipes, each a link to another item.
     def removable?(block, body)
       return false if block.below || in_post?(block) || block.nodes.any? { |node| protected?(node) }
+      return false if InPageLinks.listed?(block.nodes.first)
       return false if own_list?(block) && !(block.title.nil? && block.alike && after_text?(block))
       return text_before(block) >= MIN_TEXT_BEFORE if block.alike
 
