@@ -9,7 +9,7 @@ module Nokodown
   # an archive page such lines are its listing, so nothing goes there.
   module Taxonomy
     TAG_PATH = %r{/(?:tags?|labels?|topics)/[^/?#]}i.freeze
-    ARCHIVE_INDEX = %r{\A(?:https?:)?//[^/?#]+(?:/[^?#]*)?/(?:tags?|labels?|topics|categories)/?(?:[?#]|\z)}i.freeze
+    ARCHIVE_INDEX = %r{\A(?:https?:)?//[^/?#]+(?:/[^?#]*)?/(?:tags?|labels?|topics|categor(?:y|ies))(?:/|\.\w{2,5})?(?:[?#]|\z)}i.freeze
     # Shops file products under "/product-category/", "/categoria-producto/".
     CATEGORY_PATH = %r{/[^/?#]*[ck]ategor[^/?#]*/[^/?#]}i.freeze
     TAG_QUERY = /[?&]tag=[^&#]/.freeze
@@ -44,8 +44,8 @@ module Nokodown
       lines.reject { |node| repeated.include?(shape(node)) }
     end
 
-    # An archive, or the index of all tags ("/tags?view=popular"), is made
-    # of such lines.
+    # An archive, or the index of all tags or categories ("/tags?view=popular",
+    # "/tags.html", "/category"), is made of such lines.
     def archive_page?(page)
       page.match?(TAG_PATH) || page.match?(CATEGORY_PATH) || page.match?(TAG_QUERY) || page.match?(CATEGORY_QUERY) ||
         page.match?(ARCHIVE_INDEX)

@@ -73,8 +73,8 @@ with `main_content: false`, `:none` for a document without a body.
   the site's tag or label archives ("Tags: a, b") with at most a short label
   ending in a colon and a category kicker above the title, unless the page
   repeats the line (a card's tags) or is such an archive or the index of
-  all tags, and
-  copyright and licence lines in the major web languages.
+  all tags or categories, and copyright and licence lines in the major web
+  languages.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
