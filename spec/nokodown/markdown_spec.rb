@@ -941,9 +941,11 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops a sentence set as a heading at the end of the page with the other empty sections" do
-      html = "<h2>Recipe</h2><p>Mix the flour and the eggs.</p>" \
+      recipe = "Mix the flour and the eggs, then knead the dough for ten minutes and let it rest under a cloth " \
+               "for an hour before rolling it out."
+      html = "<h2>Recipe</h2><p>#{recipe}</p>" \
              "<h6>All prices include VAT and are subject to change without notice at any time by the shop owner.</h6>"
-      convert(html).should == "## Recipe\n\nMix the flour and the eggs."
+      convert(html).should == "## Recipe\n\n#{recipe}"
     end
 
     it "keeps a number under a date set as a heading" do
