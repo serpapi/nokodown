@@ -829,16 +829,20 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should start_with("# Flat for sale in the Eixample\n\nThe flat sits")
     end
 
-    it "leaves out a letter avatar's initial between the headline and the body, but not a dash in a table" do
+    it "keeps a one-letter value between the headline and the body" do
       prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
-      head = "<h1>Flat for sale in the Eixample</h1><div><div class='avatar'>a</div><span>Ana Puig</span></div>" \
-             "<div><time>3 May 2026</time> · 7 min read</div><table><tr><th>Rooms</th><th>Lift</th><th>Floor</th></tr>" \
-             "<tr><td>2</td><td>–</td><td>3</td></tr></table>"
+      head = "<h1>Flat for sale in the Eixample</h1><div class='facts'><div>Energy rating</div><div>E</div></div>"
       html = "<main><article><header>#{head}</header><div class='description'>#{prose}</div></article></main>"
 
-      markdown = Nokodown.to_markdown(html)
-      markdown.should start_with("# Flat for sale in the Eixample\n\nAna Puig\n\n3 May 2026 · 7 min read")
-      markdown.should include("| 2 | – | 3 |")
+      Nokodown.to_markdown(html).should start_with("# Flat for sale in the Eixample\n\nEnergy rating\n\nE\n\nThe flat sits")
+    end
+
+    it "keeps a byline in Devanagari between the headline and the body" do
+      prose = "<p>पटना में आज सुबह से भारी बारिश हो रही है और कई इलाकों में पानी भर गया है। नगर निगम ने राहत दल तैनात किए हैं।</p>" * 4
+      head = "<h1>पटना में भारी बारिश से जलभराव</h1><div><span>सुधा राव</span></div><div>बिहार</div>"
+      html = "<main><article><header>#{head}</header><div class='description'>#{prose}</div></article></main>"
+
+      Nokodown.to_markdown(html).should start_with("# पटना में भारी बारिश से जलभराव\n\nसुधा राव\n\nबिहार\n\nपटना में आज")
     end
 
     it "keeps the whole table of results when one row outscores the others" do
