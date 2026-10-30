@@ -811,6 +811,18 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should start_with("# Flat for sale in the Eixample\n\nThe flat sits")
     end
 
+    it "leaves out a letter avatar's initial between the headline and the body, but not a dash in a table" do
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      head = "<h1>Flat for sale in the Eixample</h1><div><div class='avatar'>a</div><span>Ana Puig</span></div>" \
+             "<div><time>3 May 2026</time> · 7 min read</div><table><tr><th>Rooms</th><th>Lift</th><th>Floor</th></tr>" \
+             "<tr><td>2</td><td>–</td><td>3</td></tr></table>"
+      html = "<main><article><header>#{head}</header><div class='description'>#{prose}</div></article></main>"
+
+      markdown = Nokodown.to_markdown(html)
+      markdown.should start_with("# Flat for sale in the Eixample\n\nAna Puig\n\n3 May 2026 · 7 min read")
+      markdown.should include("| 2 | – | 3 |")
+    end
+
     it "keeps the whole table of results when one row outscores the others" do
       authors = Array.new(60) { |index| "Moretti#{index}, A." }.join("; ")
       rows = [["Predicting kidney failure", authors], ["Preeclampsia before a biopsy", "Cabiddu, G."], ["Dialysis in older patients", "Rossi, M."]]

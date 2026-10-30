@@ -14,6 +14,10 @@ module Nokodown
     TITLE_MATCH = 0.5
     DIGIT = /\d/.freeze
     LINK_LINE = 0.9
+    # Two letters in a row or a digit: a line of the article has one, the
+    # marks a widget leaves behind do not.
+    WORD = /\p{L}{2}|\p{N}/.freeze
+    CELLS = Set.new(%w[td th]).freeze
     # A body inside a list or a data table would be rendered as part of it,
     # and invalid nesting there, such as a list right inside a <dl>, is
     # dropped. Layout tables are unwrapped.
@@ -40,7 +44,10 @@ module Nokodown
       return @nodes unless short?(stretch) && !rival?(headline, stretch)
 
       cut(holder, headline)
-      stretch.drop(1).each { |node| drop_link_lines(node) if node.element? }
+      stretch.drop(1).select(&:element?).each do |node|
+        drop_link_lines(node)
+        drop_mark_lines(node)
+      end
       [holder]
     end
 
@@ -121,6 +128,21 @@ module Nokodown
     def link_line?(line)
       text = Dom.text(line)
       !text.empty? && !text.match?(DIGIT) && line.at_css(Dom::HEADING_SELECTOR).nil? && @stats.link_density(line) >= LINK_LINE
+    end
+
+    # A letter avatar's initial ("a" for the author "agiled") or the "A A"
+    # at a font size slider's ends is all that is left of a widget once its
+    # picture or control is gone. A cell stays to keep its table's columns.
+    def drop_mark_lines(node)
+      lines = node.xpath(".//text()").filter_map do |text|
+        path_to(text.parent, node).find { |step| Dom.block?(step) } || (node if Dom.block?(node))
+      end
+      lines.uniq { |line| Dom.key(line) }.each { |line| line.remove if mark_line?(line) }
+    end
+
+    def mark_line?(line)
+      text = Dom.text(line)
+      !text.empty? && !text.match?(WORD) && !CELLS.include?(line.name) && line.at_css("img, iframe").nil?
     end
 
     # The node and its ancestors below `top`.
