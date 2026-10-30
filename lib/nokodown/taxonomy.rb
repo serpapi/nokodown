@@ -27,12 +27,12 @@ module Nokodown
 
     module_function
 
-    # Keys of the outermost elements that hold only such a line. Lines of
+    # The outermost elements that hold only such a line. Lines of
     # one shape repeated are the category of every card in a listing, or
     # the facts of a product linked to their filters, so they stay.
     def blocks(body, url)
       page = url.to_s
-      return Set.new if page.match?(TAG_PATH) || page.match?(CATEGORY_PATH) || page.match?(TAG_QUERY) || page.match?(CATEGORY_QUERY)
+      return [] if page.match?(TAG_PATH) || page.match?(CATEGORY_PATH) || page.match?(TAG_QUERY) || page.match?(CATEGORY_QUERY)
 
       site = page[ADDRESS, 1]&.downcase || Breadcrumbs.site_host(body.css("a[href]"))
       title = body.at_css("h1")
@@ -40,7 +40,7 @@ module Nokodown
       lines = body.css("a[href]").filter_map { |link| outermost(link, site, judged) if archive(link, site) }
       lines = lines.uniq { |node| Dom.key(node) }.select { |node| judged[Dom.key(node)] == :tag || kicker?(node, title) }
       repeated = lines.group_by { |node| shape(node) }.select { |_, alike| alike.size >= MIN_REPEATS }.keys
-      lines.reject { |node| repeated.include?(shape(node)) }.map { |node| Dom.key(node) }.to_set
+      lines.reject { |node| repeated.include?(shape(node)) }
     end
 
     def shape(node)
