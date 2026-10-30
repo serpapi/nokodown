@@ -185,25 +185,26 @@ module Nokodown
       end
 
       # Links to other sections of the title's page (#2 after #1) are not
-      # repeats. Nor is the link that opens an item of a list written as
-      # lines: each item names its own entry, however many share a file.
+      # repeats. Nor are items of a list written as lines that share a file
+      # with the item that keeps it: each names its own entry.
       def plan(card, keeper)
         card.each do |link|
           next if link.equal?(keeper) || (link.fragment && keeper.fragment && link.fragment != keeper.fragment)
 
           button = button?(link, keeper)
-          next if !button && item?(link)
+          next if !button && item?(link) && item?(keeper) && name?(link)
 
           @edits[link.block][link.line][link.segment] = button ? "" : link.text
         end
       end
 
-      # An item names a thing in words; a date or a count on the line under
-      # a title ("May 30, 2018", "12 comments") repeats the title's link.
       def item?(link)
-        return false unless @item_blocks.include?(link.block) && link.segment == 1
-        return false unless @segments[[link.block, link.line]].first.strip.empty?
+        @item_blocks.include?(link.block) && link.segment == 1 && @segments[[link.block, link.line]].first.strip.empty?
+      end
 
+      # A date or a count on the line under a title ("May 30, 2018", "12
+      # comments") repeats the title's link; an item names a thing in words.
+      def name?(link)
         link.label.scan(/\p{L}+/).size > link.label.scan(NUMBER).size
       end
 

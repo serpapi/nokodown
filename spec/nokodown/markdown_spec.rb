@@ -395,6 +395,11 @@ RSpec.describe "Markdown conversion" do
                               "[Hedum water, 2,5 km](https://example.com/d/south.pdf)\nStart: Hedum."
       cards = %w[a b].map { |page| %(<p><a href="/#{page}">Post #{page}</a><br><a href="/#{page}">May 30, 2018</a><br><a href="/#{page}">12 comments</a><br><a href="/#{page}">Read more</a></p>) }
       convert(cards.join).should == "[Post a](https://example.com/a)\nMay 30, 2018\n12 comments\n\n[Post b](https://example.com/b)\nMay 30, 2018\n12 comments"
+      teasers = { "a" => "Headaches are among the most common complaints.", "b" => "Back pain is common." }.map do |page, text|
+        %(<h4><a href="/#{page}">Cure #{page}</a></h4><p><a href="/#{page}">#{text}</a><br><a href="/#{page}">Details</a></p>)
+      end
+      convert(teasers.join).should == "#### [Cure a](https://example.com/a)\n\nHeadaches are among the most common complaints.\n\n" \
+                                      "#### [Cure b](https://example.com/b)\n\nBack pain is common."
     end
 
     it "leaves links written in code alone" do
