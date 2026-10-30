@@ -20,6 +20,8 @@ jobs:
             nokolexbor: "0.6.4"
           - ruby: "3.4"
             nokolexbor: ""
+          - ruby: "4.0"
+            nokolexbor: ""
     env:
       NOKOLEXBOR_VERSION: ${{ matrix.nokolexbor }}
     steps:
