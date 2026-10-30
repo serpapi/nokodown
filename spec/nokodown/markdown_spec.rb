@@ -759,6 +759,10 @@ RSpec.describe "Markdown conversion" do
         text = "<p>We dressed the long tables in linen and vine leaves, and lit the courtyard with lanterns as the evening drew on.</p>"
         extract("<main><h1>Vineyard wedding</h1>#{text}#{photo}</main>").should_not include(".jpg")
         extract("<main><h1>Vineyard wedding</h1>#{photo}#{photo.gsub('28', '29')}#{footer}</main>").should_not include(".jpg")
+        gallery = photo.sub("/uploads/wedding-28.jpg", "/gallery/wedding/")
+        extract("<main><h1>Vineyard wedding 28</h1>#{gallery}#{footer}</main>").should_not include(".jpg")
+        tags = (1..8).map { |number| %(<a href="/tag/#{number}">Vineyard wedding photos #{number}</a>) }.join(" ")
+        extract("<main><h1>Vineyard wedding 28</h1>#{photo}<p>#{tags}</p></main>").should include("wedding-28-300x200.jpg")
       end
 
       it "drops images whose alt text names nothing" do
