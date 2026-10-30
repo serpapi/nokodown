@@ -21,6 +21,7 @@ module Nokodown
       PERMALINK = /\A[#¶§🔗]\s+(?!\d)|\s+[#¶§🔗]\z/.freeze
       # Characters of a paragraph that a section holds and a card does not.
       SECTION_TEXT = 80
+      TYPED_RANK = /\A\d+[.)]\s/.freeze
 
       def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images,
@@ -29,6 +30,8 @@ module Nokodown
         @depth = 0
         @contains_block = {}
         @in_cell = false
+        @keep_lists = false
+        @kept_lists = {}
       end
 
       def render(nodes)
@@ -147,18 +150,44 @@ module Nokodown
         [Block.new(:heading, "#{'#' * level} #{text}", level)]
       end
 
+      # A list that stays a list writes the headings of its items as lines,
+      # so the sections of a list nested in an item would run together. Its
+      # items are rendered again, and each nested list stays a list.
       def list(node)
+        start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
+        return kept_list(node, start) if @keep_lists
+
+        items = list_items(node)
+        return sections(unlisted(items, start)) if sections_list?(items, start)
+        return format_list(items, start) unless items.any? { |blocks| sections?(blocks) }
+
+        keeping_lists { kept_list(node, start) }
+      end
+
+      # Each list around it that stays a list renders it again, so nested
+      # lists would be rendered once for every level above them.
+      def kept_list(node, start)
+        key = Dom.key(node)
+        return format_list(list_items(node), start) unless key
+
+        (@kept_lists[[key, @in_cell]] ||= format_list(list_items(node), start)).map(&:dup)
+      end
+
+      def list_items(node)
         items = []
         list_children(node).each do |child|
           blocks = list_item(child)
           owner = list_owner(items, wrapped: child.name == "li") if sublist?(child, blocks)
           owner ? owner.concat(blocks) : items << blocks
         end
-        items.reject!(&:empty?)
-        start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
-        return sections(unlisted(items, start)) if sections_list?(items, start)
+        items.reject(&:empty?)
+      end
 
-        format_list(items, start)
+      def keeping_lists
+        @keep_lists = true
+        yield
+      ensure
+        @keep_lists = false
       end
 
       # Tab panels and accordions set whole sections in list items: two
@@ -188,19 +217,52 @@ module Nokodown
       def sections_list?(items, start)
         return false unless items.any? { |blocks| sections?(blocks) }
 
-        start.nil? || items.all? { |blocks| blocks.first.kind == :heading }
+        start.nil? || items.all? { |blocks| opening(blocks) }
+      end
+
+      # A product photo may go before the heading that names its item. Past
+      # a photo, a heading names the item only when it outranks the item's
+      # other headings: an app card's logo goes before labels of one level.
+      def opening(blocks)
+        heading = blocks.find { |block| !picture?(block) }
+        heading if heading&.kind == :heading && (heading.equal?(blocks.first) || outranks?(heading, blocks))
+      end
+
+      def outranks?(heading, blocks)
+        blocks.none? { |block| block.kind == :heading && !block.equal?(heading) && block.level <= heading.level }
+      end
+
+      def picture?(block)
+        block.kind == :paragraph && !block.text.gsub(ImageCleanup::IMAGE, "").match?(/[\p{L}\p{N}]/)
       end
 
       def unlisted(items, start)
-        return items.flatten(1) unless start
+        return headed_items(items) unless start
 
-        items.each_with_index.flat_map { |blocks, index| [ranked(blocks.first, start + index), *blocks.drop(1)] }
+        items.each_with_index.flat_map do |blocks, index|
+          heading = opening(blocks)
+          blocks.map { |block| block.equal?(heading) ? ranked(block, start + index) : block }
+        end
       end
 
-      # A site may type the number into the heading already.
+      # Items without a heading would read as text of the section before
+      # them, so each run of them stays a list.
+      def headed_items(items)
+        runs = items.slice_when { |item, following| headed?(item) || headed?(following) }
+        runs.flat_map { |run| headed?(run.first) ? run.first : format_list(run, nil) }
+      end
+
+      def headed?(blocks)
+        blocks.any? { |block| block.kind == :heading }
+      end
+
+      # A site may type the number into the heading already, or a rank of
+      # its own that the list does not set, as a countdown does.
       def ranked(heading, number)
         hashes, text = heading.text.split(" ", 2)
-        text.match?(/\A#{number}\b/) ? heading : Block.new(:heading, "#{hashes} #{number}. #{text}", heading.level)
+        return heading if text.match?(/\A#{number}\b/) || text.match?(TYPED_RANK)
+
+        Block.new(:heading, "#{hashes} #{number}. #{text}", heading.level)
       end
 
       # A heading that ends the list heads nothing in it, as an API
@@ -425,9 +487,11 @@ module Nokodown
 
       # A card's link goes on its title. A first line longer than
       # MAX_LINK_TARGET is a passage, not a title, and is written without it.
+      # Its text is measured without heading marks, emphasis or escapes, as
+      # ReadMoreLinks measures it on the page.
       def link_target(blocks)
         target = blocks.find { |b| b.kind == :heading } || blocks.find { |b| b.kind == :paragraph && !b.text.start_with?("![") }
-        target if target && target.text.length <= MAX_LINK_TARGET && !target.text.include?("](")
+        target if target && Text.plain(target.text.sub(/\A#+ /, "")).length <= MAX_LINK_TARGET && !target.text.include?("](")
       end
     end
   end
