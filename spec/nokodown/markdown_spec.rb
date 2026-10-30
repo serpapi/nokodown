@@ -1273,6 +1273,15 @@ RSpec.describe "Markdown conversion" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
     end
 
+    it "keeps question headings at the end when the comment line under them is dropped, but not a reviews heading" do
+      html = "<p>12/7/2016</p><h2>Which two skills does a lidded pot use?</h2><h2>How many days does the clay dry?</h2>" \
+             "<p>Comments are closed.</p>"
+      convert(html).should == "12/7/2016\n\n## Which two skills does a lidded pot use?\n\n## How many days does the clay dry?"
+      convert("<p>$24.00</p><h2>Reviews</h2><p>There are no reviews yet.</p>").should == "$24.00"
+      convert("<p>$24.00</p><h2>Any questions?</h2><p>Comments are closed.</p>").should == "$24.00"
+      convert("<h2>Intro</h2><p>Text</p><h2>Can you leave us your phone number?</h2>").should == "## Intro\n\nText"
+    end
+
     it "keeps a trailing price heading, and the title over it, when the label after it is dropped" do
       html = "<p>#SKU: HW73826</p><h1>Coffee set x12</h1><h3 class='price'>$ 24.284,10</h3><div><span>Cantidad</span></div>"
       convert(html).should == "#SKU: HW73826\n\n# Coffee set x12\n\n### $ 24.284,10"
