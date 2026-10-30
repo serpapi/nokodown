@@ -10,6 +10,7 @@ module Nokodown
   # Markdown::CardLinks leaves for not repeating across cards.
   class ReadMoreLinks
     Link = Struct.new(:node, :page, :text, :position)
+    Title = Struct.new(:heading, :line)
 
     MAX_LABEL = 30
     MAX_WORDS = 4
@@ -30,6 +31,9 @@ module Nokodown
     DATE_OR_TIME = %r{\d{1,2}:\d{2}|\d{1,4}[./-]\d{1,2}[./-]\d{1,4}}.freeze
     # An excerpt the label follows ends like a sentence or with "[…]".
     EXCERPT_END = /[.…!?。！？\])]\z/.freeze
+    # The renderer writes these as they are, never with a card's link on a
+    # line of theirs.
+    OWN_LINES = %w[ul ol menu dir li dl blockquote].freeze
 
     def initialize(root)
       @root = root
@@ -178,16 +182,53 @@ module Nokodown
         written?(link.node)
     end
 
-    # Markdown::Renderer writes a link around blocks on their heading, or on
-    # their first line of text when that holds no image or link and is short
-    # enough for a title; around anything else (a team's name beside its
-    # logo, a whole paragraph) the link is lost.
+    # Markdown::Renderer writes a link around blocks on their first heading,
+    # or else on their first line of text when that holds no image or link,
+    # and only on one short enough for a title. Lists, quotes, code and data
+    # tables keep their own lines, so neither is looked for in them. Around
+    # anything else (a team's name beside its logo, a whole paragraph, a
+    # list) the link is lost.
     def written?(node)
-      blocks = node.css("*").select { |child| Dom.block?(child) }
-      return true if blocks.empty? || blocks.any? { |block| Dom.heading?(block) }
+      title = Title.new
+      return true unless read_title(node, title) && title.heading.nil?
 
-      line = blocks.find { |block| !Dom.text(block).empty? && block.css("*").none? { |child| Dom.block?(child) } }
-      !line.nil? && line.at_css("img, a").nil? && Dom.text(line).length <= Markdown::Renderer::MAX_LINK_TARGET
+      line = title.line
+      !line.nil? && line.at_css("img, a").nil? && title?(line)
+    end
+
+    # Keeps the first heading under the node that can be a title and its
+    # first line, a block with text and no block inside, and returns
+    # whether it holds a block. A link can wrap a whole page in many levels
+    # of blocks, so each element is read once, not once for every block
+    # around it.
+    def read_title(node, title)
+      node.element_children.reduce(false) do |holds, child|
+        next true if own_lines?(child)
+
+        inner = read_title(child, title)
+        next holds || inner unless Dom.block?(child)
+
+        title.heading ||= child if Dom.heading?(child) && title?(child)
+        title.line = child unless title.line || inner || Dom.text(child).empty?
+        true
+      end
+    end
+
+    # The renderer leaves an empty heading out and writes one too long for a
+    # title as a paragraph.
+    def title?(block)
+      length = Dom.text(block).length
+      length.positive? && length <= Markdown::Renderer::MAX_LINK_TARGET
+    end
+
+    # Code that reads as prose and a table laid out for its looks are
+    # written as paragraphs.
+    def own_lines?(node)
+      case node.name
+      when "pre" then !Markdown::CodeBlock.prose?(node)
+      when "table" then data_table?(node)
+      else OWN_LINES.include?(node.name)
+      end
     end
 
     # Controls follow what they act on, so the nearest longer links before
