@@ -60,9 +60,12 @@ module Nokodown
         end.to_set
       end
 
-      # The page's title stays even when its form is all it held.
+      # The page's title stays even when its form is all it held, and so
+      # does a heading longer than a label, such as a video's description
+      # over a "More videos:" whose list is gone: it names no form.
       def labels_section?(heading, following)
-        heading&.kind == :heading && heading.level > 1 && (following.nil? || following.level <= heading.level)
+        heading&.kind == :heading && heading.level > 1 && (following.nil? || following.level <= heading.level) &&
+          Text.plain(Cleanup.heading_text(heading)).length <= LABEL_LENGTH
       end
 
       # Numbers side by side are the columns of a row, such as a forum's

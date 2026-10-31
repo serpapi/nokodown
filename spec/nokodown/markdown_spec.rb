@@ -1022,9 +1022,11 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops a sentence set as a heading at the end of the page with the other empty sections" do
-      html = "<h2>Recipe</h2><p>Mix the flour and the eggs.</p>" \
+      recipe = "Mix the flour and the eggs, then knead the dough for ten minutes and let it rest under a cloth " \
+               "for an hour before rolling it out."
+      html = "<h2>Recipe</h2><p>#{recipe}</p>" \
              "<h6>All prices include VAT and are subject to change without notice at any time by the shop owner.</h6>"
-      convert(html).should == "## Recipe\n\nMix the flour and the eggs."
+      convert(html).should == "## Recipe\n\n#{recipe}"
     end
 
     it "keeps a number under a date set as a heading" do
@@ -1566,10 +1568,45 @@ RSpec.describe "Markdown conversion" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
     end
 
+    it "keeps question headings at the end when the comment line under them is dropped, but not a reviews heading" do
+      html = "<p>12/7/2016</p><h2>Which two skills does a lidded pot use?</h2><h2>How many days does the clay dry?</h2>" \
+             "<p>Comments are closed.</p>"
+      convert(html).should == "12/7/2016\n\n## Which two skills does a lidded pot use?\n\n## How many days does the clay dry?"
+      convert("<p>$24.00</p><h2>Reviews</h2><p>There are no reviews yet.</p>").should == "$24.00"
+      convert("<p>$24.00</p><h2>Any questions?</h2><p>Comments are closed.</p>").should == "$24.00"
+      convert("<h2>Intro</h2><p>Text</p><h2>Can you leave us your phone number?</h2>").should == "## Intro\n\nText"
+    end
+
     it "keeps a trailing price as a line, and the title over it, when the label after it is dropped" do
       html = "<p>#SKU: HW73826</p><h1>Coffee set x12</h1><h3 class='price'>$ 24.284,10</h3><div><span>Cantidad</span></div>"
       convert(html).should == "#SKU: HW73826\n\n# Coffee set x12\n\n$ 24.284,10"
       convert("<h2>Intro</h2><p>Text</p><h2>Top 10 picks</h2>").should == "## Intro\n\nText"
+    end
+
+    it "keeps headings of a sentence that end a page with no other text, as builders set whole pages in headings" do
+      html = "<p>SP</p><h1>Sébastien Poirier</h1><h4>CNOSF Comité national olympique et sportif français</h4>" \
+             "<h4>Vice-président du CNOSF en charge de la transformation économique</h4>"
+      convert(html).should == "SP\n\n# Sébastien Poirier\n\n#### CNOSF Comité national olympique et sportif français\n\n" \
+                              "#### Vice-président du CNOSF en charge de la transformation économique"
+      text = "<p>#{'The harbour is explained here in a sentence long enough to read like text. ' * 2}</p>"
+      convert("<h2>Harbour</h2>#{text}<h2>Other stories you might enjoy from our harbour desk this week</h2>").should_not include("Other stories")
+    end
+
+    it "does not keep furniture, a linked title, a line of tags or an H1 as a heading of a sentence" do
+      lead = "<h1>Spring concert</h1><p>Photos below.</p>"
+      ["Subscribe to our newsletter for the latest news and events",
+       "Follow us on Facebook, Instagram and Twitter for more updates",
+       "Commented yet? Go on..you know you want to :)",
+       "One thought on “Spring concert at the old harbour hall”",
+       "Inga svar till “20 % i rabatt vid köp över 1400 kr”",
+       "#concert #harbour #spring #music #live #choir #brass #evening",
+       "More from the harbour hall and the town choir this spring",
+       '<a href="/news/41">Autumn concert at the old harbour hall with the town choir</a>'].each do |heading|
+        convert("#{lead}<h3>#{heading}</h3>").should == "# Spring concert\n\nPhotos below."
+      end
+      convert("<p>Photos below.</p><h1>Spring concert at the old harbour hall with the town choir</h1>").should == "Photos below."
+      convert("<p>写真</p><h3>港のホールで開かれた春の演奏会には町の合唱団と吹奏楽団が出演しました</h3>")
+        .should == "写真\n\n### 港のホールで開かれた春の演奏会には町の合唱団と吹奏楽団が出演しました"
     end
 
     it "keeps the last card's linked title when the control after it is removed" do

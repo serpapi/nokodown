@@ -173,6 +173,18 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should include("Robotic mower KR500")
     end
 
+    it "keeps a post whose wrapper is named for the room a consent banner leaves" do
+      reply = "<p>The link is in the first post. I had never seen screw plugs for tyres before, and nobody here sells them.</p>" * 3
+      %w[cookiebot-padding-bottom cookie-consent-margin-top].each do |room|
+        html = "<div class=\"content-holder #{room}\"><h2>Re: Screw type tire plugs</h2>#{reply}</div>" \
+               "<div class=\"cookie-notice\"><p>We use cookies.</p></div>"
+
+        text = remaining(html)
+        text.should include("screw plugs")
+        text.should_not include("We use cookies")
+      end
+    end
+
     it "keeps the largest guessed block when a cookie banner that outweighs it goes" do
       products = Array.new(6) { |index| "<a href=\"/mower-#{index}\">Robotic mower KR#{index}00 for lawns up to #{index + 1} acres</a>" }
       notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 6
@@ -265,6 +277,17 @@ RSpec.describe Nokodown::Boilerplate do
       end
     end
 
+    it "removes a trail in a font element, but not the copies the parser makes of it around the content" do
+      trail = '<a href="/">Home</a> › <a href="/lab/">Laboratory</a> › Stirrer'
+      html = "<p><font face=\"Arial\">#{trail}</p><h1>Stirrer</h1><div>#{prose('The stirrer', 1)}</div></font>"
+      text = remaining(html)
+
+      text.should_not include("Laboratory")
+      text.should include("The stirrer is explained")
+      remaining("<p><font face=\"Arial\">#{trail}</p><h1>Stirrer</h1><div>#{prose('The stirrer', 2)}</div><p>#{trail}</p></font>")
+        .should_not include("Laboratory")
+    end
+
     it "keeps a category link followed by the post's date" do
       remaining("<div><a href=\"/\">Home</a> | 20.07.2026 08:42</div>#{prose('Health', 2)}").should include("20.07.2026")
     end
@@ -299,6 +322,15 @@ RSpec.describe Nokodown::Boilerplate do
       text = remaining(html)
       text.should include("salaries by industry")
       text.should include("relocation guide")
+    end
+
+    it "judges a list of thousands of home links in time linear in its links" do
+      links = Array.new(10_000) { |index| "<li><a href=\"/\">Partner #{index}</a></li>" }.join
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining("#{prose('Our partners', 2)}<ul>#{links}</ul>")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 2
+      text.should include("Partner 9999")
     end
   end
 
@@ -346,6 +378,52 @@ RSpec.describe Nokodown::Boilerplate do
       html = "<div class=\"main\"><div class=\"title\"><h1>Sakura Clinic</h1></div><div id=\"sidebar\">#{hours}</div></div>"
 
       remaining(html).should include("Monday 9:00")
+    end
+
+    it "keeps a listing in the main grid column or in the layout around a sidebar" do
+      products = Array.new(10) do |index|
+        "<div class=\"product\"><h5><a href=\"/p/#{index}\">Aloe vera gel, #{index + 1} gallons</a></h5>" \
+          "As low as $#{index + 15}.50 a gallon, shipped to all states</div>"
+      end
+      header = "<div class=\"titleclass\"><h1>Carrier Oils</h1><p>Showing all 10 results, sorted by price</p></div>"
+      in_main = "#{header}<div class=\"row\"><div class=\"main col-lg-9\">" \
+                "<div class=\"products shopcolumn4 shopsidebarwidth\">#{products.join}</div></div>" \
+                "<aside class=\"col-lg-3\"></aside></div>"
+      around = "#{header}<div class=\"torso tmpl_two_col_sidebar\"><div class=\"sidebar\"><p>Filters</p></div>" \
+               "<div class=\"main\">#{products.join}</div></div>"
+      prefixed = "#{header}<div class=\"dprime-wf-app dprime-wf-sidebar-left\"><aside class=\"dprime-wf-sidebar\"><p>Filters</p></aside>" \
+                 "<div class=\"dprime-wf-content\">#{products.join}</div></div>"
+
+      [in_main, around, prefixed].each { |html| remaining(html).should include("Aloe vera gel, 10 gallons") }
+    end
+
+    it "removes a sidebar in a narrow grid column, or one holding a widget, beside the title" do
+      title = "<h1>Fully booked on Friday</h1><p>The morning slots are taken.</p>"
+      nested = "<div class=\"title\">#{title}</div><div class=\"row\"><div class=\"col-md-9\"><div class=\"row\">" \
+               "<div class=\"col-md-8 entry\"><p>Call us.</p></div><div class=\"col-md-4 sidebar\">#{hours}</div></div></div></div>"
+      beside = "<div class=\"row\"><div class=\"col-md-8\">#{title}</div><div class=\"col-md-4\"><div id=\"sidebar\">#{hours}</div></div></div>"
+      widget = "<div class=\"main\">#{title}</div><div class=\"sidebar\"><div class=\"widget\">" \
+               "<h3 class=\"sidebar-title\">Contact</h3><div class=\"widget-content\">#{hours}</div></div></div>"
+      tabs = "<div class=\"main\">#{title}</div><div class=\"sidebar\"><ul class=\"sidebar-tabs\"><li>Contact</li></ul>" \
+             "<div class=\"tab-content\">#{hours}</div></div>"
+
+      [nested, beside, widget, tabs].each do |html|
+        text = remaining(html)
+        text.should include("The morning slots are taken.")
+        text.should_not include("Sakura Clinic")
+      end
+    end
+
+    it "looks for the layout around a sidebar in time linear in the sidebar's items" do
+      items = Array.new(2000) { |index| "<li class=\"sidebar-item\"><a href=\"/c/#{index}\">City #{index}</a> (#{index % 97} listings)</li>" }
+      html = "<div class=\"page-title\"><h1>Plumbers</h1><p>Updated 3 June 2026 by the editors</p></div><div class=\"wrap\">" \
+             "<div class=\"entry\"><p>No plumbers listed here yet.</p></div><div class=\"sidebar\"><ul>#{items.join}</ul></div></div>"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining(html)
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      text.should include("No plumbers listed here yet.")
+      text.should_not include("City 1999")
     end
 
     it "keeps a block laid out beside a sidebar" do
@@ -670,6 +748,25 @@ RSpec.describe Nokodown::Boilerplate do
       %w[News boats tides Sea].each { |word| markdown.should_not include(word) }
     end
 
+    it "judges a tag line deep in nested blocks in time linear in its depth" do
+      tags = Array.new(50) { |index| "<a href=\"/tag/harbour-#{index}/\">harbour #{index}</a>" }.join(", ")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining("#{prose('Ferries', 2)}#{'<div>' * 200}<p>Tags: #{tags}</p>#{'</div>' * 200}")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      text.should_not include("harbour 1")
+    end
+
+    it "removes a tag line in a font element, but not the parser's copy of it around a paragraph that links a tag" do
+      html = '<h1>Magnetic stirrer</h1><div><font face="Arial">Tags: <a href="/tag/lab/">lab</a></div>' \
+             '<p>Our stirrer spins a bar magnet at up to 1500 rpm; see the <a href="/tag/glassware/">glassware</a> we pair it with.</p>' \
+             "#{prose('The stirrer', 2)}</font>"
+      text = remaining(html)
+
+      text.should_not include("Tags")
+      text.should include("Our stirrer spins")
+    end
+
     it "keeps a line with other text, other links or another site's tags, and the lines of an archive itself" do
       meta = '<p>Filed in <a href="/category/news/">News</a> on 3 May by Ann</p>' \
              '<p>Tags: <a href="/tag/boats/">boats</a>, <a href="/boats-guide/">guide</a></p>' \
@@ -680,6 +777,16 @@ RSpec.describe Nokodown::Boilerplate do
       markdown.should include("tides")
 
       article("https://example.com/category/news/", "").should include("News")
+    end
+
+    it "keeps the list of every tag on the index of the tags" do
+      tags = %w[harbour-walks old-boats spring-tides night-ferries fishing-nets sailing-clubs sea-shanties tall-ships]
+      html = "<html><body><h1>Tags</h1><div>#{tags.map { |tag| "<a href=\"/tag/#{tag}/\">#{tag.tr('-', ' ')}</a>" }.join(', ')}</div></body></html>"
+
+      %w[/tags?view=popular /tags.html /category].each do |path|
+        Nokodown.to_markdown(html, url: "https://example.com#{path}", title: false).should include("[night ferries]")
+      end
+      Nokodown.to_markdown(html, url: "https://example.com/2024/05/harbour/", title: false).should_not include("ferries")
     end
 
     it "keeps the category line of every card in a listing" do

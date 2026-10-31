@@ -15,6 +15,13 @@ module Nokodown
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     SIDE_FURNITURE = /sidebar|#{Patterns::WORD_START}footer#{Patterns::WORD_END}/.freeze
+    SIDEBAR = /sidebar/.freeze
+    # A main column is named for the layout ("main", "content-area",
+    # "l-main-content"), after any prefix: "dprime-wf-content".
+    MAIN_COLUMN = /
+      (?:\A|(?<=[-_]))(?:(?:site|page|l)[-_])?(?:main|content|primary)
+      (?:[-_](?:main|content|area|column|col|container|wrap|wrapper|inner))*\z
+    /x.freeze
     # A BEM modifier names a variant of the block: "catalog-grid--sidebar" is
     # the grid laid out beside a sidebar.
     BEM_MODIFIER = /--[\w-]+/.freeze
@@ -29,6 +36,9 @@ module Nokodown
     # A shop's or a blog's tags and categories name the products or posts it
     # lists ("product_tag-buy-cookies-online", "category-cookies").
     LISTED_TAXONOMY = /(?<![\w-])(?:\w+_)?(?:tag|cat|category)-[\w-]+/.freeze
+    # The room a page leaves for the banner, named on the wrapper of its
+    # content: "cookiebot-padding-bottom".
+    ROOM_FOR_BANNER = /padding|margin|spacer|spacing|offset/.freeze
     OVERLAY_ROLES = %w[dialog alertdialog].freeze
     OVERLAY_STYLE = /(?:\A|;)\s*position\s*:\s*(?:fixed|sticky)/i.freeze
     TRAIL_OR_MENU = /breadcrumb|crumbs|trail|#{Patterns::WORD_START}nav|menu/.freeze
@@ -69,8 +79,8 @@ module Nokodown
       @shielded = shielded_keys
       h1s = @body.css("h1").to_a
       @single_h1 = h1s.size == 1
-      @trails = Breadcrumbs.trails(@body).map { |trail| Dom.key(trail) }.to_set
-      @taxonomy = Taxonomy.blocks(@body, @url)
+      @trails = Breadcrumbs.trails(@body).group_by { |trail| Dom.key(trail) }
+      @taxonomy = Taxonomy.blocks(@body, @url).group_by { |block| Dom.key(block) }
       @title = h1s.last
       @last_h1 = @title ? Dom.key(@title).to_i : 0
       @title_columns = title_columns
@@ -135,7 +145,7 @@ module Nokodown
       return :chrome if (chrome_element?(node) || chrome_role?(node)) && !title_holder?(node)
       return :furniture if side_column?(node)
       return if dominant?(node) && !furniture_however_large?(node)
-      return :guess if trail?(node) || @taxonomy.include?(Dom.key(node))
+      return :guess if trail?(node) || found?(@taxonomy, node)
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
       return :panel if MemberPanel.panel?(node)
@@ -171,9 +181,16 @@ module Nokodown
     # A trail stands apart from the text around it; one that words lead into
     # or out of is part of a sentence ("Open Home › Account and pick...").
     def trail?(node)
-      return false unless @trails.include?(Dom.key(node))
+      return false unless found?(@trails, node)
 
       [node.previous_sibling, node.next_sibling].none? { |sibling| sibling&.text? && !Dom.squish(sibling.content).empty? }
+    end
+
+    # The parser reopens a formatting element (a <font> around blocks) as
+    # copies that share its attributes, and so its key: the key finds the
+    # copies, and only the node itself is the one found.
+    def found?(index, node)
+      index.fetch(Dom.key(node), []).any? { |found| found == node }
     end
 
     # A link or span in the middle of running text is part of that text,
@@ -390,7 +407,61 @@ module Nokodown
       return false unless node.at_css("h1").nil? && !prose_lines?(node)
 
       branch = title_branch(node)
-      !branch.nil? && @stats.text_chars(branch) - @stats.text_chars(@title) >= TITLED_TEXT
+      return false if branch.nil? || @stats.text_chars(branch) - @stats.text_chars(@title) < TITLED_TEXT
+
+      !in_main_column?(node, branch.parent) && !around_sidebar?(node)
+    end
+
+    # The nearest grid column short of the full row tells which one the
+    # node is in. One wider than half the row is the main one, beside which
+    # a sidebar sits: a shop's product grid named "shopsidebarwidth" for the
+    # room a sidebar leaves it is inside it. A narrower column, the node's
+    # own or one nested in the main one, holds a sidebar again.
+    def in_main_column?(node, shared)
+      column = node
+      while column.element? && Dom.key(column) != Dom.key(shared)
+        width = Dom.grid_width(column)
+        return width > Dom::FULL_WIDTH / 2 if width && width < Dom::FULL_WIDTH
+
+        column = column.parent
+      end
+      false
+    end
+
+    # The layout around a sidebar holds it beside the main column, which
+    # holds most of the text: "tmpl_two_col_sidebar" around "sidebar" and
+    # "main". On each level one child at most holds more than half the
+    # text, so the walk down to the column follows it.
+    def around_sidebar?(node)
+      half = @stats.text_chars(node) / 2
+      column = node
+      while (column = column.element_children.find { |child| @stats.text_chars(child) > half })
+        prefixes = main_column_prefixes(column)
+        return true if prefixes.any? && column.parent.element_children.any? { |side| sidebar_beside?(side, prefixes) }
+      end
+      false
+    end
+
+    # What a main column's names put before the layout's word: nothing in
+    # "main", "dprime-wf-" in "dprime-wf-content". A column named as
+    # furniture is not the main one.
+    def main_column_prefixes(column)
+      signature = Dom.signature(column)
+      return [] if @names[signature].match?(SIDE_FURNITURE) || @furniture[signature]
+
+      @names[signature].gsub(BEM_MODIFIER, " ").split.filter_map do |token|
+        layout = token.match(MAIN_COLUMN)
+        token[0, layout.begin(0)] if layout
+      end
+    end
+
+    # A theme gives the sidebar the prefix it gives the main column:
+    # "dprime-wf-sidebar" beside "dprime-wf-content". A sidebar's parts are
+    # named for themselves, so "sidebar-title" beside "widget-content" or
+    # "sidebar-tabs" beside "tab-content" is a widget, not a layout.
+    def sidebar_beside?(side, prefixes)
+      names = @names[Dom.signature(side)].gsub(BEM_MODIFIER, " ").split.grep(SIDEBAR)
+      names.any? { |name| prefixes.any? { |prefix| name.start_with?(prefix) } }
     end
 
     # The title's ancestor that sits beside the node, under the parent they share.
@@ -457,6 +528,8 @@ module Nokodown
     end
 
     def consent_name?(token)
+      return false if token.match?(ROOM_FOR_BANNER)
+
       token.match?(CONSENT_MANAGER) || (token.match?(Patterns::CONSENT) && token.sub(Patterns::CONSENT, " ").match?(CONSENT_PROMPT))
     end
 

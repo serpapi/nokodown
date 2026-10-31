@@ -97,10 +97,21 @@ module Nokodown
       @root = root
       @anchors = anchors
       @urls = urls
+      @targets = {}
     end
 
+    # Only a container around links into the page, and around no other link,
+    # can be one. Reading every container's links costs as much as its
+    # subtree, so the others are ruled out by key first. A key that clones
+    # share rules out nothing.
     def contents
-      tables = @root.css(CONTAINERS).select { |node| contents?(node) }
+      candidates = candidate_keys
+      return [] if candidates.empty?
+
+      tables = @root.css(CONTAINERS).select do |node|
+        key = Dom.key(node)
+        (key.nil? || shared_keys.include?(key) || candidates.include?(key)) && contents?(node)
+      end
       keys = tables.map { |node| Dom.key(node) }.to_set
       tables.reject { |node| node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) } }
     end
@@ -111,6 +122,38 @@ module Nokodown
 
     private
 
+    # Keys of the elements around a link into the page and around no other
+    # link, once the page has MIN_ENTRIES links into it.
+    def candidate_keys
+      targets, others = @root.css("a[href]").partition { |link| target(link) }
+      return Set.new if targets.size < MIN_ENTRIES
+
+      keys_around(targets) - keys_around(others)
+    end
+
+    # Each element is added once: a walk up stops at an element an earlier
+    # walk went through, which went on from there to the root. Only a key
+    # that one element holds tells that.
+    def keys_around(links)
+      links.each_with_object(Set.new) do |link, keys|
+        node = link
+        until (node = node.parent).nil? || node == @root
+          key = Dom.key(node)
+          next if key.nil? || shared_keys.include?(key)
+          break unless keys.add?(key)
+        end
+      end
+    end
+
+    # The parser clones a formatting element left open, such as a
+    # <font face>, and the clones share their attributes, key included.
+    def shared_keys
+      @shared_keys ||= begin
+        counts = @root.css("*").filter_map { |node| Dom.key(node) }.tally
+        counts.select { |_, count| count > 1 }.keys.to_set
+      end
+    end
+
     def contents?(node)
       links = node.css("a[href]")
       return false if links.size < MIN_ENTRIES || !links.all? { |link| target(link) }
@@ -120,19 +163,21 @@ module Nokodown
     end
 
     # A short link alone on its line, to the top or to a point above it
-    # outside the link's own section.
+    # outside the link's own section. The href rules out most links before
+    # their text and ancestors are read.
     def back?(link)
+      href = link["href"].strip
+      return false unless href.match?(TOP) || target(link)
+
       text = Dom.text(link)
       return false if text.scan(WORDS).size > MAX_BACK_WORDS || !text.match?(LETTER)
       return false if Dom.ancestors_named(link, *TITLES).any?
 
-      href = link["href"].strip
       (href.match?(TOP) || above?(link, href)) && alone?(link, text)
     end
 
+    # Asked only of a link into the page.
     def above?(link, href)
-      return false unless target(link)
-
       position = @anchors[fragment(href)]
       position < Dom.key(link).to_i && link.ancestors.none? { |ancestor| ancestor.element? && Dom.key(ancestor).to_i == position }
     end
@@ -142,8 +187,14 @@ module Nokodown
       line.nil? || Dom.text(line).sub(text, "").match?(SEPARATORS)
     end
 
+    # Every link is asked about, and resolving an href costs more than the
+    # rest, so each href is judged once.
     def target(link)
       href = link["href"].strip
+      @targets.fetch(href) { @targets[href] = into_page?(href) }
+    end
+
+    def into_page?(href)
       name = fragment(href)
       return false if name.nil? || name.empty? || !@anchors.key?(name)
 

@@ -59,6 +59,17 @@ RSpec.describe Nokodown::MessageForms do
     markdown(html).should include("tune bhi had kar di")
   end
 
+  it "does not take a text box placed off screen beside a note for one readers can see" do
+    trap = '<div style="position:absolute;left:-9999px"><p>Leave this box empty if you are a person, it only ' \
+           'catches robots.</p><textarea name="hp"></textarea></div>'
+    html = "<div class=\"post\">#{story}<div class=\"box\"><h3>Leave a Reply</h3><form>" \
+           "<input type=\"text\" name=\"author\">#{trap}</form></div></div>"
+    body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
+    Nokodown::Preprocessor.new(body).call
+
+    body.css("[#{described_class::MARK}]").should be_empty
+  end
+
   it "keeps a product's order form, though it asks for a note" do
     html = "#{story}<form class=\"cart\"><p>Flavour: Vanilla or Red Velvet (AED30.00)</p><p>Cakes need 3 days' notice.</p>" \
            '<input type="text" name="name_on_cake"><textarea name="message"></textarea>' \
@@ -82,6 +93,40 @@ RSpec.describe Nokodown::MessageForms do
            "<label>Name</label><input name=\"name\"><textarea name=\"note\"></textarea></form></main>"
 
     markdown(html).should include("Fields in bold must be filled in")
+  end
+
+  it "keeps the table of what an inquiry form asks about" do
+    html = "#{story}<div class=\"inquiry\"><form><table><tr><th>Property</th><th>Type</th><th>Address</th></tr>" \
+           '<tr><td><input type="hidden" name="id" value="6136">F.L.A.G.</td><td>Apartment</td><td>Minatomachi, Sanyo-Onoda</td></tr>' \
+           '</table><table><tr><th>Name</th><td><input type="text" name="name"></td></tr></table><textarea></textarea></form></div>'
+
+    markdown(html).should include("Minatomachi")
+  end
+
+  it "removes a comment form laid out in a table, its labels in headers or in cells" do
+    headers = '<tr><th>Your name</th><th>Your website</th></tr><tr><td><input type="text" name="author"> required</td>' \
+              '<td><input type="text" name="url"> optional</td></tr>'
+    cells = '<tr><td>Your name</td><td>Your website</td></tr><tr><td><input type="text" name="author"></td>' \
+            '<td><input type="text" name="url"></td></tr>'
+
+    [headers, cells].each do |rows|
+      form = '<div class="box"><h3>Leave a Reply</h3><form><p>Your email address will not be published.</p>' \
+             "<table>#{rows}</table><textarea></textarea></form></div>"
+      markdown("<div class=\"post\">#{story}#{form}</div>").should end_with("by the reeds.")
+    end
+  end
+
+  it "keeps a form when only spacers would be left beside it, and removes it beside a picture" do
+    form = '<form><h3>Send this postcard</h3><img src="/media/girls-773.jpg" alt="Girls on the beach"><p>Sender</p>' \
+           '<input type="text" name="name"><textarea></textarea></form>'
+    gif = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+    ['<img src="/images/spacer.gif" width="1" height="1">', "<img src=\"#{gif}\">"].each do |spacer|
+      markdown("<table><tr><td>#{spacer}</td><td>#{form}</td></tr></table>").should include("Girls on the beach")
+    end
+
+    text = markdown("<table><tr><td><img src=\"/media/beach-12.jpg\" alt=\"The beach at Bávaro\"></td><td>#{form}</td></tr></table>")
+    text.should include("The beach at Bávaro")
+    text.should_not include("Send this postcard")
   end
 
   it "keeps a contact page that holds nothing but its form" do
