@@ -457,14 +457,17 @@ RSpec.describe "Markdown conversion" do
                                     "## Cursor Agent\n\nAn editor named Cursor Agent.\n\n[Official site](https://cursor.com)"
     end
 
-    it "keeps neighbouring repeats apart once they lose their links" do
+    it "keeps neighbouring repeats apart once they lose their links, where a word alone does not" do
       posts = [%w[1 Scaling], %w[2 Stores]].map do |id, name|
         %(<h2><a href="/p/#{id}">#{name}</a></h2><p>A post about #{name.downcase}.</p>) +
-          '<p><a href="/t/ml">Machine Learning</a> | <a href="/t/ds">Data Science</a></p>'
+          '<p><a href="/t/ml">Machine Learning</a> | <a href="/t/ds">Data Science</a></p>' \
+          '<p>Pages: <a href="/t/ml/2">2</a> <a href="/t/ml/3">3</a></p>'
       end
       convert(posts.join).should == "## [Scaling](https://example.com/p/1)\n\nA post about scaling.\n\n" \
                                     "[Machine Learning](https://example.com/t/ml) [Data Science](https://example.com/t/ds)\n\n" \
-                                    "## [Stores](https://example.com/p/2)\n\nA post about stores.\n\nMachine Learning · Data Science"
+                                    "Pages: [2](https://example.com/t/ml/2) [3](https://example.com/t/ml/3)\n\n" \
+                                    "## [Stores](https://example.com/p/2)\n\nA post about stores.\n\nMachine Learning · Data Science\n\n" \
+                                    "Pages: 2 3"
     end
 
     it "keeps a phrase linked in pieces whole once its links are repeats" do

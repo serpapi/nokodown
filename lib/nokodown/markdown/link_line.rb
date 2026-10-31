@@ -19,10 +19,11 @@ module Nokodown
       WORD_END = /[\p{L}\p{N}][*_~`]*\z/.freeze
       # Between two texts that took the places of links a space apart: their
       # brackets told the items apart, and Separators dropped what stood
-      # between them.
+      # between them. Single words a space apart ("2 3 4", "Home About")
+      # read as items without it.
       ITEMS = " · "
-      # What stands between two links of one run, ITEMS once join set it.
-      RUN_GAP = /\A(?: *| · )\z/.freeze
+      # What stands between two links of one run.
+      RUN_GAP = /\A *\z/.freeze
       # A sentence runs on in lowercase words; a label ("Tags:"), a date or
       # a menu's capitalised or CJK items do not.
       WORD_BEFORE = /\p{Ll}[*_~`]* +\z/.freeze
@@ -55,10 +56,11 @@ module Nokodown
       # replacements: segment => the text that takes the link's place, ""
       # to drop it with the spaces before it.
       def join(parts, replacements)
+        items = replacements.size > 1 ? item_segments(parts, replacements) : Set.new
         replacements.each do |segment, text|
           if text.empty?
             parts[segment - 1] = parts[segment - 1].sub(/ +\z/, "")
-          elsif !replacements[segment - 2].to_s.empty? && parts[segment - 1].match?(/\A +\z/) && !phrase?(parts, segment)
+          elsif items.include?(segment) && !replacements[segment - 2].to_s.empty? && parts[segment - 1].match?(/\A +\z/)
             parts[segment - 1] = ITEMS
           elsif parts[segment - 1].end_with?("\\!") && !text.start_with?("[")
             # Inline escaped the "!" only for the link's bracket.
@@ -88,14 +90,18 @@ module Nokodown
         "#{' ' if space_before?(text, before, left)}#{text}#{' ' if space_after?(text, after, right)}"
       end
 
-      # Links set a space apart with words running on at both ends of the
-      # run are a phrase linked in pieces ("Read the [New York](…)
-      # [Times](…) today"), not items.
-      def phrase?(parts, segment)
-        first = last = segment
-        first -= 2 while first > 1 && parts[first - 1].match?(RUN_GAP)
-        last += 2 while last < parts.size - 2 && parts[last + 1].match?(RUN_GAP)
-        parts[first - 1].match?(WORD_BEFORE) && parts[last + 1].match?(WORD_AFTER)
+      # The segments of the runs of links set a space apart that take ITEMS:
+      # a run with a text of more than a word, and not a phrase linked in
+      # pieces, with words running on at both ends ("Read the [New York](…)
+      # [Times](…) today").
+      def item_segments(parts, replacements)
+        runs = (1...parts.size).step(2).slice_when { |_, link| !parts[link - 1].match?(RUN_GAP) }
+        runs.each_with_object(Set.new) do |run, items|
+          next if run.size < 2 || (parts[run.first - 1].match?(WORD_BEFORE) && parts[run.last + 1].match?(WORD_AFTER))
+          next unless run.any? { |link| replacements.fetch(link) { link_text(parts, link) }.include?(" ") }
+
+          items.merge(run)
+        end
       end
 
       # A word after an image or a parenthesis ("(09/08)") needs a space,
