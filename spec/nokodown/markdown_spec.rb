@@ -467,6 +467,24 @@ RSpec.describe "Markdown conversion" do
                                     "## [Stores](https://example.com/p/2)\n\nA post about stores.\n\nMachine Learning · Data Science"
     end
 
+    it "keeps a phrase linked in pieces whole once its links are repeats" do
+      line = '<p>Read the <a href="/ny">New York</a> <a href="/t">Times</a> today.</p>'
+      html = "<h2>C</h2><p>Words about c, which go on for a while here.</p>#{line}" \
+             "<h2>D</h2><p>Words about d, which go on for a while here.</p>#{line.sub('Read', 'Then read')}"
+      convert(html).should end_with("Then read the New York Times today.")
+    end
+
+    it "spaces repeats as the page set their words" do
+      line = '<a href="/l">L</a><a href="/l">ien</a> vers <a href="/f">Falle</a> (1983)<a href="/g">,</a> Robert'
+      html = "<h2>A</h2><p>First: #{line}</p><p>Words in between.</p><h2>B</h2><p>Again: #{line}</p>"
+      convert(html).should end_with("Again: Lien vers Falle (1983), Robert")
+    end
+
+    it "drops a line a repeat leaves with only symbols" do
+      html = '<p>Some heading words<br><a href="/x">---</a></p><p>Again words<br><a href="/x">---</a></p>'
+      convert(html).should == "Some heading words\n[---](https://example.com/x)\n\nAgain words"
+    end
+
     it "escapes a repeat that opens its line once it loses its link" do
       html = '<p>Replies are listed below, oldest first.</p><p><a href="/r/5">&gt;&gt;5</a><br>I agree.</p><p>Some text between.</p>' \
              '<p><a href="/r/5">&gt;&gt;5</a><br>Me too.</p>'
@@ -479,6 +497,12 @@ RSpec.describe "Markdown conversion" do
              '<p>Via <a href="/y">Yahoo!</a><a href="/n">News</a> today</p><p>Big news!<a href="/sale">Spring sale</a> starts Monday.</p>'
       convert(html).should == "## A\n\nWords about a.\n\nBy [Yahoo!](https://example.com/y) today\n\n## B\n\nWords about b.\n\n" \
                               "Via Yahoo! [News](https://example.com/n) today\n\nBig news\\![Spring sale](https://example.com/sale) starts Monday."
+      convert('<p>C:\\!<a href="/r">a</a> more</p>').should == "C:\\\\\\![a](https://example.com/r) more"
+      convert("<p>Hello!<span>[1]</span> text</p>").should == "Hello![1] text"
+    end
+
+    it "keeps a bracket before a parenthesis from making a link" do
+      convert("<p>See <span>[1]</span>(page 4).</p>").should == "See [1\\](page 4)."
     end
 
     it "writes links whose text ends in a backslash or nests brackets, and addresses that nest parentheses" do

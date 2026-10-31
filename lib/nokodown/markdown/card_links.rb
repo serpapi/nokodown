@@ -211,7 +211,7 @@ module Nokodown
         before.strip.empty? || !@lines[link.block][link.line + 1].to_s.match?(/\A +\S/)
       end
 
-      # Lines the edits leave with only list markers go.
+      # Lines the edits leave with only list markers or symbols go.
       def edited(index)
         lines = @lines[index]
         edits = @edits[index]
@@ -219,7 +219,7 @@ module Nokodown
           next line unless edits.key?(number)
 
           result = LinkLine.join(@segments[[index, number]], edits[number])
-          result unless result.match?(MARKERS) && !line.match?(MARKERS)
+          result unless LinkLine.bare?(result)
         end.join("\n")
       end
     end

@@ -19,17 +19,19 @@ module Nokodown
       # The indentation and markers before a line's text.
       LINE_PREFIX = /\A(?: |>|(?:[-*+]|\d+\.) )*/.freeze
 
-      # unnamed: also remove the images Inline found to say nothing.
-      def initialize(images, unnamed: false)
+      # unnamed: also remove the images Inline found to say nothing. links:
+      # false when the Markdown has none to say which titles were kept.
+      def initialize(images, unnamed: false, links: true)
         @images = images
         @unnamed = unnamed
+        @links = links
         # Image URL => @text_lines when its last copy was written.
         @seen = {}
         @text_lines = 0
       end
 
       def call(blocks)
-        @linked = linked_pages(blocks)
+        @linked = linked_pages(blocks) if @links
         blocks.select do |block|
           if block.kind == :code || !block.text.include?("![")
             @text_lines += 1
@@ -108,9 +110,10 @@ module Nokodown
       end
 
       # A thumbnail goes only while the Markdown still links to its page; a
-      # card whose title link was dropped keeps its image.
+      # card whose title link was dropped keeps its image. Without links the
+      # title's text is all there is to go by, and RedundantImages found it.
       def redundant?(image)
-        (@unnamed && image.unnamed) || (image.redundant && image.targets.all? { |target| @linked.include?(target) })
+        (@unnamed && image.unnamed) || (image.redundant && (!@links || image.targets.all? { |target| @linked.include?(target) }))
       end
 
       # Lines left with only markers go. A list item whose first line held

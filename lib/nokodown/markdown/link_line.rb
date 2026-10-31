@@ -21,8 +21,15 @@ module Nokodown
       # brackets told the items apart, and Separators dropped what stood
       # between them.
       ITEMS = " · "
+      # What stands between two links of one run, ITEMS once join set it.
+      RUN_GAP = /\A(?: *| · )\z/.freeze
+      # A sentence runs on in lowercase words; a label ("Tags:"), a date or
+      # a menu's capitalised or CJK items do not.
+      WORD_BEFORE = /\p{Ll}[*_~`]* +\z/.freeze
+      WORD_AFTER = /\A +[*_~`]*[\p{Ll}(]/.freeze
       # Only list and quote markers before a text: it opens its line.
       OPENING = /\A *(?:(?:[-*+]|\d+[.)]|>) +)*\z/.freeze
+      MARKERS = /\A *(?:(?:[-*+]|\d+[.)]|>)(?: +|\z))*/.freeze
 
       module_function
 
@@ -46,13 +53,12 @@ module Nokodown
       end
 
       # replacements: segment => the text that takes the link's place, ""
-      # to drop it with the spaces before it. items: false when Separators
-      # kept what stood between the links.
-      def join(parts, replacements, items: true)
+      # to drop it with the spaces before it.
+      def join(parts, replacements)
         replacements.each do |segment, text|
           if text.empty?
             parts[segment - 1] = parts[segment - 1].sub(/ +\z/, "")
-          elsif items && !replacements[segment - 2].to_s.empty? && parts[segment - 1].match?(/\A +\z/)
+          elsif !replacements[segment - 2].to_s.empty? && parts[segment - 1].match?(/\A +\z/) && !phrase?(parts, segment)
             parts[segment - 1] = ITEMS
           elsif parts[segment - 1].end_with?("\\!") && !text.start_with?("[")
             # Inline escaped the "!" only for the link's bracket.
@@ -76,7 +82,29 @@ module Nokodown
         left = replacements.fetch(segment - 2) { link_text(parts, segment - 2) }
         right = replacements.key?(segment + 2) ? "" : link_text(parts, segment + 2)
         text = escaped(text, before, after.empty? ? replacements[segment + 2].to_s : after, segment)
-        "#{' ' if before.empty? ? beside?(left, text) : before.match?(/[)\]]\z/)}#{text}#{' ' if space_after?(text, after, right)}"
+        own = address(parts, segment)
+        left = "" if own == address(parts, segment - 2) && inside_word?(left, text)
+        right = "" if own == address(parts, segment + 2) && inside_word?(text, right)
+        "#{' ' if space_before?(text, before, left)}#{text}#{' ' if space_after?(text, after, right)}"
+      end
+
+      # Links set a space apart with words running on at both ends of the
+      # run are a phrase linked in pieces ("Read the [New York](…)
+      # [Times](…) today"), not items.
+      def phrase?(parts, segment)
+        first = last = segment
+        first -= 2 while first > 1 && parts[first - 1].match?(RUN_GAP)
+        last += 2 while last < parts.size - 2 && parts[last + 1].match?(RUN_GAP)
+        parts[first - 1].match?(WORD_BEFORE) && parts[last + 1].match?(WORD_AFTER)
+      end
+
+      # A word after an image or a parenthesis ("(09/08)") needs a space,
+      # punctuation does not ("(1983),"). A closing bracket before "(" would
+      # make a link of the two.
+      def space_before?(text, before, left)
+        return beside?(left, text) if before.empty?
+
+        before.end_with?("]") || (before.end_with?(")") && text.match?(WORD_START))
       end
 
       # Brackets Text.link_text escaped for the link read as written once it
@@ -95,13 +123,35 @@ module Nokodown
 
       # A "!" before a link would make an image of it.
       def space_after?(text, after, right)
-        return after.match?(/\A!?\[/) unless after.empty?
+        return after.start_with?("![") unless after.empty?
 
         beside?(text, right) || (text.end_with?("!") && !right.empty?)
       end
 
       def beside?(left, right)
         left.match?(WORD_END) && right.match?(WORD_START)
+      end
+
+      # Two links to one address that meet inside a word are one link the
+      # page split with markup, as a drop cap ("L" "ien"): no brackets told
+      # them apart.
+      def inside_word?(left, right)
+        left.match?(/\p{L}\z/) && right.match?(/\A\p{Ll}/)
+      end
+
+      # A line its links left with nothing but symbols ("-", "=", "»") says
+      # nothing, as Separators finds of such a line without links, and a "-"
+      # or "=" under a line of text would make a heading of it. A table row
+      # keeps its cells.
+      def bare?(line)
+        return false if line.start_with?("|")
+
+        text = line.sub(MARKERS, "")
+        text.match?(Separators::SYMBOL_LINE) && !text.match?(Separators::EMOTICON)
+      end
+
+      def address(parts, segment)
+        parts[segment][LINK, 2] if segment.between?(1, parts.size - 1)
       end
 
       def link_text(parts, segment)

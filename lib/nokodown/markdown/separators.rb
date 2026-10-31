@@ -32,11 +32,9 @@ module Nokodown
       end
 
       # The line without separators that separate nothing, or nil when only
-      # symbols are left. Without links, the separators between them stay,
-      # since their brackets will not.
-      def line(line, links: true)
-        line = line.gsub(REPEATED, '\1')
-        line = line.gsub(BETWEEN_LINKS, " ") if links
+      # symbols are left.
+      def line(line)
+        line = line.gsub(REPEATED, '\1').gsub(BETWEEN_LINKS, " ")
         line = trim_end(line.sub(LINE_START, ""), LINE_END)
         line if !line.match?(SYMBOL_LINE) || line.match?(EMOTICON)
       end

@@ -36,11 +36,7 @@ module Nokodown
         # Labels joins a counter to its label and CardLinks unlinks a card's
         # repeated "Read more", so both make noise the first pass missed.
         blocks = drop_empty_sections(CardLinks.new(blocks).call.reject { |block| noise?(block) })
-        blocks = ImageCleanup.new(images, unnamed: !image_page?(blocks, images)).call(blocks) unless images.empty?
-        # Without links, CardLinks and ImageCleanup still read them, to drop a
-        # card's repeated buttons and its thumbnail beside the title link.
-        # The steps after this one read the text alone.
-        links ? blocks : dedupe(LinkAddresses.call(blocks, links: false))
+        images.empty? ? blocks : ImageCleanup.new(images, unnamed: !image_page?(blocks, images), links: links).call(blocks)
       end
 
       def image_page?(blocks, images)

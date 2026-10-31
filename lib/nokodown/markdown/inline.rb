@@ -38,6 +38,9 @@ module Nokodown
       WORD_START = /\A[\p{L}\p{N}]/.freeze
       WORD_END = /[\p{L}\p{N}]\z/.freeze
       TAIL_BYTES = 1600
+      # Link markup, not a bracket of the page's text: "![1]" with no address
+      # after it reads as written.
+      LINK_START = /\A\[#{Text::LINK_TEXT}\]\(/.freeze
       PARAGRAPH_BREAK = /(\s*\n\s*\n\s*)/.freeze
       LINK_ONLY = /\A!?\[(?:\\.|[^\\\]])*\]\([^\s]*\)\z/.freeze
       # Markup around the first and last visible characters of a piece.
@@ -155,9 +158,17 @@ module Nokodown
       # text decides its own spacing.
       def append(out, piece, previous, node)
         out << " " if glued?(previous, piece) && !script?(node)
-        # A "!" right before a link would make an image of it.
-        out.insert(-2, "\\") if piece.start_with?("[") && out.end_with?("!") && !out.end_with?("\\!")
+        # A "!" right before a link would make an image of it, and a "]"
+        # right before "(" a link of the text in brackets ("[1](page 4)").
+        out.insert(-2, "\\") if (piece.start_with?("[") && ends_bare?(out, "!") && piece.match?(LINK_START)) ||
+                                (piece.start_with?("(") && ends_bare?(out, "]"))
         out << piece
+      end
+
+      # After an odd run of backslashes the last character is escaped
+      # already; after an even one they escape each other.
+      def ends_bare?(out, char)
+        out.end_with?(char) && tail(out)[/\\*.\z/].length.odd?
       end
 
       def script?(node)
@@ -268,24 +279,17 @@ module Nokodown
       def link_markup(text, node)
         text = Separators.link_text(text)
         return "" if text.empty? || text.match?(Patterns::LINK_NOISE_TEXT)
-        return text if @in_link
+        return text if !@links || @in_link
 
         url = link_url(node["href"].to_s)
         return text if url.nil? || archive_in_line?(node, url)
 
         text = Emphasis.unwrap(text)
         return text if shown?(text, url)
-        return @links ? url : text if same_as_url?(text, url)
+        return url if same_as_url?(text, url)
         return text if same_address?(text, url)
 
-        address = address_markup(text, url)
-        address ? shown_address(address, text) : "[#{Text.link_text(text)}](#{Text.destination(url)})"
-      end
-
-      # Without links, a text that shows an address stays as the page wrote
-      # it.
-      def shown_address(address, text)
-        @links ? address : text
+        address_markup(text, url) || "[#{Text.link_text(text)}](#{Text.destination(url)})"
       end
 
       # In a byline or a post's meta line ("By Ann in News"), not as an entry

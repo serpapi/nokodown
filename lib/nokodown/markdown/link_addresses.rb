@@ -8,23 +8,23 @@ module Nokodown
     # link with other text says something of its own about the address and
     # keeps it, as does a label the page links to several addresses
     # ("Official site", "More details"): each of its links gives its item's
-    # address. Without links every link keeps only its text. A block left
-    # with nothing worth reading goes.
+    # address. A line left with only symbols goes, as does a block left with
+    # nothing worth reading.
     module LinkAddresses
       module_function
 
-      def call(blocks, links:)
+      def call(blocks)
         lines = blocks.map { |block| link_lines(block) }
-        labels = links ? labels(lines) : Set.new
+        labels = labels(lines)
         written = Set.new
         blocks.zip(lines).filter_map do |block, split|
           next block unless split
 
-          text = split.map { |line, parts, found| found.empty? ? line : unlinked(parts, found, links && written, labels) }.join("\n")
+          text = split.filter_map { |line, parts, found| found.empty? ? line : unlinked(parts, found, written, labels) }.join("\n")
           next block if text == block.text
 
           block.text = text
-          block unless Cleanup.noise?(block)
+          block unless text.empty? || Cleanup.noise?(block)
         end
       end
 
@@ -49,11 +49,14 @@ module Nokodown
         addresses.select { |_, found| found.size > 1 }.keys.to_set
       end
 
-      # written: the address and text of each link so far, or false to
-      # unlink every link.
+      # written: the address and text of each link so far. Nil for a line
+      # left with only symbols.
       def unlinked(parts, found, written, labels)
-        repeats = written ? found.reject { |_, text, destination| labels.include?(key(text)) || written.add?([destination, key(text)]) } : found
-        repeats.empty? ? parts.join : LinkLine.join(parts, repeats.to_h { |segment, text, _| [segment, text] }, items: written)
+        repeats = found.reject { |_, text, destination| labels.include?(key(text)) || written.add?([destination, key(text)]) }
+        return parts.join if repeats.empty?
+
+        line = LinkLine.join(parts, repeats.to_h { |segment, text, _| [segment, text] })
+        line unless LinkLine.bare?(line)
       end
 
       def key(text)
