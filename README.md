@@ -197,7 +197,8 @@ with `main_content: false`, `:none` for a document without a body.
   (`role="presentation"` or `role="none"`) goes unless it sits in a figure, an
   image link or a text-free paragraph or table cell, or declares a width or
   height of 300 pixels or more; and card thumbnails go while the Markdown
-  still has a text link to the same page. "Read more" or
+  still has a text link to the same page, or, with `links: false`, the words
+  of one or of the image's alt text. "Read more" or
   "3 comments" never names the page, and a label without letters ("$40") or
   with only a date ("Oct 1, 2026") names it only for an image without alt
   text. Any other text does, so in `:page` mode a thumbnail beside a

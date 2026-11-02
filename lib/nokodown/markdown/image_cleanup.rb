@@ -20,7 +20,8 @@ module Nokodown
       LINE_PREFIX = /\A(?: |>|(?:[-*+]|\d+\.) )*/.freeze
 
       # unnamed: also remove the images Inline found to say nothing. links:
-      # false when the Markdown has none to say which titles were kept.
+      # false when the Markdown has none, so its words say which titles were
+      # kept.
       def initialize(images, unnamed: false, links: true)
         @images = images
         @unnamed = unnamed
@@ -31,7 +32,7 @@ module Nokodown
       end
 
       def call(blocks)
-        @linked = linked_pages(blocks) if @links
+        @linked = @links ? linked_pages(blocks) : named_pages(blocks)
         blocks.select do |block|
           if block.kind == :code || !block.text.include?("![")
             @text_lines += 1
@@ -52,6 +53,20 @@ module Nokodown
       def linked_pages(blocks)
         destinations = blocks.reject { |block| block.kind == :code }.flat_map { |block| block.text.scan(DESTINATION).flatten }
         Set.new(destinations.map { |destination| RedundantImages.page(destination) })
+      end
+
+      # Without links, the pages a link text still in the Markdown names, so
+      # a card whose title went with an empty section keeps its image. Words,
+      # not phrases: a card's link can hold a date and a title the Markdown
+      # sets apart, and looking each word up keeps a page of thousands linear.
+      def named_pages(blocks)
+        @words = Set.new(blocks.reject { |block| block.kind == :code }.flat_map { |block| RedundantImages.words(block.text.gsub(IMAGE, " ")) })
+        targets = @images.each_value.flat_map { |image| image.targets.to_a }.uniq
+        Set.new(targets.select { |target| target.labels.any? { |words| said?(words) } }.map(&:page))
+      end
+
+      def said?(words)
+        words.all? { |word| @words.include?(word) }
       end
 
       def without_images(text)
@@ -80,7 +95,7 @@ module Nokodown
       # line. Beside text, as in a table of tick marks, each copy counts.
       def removed_images(line)
         markups = line.scan(IMAGE).select { |markup| @images.key?(markup) }
-        content = markups.reject { |markup| redundant?(@images[markup]) }
+        content = markups.reject { |markup| redundant?(markup) }
         alone = line.gsub(IMAGE) { |markup| @images.key?(markup) ? "" : markup }.match?(BARE_LINE)
         removed = Set.new(markups - content)
         removed.merge(repeats(content)) if alone
@@ -110,10 +125,16 @@ module Nokodown
       end
 
       # A thumbnail goes only while the Markdown still links to its page; a
-      # card whose title link was dropped keeps its image. Without links the
-      # title's text is all there is to go by, and RedundantImages found it.
-      def redundant?(image)
-        (@unnamed && image.unnamed) || (image.redundant && (!@links || image.targets.all? { |target| @linked.include?(target) }))
+      # card whose title link was dropped keeps its image. Without links, a
+      # card's only link can be a "See more" its text no longer holds, so a
+      # thumbnail whose alt the text says goes too.
+      def redundant?(markup)
+        image = @images[markup]
+        return true if @unnamed && image.unnamed
+        return false unless image.redundant
+
+        image.targets.all? { |target| @linked.include?(target.page) } ||
+          (!@links && said?(RedundantImages.words(markup[ALT, 1])))
       end
 
       # Lines left with only markers go. A list item whose first line held

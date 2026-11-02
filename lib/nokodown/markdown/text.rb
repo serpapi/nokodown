@@ -27,6 +27,9 @@ module Nokodown
       DESTINATION = /(?:[^()\s]|\([^()\s]*\))*/.freeze
       LEADING_IMAGES = /\A(?:!\[#{LINK_TEXT}\]\(#{DESTINATION}\)\s*)+/.freeze
       ENCODED_NON_ASCII = /(?:%[89A-F]\h)+/i.freeze
+      # Before anything but ASCII punctuation or a line break a backslash
+      # reads as itself.
+      LITERAL_AFTER_BACKSLASH = /\A[^!-\/:-@\[-`{-~\s]/.freeze
       # Spaces and invisible characters would end or hide the destination.
       UNPRINTABLE = /[\p{Z}\p{C}]/.freeze
 
@@ -45,6 +48,13 @@ module Nokodown
         string = string.gsub(/(?<![\p{L}\p{N}\p{M}\\])_|_(?![\p{L}\p{N}\p{M}])/, "\\\\_")
         string = string.gsub(/\](?=[(\[])/, "\\\\]")
         string.gsub(/<(?=[A-Za-z\/!?])/, "\\\\<")
+      end
+
+      # escape doubled the backslash that ends a text for markup that might
+      # follow; before a letter one reads the same ("C:\Windows"). A longer
+      # run stays as written. Read from the end, so a long text costs no more.
+      def doubled_end?(text, following)
+        text.end_with?("\\\\") && !text.end_with?("\\\\\\") && following.match?(LITERAL_AFTER_BACKSLASH)
       end
 
       # An escaped asterisk or underscore needs its backslash only when another

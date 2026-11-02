@@ -759,7 +759,7 @@ RSpec.describe Nokodown do
       convert(html, links: false).should == "Thread: example.com/showthread.p...\n\nVisit www.example.org today."
     end
 
-    it "keeps brackets as written once their link is gone, and an image whose alt holds brackets" do
+    it "writes a link's text in brackets as the page does, and an image whose alt holds brackets" do
       html = '<p>See <a href="/w/Main">[[Main Page]]</a> now.</p><p><img alt="Chart [Q1](2024)" src="/c.png"></p>'
       convert(html, links: false).should == "See [[Main Page]] now.\n\n![Chart \\[Q1\\](2024)](https://example.com/c.png)"
     end

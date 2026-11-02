@@ -38,6 +38,7 @@ module Nokodown
       WORD_START = /\A[\p{L}\p{N}]/.freeze
       WORD_END = /[\p{L}\p{N}]\z/.freeze
       TAIL_BYTES = 1600
+      BACKSLASH = "\\".ord
       # Link markup, not a bracket of the page's text: "![1]" with no address
       # after it reads as written.
       LINK_START = /\A\[#{Text::LINK_TEXT}\]\(/.freeze
@@ -157,6 +158,7 @@ module Nokodown
       # them with CSS, so their words would run together. Raised and lowered
       # text decides its own spacing.
       def append(out, piece, previous, node)
+        out.chop! if Text.doubled_end?(out, piece)
         out << " " if glued?(previous, piece) && !script?(node)
         # A "!" right before a link would make an image of it, and a "]"
         # right before "(" a link of the text in brackets ("[1](page 4)").
@@ -166,9 +168,17 @@ module Nokodown
       end
 
       # After an odd run of backslashes the last character is escaped
-      # already; after an even one they escape each other.
+      # already; after an even one they escape each other. The run is
+      # counted back from that character: a pattern searched from the front
+      # would try each backslash of it in turn, costing its square. No byte
+      # of a multibyte character is a backslash.
       def ends_bare?(out, char)
-        out.end_with?(char) && tail(out)[/\\*.\z/].length.odd?
+        return false unless out.end_with?(char)
+
+        last = out.bytesize - char.bytesize
+        first = last
+        first -= 1 while first.positive? && out.getbyte(first - 1) == BACKSLASH
+        (last - first).even?
       end
 
       def script?(node)
@@ -394,7 +404,8 @@ module Nokodown
       end
 
       # An image is redundant only if every copy of it is. Targets are the
-      # pages whose text links make its thumbnail copies redundant.
+      # pages, with the words of their links, whose text links make its
+      # thumbnail copies redundant.
       def record(markup, src, node, unnamed)
         image = (@rendered_images[markup] ||= RenderedImage.new(src, true, Set.new, true, false))
         key = Dom.key(node)

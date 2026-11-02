@@ -219,7 +219,7 @@ module Nokodown
           next line unless edits.key?(number)
 
           result = LinkLine.join(@segments[[index, number]], edits[number])
-          result unless LinkLine.bare?(result)
+          result unless LinkLine.bare?(result, line)
         end.join("\n")
       end
     end

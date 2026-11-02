@@ -8,8 +8,9 @@ module Nokodown
     # link with other text says something of its own about the address and
     # keeps it, as does a label the page links to several addresses
     # ("Official site", "More details"): each of its links gives its item's
-    # address. A line left with only symbols goes, as does a block left with
-    # nothing worth reading.
+    # address, and so does a link set against the words beside it, which
+    # only its brackets told apart. A line left with only symbols goes, as
+    # does a block left with nothing worth reading.
     module LinkAddresses
       module_function
 
@@ -20,7 +21,7 @@ module Nokodown
         blocks.zip(lines).filter_map do |block, split|
           next block unless split
 
-          text = split.filter_map { |line, parts, found| found.empty? ? line : unlinked(parts, found, written, labels) }.join("\n")
+          text = split.filter_map { |line, parts, found| found.empty? ? line : unlinked(line, parts, found, written, labels) }.join("\n")
           next block if text == block.text
 
           block.text = text
@@ -51,12 +52,14 @@ module Nokodown
 
       # written: the address and text of each link so far. Nil for a line
       # left with only symbols.
-      def unlinked(parts, found, written, labels)
-        repeats = found.reject { |_, text, destination| labels.include?(key(text)) || written.add?([destination, key(text)]) }
-        return parts.join if repeats.empty?
+      def unlinked(line, parts, found, written, labels)
+        repeats = found.reject do |segment, text, destination|
+          labels.include?(key(text)) || written.add?([destination, key(text)]) || LinkLine.glued?(parts, segment)
+        end
+        return line if repeats.empty?
 
-        line = LinkLine.join(parts, repeats.to_h { |segment, text, _| [segment, text] })
-        line unless LinkLine.bare?(line)
+        result = LinkLine.join(parts, repeats.to_h { |segment, text, _| [segment, text] })
+        result unless LinkLine.bare?(result, line)
       end
 
       def key(text)
