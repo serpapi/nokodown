@@ -18,6 +18,16 @@ module Nokodown
       (?<![\w-])(?:(?:site|global|main|page|app|l|c|o|g)-?)?footer(?:-(?:wrapper|container|inner|main|top|bottom|links|nav|menu))?(?![\w-])
     /x.freeze
 
+    # Fine print. WordPress puts category-* and tag-* terms on the post, and a
+    # modifier ("hasDisclaimer") names the block that has one, not the note.
+    DISCLAIMER = /#{WORD_START}(?<!category-|tag-|has-)(?:disclaimers?|disclosures)#{WORD_END}/.freeze
+
+    # The panel of member details beside each forum post: XenForo
+    # message-user, phpBB postprofile, Invision cAuthorPane, vBulletin
+    # userinfo. The token must end there, so XenForo's post body,
+    # message-userContent, is not one. MemberPanel reduces it to the name.
+    MEMBER_PANEL = /#{WORD_START}(?:postprofile|poster-?info|author-?pane|message-user|user-?(?:info|details|extras|stats))(?![\w-])/.freeze
+
     # Overlays, ads, prompts and widgets that are never part of the content.
     # "ad" may carry a size ("ad300x250") but must not touch other digits:
     # generated hashes such as "elementor-element-38ad5ea" contain it.
@@ -32,6 +42,8 @@ module Nokodown
       popup|pop-up|#{WORD_START}modal#{WORD_END}|interstitial|offcanvas|off-canvas|flyout|snackbar|tooltip|popover|
       #{WORD_START}toast#{WORD_END}|#{WORD_START}drawer#{WORD_END}|
       editsection|#{WORD_START}feedback#{WORD_END}|was-?this-?helpful|intercom|livechat|chat-?widget|
+      #{WORD_START}signature(?![\w-])|#{DISCLAIMER.source}|
+      #{MEMBER_PANEL.source}|
       related|recommend|recirc|read-?next|more-?stories|you-?may-?like|also-?like|
       #{WORD_START}(?:search-?form|search-?box|search-?bar)#{WORD_END}
     /x.freeze
@@ -111,7 +123,7 @@ module Nokodown
         skip\sto\s(?:main\s)?(?:content|navigation)|jump\sto\s(?:main\s)?content|
         share(?:\sthis)?(?:\s(?:article|story|post|page))?|share\son\s\w+|tweet(?:\sthis)?|pin\sit|
         email(?:\sthis)?|print(?:\sthis)?(?:\s(?:article|page))?|
-        loading|back\sto\stop|scroll\sto\stop|copy\slink|link\scopied|copied|
+        loading|loading(?:\s[\p{L}]+){1,2}(?=\s*(?:…|\.{3}))|back\sto\stop|scroll\sto\stop|copy\slink|link\scopied|copied|
         (?:read|view|see|show|load)\s(?:more|less)|continue\sreading|click\sto\sexpand|
         (?:hide|show|toggle)\scaption|enlarge\sthis\simage|
         (?:image|photo|picture|slide)\s\d+\s(?:of|\/)\s\d+|\d*\s?comments?|

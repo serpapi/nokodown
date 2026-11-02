@@ -66,7 +66,7 @@ public API. Other classes are internal and can change in any release.
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
 | `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
-| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
+| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |
 
@@ -80,14 +80,23 @@ with `main_content: false`, `:none` for a document without a body.
   tables of contents, found through HTML semantics (`nav`, page-level `header`
   and `footer`, ARIA roles, schema.org types) and class/id names.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars, modals,
-  chat widgets, "related", "recommended" and "most popular" boxes, and, next
-  to an article, its comment thread.
+  chat widgets, "related", "recommended" and "most popular" boxes, legal
+  disclaimers and disclosures (but not a note continuing the paragraph before
+  it, or the footnote to a mark just above), and, next to an article, its
+  comment thread.
+- On forums, the member panel and signature repeated beside every post. The
+  member panel leaves one line naming the poster, with the post's date when
+  the panel holds it. A quote that repeats a post already in the output is cut
+  to its opening sentence, so the reply still shows what it answers.
 - On product pages, customer reviews and Q&A widgets, with their review
   summaries and rating histograms. An inline rating badge ("212 reviews" next
   to the price), testimonials and editorial reviews stay.
 - Invisible elements (`hidden`, `aria-hidden`, inline `display: none`,
   screen-reader-only and other hiding classes), keeping collapsed accordions,
-  tab panels and FAQ answers.
+  tab panels and FAQ answers. Content that React streams into hidden
+  containers at the end of the page is put back where the page shows it,
+  unless it is mostly links, as carousels of recommended products are.
+- Sections rendered twice, such as a desktop and a mobile copy.
 - Tracking pixels, spacers, icons, placeholders, README badges, click-tracking
   URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,
   "Read more" links, code line numbers, and repeated responsive copies of the

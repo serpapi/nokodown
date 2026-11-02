@@ -14,8 +14,15 @@ module Nokodown
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
+    TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     MIN_CARD_RUN = 3
+    MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
+    # A note continues the prose only after a sentence or more of it, not after a line of links.
+    NOTE_PROSE = 80
+    FOOTNOTE_MARK = /\A[*†‡§]+/.freeze
+    # The word goes with its separators: "footer__disclaimer" without it is "footer", not "footer__".
+    DISCLAIMER_WORD = /[-_]*#{Patterns::DISCLAIMER.source}[-_]*/.freeze
 
     def initialize(body)
       @body = body
@@ -27,10 +34,17 @@ module Nokodown
       @shielded = shielded_keys
       # Card grids repeat the same class list hundreds of times.
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
+      @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
+      @notes = Set.new
       @prose_blocks = Set.new
       @card_classes = card_classes
       @card_bases = @card_classes.map { |classes| base_classes(classes) }
-      walk(@body)
+      removals = []
+      walk(@body, removals)
+      removals.delete(content_guess(removals)) if almost_empty_without?(removals)
+      removals.each { |node, kind| kind == :panel ? MemberPanel.reduce(node) : node.remove }
+      # The lines panels leave are new elements, and later passes measure by key.
+      Dom.assign_keys(@body) if removals.any? { |_, kind| kind == :panel }
     end
 
     private
@@ -43,29 +57,39 @@ module Nokodown
     end
 
     # Code is never furniture, whatever classes its highlighter gives tokens.
-    def walk(node)
+    def walk(node, removals)
       node.element_children.each do |child|
         next if Dom::CODE.include?(child.name)
 
-        if remove?(child)
-          child.remove
-        else
-          walk(child)
-        end
+        kind = removal(child)
+        kind ? removals << [child, kind] : walk(child, removals)
       end
+    end
+
+    def almost_empty_without?(removals)
+      @stats.chars(@body) - removals.sum { |node, _| @stats.chars(node) } < MIN_LEFT
+    end
+
+    def content_guess(removals)
+      guess = removals.select { |_, kind| kind == :guess }.max_by { |node, _| @stats.chars(node) }
+      return unless guess && @stats.chars(guess.first) >= MIN_LEFT
+
+      signature = Dom.signature(guess.first)
+      guess unless signature.match?(Patterns::PLACE) || signature.match?(Patterns::OVERLAY)
     end
 
     # Semantic chrome (nav, a page-level footer) goes even when it outweighs
     # the content, as legal footnotes often do; class-name guesses do not.
-    def remove?(node)
-      return false if @shielded.include?(Dom.key(node))
+    def removal(node)
+      return if @shielded.include?(Dom.key(node))
       # Side notes inside an article are content whatever their class says.
-      return false if node.name == "aside" && !aside_noise?(node)
-      return true if chrome_element?(node) || chrome_role?(node)
-      return false if dominant?(node)
-      return false unless advertising?(node) || chrome_label?(node) || class_noise?(node)
+      return if node.name == "aside" && !aside_noise?(node)
+      return :chrome if chrome_element?(node) || chrome_role?(node)
+      return if dominant?(node)
+      return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
+      return if inside_sentence?(node)
 
-      !inside_sentence?(node)
+      MemberPanel.panel?(node) ? :panel : :guess
     end
 
     # A link or span in the middle of running text is part of that text,
@@ -124,7 +148,43 @@ module Nokodown
     def class_noise?(node)
       return false if !@prose_blocks.empty? && prose_part?(node)
 
-      furniture_class?(node) && (@card_bases.empty? || !card?(node))
+      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node))
+    end
+
+    # Fine print about the site is furniture, but a note on the content right
+    # before it belongs to that content: a paragraph continuing the prose, or
+    # the footnote to a mark in it ("40-46 states*"). Widgets nest the note's
+    # text in an element named like the note.
+    def content_note?(node)
+      return false unless @disclaimer_only[Dom.signature(node)]
+
+      note = @notes.include?(Dom.key(node.parent)) || annotates_previous?(node)
+      @notes << Dom.key(node) if note
+      note
+    end
+
+    def annotates_previous?(node)
+      previous = node.previous_element
+      return false unless previous
+
+      prose_note?(node, previous) || footnote_to?(node, previous)
+    end
+
+    def prose_note?(node, previous)
+      return false unless node.name == "p" && previous.name == "p"
+
+      @stats.text_chars(previous) >= NOTE_PROSE && !@furniture[Dom.signature(previous)]
+    end
+
+    def footnote_to?(node, previous)
+      marks = [node, *node.css("p, li")].map { |line| Dom.text(line)[FOOTNOTE_MARK] }.compact.uniq
+      marks.any? { |mark| previous.content.match?(/[[:alnum:]]#{Regexp.escape(mark)}/) }
+    end
+
+    # Only a signature that is furniture for its disclaimer name alone can be
+    # a note; "ad-disclaimer" or "footer__disclaimer" stays furniture.
+    def disclaimer_only?(signature)
+      signature.match?(Patterns::DISCLAIMER) && !signature.gsub(DISCLAIMER_WORD, " ").match?(Patterns::PAGE_FURNITURE)
     end
 
     def card?(node)
@@ -149,6 +209,7 @@ module Nokodown
       return @stats.link_density(node) > 0.5 if !chrome && signature.match?(Patterns::MENU)
       return false unless chrome
       return false if prose_section?(node, signature)
+      return true if signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE)
 
       !(signature.match?(Patterns::POSITIVE) && @stats.text_chars(node) >= 200)
     end

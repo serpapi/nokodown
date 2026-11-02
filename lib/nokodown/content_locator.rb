@@ -18,6 +18,11 @@ module Nokodown
     REQUIRED_SHARE = { article: 0.15, product: 0.9 }.freeze
     DEFAULT_SHARE = 0.7
 
+    # Sibling sections extend an article whose top candidate holds the share.
+    # When only they reach it, they must hold nearly the whole page: page mode
+    # would keep every band, and article mode drops the bands they leave out.
+    WHOLE_PAGE_SHARE = 0.9
+
     # Page types whose replies are content: forum threads and Q&A pages.
     DISCUSSIONS = %i[forum qa].freeze
 
@@ -58,13 +63,21 @@ module Nokodown
     end
 
     def article?(result, root, stats)
-      article_text = result.nodes.sum { |node| stats.text_chars(node) }
+      required = REQUIRED_SHARE.fetch(@page_type, DEFAULT_SHARE)
+      return true if holds_share?(result.core, root, stats, required)
+      return false if result.nodes.size == result.core.size
+
+      holds_share?(result.nodes, root, stats, [required, WHOLE_PAGE_SHARE].max)
+    end
+
+    def holds_share?(nodes, root, stats, required)
+      article_text = nodes.sum { |node| stats.text_chars(node) }
       return false if article_text < MIN_ARTICLE_CHARS
 
-      page_text = stats.text_chars(root) - secondary_text(root, result.nodes, stats)
+      page_text = stats.text_chars(root) - secondary_text(root, nodes, stats)
       return true if page_text <= 0
 
-      article_text / page_text >= REQUIRED_SHARE.fetch(@page_type, DEFAULT_SHARE)
+      article_text / page_text >= required
     end
 
     # Comment threads and "most popular" rails beside an article do not count

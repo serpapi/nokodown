@@ -647,6 +647,58 @@ RSpec.describe "Markdown conversion" do
       convert("<p>Area #{math}</p>").should == "Area $x^2$"
     end
 
+    it "shortens a quote that repeats an earlier post to its opening sentence, without links" do
+      post = "The stove boils a litre in three minutes on a full canister. It is a bit slower in the cold, " \
+             "and the piezo lighter fails above 3000 metres, so carry matches."
+      html = "<p>#{post}</p><blockquote><p><a href=\"/posts/1\">Sam said:</a></p><p>#{post}</p></blockquote><p>Same here.</p>"
+      convert(html).should ==
+        "#{post}\n\n> Sam said:\n>\n> The stove boils a litre in three minutes on a full canister. …\n\nSame here."
+    end
+
+    it "keeps a short quote of an earlier post whole" do
+      post = "The stove boils a litre in three minutes on a full canister."
+      convert("<p>#{post}</p><p>Sam posted...</p><blockquote><p>#{post}</p></blockquote><p>Mine too.</p>").should ==
+        "#{post}\n\nSam posted...\n\n> #{post}\n\nMine too."
+    end
+
+    it "opens a shortened quote with the quoter's words, not the quote nested in it" do
+      post = "The stove boils a litre in three minutes on a full canister, a bit slower in the cold."
+      reply = "Mine takes four minutes. The wind matters more than the cold, so I always bring a windscreen along."
+      html = "<p>#{post}</p><blockquote><p>#{post}</p></blockquote><p>#{reply}</p>" \
+             "<blockquote><p>Ann wrote:</p><blockquote><p>#{post}</p></blockquote><p>#{reply}</p></blockquote><p>Agreed.</p>"
+      convert(html).should == "#{post}\n\n> #{post}\n\n#{reply}\n\n> Ann wrote:\n>\n> #{reply} …\n\nAgreed."
+    end
+
+    it "closes the bold a shortened quote cuts through" do
+      post = "The stove boils a full litre of water in three minutes on a canister. It is a bit slower in the cold, " \
+             "and the piezo lighter fails above 3000 metres, so carry matches."
+      convert("<p><b>#{post}</b></p><blockquote><p><b>#{post}</b></p></blockquote>").should ==
+        "**#{post}**\n\n> **The stove boils a full litre of water in three minutes on a canister.** …"
+    end
+
+    it "keeps a quote that repeats another quote" do
+      quote = "Tears after the last morning of yoga say it all. The venue was spacious and perfectly located. " \
+              "The food was freshly cooked and the people were wonderful. Thank you so much for a week we will never forget."
+      convert("<blockquote><p>#{quote}</p></blockquote><p>Desert yoga at sunset</p><blockquote><p>#{quote}</p></blockquote>").should ==
+        "> #{quote}\n\nDesert yoga at sunset\n\n> #{quote}"
+    end
+
+    it "keeps a quote of text that is not on the page" do
+      quote = "The tide is the most predictable renewable resource we have, more than wind or sun."
+      convert("<p>Engineers agree.</p><blockquote><p>#{quote}</p></blockquote>").should == "Engineers agree.\n\n> #{quote}"
+    end
+
+    it "drops a section rendered a second time, but keeps a single repeated paragraph" do
+      first = "The stove boils a litre in three minutes on a full canister, and a little slower in cold mountain weather."
+      second = "It weighs 85 grams and folds into its own pot, so it takes almost no room at all in a pack or a bike bag."
+      convert("<div><p>#{first}</p><p>#{second}</p></div><div><p>#{first}</p><p>#{second}</p></div>").should == "#{first}\n\n#{second}"
+      convert("<p>#{first}</p><p>Day two.</p><p>#{first}</p>").should == "#{first}\n\nDay two.\n\n#{first}"
+    end
+
+    it "drops the placeholder a script-loaded widget leaves, and its heading" do
+      convert("<p>Fits a 1 litre pot.</p><h2>Questions &amp; Answers</h2><div>Loading Questions...</div>").should == "Fits a 1 litre pot."
+    end
+
     it "drops a trailing heading left without content" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
     end
