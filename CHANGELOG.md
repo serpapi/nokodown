@@ -17,6 +17,9 @@
 - With `main_content: false`, headings without a section and boilerplate
   lines ("Advertisement", "Share") are kept, so converting a selection of
   headings no longer gives empty Markdown.
+- Extraction is faster on large pages, with the same output: about 30%
+  on Wikipedia's Coffee article (390 to 260 ms on Ruby 2.7) and 20% at the
+  median of WCXB.
 
 ## 0.1.0 (2026-11-02)
 
