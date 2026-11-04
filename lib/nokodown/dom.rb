@@ -33,6 +33,8 @@ module Nokodown
     # a run of unclosed "[" is not rescanned from each one.
     ARBITRARY_VALUE = /\[(?:[^\s\[\]]|\[[^\s\[\]]*+\])*+\]/.freeze
     CSS_MODULE_HASH = /__(?=[\w-]{0,4}[A-Z\d])[\w-]{5}(?![\w-])/.freeze
+    CAMEL_CASE = /(?<=[a-z\d])(?=[A-Z])/.freeze
+    SIGNATURES = :nokodown_signatures
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
@@ -118,7 +120,22 @@ module Nokodown
       id = name_id(node)
       return "" if classes.nil? && id.nil?
 
-      signature_of("#{classes} #{id}")
+      value = "#{classes} #{id}"
+      signatures = Thread.current[SIGNATURES]
+      return signature_of(value) unless signatures
+
+      signatures[value] ||= signature_of(value).freeze
+    end
+
+    # Every stage reads the signatures of the same elements again, and a
+    # page repeats its class lists, so an extraction computes each one once.
+    # The cache lives only as long as the block, so pages share nothing.
+    def caching_signatures
+      outer = Thread.current[SIGNATURES]
+      Thread.current[SIGNATURES] = outer || {}
+      yield
+    ensure
+      Thread.current[SIGNATURES] = outer
     end
 
     # The id as a name for the element; a heading anchor only repeats the heading.
@@ -132,7 +149,7 @@ module Nokodown
       # Generated ids (Webflow "w-node-<uuid>") would otherwise read as words.
       value = value.gsub(UUID, " ") if value.match?(UUID)
       value = value.gsub(CSS_MODULE_HASH, "") if value.include?("__")
-      value = value.gsub(/([a-z\d])([A-Z])/, '\1-\2') if value.match?(/[a-z\d][A-Z]/)
+      value = value.gsub(CAMEL_CASE, "-") if value.match?(CAMEL_CASE)
       value.downcase
     end
 

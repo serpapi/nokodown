@@ -18,6 +18,12 @@ module Nokodown
     end
 
     def call
+      Dom.caching_signatures { extract }
+    end
+
+    private
+
+    def extract
       doc = Nokolexbor::HTML(Charset.utf8(@html.to_s))
       metadata = Metadata.new(doc).to_h
       urls = UrlResolver.new(@url, doc.at_css("base[href]")&.[]("href"))
@@ -31,8 +37,6 @@ module Nokodown
       blocks = with_title(blocks, metadata[:title]) if @title
       result(blocks, metadata, mode)
     end
-
-    private
 
     def render(nodes, mode, urls)
       redundant = redundant_images(nodes, mode, urls)
