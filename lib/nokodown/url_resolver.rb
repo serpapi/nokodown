@@ -63,27 +63,36 @@ module Nokodown
       @base = parse(url)
       href = base_href.to_s.strip
       @base = join(@base, href) || @base if !href.empty? && !href.start_with?("javascript:")
+      # A page links to the same places many times, and content selection
+      # and rendering both resolve every link.
+      @links = {}
+      @images = {}
+      @same_page = {}
     end
 
     def resolve(href)
-      absolute(href) { |uri| clean_link(uri) }
+      @links.fetch(href) { @links[href.dup.freeze] = absolute(href) { |uri| clean_link(uri) }.freeze }
     end
 
     def resolve_image(src)
-      absolute(src) { |uri| clean_image(uri) }
+      @images.fetch(src) { @images[src.dup.freeze] = absolute(src) { |uri| clean_image(uri) }.freeze }
     end
 
     def same_page?(url)
+      @same_page.fetch(url) { @same_page[url.dup.freeze] = page_anchor?(url) }
+    end
+
+    private
+
+    def page_anchor?(url)
       return false unless @base
 
       uri = parse(url)
       return false unless uri
 
       @page ||= strip_fragment(clean_link(@base))
-      uri.fragment && strip_fragment(uri) == @page
+      !uri.fragment.nil? && strip_fragment(uri) == @page
     end
-
-    private
 
     def absolute(href)
       href = href.to_s.strip.delete("\t\n\r")
