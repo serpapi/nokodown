@@ -43,6 +43,9 @@ module Nokodown
     ].freeze
     LAZY_SRCSET = %w[data-srcset data-lazy-srcset data-original-set].freeze
 
+    # Where script-driven links keep their target when they have no href.
+    LINK_TARGETS = %w[data-href data-url data-target-url data-delayed-url data-fallback-url ourl rl-link-href].freeze
+
     # Below this many levels under <body>, elements become plain text. Page
     # analysis and rendering recurse once per level, and a thread's stack
     # (Puma serves requests in threads) runs out after a few hundred; real
@@ -66,6 +69,7 @@ module Nokodown
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
       restore_picture_sources
+      @body.css("a:not([href])").each { |link| restore_link_target(link) }
       @body.css("video, audio").each { |media| keep_playable(media) }
       @body.css(JUNK).each(&:remove)
       @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
@@ -206,6 +210,13 @@ module Nokodown
       return false if src.start_with?("data:image/svg+xml") && src.length > 200
 
       src.length < 300 || img.attribute_nodes.any? { |a| a.name != "src" && a.value.to_s.match?(IMAGE_URL) }
+    end
+
+    # Every later step reads href. A template placeholder ("{url}") is no
+    # target.
+    def restore_link_target(link)
+      target = LINK_TARGETS.lazy.map { |name| link[name].to_s.strip }.find { |value| !value.empty? }
+      link["href"] = target if target && !target.match?(/[{}]/)
     end
 
     # A player is kept as an empty element with the file it plays, for the

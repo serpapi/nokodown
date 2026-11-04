@@ -8,6 +8,8 @@
 - Native `<video>` and `<audio>` players become links to the file they play,
   labelled with their title. Muted videos (autoplaying backgrounds) and
   players inside a link are skipped.
+- Links without `href` take their target from `data-href`, `data-url` and
+  the other attributes scripts keep it in.
 
 ## 0.1.0 (2026-11-02)
 

@@ -106,6 +106,16 @@ RSpec.describe "Markdown conversion" do
         "[Guide](https://example.com/guide) and [about](https://example.com/about)"
     end
 
+    it "takes the target of a link without href from its data attributes" do
+      convert('<p>Visit <a data-href="/article">Article</a>.</p>').should == "Visit [Article](https://example.com/article)."
+      convert('<p><a data-url="" ourl="/fallback">Fallback</a></p>').should == "[Fallback](https://example.com/fallback)"
+      convert('<p><a href="/real" data-href="/other">Real</a></p>').should == "[Real](https://example.com/real)"
+    end
+
+    it "keeps only the text of data attribute targets that are templates or scripts" do
+      convert('<p><a data-href="mailto:?subject={title}">Mail</a> <a data-href="javascript:share()">Share</a></p>').should == "Mail Share"
+    end
+
     it "strips click-tracking parameters" do
       convert('<p><a href="https://shop.example/p?id=7&utm_source=mail&gclid=abc">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
       convert('<p><a href="https://shop.example/p?id=7&_ga=2.1.2-3&srsltid=AfmBOx">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
