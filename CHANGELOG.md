@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Elements nested more than 64 levels below `<body>` are converted as plain
+  text, so deeply nested markup no longer raises `SystemStackError`, also
+  inside a thread with its smaller stack.
+
 ## 0.1.0 (2026-11-02)
 
 First release.

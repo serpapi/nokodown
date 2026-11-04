@@ -7,7 +7,6 @@ module Nokodown
     # Turns DOM nodes into Markdown blocks. Runs of inline content become
     # paragraphs; block elements are rendered by tag.
     class Renderer
-      MAX_DEPTH = 400
       SEPARATOR_LINE = /\A\s*([-=_*~])\1{2,}\s*\z/.freeze
       GLYPHS = "•·▪◦‣►▶▸➤→■●○"
       # A run of glyphs (●●●○○) is a rating, not a bullet.
@@ -19,7 +18,6 @@ module Nokodown
       def initialize(urls, images: true, links: true, redundant_images: {})
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
         @links = links
-        @depth = 0
         @contains_block = {}
       end
 
@@ -81,18 +79,9 @@ module Nokodown
 
       private
 
+      # Rendering recurses once per level of nesting, which Preprocessor
+      # bounds by flattening deeper elements into text.
       def block(node)
-        return paragraphs([node]) if @depth > MAX_DEPTH
-
-        @depth += 1
-        begin
-          render_block(node)
-        ensure
-          @depth -= 1
-        end
-      end
-
-      def render_block(node)
         case node.name
         when "h1", "h2", "h3", "h4", "h5", "h6" then heading(node)
         when "ul", "ol", "menu", "dir" then list(node)

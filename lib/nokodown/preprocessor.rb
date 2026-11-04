@@ -43,6 +43,19 @@ module Nokodown
     ].freeze
     LAZY_SRCSET = %w[data-srcset data-lazy-srcset data-original-set].freeze
 
+    # Below this many levels under <body>, elements become plain text. Page
+    # analysis and rendering recurse once per level, and a thread's stack
+    # (Puma serves requests in threads) runs out after a few hundred; real
+    # pages nest about 20 levels deep, rarely more than 50.
+    MAX_DEPTH = 64
+
+    # Elements whose renderer reads only certain children, and the wrapper
+    # their flattened text needs so it is not dropped.
+    TEXT_WRAPPERS = {
+      "table" => %w[tr td], "thead" => %w[tr td], "tbody" => %w[tr td], "tfoot" => %w[tr td],
+      "tr" => %w[td], "dl" => %w[dd]
+    }.freeze
+
     def initialize(body)
       @body = body
     end
@@ -58,6 +71,7 @@ module Nokodown
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
       remove_form_controls
+      flatten_deep_elements
       HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
     end
@@ -292,6 +306,56 @@ module Nokodown
         form.css("input").any? { |i| %w[search email password].include?(i["type"].to_s.downcase) } ||
         form["action"].to_s.match?(/search|subscribe|newsletter|login|sign-?in|sign-?up/i) ||
         Dom.signature(form).match?(Patterns::NOISE)
+    end
+
+    # Runs last, so the text kept is only what would have been rendered, the
+    # content of <noscript> included.
+    def flatten_deep_elements
+      @body.xpath(".#{'/*' * MAX_DEPTH}[*]").each do |node|
+        text = @body.document.create_text_node(flat_text(node))
+        node.children.remove
+        text_wrappers(node).reverse_each { |name| text = wrap(name, text) }
+        node.add_child(text)
+      end
+    end
+
+    # Text of every descendant, without recursion. Block boundaries and <br>
+    # become line breaks, so words stay apart; <pre> keeps them as lines.
+    def flat_text(node)
+      text = +""
+      pending = node.children.to_a.reverse
+      until pending.empty?
+        current = pending.pop
+        if current.is_a?(String)
+          text << current
+        elsif current.text? || current.cdata?
+          text << current.content
+        elsif current.name == "br"
+          text << "\n"
+        elsif current.element?
+          boundary = Dom::BLOCK.include?(current.name)
+          text << "\n" if boundary
+          pending << "\n" if boundary
+          pending.concat(current.children.to_a.reverse)
+        end
+      end
+      text
+    end
+
+    # A <div> in a <dl> is read for its <dt>s and <dd>s, like the <dl>.
+    def text_wrappers(node)
+      return TEXT_WRAPPERS[node.name] if TEXT_WRAPPERS.key?(node.name)
+      return [] unless node.name == "div"
+
+      parent = node.parent
+      parent = parent.parent while parent&.name == "div"
+      parent&.name == "dl" ? %w[dd] : []
+    end
+
+    def wrap(name, child)
+      element = @body.document.create_element(name)
+      element.add_child(child)
+      element
     end
 
     # Accordion triggers usually carry the question text of an FAQ.

@@ -469,6 +469,48 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "deeply nested markup" do
+    # Puma serves requests in threads, whose stack is much smaller than the
+    # main thread's.
+    def in_thread(&block)
+      Thread.new(&block).value
+    end
+
+    {
+      "blocks" => "<p>Visible</p>#{'<div>' * 3000}Deep#{'</div>' * 3000}",
+      "inline elements" => "<p>Visible #{'<span>' * 3000}Deep#{'</span>' * 3000}</p>",
+      "lists" => "<p>Visible</p>#{'<ul><li>' * 1500}Deep#{'</li></ul>' * 1500}",
+      "links and emphasis" => "<p>Visible</p>#{'<a href="/x"><strong>' * 1500}Deep#{'</strong></a>' * 1500}",
+      "tables" => "<p>Visible</p>#{'<table><tr><td>' * 1000}Deep#{'</td></tr></table>' * 1000}",
+      "noscript content" => "<p>Hi</p><noscript><p>Visible #{'word ' * 100}</p>#{'<div>' * 3000}Deep#{'</div>' * 3000}</noscript>"
+    }.each do |shape, html|
+      it "renders #{shape} 3000 levels deep inside a thread" do
+        [true, false].each do |main_content|
+          in_thread { Nokodown.to_markdown(html, url: "https://example.com/", main_content: main_content) }.should include("Visible", "Deep")
+        end
+      end
+    end
+
+    it "renders 10,000 levels on the main thread" do
+      html = "<body>#{%(<div onclick="alert('deep')">) * 10_000}deep#{'</div>' * 10_000}</body>"
+
+      Nokodown.to_markdown(html).should == "deep"
+      Nokodown.to_markdown(("<div>" * 4000) + "leaf" + ("</div>" * 4000)).should == "leaf"
+    end
+
+    it "keeps the words of flattened elements apart" do
+      html = "#{'<div>' * 100}<p>One</p><p>Two<br>Three</p><span>Four</span>#{'</div>' * 100}"
+
+      convert(html).should == "One Two Three Four"
+    end
+
+    it "leaves the nesting of real pages alone" do
+      html = "#{'<div>' * 60}<h2>Title</h2><p>Some <em>text</em></p>#{'</div>' * 60}"
+
+      convert(html).should == "## Title\n\nSome *text*"
+    end
+  end
+
   describe "encodings" do
     it "transcodes binary input using the declared charset" do
       html = "<html><head><meta charset=\"windows-1252\"></head><body><p>caf\xE9</p></body></html>".b

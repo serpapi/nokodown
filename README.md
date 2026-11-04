@@ -126,7 +126,8 @@ region, or most of the page's text, is never removed because of its class name.
 2. **Metadata**: JSON-LD, Open Graph and other `<meta>` tags, then the
    document, in Readability's order of preference.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
-   `<noscript>` copies), drop scripts, invisible elements and form controls.
+   `<noscript>` copies), drop scripts, invisible elements and form controls,
+   and turn elements nested more than 64 levels deep into plain text.
 4. **Boilerplate**: remove page chrome and noise widgets across the whole page.
 5. **ContentLocator**: score paragraphs with Readability's algorithm. When one
    candidate holds most of the page's prose the content is narrowed to it
