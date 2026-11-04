@@ -83,7 +83,10 @@ module Nokodown
       !post.nil? && @text.length >= post_length(post) * POST_BODY_SHARE
     end
 
+    # Native players the preprocessor kept play a file, so they are content.
     def video_embed?
+      return true if @node.at_css("video, audio")
+
       @node.css("object, embed, iframe").any? do |embed|
         embed.attribute_nodes.any? { |attribute| attribute.value.to_s.match?(Preprocessor::VIDEO_HOSTS) }
       end

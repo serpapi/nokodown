@@ -7,7 +7,7 @@ module Nokodown
   class Preprocessor
     JUNK = %w[
       script style noscript template link meta base object embed applet param canvas map area svg
-      source track audio video dialog select option optgroup datalist textarea output progress meter
+      source track dialog select option optgroup datalist textarea output progress meter
       keygen frame frameset portal slot
     ].join(",").freeze
 
@@ -66,6 +66,7 @@ module Nokodown
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
       restore_picture_sources
+      @body.css("video, audio").each { |media| keep_playable(media) }
       @body.css(JUNK).each(&:remove)
       @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
@@ -205,6 +206,19 @@ module Nokodown
       return false if src.start_with?("data:image/svg+xml") && src.length > 200
 
       src.length < 300 || img.attribute_nodes.any? { |a| a.name != "src" && a.value.to_s.match?(IMAGE_URL) }
+    end
+
+    # A player is kept as an empty element with the file it plays, for the
+    # renderer to link to. Muted videos are autoplaying backgrounds, and one
+    # inside a link is a preview of the page it links to; neither is content.
+    # Blob URLs exist only in the browser that made them.
+    def keep_playable(media)
+      sources = [media["src"]] + media.css("source").map { |source| source["src"] }
+      src = sources.map { |value| value.to_s.strip }.find { |value| !value.empty? && !value.match?(/\A(?:blob|data):/i) }
+      return media.remove if src.nil? || media.key?("muted") || Dom.ancestors_named(media, "a").any?
+
+      media.children.remove
+      media["src"] = src
     end
 
     def restore_picture_sources

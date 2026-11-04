@@ -99,6 +99,7 @@ module Nokodown
         when "wbr" then ""
         when "a" then link(node)
         when "img" then image(node)
+        when "video", "audio" then media(node)
         when "q" then "\"#{render(node.children)}\""
         when "math" then math(node)
         when "sup", "sub" then script(node)
@@ -187,6 +188,16 @@ module Nokodown
 
         @link_images << markup
         ""
+      end
+
+      # Players link to the file they play, labelled with their title. Every
+      # bracket and backslash in it is escaped, so no title can end the label.
+      def media(node)
+        url = link_url(node["src"].to_s)
+        return "" if url.nil? || !@links || @in_link
+
+        title = Dom.squish(node["title"].to_s).gsub(/[\\\[\]]/) { |character| "\\#{character}" }
+        "[#{title.empty? ? node.name.capitalize : title}](#{Text.destination(url)})"
       end
 
       # An image is redundant only if every copy of it is. Targets are the

@@ -642,6 +642,32 @@ RSpec.describe "Markdown conversion" do
         "[Demo video](https://www.youtube.com/watch?v=dQw4w9WgXcQ)"
     end
 
+    it "links native video and audio players to the file they play" do
+      html = '<p>Clip:</p><video controls src="/clip.mp4" title="Demo clip"></video>' \
+             '<video controls><source src="/b.webm">Your browser does not support video.</video>' \
+             '<audio controls src="/a.mp3"></audio>'
+      convert(html).should == "Clip:\n\n[Demo clip](https://example.com/clip.mp4)\n\n[Video](https://example.com/b.webm)\n\n" \
+                              "[Audio](https://example.com/a.mp3)"
+    end
+
+    it "escapes the title of a player" do
+      convert('<p>Listen: <span><audio controls src="/ep.mp3" title="Episode 1] \\ Live"></audio></span> now</p>').should ==
+        "Listen:\n\n[Episode 1\\] \\\\ Live](https://example.com/ep.mp3)\n\nnow"
+    end
+
+    it "skips muted background videos, previews inside a link and players without a file" do
+      html = '<p>Hero</p><video autoplay muted loop src="/loop.mp4"></video>' \
+             '<a href="/watch"><video src="/preview.mp4"></video>Watch</a><video src="blob:https://example.com/1"></video><audio controls></audio>'
+      convert(html).should == "Hero\n\n[Watch](https://example.com/watch)"
+    end
+
+    it "keeps a player in the main content" do
+      prose = "<p>#{'Tidal lagoons hold water behind a wall at high tide, then release it through turbines. ' * 4}</p>"
+      html = "<article><h1>Lagoon</h1>#{prose}<div class='media'><video controls src='/clip.mp4'></video></div>#{prose}</article>"
+
+      Nokodown.to_markdown(html, url: "https://example.com/", title: false).should include("\n\n[Video](https://example.com/clip.mp4)\n\n")
+    end
+
     it "uses the TeX source of MathML" do
       math = '<math><semantics><mi>x</mi><annotation encoding="application/x-tex">x^2</annotation></semantics></math>'
       convert("<p>Area #{math}</p>").should == "Area $x^2$"

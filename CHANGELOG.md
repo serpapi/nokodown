@@ -5,6 +5,9 @@
 - Elements nested more than 64 levels below `<body>` are converted as plain
   text, so deeply nested markup no longer raises `SystemStackError`, also
   inside a thread with its smaller stack.
+- Native `<video>` and `<audio>` players become links to the file they play,
+  labelled with their title. Muted videos (autoplaying backgrounds) and
+  players inside a link are skipped.
 
 ## 0.1.0 (2026-11-02)
 

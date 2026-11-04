@@ -14,6 +14,8 @@ module Nokodown
       # Any symbols before a space can be an item's marker (+ and - in pros
       # and cons, ✓ and ✗), not only the glyphs that are stripped.
       LEADING_SYMBOLS = /\A[^\p{L}\p{N}\s]+(?=\s)/.freeze
+      # Native players, each a link of its own.
+      MEDIA = Set.new(%w[video audio]).freeze
 
       def initialize(urls, images: true, links: true, redundant_images: {})
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
@@ -62,7 +64,7 @@ module Nokodown
 
       def block_level?(node)
         return false unless node.element?
-        return true if Dom::BLOCK.include?(node.name)
+        return true if Dom::BLOCK.include?(node.name) || MEDIA.include?(node.name)
         return CodeBlock.standalone?(node) if node.name == "code"
 
         contains_block?(node)
@@ -72,7 +74,9 @@ module Nokodown
         key = Dom.key(node)
         return @contains_block[key] if key && @contains_block.key?(key)
 
-        found = node.element_children.any? { |child| Dom::BLOCK.include?(child.name) || contains_block?(child) }
+        found = node.element_children.any? do |child|
+          Dom::BLOCK.include?(child.name) || MEDIA.include?(child.name) || contains_block?(child)
+        end
         @contains_block[key] = found if key
         found
       end
@@ -93,6 +97,7 @@ module Nokodown
         when "dl" then definition_list(node)
         when "hr" then [Block.new(:rule, "---")]
         when "iframe" then embed(node)
+        when "video", "audio" then paragraphs([node])
         when "summary" then summary(node)
         when "a" then linked_blocks(node)
         else children_blocks(node)
