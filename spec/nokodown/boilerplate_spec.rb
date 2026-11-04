@@ -68,6 +68,29 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "furniture class names" do
+    it "finds a furniture name anywhere in a class list" do
+      html = <<~HTML
+        <p>Heat pumps move heat instead of making it.</p>
+        <div class="col-md-4 js-sticky siteSidebar">Our showroom</div>
+        <div class="grid w-full" id="cookie-banner-root">We use cookies</div>
+      HTML
+
+      remaining(html).should == "Heat pumps move heat instead of making it."
+    end
+
+    # Boilerplate matches and caches each class name on its own, which only
+    # gives the same answer as matching the whole list while no pattern can
+    # match across the space between two names.
+    it "has no pattern that matches across class names" do
+      pattern = Nokodown::Patterns::PAGE_FURNITURE
+      pattern.source.should_not match(/\\[sSWDhH ]|\[\^|(?<!\\)\./)
+      ["sign up", "follow us", "ad slot", "site footer", "was this helpful", "table of contents"].each do |names|
+        names.match?(pattern).should == names.split.any? { |name| name.match?(pattern) }
+      end
+    end
+  end
+
   describe "sections named like furniture" do
     let(:article) { "<h1>Choosing a heat pump</h1>#{prose('Sizing', 6)}" }
 

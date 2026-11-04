@@ -35,8 +35,11 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
-      # Card grids repeat the same class list hundreds of times.
-      @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
+      # Card grids repeat the same class list hundreds of times, and class
+      # names repeat across lists. No furniture pattern spans a space, so a
+      # list is furniture when one of its names is.
+      @furniture_tokens = Hash.new { |cache, token| cache[token] = token.match?(Patterns::PAGE_FURNITURE) }
+      @furniture = Hash.new { |cache, signature| cache[signature] = signature.split.any? { |token| @furniture_tokens[token] } }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
       @signature_only = Hash.new { |cache, signature| cache[signature] = signature_only?(signature) }
       @notes = Set.new
@@ -240,7 +243,7 @@ module Nokodown
       return false if signature.match?(Patterns::PLACE) || signature.gsub(DRAWER, " ").match?(Patterns::NOISE)
       return false if node.css("p").size < 2
 
-      @prose_blocks.merge(node["class"].to_s.split.select { |token| token.downcase.match?(Patterns::PAGE_FURNITURE) })
+      @prose_blocks.merge(node["class"].to_s.split.select { |token| @furniture_tokens[token.downcase] })
       true
     end
 
