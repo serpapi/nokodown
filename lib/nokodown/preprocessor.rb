@@ -52,6 +52,7 @@ module Nokodown
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
       remove_form_controls
+      HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
     end
 

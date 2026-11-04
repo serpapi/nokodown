@@ -17,10 +17,11 @@ module Nokodown
     end
 
     # Conditional cleaning deletes whatever weighs negative, so it ignores CSS
-    # utility tokens. Candidate scoring keeps Readability's weight, which some
-    # pages need to pick the right candidate.
+    # utility tokens and heading anchors ("media" in "h-social-media-tips").
+    # Candidate scoring keeps Readability's weight, which some pages need to
+    # pick the right candidate.
     def self.cleaning_weight(node)
-      [node["class"], node["id"]].sum do |value|
+      [node["class"], Dom.name_id(node)].sum do |value|
         tokens = value.to_s.downcase.split.reject { |token| utility_class?(token) }
         words_weight(tokens.join(" "))
       end

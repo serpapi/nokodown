@@ -84,6 +84,38 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "ids made from a heading's text" do
+    let(:article) { "<h1>Selling on social media</h1>#{prose('Social selling', 4)}" }
+
+    it "keeps headings and sections whose id is their heading's anchor" do
+      html = <<~HTML
+        #{article}
+        <h2 class="wp-block-heading" id="h-what-is-social-shopping">What is social shopping?</h2>#{prose('Social shopping', 1)}
+        <h3 id="sponsorship-deals-2">Sponsorship deals</h3>#{prose('Sponsorship', 1)}
+        <section id="cookies"><h2>Cookies<a href="#cookies">¶</a></h2>#{prose('Reading cookies', 1)}</section>
+      HTML
+
+      text = remaining(html)
+      text.should include("What is social shopping?")
+      text.should include("Sponsorship deals")
+      text.should include("Reading cookies is explained")
+    end
+
+    it "still removes junk labels, ids that are not anchors and furniture classes" do
+      html = <<~HTML
+        #{article}
+        <h2 id="related-posts">Related posts</h2>
+        <section id="share-this-article"><h3>Share this article</h3><a href="/share">Copy link</a></section>
+        <section id="related-articles"><h2>Related articles<a href="#related-articles">¶</a></h2><a href="/older">Older story</a></section>
+        <h3 id="social-links">Follow our journey</h3>
+        <h2 class="social-title" id="h-social-media-tips">Social media tips</h2>
+      HTML
+
+      text = remaining(html)
+      %w[Related Share Older Follow tips].each { |word| text.should_not include(word) }
+    end
+  end
+
   describe "repeated modules" do
     def cards(classes, count)
       Array.new(count) do |index|
