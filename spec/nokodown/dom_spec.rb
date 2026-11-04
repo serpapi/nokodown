@@ -5,6 +5,37 @@ RSpec.describe Nokodown::Dom do
     Nokolexbor::HTML("<div #{attributes}></div>").at_css("div")
   end
 
+  describe ".paragraph_keys" do
+    def keyed(html)
+      body = Nokolexbor::HTML("<body>#{html}</body>").at_css("body")
+      described_class.assign_keys(body)
+      body
+    end
+
+    def paragraphs(body, root = body)
+      keys = described_class.paragraph_keys(root)
+      body.css("[id]").select { |node| keys.include?(described_class.key(node)) }.map { |node| node["id"] }
+    end
+
+    it "finds paragraphs and the divs without block children Readability rewrites into them" do
+      body = keyed(<<~HTML)
+        <div id="outer"><div id="text">Plain <b>text</b></div><p id="para">Para <span>graph</span></p>
+        <div id="list"><ul><li>Item</li></ul></div><div id="picture"><span><img src="a.jpg"></span></div><section id="section">Text</section></div>
+      HTML
+
+      paragraphs(body).should == %w[text para]
+      paragraphs(body, body.at_css("#text")).should == %w[text]
+    end
+
+    # Lexbor copies a link that is cut by a block into several elements that
+    # share one attribute list, so the copies share a key too.
+    it "does not take a div with a block in a misnested link for a paragraph" do
+      body = keyed('<div id="wrapper"><a href="/cart"><div>Offer</div><footer><span>Sale</span></a></footer></div>')
+
+      paragraphs(body).should == []
+    end
+  end
+
   describe ".ancestors_named" do
     it "lists the ancestors with the given names, nearest first" do
       doc = Nokolexbor::HTML("<table><tr><td><div><p><b>Cell</b></p></div></td></tr></table>")

@@ -14,6 +14,7 @@ module Nokodown
 
     # Elements that stop Readability from treating a div as a paragraph.
     PARAGRAPH_BREAKERS = Set.new(%w[blockquote dl div img ol p pre table ul]).freeze
+    PARAGRAPH_BREAKER_SELECTOR = PARAGRAPH_BREAKERS.to_a.join(", ").freeze
 
     CODE = %w[pre code].freeze
 
@@ -70,18 +71,26 @@ module Nokodown
     end
 
     # Keys of the <p>s and of the divs Readability would rewrite into <p>
-    # (no block-level descendants), found in one bottom-up pass.
+    # (no block-level descendants). Breakers are rare, so marking their
+    # ancestors is much faster than visiting every node. The walk cannot stop
+    # at an ancestor already marked: the copies Lexbor makes of a misnested
+    # <a> or <b> share one attribute list, so two elements can share a key.
     def paragraph_keys(root)
-      keys = Set.new
-      breaks = {}
-      root.traverse do |node|
-        next unless node.element?
-
-        key = key(node)
-        breaks[key] = node.element_children.any? { |child| PARAGRAPH_BREAKERS.include?(child.name) || breaks[key(child)] }
-        keys << key if node.name == "p" || (node.name == "div" && !breaks[key])
+      broken = Set.new
+      root.css(PARAGRAPH_BREAKER_SELECTOR).each do |breaker|
+        ancestor = breaker.parent
+        while ancestor&.element?
+          broken << key(ancestor)
+          ancestor = ancestor.parent
+        end
       end
-      keys
+
+      candidates = root.css("p, div").to_a
+      candidates << root if root.name == "p" || root.name == "div"
+      candidates.each_with_object(Set.new) do |node, keys|
+        key = key(node)
+        keys << key if node.name == "p" || !broken.include?(key)
+      end
     end
 
     # Nokolexbor answers ancestors(selector) by running CSS matching per
