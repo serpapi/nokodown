@@ -5,6 +5,23 @@ RSpec.describe Nokodown::Dom do
     Nokolexbor::HTML("<div #{attributes}></div>").at_css("div")
   end
 
+  describe ".ancestors_named" do
+    it "lists the ancestors with the given names, nearest first" do
+      doc = Nokolexbor::HTML("<table><tr><td><div><p><b>Cell</b></p></div></td></tr></table>")
+
+      described_class.ancestors_named(doc.at_css("b"), "td", "p", "table").map(&:name).should == %w[p td table]
+      described_class.ancestors_named(doc.at_css("b"), "figure").should == []
+    end
+
+    it "climbs out of a copy or a fragment without failing" do
+      doc = Nokolexbor::HTML("<figure><p><b>Cell</b></p></figure>")
+      copy = doc.at_css("p").dup
+
+      described_class.ancestors_named(copy.at_css("b"), "p", "figure").map(&:name).should == %w[p]
+      described_class.ancestors_named(doc.fragment("<i><b>x</b></i>").at_css("b"), "i").map(&:name).should == %w[i]
+    end
+  end
+
   describe ".signature" do
     it "lowercases class and id and splits camelCase" do
       described_class.signature(element('class="adContainer siteNav2Bar" id="mainHeader"')).should ==

@@ -84,9 +84,16 @@ module Nokodown
     end
 
     # Nokolexbor answers ancestors(selector) by running CSS matching per
-    # ancestor, which dominated extraction time; compare tag names instead.
+    # ancestor, which dominated extraction time, and builds a NodeSet of
+    # every ancestor even without one; walk up and compare tag names instead.
     def ancestors_named(node, *names)
-      node.ancestors.select { |ancestor| ancestor.element? && names.include?(ancestor.name) }
+      found = []
+      ancestor = node.parent
+      while ancestor
+        found << ancestor if ancestor.element? && names.include?(ancestor.name)
+        ancestor = ancestor.parent
+      end
+      found
     end
 
     # Syntax highlighters wrap tokens in spans whose class ("token comment",
