@@ -23,6 +23,7 @@ module Nokodown
     # Every character [[:space:]] matches. tr/squeeze is several times faster
     # than a regex gsub on large subtrees.
     UNICODE_SPACES = "\t\n\v\f\r\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000"
+    ASCII_SPACES = "\t\n\v\f\r"
 
     # Nokolexbor returns a new Ruby object every time a node is read, so nodes
     # cannot be hash keys. Elements get a numbered attribute to key on instead.
@@ -119,7 +120,12 @@ module Nokodown
     end
 
     def squish(string)
-      string.tr(UNICODE_SPACES, " ").squeeze(" ").strip
+      spaces_to_blanks(string).squeeze(" ").strip
+    end
+
+    # Most text is ASCII, where a shorter tr table is twice as fast.
+    def spaces_to_blanks(string)
+      string.ascii_only? ? string.tr(ASCII_SPACES, " ") : string.tr(UNICODE_SPACES, " ")
     end
 
     def signature(node)

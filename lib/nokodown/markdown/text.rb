@@ -5,15 +5,20 @@ module Nokodown
     # Escaping and whitespace rules. Escapes only what would otherwise change
     # meaning, so prose stays free of backslashes.
     module Text
-      INVISIBLE = /[\u00AD\u200B\u2060\uFEFF]/.freeze
+      INVISIBLE = "\u00AD\u200B\u2060\uFEFF"
+      # Every character escape may change; most text has none.
+      ESCAPABLE = /[\\`*_\]<]/.freeze
 
       module_function
 
       def collapse(string)
-        string.gsub(INVISIBLE, "").tr(Dom::UNICODE_SPACES, " ").squeeze(" ")
+        string = string.delete(INVISIBLE) unless string.ascii_only?
+        Dom.spaces_to_blanks(string).squeeze(" ")
       end
 
       def escape(string)
+        return string unless string.match?(ESCAPABLE)
+
         string = string.gsub(/\\(?=[!-\/:-@\[-`{-~])/, "\\\\\\\\")
         string = string.gsub("`", "\\\\`")
         string = string.gsub(/(?<!\s)\*|\*(?!\s)/, "\\\\*")

@@ -6,12 +6,21 @@ RSpec.describe "Markdown conversion" do
       convert("<p>  one\n   two  three  </p>").should == "one two three"
     end
 
+    it "collapses Unicode spaces and drops invisible characters, in ASCII and non-ASCII text" do
+      convert("<p>one\ttwo\r\nthree</p><p>caf\u00E9\u00A0au\u3000lait, co\u00ADoperate, zero\u200Bwidth</p>").should ==
+        "one two three\n\ncaf\u00E9 au lait, cooperate, zerowidth"
+    end
+
     it "splits paragraphs on a double <br>" do
       convert("<div>first line<br>second line<br><br>next paragraph</div>").should == "first line\nsecond line\n\nnext paragraph"
     end
 
     it "escapes only characters that would change the meaning" do
       convert("<p>snake_case, 5 * 3, *starred*, `tick`, <b>bold</b></p>").should == "snake_case, 5 * 3, \\*starred\\*, \\`tick\\`, **bold**"
+    end
+
+    it "escapes brackets, angle brackets, backslashes and lone underscores" do
+      convert("<p>[a](b) &lt;b&gt; C:\\* _x_ plain text</p>").should == "[a\\](b) \\<b> C:\\\\\\* \\_x\\_ plain text"
     end
 
     it "escapes text that would start a heading or a quote" do
