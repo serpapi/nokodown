@@ -41,6 +41,9 @@ module Nokodown
       data-src data-lazy-src data-original data-lazy data-url data-hi-res-src data-full-src
       data-large-src data-orig-src data-actualsrc data-echo data-img-src data-image
     ].freeze
+    # The ones that only ever hold the image a loader swaps in, so they win
+    # over any src: a placeholder, a spacer or a low-quality thumbnail.
+    LAZY_ONLY_SRC = (LAZY_SRC - %w[data-url data-echo data-img-src data-image]).freeze
     LAZY_SRCSET = %w[data-srcset data-lazy-srcset data-original-set].freeze
 
     # Where script-driven links keep their target when they have no href.
@@ -176,18 +179,35 @@ module Nokodown
       !src.empty? && ["src", *LAZY_SRC].any? { |name| img[name].to_s.strip == src }
     end
 
+    # Loaders mark their images with a "lazy" class or with nothing but the
+    # attribute, so an attribute that only loaders use wins over any src: a
+    # spacer, a placeholder or a low-quality thumbnail. Generic names such as
+    # data-url and data-image count only on a marked image.
     def restore_lazy_image(img)
       img.remove_attribute("src") if placeholder_src?(img)
-      return if img["src"] && !img["class"].to_s.downcase.include?("lazy")
+      return restore_unmarked_image(img) if img["src"] && !img["class"].to_s.downcase.include?("lazy")
 
       copy_first_attribute(img, LAZY_SRC, "src")
       copy_first_attribute(img, LAZY_SRCSET, "srcset")
       restore_from_any_attribute(img) unless img["src"] || img["srcset"]
     end
 
+    def restore_unmarked_image(img)
+      source = LAZY_ONLY_SRC.map { |name| img[name].to_s.strip }.find { |value| image_location?(value) }
+      img["src"] = source if source
+    end
+
     def copy_first_attribute(img, names, target)
       value = names.map { |name| img[name].to_s.strip }.find { |v| !v.empty? && !v.start_with?("data:") }
       img[target] = value if value
+    end
+
+    # A path or a web URL, as opposed to "false", an ID or a caption.
+    def image_location?(value)
+      return false if value.empty? || value.match?(/[\s{}<>]/)
+      return true if value.match?(%r{\A(?:https?:)?//}i)
+
+      !value.match?(/\A[a-z][a-z\d+.-]*:/i) && (value.include?("/") || value.match?(IMAGE_URL))
     end
 
     def restore_from_any_attribute(img)
@@ -203,10 +223,11 @@ module Nokodown
       end
     end
 
-    # Tiny base64 GIF/PNG stand-ins that a lazy loader swaps out.
+    # Tiny base64 GIF/PNG stand-ins that a lazy loader swaps out, and
+    # spacer and placeholder files.
     def placeholder_src?(img)
       src = img["src"].to_s.strip
-      return false unless src.start_with?("data:")
+      return src.match?(Markdown::Image::TRACKING) unless src.start_with?("data:")
       return false if src.start_with?("data:image/svg+xml") && src.length > 200
 
       src.length < 300 || img.attribute_nodes.any? { |a| a.name != "src" && a.value.to_s.match?(IMAGE_URL) }

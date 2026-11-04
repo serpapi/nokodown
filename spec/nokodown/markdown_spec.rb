@@ -211,6 +211,18 @@ RSpec.describe "Markdown conversion" do
       convert('<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/real.jpg" alt="Real">').should == "![Real](https://example.com/real.jpg)"
     end
 
+    it "uses lazy-loading attributes over a placeholder or thumbnail src without a lazy class" do
+      convert('<p>Visible</p><img data-src="/real.jpg" src="/placeholder.gif" alt="Lazy">').should == "Visible\n\n![Lazy](https://example.com/real.jpg)"
+      convert('<p>Visible</p><img data-src="/real.jpg" src="/thumb-small.jpg" alt="Lazy">').should == "Visible\n\n![Lazy](https://example.com/real.jpg)"
+      convert('<img data-src="https://cdn.example.org/photo?id=7" src="/assets/spacer.gif" alt="Photo">').should == "![Photo](https://cdn.example.org/photo?id=7)"
+    end
+
+    it "keeps src when the lazy-loading attributes hold no image location" do
+      html = '<p><img data-src="false" src="/a.jpg" alt="A"> <img data-src="Facebook" src="/b.jpg" alt="B"> ' \
+             '<img data-image="322851" data-url="/c-other.jpg" src="/c.jpg" alt="C"></p>'
+      convert(html).should == "![A](https://example.com/a.jpg) ![B](https://example.com/b.jpg) ![C](https://example.com/c.jpg)"
+    end
+
     it "uses the <noscript> copy of a lazy image once, on either side of the placeholder" do
       html = '<p><noscript><img src="/a.jpg" alt="Harbour"></noscript>' \
              '<img class="lazyload" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/a.jpg" alt="Harbour">' \

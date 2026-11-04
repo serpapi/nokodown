@@ -10,6 +10,10 @@
   players inside a link are skipped.
 - Links without `href` take their target from `data-href`, `data-url` and
   the other attributes scripts keep it in.
+- An image's `data-src` (and the other attributes only lazy loaders use) is
+  preferred over its `src`, also without a "lazy" class, so the real image
+  replaces a placeholder or a low-quality thumbnail. Spacer and placeholder
+  files no longer count as a `src`.
 
 ## 0.1.0 (2026-11-02)
 
