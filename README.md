@@ -65,7 +65,7 @@ public API. Other classes are internal and can change in any release.
 | Option | Default | |
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
-| `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
+| `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls; headings without a section and lines such as "Advertisement" or "Share" stay. |
 | `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |

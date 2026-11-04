@@ -757,12 +757,26 @@ RSpec.describe "Markdown conversion" do
       convert("<p>#{first}</p><p>Day two.</p><p>#{first}</p>").should == "#{first}\n\nDay two.\n\n#{first}"
     end
 
-    it "drops the placeholder a script-loaded widget leaves, and its heading" do
-      convert("<p>Fits a 1 litre pot.</p><h2>Questions &amp; Answers</h2><div>Loading Questions...</div>").should == "Fits a 1 litre pot."
+    it "drops the placeholder a script-loaded widget leaves, and its heading, from the main content" do
+      Nokodown.to_markdown("<body><p>Fits a 1 litre pot.</p><h2>Questions &amp; Answers</h2><div>Loading Questions...</div></body>", title: false).should == "Fits a 1 litre pot."
     end
 
-    it "drops a trailing heading left without content" do
-      convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
+    it "drops a trailing heading left without content from the main content" do
+      Nokodown.to_markdown("<body><h2>Intro</h2><p>Text</p><h2>Related</h2></body>", title: false).should == "## Intro\n\nText"
+    end
+
+    it "drops boilerplate lines from the main content" do
+      Nokodown.to_markdown("<body><p>Text</p><p>Advertisement</p><p>★★★</p></body>", title: false).should == "Text"
+    end
+
+    it "keeps headings without content when converting the whole page" do
+      convert("<p>First</p><h1>Second</h1>").should == "First\n\n# Second"
+      convert("<h2>A</h2><h2>B</h2>").should == "## A\n\n## B"
+      convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText\n\n## Related"
+    end
+
+    it "keeps boilerplate lines and symbols but drops stray punctuation when converting the whole page" do
+      convert("<p>Text</p><p>Advertisement</p><p>★★★</p><p>•</p><p>...</p>").should == "Text\n\nAdvertisement\n\n★★★"
     end
 
     it "keeps a trailing list of linked titles" do

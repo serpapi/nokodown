@@ -22,8 +22,9 @@ module Nokodown
       # is the fence of a code block nested in a list or a quote.
       FENCE = /#{LINE_PREFIX.source}(`{3,})/.freeze
 
-      def initialize(images)
+      def initialize(images, full: false)
         @images = images
+        @full = full
         # Image URL => @text_lines when its last copy was written.
         @seen = {}
         @text_lines = 0
@@ -41,7 +42,7 @@ module Nokodown
           next true if text == block.text
 
           block.text = text
-          text.match?(/[\p{L}\p{N}]/) && !Cleanup.noise?(block)
+          text.match?(/[\p{L}\p{N}]/) && (@full || !Cleanup.noise?(block))
         end
       end
 

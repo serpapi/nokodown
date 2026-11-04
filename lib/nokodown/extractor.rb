@@ -37,7 +37,7 @@ module Nokodown
     def render(nodes, mode, urls)
       redundant = redundant_images(nodes, mode, urls)
       renderer = Markdown::Renderer.new(urls, images: @images, links: @links, redundant_images: redundant)
-      Markdown::Cleanup.call(renderer.render(nodes), renderer.rendered_images)
+      Markdown::Cleanup.call(renderer.render(nodes), renderer.rendered_images, full: mode == :full)
     end
 
     # Converting the whole page keeps every visible image.

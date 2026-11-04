@@ -4,7 +4,10 @@ module Nokodown
   module Markdown
     # Block-level tidying after rendering: repeated blocks, stray rules,
     # punctuation-only lines, section headings left without a section, and
-    # redundant or repeated images.
+    # redundant or repeated images. Converting the whole page (full) keeps
+    # what is noise only next to main content: boilerplate lines, symbols
+    # such as rating stars, and headings without a section, which are all a
+    # selection of headings has.
     module Cleanup
       DEDUPE_WINDOW = 4
       IMAGE_ONLY = /\A!\[([^\]]*)\]\([^)]*\)\z/.freeze
@@ -25,14 +28,19 @@ module Nokodown
       module_function
 
       # images: the Renderer's rendered_images.
-      def call(blocks, images = {})
-        blocks = blocks.reject { |block| noise?(block) }
+      def call(blocks, images = {}, full: false)
+        blocks = blocks.reject { |block| full ? punctuation?(block) : noise?(block) }
         blocks = dedupe(blocks)
         blocks = drop_repeated_runs(blocks)
         blocks = shorten_repeated_quotes(blocks)
         blocks = trim_rules(blocks)
-        blocks = drop_empty_sections(blocks)
-        images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
+        blocks = drop_empty_sections(blocks) unless full
+        images.empty? ? blocks : ImageCleanup.new(images, full: full).call(blocks)
+      end
+
+      # Separators and stray marks ("•", "...", a zero-width joiner).
+      def punctuation?(block)
+        block.kind == :paragraph && !block.text.match?(/[\p{L}\p{N}\p{So}]/) && !block.text.include?("](")
       end
 
       def noise?(block)

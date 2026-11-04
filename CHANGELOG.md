@@ -14,6 +14,9 @@
   preferred over its `src`, also without a "lazy" class, so the real image
   replaces a placeholder or a low-quality thumbnail. Spacer and placeholder
   files no longer count as a `src`.
+- With `main_content: false`, headings without a section and boilerplate
+  lines ("Advertisement", "Share") are kept, so converting a selection of
+  headings no longer gives empty Markdown.
 
 ## 0.1.0 (2026-11-02)
 
