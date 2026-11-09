@@ -36,6 +36,7 @@ module Nokodown
     VIDEO_HOSTS = %r{//(?:www\.)?(?:(?:dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq|bilibili|live\.bilibili)\.com|(?:archive|upload\.wikimedia)\.org|player\.twitch\.tv|fast\.wistia\.(?:net|com)|play\.vidyard\.com|loom\.com/embed)}i.freeze
 
     IMAGE_URL = /\.(?:jpe?g|png|webp|gif|avif)(?:[?#]\S*)?\s*\z/i.freeze
+    FILE_NAME = /\.[a-z\d]{2,5}(?:[?#]\S*)?\z/i.freeze
     IMAGE_SRCSET = /\.(?:jpe?g|png|webp|gif|avif)(?:\?\S*)?\s+\d/i.freeze
     LAZY_SRC = %w[
       data-src data-lazy-src data-original data-lazy data-url data-hi-res-src data-full-src
@@ -187,7 +188,7 @@ module Nokodown
       img.remove_attribute("src") if placeholder_src?(img)
       return restore_unmarked_image(img) if img["src"] && !img["class"].to_s.downcase.include?("lazy")
 
-      source = lazy_source(img, LAZY_SRC)
+      source = lazy_source(img, LAZY_SRC, marked: true)
       img["src"] = source if source
       srcset = LAZY_SRCSET.map { |name| img[name].to_s.strip }.find { |value| !value.empty? && !value.start_with?("data:") }
       img["srcset"] = srcset if srcset
@@ -195,25 +196,28 @@ module Nokodown
     end
 
     def restore_unmarked_image(img)
-      source = lazy_source(img, LAZY_ONLY_SRC)
+      source = lazy_source(img, LAZY_ONLY_SRC, marked: false)
       img["src"] = source if source
     end
 
     # The first of the attributes that holds an image location, skipping
-    # words, IDs, and spacer or placeholder files.
-    def lazy_source(img, names)
+    # spacer and placeholder files.
+    def lazy_source(img, names, marked:)
       names.map { |name| img[name].to_s.strip }.find do |value|
-        image_location?(value) && !value.match?(Markdown::Image::TRACKING)
+        image_location?(value, marked) && !value.match?(Markdown::Image::TRACKING)
       end
     end
 
-    # A path or a web URL, as opposed to "false", an ID, a fragment or a
-    # caption.
-    def image_location?(value)
-      return false if value.empty? || value.start_with?("#") || value.match?(/[\s{}<>]/)
+    # A path or a web URL, as opposed to "false", an ID, a fragment, a
+    # template or a caption. Where a loader marks the image, any file name
+    # or path counts, spaces and all; an attribute that only replaces src
+    # has to name an image file or hold a path.
+    def image_location?(value, marked)
+      return false if value.empty? || value.start_with?("#") || value.match?(marked ? /[{}<>]/ : /[\s{}<>]/)
       return true if value.match?(%r{\A(?:https?:)?//}i)
+      return false if value.match?(/\A[a-z][a-z\d+.-]*:/i)
 
-      !value.match?(/\A[a-z][a-z\d+.-]*:/i) && (value.include?("/") || value.match?(IMAGE_URL))
+      value.include?("/") || value.match?(marked ? FILE_NAME : IMAGE_URL)
     end
 
     def restore_from_any_attribute(img)

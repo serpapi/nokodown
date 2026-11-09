@@ -270,6 +270,15 @@ RSpec.describe "Markdown conversion" do
       convert('<img class="lazyload" data-src="#" data-original="/photo.jpg" alt="Photo">').should == "![Photo](https://example.com/photo.jpg)"
     end
 
+    it "takes any file name or path from the lazy-loading attributes of a marked image" do
+      html = '<p><img class="lazyload" data-src="logo.svg" alt="Logo"> <img class="lazyload" data-src="/my photo.jpg" alt="Photo"> ' \
+             '<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="false" data-original="chart.svg" alt="Chart"> ' \
+             '<img class="lazyload" data-src="javascript:alert(1)" alt="Script"></p>'
+      convert(html).should == "![Logo](https://example.com/dir/logo.svg) ![Photo](https://example.com/my%20photo.jpg) " \
+                              "![Chart](https://example.com/dir/chart.svg)"
+      convert('<img data-src="logo.svg" src="/logo.png" alt="Logo">').should == "![Logo](https://example.com/logo.png)"
+    end
+
     it "uses the <noscript> copy of a lazy image once, on either side of the placeholder" do
       html = '<p><noscript><img src="/a.jpg" alt="Harbour"></noscript>' \
              '<img class="lazyload" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/a.jpg" alt="Harbour">' \
