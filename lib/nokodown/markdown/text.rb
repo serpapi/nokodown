@@ -17,6 +17,9 @@ module Nokodown
       # How deep CommonMark (cmark, markdown-it) nests parentheses in a
       # destination before it stops reading it as one.
       MAX_PARENTHESES = 32
+      # The longest backtick run that CommonMarker (cmark-gfm) reads as the
+      # fence of a code span; a longer one is text.
+      MAX_BACKTICKS = 80
       # Link text in pieces: backticks, a backslash, a bracket or anything else.
       LINK_TEXT_TOKEN = /`+|\\|[\[\]]|[^\\`\[\]]+/.freeze
 
@@ -131,10 +134,10 @@ module Nokodown
       end
 
       # The last `length` backticks of the run at `index` open a code span
-      # if a later run is as long; inside it, nothing is escaped. Otherwise
-      # they are escaped one by one.
+      # if a later run is as long and neither is too long to be a fence;
+      # inside it, nothing is escaped. Otherwise they are escaped one by one.
       def code_span_in_link_text(tokens, index, length, runs, pieces)
-        closer = runs[length].bsearch { |at| at > index }
+        closer = runs[length].bsearch { |at| at > index } if length <= MAX_BACKTICKS
         unless closer
           pieces << ("\\`" * length)
           return index + 1

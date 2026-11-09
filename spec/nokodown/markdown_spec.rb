@@ -271,6 +271,13 @@ RSpec.describe "Markdown conversion" do
                               "[$!\\[i\\](javascript:alert(1))$](https://example.com/z)"
     end
 
+    it "reads no backtick run longer than Markdown's fence limit as code in link text" do
+      ticks = "`" * 80
+      convert(%(<p><a href="/x"><code>#{ticks}[Run](javascript:alert(1))[</code></a></p>)).should ==
+        "[#{'\\`' * 81} #{'\\`' * 80}\\[Run\\](javascript:alert(1))\\[ #{'\\`' * 81}](https://example.com/x)"
+      convert(%(<p><a href="/x"><code>#{'`' * 79}[a]</code></a></p>)).should == "[#{ticks} #{'`' * 79}[a] #{ticks}](https://example.com/x)"
+    end
+
     it "writes a link whose text is its URL as a bare URL" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
     end
