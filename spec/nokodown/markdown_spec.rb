@@ -230,6 +230,13 @@ RSpec.describe "Markdown conversion" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
     end
 
+    it "writes a link whose URL holds Markdown as a link, even when its text is the URL" do
+      html = '<p><a data-href="mailto:[Run](javascript:alert(1))">[Run](javascript:alert(1))</a> ' \
+             '<a href="https://example.org/a`b">https://example.org/a`b</a></p>'
+      convert(html).should == "[[Run\\](javascript:alert(1))](mailto:[Run](javascript:alert(1))) " \
+                              "[https://example.org/a\\`b](https://example.org/a%60b)"
+    end
+
     it "puts images out of link text" do
       convert('<p><a href="/p/1"><img src="/1.jpg" alt="Boot"> Trail boot</a></p>').should ==
         "![Boot](https://example.com/1.jpg) [Trail boot](https://example.com/p/1)"

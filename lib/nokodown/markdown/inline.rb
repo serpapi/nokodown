@@ -9,6 +9,9 @@ module Nokodown
     class Inline
       EMPHASIS = { "strong" => "**", "b" => "**", "em" => "*", "i" => "*", "del" => "~~", "s" => "~~", "strike" => "~~" }.freeze
       CODE = Set.new(%w[code kbd samp tt]).freeze
+      # What could start a link, an autolink, HTML or code where a URL is
+      # written as text.
+      MARKUP_IN_URL = /[\[\]<>`\\]/.freeze
       UNSAFE_SCHEME = /\A\s*(?:javascript|vbscript|data|tel|sms):/i.freeze
       FOOTNOTE_MARKER = /\A\s*(?:\[[^\]]{1,8}\]|[*†‡§]+)\s*\z/.freeze
       # Exponents are often written with the minus sign "−", not "-".
@@ -152,7 +155,7 @@ module Nokodown
 
         url = link_url(href)
         return text unless url
-        return url if same_as_url?(text, url)
+        return url if same_as_url?(text, url) && !url.match?(MARKUP_IN_URL)
 
         "[#{Text.link_text(text)}](#{Text.destination(url)})"
       end
