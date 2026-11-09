@@ -42,6 +42,15 @@ RSpec.describe Nokodown::ProductReviews do
     result.should_not include("summer of surveys")
   end
 
+  it "removes a reviews section whose id is made from its heading" do
+    anchored = '<section id="ratings-and-reviews"><h2>Ratings and Reviews</h2><p>It survived a whole summer of surveys ' \
+               "in my back pocket, and the paper takes pencil and fountain pen alike.</p></section>"
+    result = markdown(product_type, "#{description}#{details}#{anchored}")
+
+    result.should include("dot-grid paper")
+    result.should_not include("summer of surveys")
+  end
+
   it "removes schema.org reviews even though each has a description of its own" do
     review = '<div itemprop="review" itemscope itemtype="https://schema.org/Review"><p itemprop="description">' \
              "Bought three of these for my survey team and every one of them made it through a wet season of work.</p></div>"

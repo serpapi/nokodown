@@ -8,6 +8,8 @@ module Nokodown
   # tracking parameters, click redirectors and image resize options cost
   # tokens and tell a reader nothing.
   class UrlResolver
+    # From Ruby 3.4 URI::DEFAULT_PARSER is the RFC 3986 parser, whose unescape is obsolete.
+    URI_PARSER = defined?(URI::RFC2396_PARSER) ? URI::RFC2396_PARSER : URI::DEFAULT_PARSER
     TRACKING_PARAM = /\A(?:utm_[a-z_]+|fbclid|gclid|gclsrc|dclid|gbraid|wbraid|msclkid|yclid|igshid|mc_cid|mc_eid|_hsenc|_hsmi|mkt_tok|__s|
                        _gl|_ga|srsltid|trk|icid|cmpid|hsCtaTracking|ref_|pd_rd_[a-z]+|pf_rd_[a-z]+)\z/ix.freeze
     # Amazon session, search-rank and affiliate parameters; on other sites
@@ -223,7 +225,7 @@ module Nokodown
     end
 
     def unescape(value)
-      decoded = URI::DEFAULT_PARSER.unescape(value)
+      decoded = URI_PARSER.unescape(value)
       decoded if decoded.valid_encoding?
     end
 
