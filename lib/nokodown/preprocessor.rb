@@ -204,14 +204,16 @@ module Nokodown
     # The first of the attributes that holds an image location, as opposed
     # to "false", an ID, a fragment, a template, another scheme or a spacer
     # file. On a marked image any path, file name or query counts, spaces
-    # and all, as a loader may serve images from any relative URL; when it
-    # has no src either, a bare word ("portrait") is a relative URL too. An
-    # unmarked image's src is replaced only by an image file or a path.
+    # and all, as a loader may serve images from any relative URL. Without
+    # a src to fall back on (none, or an empty one), so does a bare word
+    # ("portrait"), in attribute order. An unmarked image's src is replaced
+    # only by an image file or a path.
     def lazy_source(img, names, marked:)
       values = names.map { |name| img[name].to_s.strip }.select { |value| lazy_candidate?(value) }
       return values.find { |value| image_location?(value) } unless marked
+      return values.find { |value| !value.match?(NO_VALUE) } if img["src"].to_s.strip.empty?
 
-      values.find { |value| value.match?(%r{[/.?]}) } || (values.find { |value| !value.match?(NO_VALUE) } unless img["src"])
+      values.find { |value| value.match?(%r{[/.?]}) }
     end
 
     def lazy_candidate?(value)

@@ -359,6 +359,12 @@ RSpec.describe "Markdown conversion" do
                               "![Thumb](https://example.com/thumb.jpg)"
     end
 
+    it "takes the first bare relative URL from a marked image whose src is empty, before a later path" do
+      html = '<p><img class="lazyload" src="" data-src="portrait" alt="Empty"> ' \
+             '<img class="lazyload" data-src="portrait" data-original="/fallback.jpg" alt="First"></p>'
+      convert(html).should == "![Empty](https://example.com/dir/portrait) ![First](https://example.com/dir/portrait)"
+    end
+
     it "reads a marked image's lazy-loading file name with a query, in linear time" do
       convert('<img class="lazyload" data-src="logo.svg?text=hello world" alt="Logo">').should ==
         "![Logo](https://example.com/dir/logo.svg?text=hello%20world)"
