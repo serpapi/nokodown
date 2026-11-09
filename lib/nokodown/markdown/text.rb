@@ -118,9 +118,12 @@ module Nokodown
         depth.zero?
       end
 
+      # Only the part before the path can spell a scheme. An entity cannot
+      # reach past the first "/" or "?", so that part is encoded on its own,
+      # without asking each match where it is (slow in a long non-ASCII URL).
       def encode_scheme_entities(url)
         path = url.index(%r{[/?]}) || url.length
-        url.gsub(ENTITY) { Regexp.last_match.begin(0) < path ? "%26" : "&" }
+        "#{url[0, path].gsub(ENTITY, '%26')}#{url[path..-1]}"
       end
 
       # Markdown back to readable text: no images, link targets, emphasis or

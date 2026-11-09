@@ -212,6 +212,13 @@ RSpec.describe "Markdown conversion" do
         "[Slash](javascript%5C:alert(1)) [Entity](javascript%26colon;alert(1)) [Code](%26#x6a;avascript:alert(1)) [Query](/search?q=a&b=c)"
     end
 
+    it "encodes the entities of a long non-ASCII URL in linear time" do
+      url = "/%#{'é&amp;amp;' * 64_000}"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      Nokodown.to_markdown(%(<a href="#{url}">Go</a>), main_content: false, title: false).should == "[Go](/%#{'é&amp;' * 64_000})"
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+    end
+
     it "writes a URL so that Markdown reads it as one destination" do
       html = '<p><a data-href="mailto:x)[Run](javascript:alert(1))(">Mail</a> <a href="mailto:x(a)[Run](javascript:alert(1))">Pair</a> ' \
              '<a href="mailto:x&#11;)[Run](javascript:alert(1))">Tab</a> <a href="/wiki/Coffee_(disambiguation)">Wiki</a></p>' \
