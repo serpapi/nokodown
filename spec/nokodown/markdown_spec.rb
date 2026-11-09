@@ -262,6 +262,15 @@ RSpec.describe "Markdown conversion" do
                               "[`[\\]`\\]](https://example.com/z) [`a`\\```b`c``](https://example.com/w)"
     end
 
+    it "writes no link or image inside link text, whatever TeX it holds" do
+      html = '<p><a href="/x"><code>[</code><math alttext="[Run](javascript:alert(1))"></math></a> ' \
+             '<a href="/y"><math alttext="\\[[Run](javascript:alert(1))"></math></a> ' \
+             '<a href="/z"><img class="mwe-math-fallback-image-inline" src="/m.png" alt="![i](javascript:alert(1))"></a></p>'
+      convert(html).should == "[`[`$\\[Run\\](javascript:alert(1))$](https://example.com/x) " \
+                              "[$\\[\\[Run\\](javascript:alert(1))$](https://example.com/y) " \
+                              "[$!\\[i\\](javascript:alert(1))$](https://example.com/z)"
+    end
+
     it "writes a link whose text is its URL as a bare URL" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
     end

@@ -67,11 +67,13 @@ module Nokodown
 
       # Escaped text as link text, so that it ends at the "]" written after
       # it. It is read as Markdown reads it: a code span is literal, so its
-      # brackets and backslashes stay as they are. Outside code spans,
-      # brackets stay only where they pair in order; otherwise each one not
-      # escaped is. Backticks that open no code span within the text are
-      # escaped, so none can pair with one around the link, and so is a
-      # backslash left at the end, which would escape that "]".
+      # brackets and backslashes stay as they are. Outside code spans, a "]"
+      # before "(" or "[" is escaped, so the text holds no link of its own
+      # (raw TeX can), and brackets stay only where they pair in order;
+      # otherwise each one not escaped is. Backticks that open no code span
+      # within the text are escaped, so none can pair with one around the
+      # link, and so is a backslash left at the end, which would escape
+      # that "]".
       def link_text(text)
         return text unless text.match?(/[\[\]\\`]/)
 
@@ -86,6 +88,9 @@ module Nokodown
             index = escape_in_link_text(tokens, index, runs, pieces)
           elsif token.start_with?("`")
             index = code_span_in_link_text(tokens, index, token.length, runs, pieces)
+          elsif token == "]" && tokens[index + 1]&.start_with?("(", "[")
+            pieces << "\\]"
+            index += 1
           else
             brackets << pieces.length if token == "[" || token == "]"
             pieces << token
