@@ -116,6 +116,18 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should_not include("Another heat pump story")
     end
 
+    it "reads no names into WooCommerce's product terms" do
+      description = "Two dozen ginger biscuits baked with butter and dark molasses, in a tin that keeps them crisp. " * 3
+      html = <<~HTML
+        <div class="product type-product post-12 status-publish product_cat-cookies product_tag-social-gifts">
+          <h1>Ginger cookies</h1><p>#{description}</p>
+        </div>
+        <section>#{prose('Shipping', 3)}</section>
+      HTML
+
+      remaining(html).should include("Two dozen ginger biscuits")
+    end
+
     it "removes forum signatures, not the post" do
       html = <<~HTML
         <div class="message">

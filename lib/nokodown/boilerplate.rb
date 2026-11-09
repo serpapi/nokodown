@@ -14,7 +14,9 @@ module Nokodown
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
-    TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
+    # Terms WordPress (tag-*, category-*) and WooCommerce (product_cat-*,
+    # product_tag-*, product_brand-*) put on a post or product.
+    TAXONOMY = /(?<![\w-])(?:tag|category|has|product_(?:cat|tag|brand))-[\w-]+/.freeze
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
