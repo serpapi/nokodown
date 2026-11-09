@@ -338,6 +338,13 @@ RSpec.describe "Markdown conversion" do
                               "![Word](https://example.com/thumb.jpg)"
     end
 
+    it "takes a bare relative URL from a marked image without src, but no word a template wrote for a missing value" do
+      html = '<p><img class="lazyload" data-src="portrait" alt="Portrait"> <img class="lazyload" data-src="undefined" data-original="hero" alt="Hero"> ' \
+             '<img class="lazyload" src="/thumb.jpg" data-src="portrait" alt="Thumb"></p>'
+      convert(html).should == "![Portrait](https://example.com/dir/portrait) ![Hero](https://example.com/dir/hero) " \
+                              "![Thumb](https://example.com/thumb.jpg)"
+    end
+
     it "reads a marked image's lazy-loading file name with a query, in linear time" do
       convert('<img class="lazyload" data-src="logo.svg?text=hello world" alt="Logo">').should ==
         "![Logo](https://example.com/dir/logo.svg?text=hello%20world)"

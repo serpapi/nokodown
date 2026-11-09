@@ -45,6 +45,8 @@ module Nokodown
     # over any src: a placeholder, a spacer or a low-quality thumbnail.
     LAZY_ONLY_SRC = (LAZY_SRC - %w[data-url data-echo data-img-src data-image]).freeze
     LAZY_SRCSET = %w[data-srcset data-lazy-srcset data-original-set].freeze
+    # What a template writes for a missing value.
+    NO_VALUE = /\A(?:false|true|null|nil|none|undefined|NaN)\z/i.freeze
 
     # Where script-driven links keep their target when they have no href.
     LINK_TARGETS = %w[data-href data-url data-target-url data-delayed-url data-fallback-url ourl rl-link-href].freeze
@@ -202,12 +204,14 @@ module Nokodown
     # The first of the attributes that holds an image location, as opposed
     # to "false", an ID, a fragment, a template, another scheme or a spacer
     # file. On a marked image any path, file name or query counts, spaces
-    # and all, as a loader may serve images from any relative URL. An
+    # and all, as a loader may serve images from any relative URL; when it
+    # has no src either, a bare word ("portrait") is a relative URL too. An
     # unmarked image's src is replaced only by an image file or a path.
     def lazy_source(img, names, marked:)
-      names.map { |name| img[name].to_s.strip }.find do |value|
-        lazy_candidate?(value) && (marked ? value.match?(%r{[/.?]}) : image_location?(value))
-      end
+      values = names.map { |name| img[name].to_s.strip }.select { |value| lazy_candidate?(value) }
+      return values.find { |value| image_location?(value) } unless marked
+
+      values.find { |value| value.match?(%r{[/.?]}) } || (values.find { |value| !value.match?(NO_VALUE) } unless img["src"])
     end
 
     def lazy_candidate?(value)
