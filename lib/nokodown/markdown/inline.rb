@@ -190,14 +190,14 @@ module Nokodown
         ""
       end
 
-      # Players link to the file they play, labelled with their title. Every
-      # bracket and backslash in it is escaped, so no title can end the label.
+      # Players link to the file they play, labelled with their title, which
+      # is escaped like any text.
       def media(node)
         url = link_url(node["src"].to_s)
         return "" if url.nil? || !@links || @in_link
 
-        title = Dom.squish(node["title"].to_s).gsub(/[\\\[\]]/) { |character| "\\#{character}" }
-        "[#{title.empty? ? node.name.capitalize : title}](#{Text.destination(url)})"
+        title = Dom.squish(node["title"].to_s)
+        "[#{title.empty? ? node.name.capitalize : Text.label(title)}](#{Text.destination(url)})"
       end
 
       # An image is redundant only if every copy of it is. Targets are the

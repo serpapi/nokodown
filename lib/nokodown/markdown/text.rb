@@ -63,6 +63,13 @@ module Nokodown
         text.gsub(/(?<!\\)([\[\]])/, "\\\\\\1")
       end
 
+      # Text not escaped yet, as link text with every bracket escaped, so no
+      # input can end the label early. A backslash that escapes a character
+      # keeps it; one at the end would escape the "]".
+      def label(text)
+        escape(text).gsub(/\\.|\\\z|[\[\]]/m) { |match| match.length == 2 ? match : "\\#{match}" }
+      end
+
       # Markdown decodes backslash escapes and entity references in a
       # destination, so "javascript\\:" or "javascript&colon;" would read as a
       # script link. Backslashes are percent-encoded, and so is an entity

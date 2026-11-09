@@ -701,9 +701,11 @@ RSpec.describe "Markdown conversion" do
                               "[Audio](https://example.com/a.mp3)"
     end
 
-    it "escapes the title of a player" do
+    it "escapes the title of a player like any text" do
       convert('<p>Listen: <span><audio controls src="/ep.mp3" title="Episode 1] \\ Live"></audio></span> now</p>').should ==
-        "Listen:\n\n[Episode 1\\] \\\\ Live](https://example.com/ep.mp3)\n\nnow"
+        "Listen:\n\n[Episode 1\\] \\ Live](https://example.com/ep.mp3)\n\nnow"
+      convert('<audio src="/a.mp3" title="&lt;img src=x onerror=alert(1)&gt; *loud* [b\\"></audio>').should ==
+        "[\\<img src=x onerror=alert(1)> \\*loud\\* \\[b\\\\](https://example.com/a.mp3)"
     end
 
     it "skips muted background videos, previews inside a link and players without a file" do
