@@ -781,6 +781,17 @@ RSpec.describe "Markdown conversion" do
       )
     end
 
+    it "keeps players that sit with only links or other players" do
+      prose = "<p>#{'Tidal lagoons hold water behind a wall at high tide, then release it through turbines. ' * 4}</p>"
+      html = "<article><h1>Lagoon</h1>#{prose}<div><video controls src='/clip.mp4'></video><p><a href='/clip.mp4'>Download</a></p></div>" \
+             "<div><div><video controls src='/tide.mp4'></video></div><div><audio controls src='/waves.mp3'></audio></div></div>#{prose}</article>"
+
+      Nokodown.to_markdown(html, url: "https://example.com/", title: false).should include(
+        "\n\n[Video](https://example.com/clip.mp4)\n\n[Download](https://example.com/clip.mp4)\n\n" \
+        "[Video](https://example.com/tide.mp4)\n\n[Audio](https://example.com/waves.mp3)\n\n"
+      )
+    end
+
     it "still drops a player in furniture" do
       prose = "<p>#{'Tidal lagoons hold water behind a wall at high tide, then release it through turbines. ' * 4}</p>"
       html = "<article><h1>Lagoon</h1>#{prose}<div class='sidebar-media'><video controls src='/promo.mp4'></video>" \
