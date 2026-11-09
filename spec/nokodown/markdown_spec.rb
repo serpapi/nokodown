@@ -744,11 +744,22 @@ RSpec.describe "Markdown conversion" do
       end
     end
 
-    it "keeps a player in the main content" do
+    it "keeps a player and its caption in the main content" do
       prose = "<p>#{'Tidal lagoons hold water behind a wall at high tide, then release it through turbines. ' * 4}</p>"
-      html = "<article><h1>Lagoon</h1>#{prose}<div class='media'><video controls src='/clip.mp4'></video></div>#{prose}</article>"
+      html = "<article><h1>Lagoon</h1>#{prose}<div class='media'><video controls src='/clip.mp4'></video>" \
+             "<p>Recorded demonstration.</p></div>#{prose}</article>"
 
-      Nokodown.to_markdown(html, url: "https://example.com/", title: false).should include("\n\n[Video](https://example.com/clip.mp4)\n\n")
+      Nokodown.to_markdown(html, url: "https://example.com/", title: false).should include(
+        "\n\n[Video](https://example.com/clip.mp4)\n\nRecorded demonstration.\n\n"
+      )
+    end
+
+    it "still drops a player in furniture" do
+      prose = "<p>#{'Tidal lagoons hold water behind a wall at high tide, then release it through turbines. ' * 4}</p>"
+      html = "<article><h1>Lagoon</h1>#{prose}<div class='sidebar-media'><video controls src='/promo.mp4'></video>" \
+             "<p>Watch our promo.</p></div>#{prose}</article>"
+
+      Nokodown.to_markdown(html, url: "https://example.com/", title: false).should_not include("promo")
     end
 
     it "uses the TeX source of MathML" do

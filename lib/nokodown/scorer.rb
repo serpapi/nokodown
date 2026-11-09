@@ -23,9 +23,11 @@ module Nokodown
     # utility tokens and heading anchors ("media" in "h-social-media-tips").
     # Candidate scoring keeps Readability's weight, which some pages need to
     # pick the right candidate.
-    def self.cleaning_weight(node)
+    # Words matching ignore count for nothing.
+    def self.cleaning_weight(node, ignore: nil)
       [node["class"], Dom.name_id(node)].sum do |value|
         tokens = value.to_s.downcase.split.reject { |token| utility_class?(token) }
+        tokens = tokens.map { |token| token.gsub(ignore, "") } if ignore
         words_weight(tokens.join(" "))
       end
     end
