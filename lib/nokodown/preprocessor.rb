@@ -187,24 +187,30 @@ module Nokodown
       img.remove_attribute("src") if placeholder_src?(img)
       return restore_unmarked_image(img) if img["src"] && !img["class"].to_s.downcase.include?("lazy")
 
-      copy_first_attribute(img, LAZY_SRC, "src")
-      copy_first_attribute(img, LAZY_SRCSET, "srcset")
+      source = lazy_source(img, LAZY_SRC)
+      img["src"] = source if source
+      srcset = LAZY_SRCSET.map { |name| img[name].to_s.strip }.find { |value| !value.empty? && !value.start_with?("data:") }
+      img["srcset"] = srcset if srcset
       restore_from_any_attribute(img) unless img["src"] || img["srcset"]
     end
 
     def restore_unmarked_image(img)
-      source = LAZY_ONLY_SRC.map { |name| img[name].to_s.strip }.find { |value| image_location?(value) }
+      source = lazy_source(img, LAZY_ONLY_SRC)
       img["src"] = source if source
     end
 
-    def copy_first_attribute(img, names, target)
-      value = names.map { |name| img[name].to_s.strip }.find { |v| !v.empty? && !v.start_with?("data:") }
-      img[target] = value if value
+    # The first of the attributes that holds an image location, skipping
+    # words, IDs, and spacer or placeholder files.
+    def lazy_source(img, names)
+      names.map { |name| img[name].to_s.strip }.find do |value|
+        image_location?(value) && !value.match?(Markdown::Image::TRACKING)
+      end
     end
 
-    # A path or a web URL, as opposed to "false", an ID or a caption.
+    # A path or a web URL, as opposed to "false", an ID, a fragment or a
+    # caption.
     def image_location?(value)
-      return false if value.empty? || value.match?(/[\s{}<>]/)
+      return false if value.empty? || value.start_with?("#") || value.match?(/[\s{}<>]/)
       return true if value.match?(%r{\A(?:https?:)?//}i)
 
       !value.match?(/\A[a-z][a-z\d+.-]*:/i) && (value.include?("/") || value.match?(IMAGE_URL))

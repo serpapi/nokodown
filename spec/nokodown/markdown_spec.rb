@@ -252,6 +252,14 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "![A](https://example.com/a.jpg) ![B](https://example.com/b.jpg) ![C](https://example.com/c.jpg)"
     end
 
+    it "takes no spacer file, word or fragment from the lazy-loading attributes" do
+      convert('<img src="/real.jpg" data-src="/spacer.gif" alt="Photo">').should == "![Photo](https://example.com/real.jpg)"
+      convert('<img class="lazyload" src="/real.jpg" data-src="/img/blank.gif" alt="Photo">').should == "![Photo](https://example.com/real.jpg)"
+      convert('<img src="/placeholder.gif" data-src="false" data-original="/photo.jpg" alt="Photo">').should ==
+        "![Photo](https://example.com/photo.jpg)"
+      convert('<img class="lazyload" data-src="#" data-original="/photo.jpg" alt="Photo">').should == "![Photo](https://example.com/photo.jpg)"
+    end
+
     it "uses the <noscript> copy of a lazy image once, on either side of the placeholder" do
       html = '<p><noscript><img src="/a.jpg" alt="Harbour"></noscript>' \
              '<img class="lazyload" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/a.jpg" alt="Harbour">' \
