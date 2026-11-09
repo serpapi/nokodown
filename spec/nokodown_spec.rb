@@ -341,6 +341,17 @@ RSpec.describe Nokodown do
       convert(article + copy).should_not include("raw markdown copy")
       convert("<div style='visibility:hidden'>#{article}</div>").should include("boils a litre")
     end
+
+    it "keeps an anti-flicker wrapper when only the site logo's h1 is outside it" do
+      article = "<h1>Trail stoves</h1><p>#{'A trail stove boils a litre in three minutes. ' * 14}</p>"
+      logos = ["<h1><a href='/'>Trailhead</a></h1>", "<a href='https://example.com/en/'><h1>Trailhead</h1></a>",
+               "<h1><img src='/logo.png' alt='Trailhead'></h1>", "<nav><h1>Trailhead</h1></nav>"]
+
+      logos.each do |logo|
+        convert("<header>#{logo}</header><div style='display:none'>#{article}</div>").should include("boils a litre")
+      end
+      convert("<h1><a href='/stoves'>Stoves</a></h1><div style='display:none'>#{article}</div>").should_not include("boils a litre")
+    end
   end
 
   describe "title: false" do

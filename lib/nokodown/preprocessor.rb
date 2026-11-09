@@ -26,6 +26,8 @@ module Nokodown
 
     STREAMED_LINK_SHARE = 0.5
     SUSPENSE_OPEN = %w[$ $? $!].freeze
+    # The site's home page, maybe for one language ("/en/").
+    HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?(?:/(?:[a-z]{2}(?:[-_][a-z]{2})?/?)?(?:index\.\w+)?)?\z}i.freeze
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
@@ -215,7 +217,24 @@ module Nokodown
     end
 
     def page_like?(node)
-      node.css("h1").size == @body.css("h1").size
+      titles(node).size == titles(@body).size
+    end
+
+    # A site logo marked up as an <h1> is on every page, outside any wrapper.
+    def titles(root)
+      root.css("h1").reject { |h1| logo?(h1) }
+    end
+
+    def logo?(h1)
+      return true if Dom.ancestors_named(h1, "nav").any?
+      return !h1.at_css("img").nil? if Dom.text(h1).empty?
+
+      home = [*Dom.ancestors_named(h1, "a"), *h1.css("a")].find { |link| home_link?(link["href"].to_s.strip) }
+      home && Dom.text(h1).length <= Dom.text(home).length
+    end
+
+    def home_link?(href)
+      !href.empty? && href.match?(HOME_LINK)
     end
 
     def hidden?(node)
