@@ -57,6 +57,15 @@ RSpec.describe Nokodown::Boilerplate do
 
       remaining(html).should == "Heat pumps move heat instead of making it. They keep working at minus twenty degrees."
     end
+
+    it "reads no names into a variant with brackets inside its brackets" do
+      html = <<~HTML
+        <p>Heat pumps move heat instead of making it.</p>
+        <div class="[&:not([hidden])_.share-row]:flex">They keep working at minus twenty degrees.</div>
+      HTML
+
+      remaining(html).should == "Heat pumps move heat instead of making it. They keep working at minus twenty degrees."
+    end
   end
 
   describe "sections named like furniture" do

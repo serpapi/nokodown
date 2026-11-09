@@ -29,7 +29,9 @@ module Nokodown
     KEY = "data-nokodown-key"
 
     UUID = /\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/.freeze
-    ARBITRARY_VALUE = /\[[^\s\]]*\]/.freeze
+    # One level of brackets may nest ("[&>[data-slot=icon]]"). Possessive, so
+    # a run of unclosed "[" is not rescanned from each one.
+    ARBITRARY_VALUE = /\[(?:[^\s\[\]]|\[[^\s\[\]]*+\])*+\]/.freeze
     CSS_MODULE_HASH = /__(?=[\w-]{0,4}[A-Z\d])[\w-]{5}(?![\w-])/.freeze
 
     # On a forum, the replies sit in containers named like a comment section.
