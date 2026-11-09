@@ -243,14 +243,41 @@ module Nokodown
     # A player is kept as an empty element with the file it plays, for the
     # renderer to link to. Muted videos are autoplaying backgrounds, and one
     # inside a link is a preview of the page it links to; neither is content.
-    # Blob URLs exist only in the browser that made them.
     def keep_playable(media)
-      sources = [media["src"]] + media.css("source").map { |source| source["src"] }
-      src = sources.map { |value| value.to_s.strip }.find { |value| !value.empty? && !value.match?(/\A(?:blob|data):/i) }
-      return media.remove if src.nil? || media.key?("muted") || Dom.ancestors_named(media, "a").any?
+      src = playable_source(media)
+      return media.remove if src.nil? || media.key?("muted") || !standalone_player?(media)
 
       media.children.remove
       media["src"] = src
+    end
+
+    # Its src, or that of a <source> in it. Blob URLs exist only in the
+    # browser that made them.
+    def playable_source(media)
+      return media["src"].strip if playable?(media["src"])
+
+      source = media.element_children.find { |child| child.name == "source" && playable?(child["src"]) }
+      source && source["src"].strip
+    end
+
+    def playable?(src)
+      src = src.to_s.strip
+      !src.empty? && !src.match?(/\A(?:blob|data):/i)
+    end
+
+    # Not in a link, and within MAX_DEPTH levels of <body>: a deeper player
+    # would become plain text, and walking up from each player of a deep
+    # nest to the top would take quadratic time. One whose outer player was
+    # emptied first has no way up at all.
+    def standalone_player?(media)
+      node = media.parent
+      MAX_DEPTH.times do
+        return false if node.nil? || node.name == "a"
+        return true if node == @body
+
+        node = node.parent
+      end
+      false
     end
 
     def restore_picture_sources

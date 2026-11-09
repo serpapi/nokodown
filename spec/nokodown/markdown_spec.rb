@@ -714,6 +714,24 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Hero\n\n[Watch](https://example.com/watch)"
     end
 
+    it "uses a <source> of the player itself, not one of a player nested in it" do
+      convert('<video><video><source src="/inner.mp4"></video><source src="/outer.mp4"></video>').should ==
+        "[Video](https://example.com/outer.mp4)"
+    end
+
+    it "finds the files of nested players in linear time" do
+      players = {
+        "nested" => "#{'<video src="/v.mp4">' * 20_000}leaf#{'</video>' * 20_000}",
+        "in nested divs" => "#{'<div><video src="/v.mp4"></video>' * 10_000}leaf#{'</div>' * 10_000}",
+        "in nested links" => "#{'<div><a href="/x"><video src="/v.mp4"></video></a>' * 10_000}leaf#{'</div>' * 10_000}"
+      }
+      players.each_value do |html|
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        convert(html)
+        (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      end
+    end
+
     it "keeps a player in the main content" do
       prose = "<p>#{'Tidal lagoons hold water behind a wall at high tide, then release it through turbines. ' * 4}</p>"
       html = "<article><h1>Lagoon</h1>#{prose}<div class='media'><video controls src='/clip.mp4'></video></div>#{prose}</article>"
