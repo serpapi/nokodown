@@ -95,6 +95,18 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("> Booked for May 3, 2024")
   end
 
+  it "keeps the subject of each post when the header goes" do
+    posts = [["wren", "Is it ruined?", question], ["basil", "Feed it twice at room temperature for two days", answer]].map do |name, subject, body|
+      "<div class='post'><div class='post-head'><div class='post-info'><h2>#{subject}</h2><a class='username' href='/u/#{name}'>#{name}</a></div>" \
+        "<div class='post-date'><time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></div></div><div class='post-body'><p>#{body}</p></div></div>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("## Is it ruined?\n\n**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("## Feed it twice at room temperature for two days\n\n**basil** · May 3, 2024\n\n#{answer}")
+    markdown.should_not include("/u/")
+  end
+
   it "writes a line for an opening post outside the list of replies" do
     entry = lambda do |kind, name, body|
       "<article class='#{kind}'><header>Posted by <span class='author'><a href='/u/#{name}'>#{name}</a></span> " \

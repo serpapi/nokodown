@@ -51,6 +51,8 @@ module Nokodown
     AUTHOR = "data-nokodown-author"
     DATE = "data-nokodown-date"
     REPLACED = "data-nokodown-replaced"
+    SUBJECT = "data-nokodown-subject"
+    HEADINGS = "h1, h2, h3, h4, h5, h6"
 
     def initialize(body)
       @body = body
@@ -58,6 +60,7 @@ module Nokodown
 
     def call
       @authors = author_holders
+      @titles = @body.css("h1")
       posts = dated_posts.filter_map { |node, date| attributed(node, date) }
       ads, posts = posts.partition { |post| post.author.nil? }
       return self unless dated_above?(posts)
@@ -73,7 +76,10 @@ module Nokodown
       bodies = @body.css("[#{AUTHOR}]")
       return if bodies.empty?
 
-      @body.css("[#{REPLACED}]").each(&:remove)
+      @body.css("[#{REPLACED}]").each do |node|
+        node.css("[#{SUBJECT}]").each { |subject| node.add_previous_sibling(subject) }
+        node.remove
+      end
       selected = nodes.map { |node| Dom.key(node) }
       bodies.each do |body|
         line = line(body[AUTHOR], body[DATE])
@@ -221,16 +227,35 @@ module Nokodown
       body[AUTHOR] = name(post.author)
       shown = date_text(post.date)
       body[DATE] = shown if shown
-      replaced(post).each { |node| node[REPLACED] = "" }
+      subjects = subjects(post, body)
+      subjects.each { |subject| subject[SUBJECT] = "" }
+      replaced(post, subjects).each { |node| node[REPLACED] = "" }
+    end
+
+    # A heading in the header that holds neither the name nor the date is
+    # the post's subject ("Re: The north bridge is closed"); it stays when
+    # the header goes, unless it repeats the thread's title, as the opening
+    # post's does on vBulletin 5. In a member panel it is the member's rank
+    # (XenForo's message-userTitle).
+    def subjects(post, body)
+      post.node.css(HEADINGS).reject do |heading|
+        @authors.include?(Dom.key(heading)) || inside?(post.date, heading) || inside?(heading, body) ||
+          quoted?(heading) || title?(heading) || heading.ancestors.any? { |ancestor| ancestor.element? && MemberPanel.panel?(ancestor) }
+      end
+    end
+
+    def title?(heading)
+      text = Dom.text(heading)
+      @titles.any? { |title| Dom.key(title) != Dom.key(heading) && Dom.text(title) == text }
     end
 
     # The line stands in for the header it was read from: the date line, the
     # panel around the name, the member panels beside the post, and copies
     # of the date above the body.
-    def replaced(post)
+    def replaced(post, subjects)
       placement = post.placement
-      header = placement.header if repeats?(placement, post.author, post.date)
-      [header, author_panel(post.author, post.date, placement.body), *member_panels(post.node, placement.body),
+      header = placement.header if repeats?(placement, post.author, post.date, subjects)
+      [header, author_panel(post.author, post.date, placement.body, subjects), *member_panels(post.node, placement.body),
        *copies(post.node, post.date, placement.body)].compact
     end
 
@@ -331,27 +356,30 @@ module Nokodown
         !node.at_css(BODY_PARTS).nil?
     end
 
-    # The header goes when the line says all it said: besides the name and
-    # the date it holds a few labels, and after the date only links and
-    # numbers ("#1"), not a short reply.
-    def repeats?(placement, author, date)
+    # The header goes when the line says all it said: besides the name, the
+    # date and the subject, which stays, it holds a few labels, and after the
+    # date only links and numbers ("#1"), not a short reply.
+    def repeats?(placement, author, date, subjects)
       return false if placement.tail.any? { |node| unlinked_text(node).match?(LETTER) }
 
       header = placement.header
       labels = Dom.text(header).length - Dom.text(date).length
       labels -= Dom.text(author).length if inside?(author, header)
+      labels -= subjects.sum { |subject| inside?(subject, header) ? Dom.text(subject).length : 0 }
       labels <= MAX_LABELS
     end
 
     # The highest ancestor of the name that holds neither the date nor the
-    # body: its avatar, rank and post count, when that is all it holds.
-    def author_panel(author, date, body)
+    # body: its avatar, rank and post count, when that is all it holds
+    # besides the post's subject.
+    def author_panel(author, date, body, subjects)
       taken = (date.ancestors.to_a + [body] + body.ancestors.to_a).select(&:element?).map { |node| Dom.key(node) }.to_set
       return if taken.include?(Dom.key(author))
 
       panel = author
       panel = panel.parent until taken.include?(Dom.key(panel.parent))
-      panel if Dom.text(panel).length <= MAX_PANEL && !prose?(panel)
+      length = Dom.text(panel).length - subjects.sum { |subject| inside?(subject, panel) ? Dom.text(subject).length : 0 }
+      panel if length <= MAX_PANEL && !prose?(panel)
     end
 
     def inside?(node, container)
