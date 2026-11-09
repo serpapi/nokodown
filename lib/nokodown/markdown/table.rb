@@ -80,7 +80,7 @@ module Nokodown
       # rendered cell by cell.
       def layout_blocks
         Tables.rows(@node).flat_map do |row|
-          cells = Tables.cells(row).reject { |cell| cell.content.strip.empty? && cell.at_css("img").nil? }
+          cells = Tables.cells(row).reject { |cell| Tables.blank?(cell) }
           if cells.none? { |cell| @renderer.contains_block?(cell) }
             @renderer.text_paragraphs(cells.map { |cell| @renderer.inline(cell.children) }.join(" "))
           else

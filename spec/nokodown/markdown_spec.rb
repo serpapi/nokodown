@@ -669,6 +669,18 @@ RSpec.describe "Markdown conversion" do
         "Left column\n\nRight column"
     end
 
+    it "keeps players in layout table cells" do
+      convert('<table><tr><td><video src="/clip.mp4"></video></td></tr></table>').should == "[Video](https://example.com/clip.mp4)"
+      html = '<table><tr><td>Intro</td><td><audio src="/a.mp3"></audio></td></tr>' \
+             '<tr><td><p>Outro</p></td><td><video src="/v.mp4"></video></td></tr></table>'
+      convert(html).should == "Intro\n\n[Audio](https://example.com/a.mp3)\n\nOutro\n\n[Video](https://example.com/v.mp4)"
+    end
+
+    it "does not count a cell holding a player as blank" do
+      row = '<tr><td>Talk</td><td><video src="/talk.mp4"></video></td><td>12 min</td></tr>'
+      convert("<table>#{row * 4}</table>").should start_with("| Talk | [Video](https://example.com/talk.mp4) | 12 min |")
+    end
+
     it "keeps the caption" do
       convert("<table><caption>Results</caption><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>").should ==
         "Results\n\n| A | B |\n| --- | --- |\n| 1 | 2 |"
