@@ -23,6 +23,7 @@ module Nokodown
     FOOTNOTE_MARK = /\A[*†‡§]+/.freeze
     # The word goes with its separators: "footer__disclaimer" without it is "footer", not "footer__".
     DISCLAIMER_WORD = /[-_]*#{Patterns::DISCLAIMER.source}[-_]*/.freeze
+    SIGNATURE_WORD = /[-_]*#{Patterns::SIGNATURE.source}[-_]*/.freeze
 
     def initialize(body)
       @body = body
@@ -35,6 +36,7 @@ module Nokodown
       # Card grids repeat the same class list hundreds of times.
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
+      @signature_only = Hash.new { |cache, signature| cache[signature] = signature_only?(signature) }
       @notes = Set.new
       @prose_blocks = Set.new
       @card_classes = card_classes
@@ -187,6 +189,18 @@ module Nokodown
       signature.match?(Patterns::DISCLAIMER) && !signature.gsub(DISCLAIMER_WORD, " ").match?(Patterns::PAGE_FURNITURE)
     end
 
+    # Furniture for its signature name alone ("signature", "member-signature").
+    def signature_only?(signature)
+      signature.match?(Patterns::SIGNATURE) && !signature.gsub(SIGNATURE_WORD, " ").match?(Patterns::PAGE_FURNITURE)
+    end
+
+    # A member's signature is named after the post ("message-signature") or
+    # sits in one; a function's signature in API docs does neither.
+    def forum_signature?(node, signature)
+      signature.gsub(SIGNATURE_WORD, " ").match?(Patterns::POST) ||
+        node.ancestors.any? { |ancestor| ancestor.element? && Dom.signature(ancestor).match?(Patterns::POST) }
+    end
+
     def card?(node)
       classes = base_classes(node["class"])
       @card_bases.any? { |base| (base - classes).empty? } && card_candidate?(node)
@@ -208,6 +222,7 @@ module Nokodown
       return site_header?(node) if !chrome && signature.match?(Patterns::HEADER)
       return @stats.link_density(node) > 0.5 if !chrome && signature.match?(Patterns::MENU)
       return false unless chrome
+      return false if @signature_only[signature] && !forum_signature?(node, signature)
       return false if prose_section?(node, signature)
       return true if signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE)
 

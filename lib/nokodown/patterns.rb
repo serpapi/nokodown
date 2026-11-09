@@ -22,6 +22,13 @@ module Nokodown
     # modifier ("hasDisclaimer") names the block that has one, not the note.
     DISCLAIMER = /#{WORD_START}(?<!category-|tag-|has-)(?:disclaimers?|disclosures)#{WORD_END}/.freeze
 
+    # A member's signature under each forum post: XenForo message-signature,
+    # phpBB and SMF signature. A modifier ("has-signature") names the post
+    # that has one. API docs name a function's signature the same way, so
+    # Boilerplate removes one only when it is named after a post or sits in one.
+    SIGNATURE = /#{WORD_START}(?<!has-|with-)signature(?![\w-])/.freeze
+    POST = /post|message|comment|repl(?:y|ies)|thread|topic|forum|discussion|answer|question|bbp|msg/.freeze
+
     # The panel of member details beside each forum post: XenForo
     # message-user, phpBB postprofile, Invision cAuthorPane, vBulletin
     # userinfo. The token must end there, so XenForo's post body,
@@ -42,7 +49,7 @@ module Nokodown
       popup|pop-up|#{WORD_START}modal#{WORD_END}|interstitial|offcanvas|off-canvas|flyout|snackbar|tooltip|popover|
       #{WORD_START}toast#{WORD_END}|#{WORD_START}drawer#{WORD_END}|
       editsection|#{WORD_START}feedback#{WORD_END}|was-?this-?helpful|intercom|livechat|chat-?widget|
-      #{WORD_START}signature(?![\w-])|#{DISCLAIMER.source}|
+      #{SIGNATURE.source}|#{DISCLAIMER.source}|
       #{MEMBER_PANEL.source}|
       related|recommend|recirc|read-?next|more-?stories|you-?may-?like|also-?like|
       #{WORD_START}(?:search-?form|search-?box|search-?bar)#{WORD_END}

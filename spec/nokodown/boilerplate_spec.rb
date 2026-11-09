@@ -129,6 +129,21 @@ RSpec.describe Nokodown::Boilerplate do
       text.should_not include("My rig")
     end
 
+    it "keeps a function's signature in API docs, and a post that has a signature" do
+      html = <<~HTML
+        <section class="tsd-panel"><div class="tsd-signature">heatOutput(flowTemperature: number): number</div></section>
+        <div class="member-signature">public double copAt(double outdoorTemperature)</div>
+        <h3 class="signature">#start_defrost(cycle) ⇒ Boolean</h3>
+        <div class="post"><div class="post-text has-signature">Bleed the radiators once a year.</div></div>
+      HTML
+
+      text = remaining(html)
+      text.should include("heatOutput(flowTemperature: number)")
+      text.should include("public double copAt")
+      text.should include("#start_defrost(cycle)")
+      text.should include("Bleed the radiators once a year.")
+    end
+
     it "keeps the largest guessed block when removing furniture would leave nothing" do
       products = Array.new(6) { |index| "<a href=\"/mower-#{index}\">Robotic mower KR#{index}00 for lawns up to #{index + 1} acres</a>" }
       html = "<header><a href='/'>Home</a></header><section class=\"related-product\">#{products.join}</section><footer>Contact us</footer>"
