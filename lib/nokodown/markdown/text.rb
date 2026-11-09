@@ -8,6 +8,9 @@ module Nokodown
       INVISIBLE = "\u00AD\u200B\u2060\uFEFF"
       # Every character escape may change; most text has none.
       ESCAPABLE = /[\\`*_\]<]/.freeze
+      # What CommonMark reads as an entity reference.
+      ENTITY = /&(?=(?:[A-Za-z][A-Za-z0-9]{1,31}|#\d{1,7}|#[xX]\h{1,6});)/.freeze
+      SCHEME = /\A[A-Za-z][A-Za-z0-9+.-]*:/.freeze
 
       module_function
 
@@ -60,10 +63,21 @@ module Nokodown
         text.gsub(/(?<!\\)([\[\]])/, "\\\\\\1")
       end
 
+      # Markdown decodes backslash escapes and entity references in a
+      # destination, so "javascript\\:" or "javascript&colon;" would read as a
+      # script link. Backslashes are percent-encoded, and so is an entity
+      # that comes before the path of a URL without a scheme, where it could
+      # spell one.
       def destination(url)
-        url = url.gsub(" ", "%20").gsub("<", "%3C").gsub(">", "%3E")
+        url = url.gsub(" ", "%20").gsub("<", "%3C").gsub(">", "%3E").gsub("\\", "%5C")
+        url = encode_scheme_entities(url) if url.include?("&") && !url.match?(SCHEME)
         url = url.gsub("(", "%28").gsub(")", "%29") unless url.count("(") == url.count(")")
         url
+      end
+
+      def encode_scheme_entities(url)
+        path = url.index(%r{[/?]}) || url.length
+        url.gsub(ENTITY) { Regexp.last_match.begin(0) < path ? "%26" : "&" }
       end
 
       # Markdown back to readable text: no images, link targets, emphasis or

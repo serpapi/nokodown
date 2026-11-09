@@ -58,11 +58,26 @@ module Nokodown
     PRIVATE_BUCKET = /\Abucketeer-/i.freeze
     WEB_URL = %r{\Ahttps?://}i.freeze
     UNSAFE = %r{[^A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]}.freeze
+    # Schemes that run code or open a document built from the URL itself.
+    SCRIPT_SCHEME = /\A(?:javascript|vbscript|data):/i.freeze
+    # A browser ignores spaces and control characters around a URL, and tabs
+    # and line breaks anywhere in it ("java&#9;script:" is "javascript:").
+    OUTER_CONTROLS = /\A[\x00-\x20]+|[\x00-\x20]+\z/.freeze
+
+    # The URL a browser would read from an attribute value.
+    def self.normalize(href)
+      href.to_s.gsub(OUTER_CONTROLS, "").delete("\t\n\r")
+    end
+
+    def self.script?(url)
+      url.match?(SCRIPT_SCHEME)
+    end
 
     def initialize(url, base_href = nil)
       @base = parse(url)
-      href = base_href.to_s.strip
-      @base = join(@base, href) || @base if !href.empty? && !href.start_with?("javascript:")
+      href = UrlResolver.normalize(base_href)
+      base = join(@base, href) unless href.empty? || UrlResolver.script?(href)
+      @base = base if base && !UrlResolver.script?(base.to_s)
       # A page links to the same places many times, and content selection
       # and rendering both resolve every link.
       @links = {}
@@ -94,13 +109,16 @@ module Nokodown
       !uri.fragment.nil? && strip_fragment(uri) == @page
     end
 
+    # Nothing that runs a script, before or after resolving: a <base> could
+    # lend its scheme to a relative path.
     def absolute(href)
-      href = href.to_s.strip.delete("\t\n\r")
-      return if href.empty?
-      return href if href.match?(/\A(?:mailto|tel|data):/i)
+      href = UrlResolver.normalize(href)
+      return if href.empty? || UrlResolver.script?(href)
+      return href if href.match?(/\A(?:mailto|tel):/i)
 
       uri = @base ? join(@base, href) : parse(href)
-      uri ? yield(uri).to_s : href
+      url = uri ? yield(uri).to_s : href
+      url unless UrlResolver.script?(url)
     end
 
     def parse(url)

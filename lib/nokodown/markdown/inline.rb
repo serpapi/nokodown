@@ -41,7 +41,7 @@ module Nokodown
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
       def self.link_url(href, urls)
-        href = href.strip
+        href = UrlResolver.normalize(href)
         return if href.empty? || href.start_with?("#") || href.match?(UNSAFE_SCHEME)
 
         url = urls.resolve(href)

@@ -248,8 +248,8 @@ module Nokodown
     end
 
     def destination(link)
-      href = link["href"].to_s.strip
-      href unless href.empty? || href.start_with?("#") || href.match?(/\Ajavascript:/i)
+      href = UrlResolver.normalize(link["href"])
+      href unless href.empty? || href.start_with?("#") || UrlResolver.script?(href)
     end
 
     def links_of(node)

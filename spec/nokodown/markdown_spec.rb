@@ -192,6 +192,26 @@ RSpec.describe "Markdown conversion" do
       convert('<p><a href="#top">Top</a> <a href="javascript:void(0)">Open</a> <a href="tel:+1555">Call</a></p>').should == "Top Open Call"
     end
 
+    it "keeps only the text of script links that tabs, line breaks or control characters disguise" do
+      convert('<p><a href="java&#x09;script:alert(1)">Tab</a> <a data-href="java&#10;script:alert(1)">Line</a> ' \
+              '<a href="&#x01;javascript:alert(1)">Control</a> <a href=" VBScript&#13;:msgbox(1)">Basic</a></p>').should ==
+        "Tab Line Control Basic"
+      convert('<p>Clip</p><video src="java&#9;script:alert(1)"></video><p><img src="JavaScript&#10;:alert(1)" alt="Logo"></p>').should == "Clip"
+    end
+
+    it "does not take a script scheme from <base>" do
+      html = '<html><head><base href=" JavaScript:alert(1)//"></head><body><p><a href="guide">Guide</a> <img src="a.jpg" alt="A"></p></body></html>'
+      Nokodown.to_markdown(html, url: "https://example.com/", main_content: false, title: false).should ==
+        "[Guide](https://example.com/guide) ![A](https://example.com/a.jpg)"
+    end
+
+    it "writes a URL so that Markdown's escapes and entity references cannot turn it into a script" do
+      html = '<p><a href="javascript\\:alert(1)">Slash</a> <a href="javascript&amp;colon;alert(1)">Entity</a> ' \
+             '<a href="&amp;#x6a;avascript:alert(1)">Code</a> <a href="/search?q=a&amp;b=c">Query</a></p>'
+      Nokodown.to_markdown(html, main_content: false, title: false).should ==
+        "[Slash](javascript%5C:alert(1)) [Entity](javascript%26colon;alert(1)) [Code](%26#x6a;avascript:alert(1)) [Query](/search?q=a&b=c)"
+    end
+
     it "drops permalink symbols and read-more links" do
       convert('<h2>Setup<a href="#setup">¶</a></h2><p>Intro. <a href="/post">Read more »</a></p>').should == "## Setup\n\nIntro."
     end
