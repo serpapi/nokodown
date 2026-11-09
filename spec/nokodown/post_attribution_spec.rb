@@ -78,6 +78,23 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.scan("May 3, 2024").size.should == 2
   end
 
+  it "keeps a date that is the body's text: a reply that is a date, a date after the text, a quoted date" do
+    entry = lambda do |name, at, body|
+      "<div class='post'><div class='post-head'><a class='username' href='/u/#{name}'>#{name}</a> " \
+        "<time datetime='2024-05-03T#{at}:00Z'>May 3, 2024</time></div><div class='post-body'>#{body}</div></div>"
+    end
+    date = ->(at) { "<span><time datetime='2024-05-03T#{at}:00Z'>May 3, 2024</time></span>" }
+    markdown = thread([
+      entry.call("wren", "08:45", "<p>#{question}</p><p>#{date.call('08:45')}</p>"),
+      entry.call("carol", "09:10", "<p>#{date.call('09:10')}</p>"),
+      entry.call("basil", "09:10", "<blockquote><p>Booked for #{date.call('09:10')}</p></blockquote><p>#{answer}</p>")
+    ])
+
+    markdown.should include("#{question}\n\nMay 3, 2024")
+    markdown.should include("**carol** · May 3, 2024\n\nMay 3, 2024")
+    markdown.should include("> Booked for May 3, 2024")
+  end
+
   it "writes a line for an opening post outside the list of replies" do
     entry = lambda do |kind, name, body|
       "<article class='#{kind}'><header>Posted by <span class='author'><a href='/u/#{name}'>#{name}</a></span> " \

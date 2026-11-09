@@ -231,7 +231,7 @@ module Nokodown
       placement = post.placement
       header = placement.header if repeats?(placement, post.author, post.date)
       [header, author_panel(post.author, post.date, placement.body), *member_panels(post.node, placement.body),
-       *copies(post.node, post.date)].compact
+       *copies(post.node, post.date, placement.body)].compact
     end
 
     # The member panel beside a post (XenForo's message-user) names the
@@ -366,20 +366,32 @@ module Nokodown
     end
 
     # Some themes show the date again above the body ("April 2, 2024 1 yr"):
-    # the outermost element around each copy that holds nothing else. A copy
-    # inside a phrase ("Posted April 2, 2024") stays, or the phrase would
-    # lose its date.
-    def copies(post, date)
+    # the outermost element around each copy that holds nothing else, short
+    # of the body. A copy inside a phrase ("Posted April 2, 2024") stays, or
+    # the phrase would lose its date, and so does one in a quote, one after
+    # the body's first words, and one that is all the body holds: a reply
+    # that is a date.
+    def copies(post, date, body)
       stamp = date["datetime"] || date["content"]
       return [] if stamp.nil?
 
+      stops = [Dom.key(post), Dom.key(body)]
       post.css(DATES).filter_map do |copy|
-        next if Dom.key(copy) == Dom.key(date) || (copy["datetime"] || copy["content"]) != stamp
+        next if Dom.key(copy) == Dom.key(date) || (copy["datetime"] || copy["content"]) != stamp || quoted?(copy)
 
         line = copy
-        line = line.parent while Dom.key(line.parent) != Dom.key(post) && Dom.text(line.parent) == Dom.text(copy)
-        line unless Dom.key(line) == Dom.key(copy)
+        line = line.parent while !stops.include?(Dom.key(line.parent)) && Dom.text(line.parent) == Dom.text(copy)
+        line if Dom.key(line) != Dom.key(copy) && above?(line, body)
       end
+    end
+
+    # Before the body, or first in it with more of the post after it. Keys
+    # follow document order.
+    def above?(line, body)
+      return false if inside?(body, line)
+      return Dom.key(line).to_i < Dom.key(body).to_i unless inside?(line, body)
+
+      text_before(line, body).zero? && Dom.text(body).length > Dom.text(line).length
     end
 
     # The date as the page shows it when that is a full date. "1 yr" or
