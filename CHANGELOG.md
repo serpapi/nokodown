@@ -23,6 +23,8 @@
   any other script link. A link's URL can no longer end its Markdown
   destination early with a stray `)`, nor its text end the label early
   with a stray `]` or a trailing backslash, and write a link of its own.
+  Link text holds no link, autolink or HTML tag of its own either, from
+  raw TeX or from a backtick run too long to fence code.
   Brackets and backticks in a URL are percent-encoded, so a URL read as
   text holds no link either.
 - Code inside link text keeps its brackets and backslashes as they are.
