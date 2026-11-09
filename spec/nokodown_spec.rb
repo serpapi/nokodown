@@ -304,6 +304,13 @@ RSpec.describe Nokodown do
       convert(html).should == "## Index funds\n\nAn index fund tracks a market index.\n\nFees matter."
     end
 
+    it "places a streamed segment whose id would break a selector" do
+      html = '<h1>Index funds</h1><template id="P:1\']"></template><div hidden id="S:1\']"><p>An index fund tracks a market index.</p></div>' \
+             '<div hidden id="S:\\"><p>Never placed.</p></div>'
+
+      convert(html).should == "# Index funds\n\nAn index fund tracks a market index."
+    end
+
     it "leaves a streamed segment made of links hidden, as it is without scripts" do
       cards = [["Camp kettle", "19.99"], ["Titanium pot set", "39.99"], ["Folding windscreen", "12.50"]].map do |name, price|
         "<div><a href=\"/p/#{name.downcase.tr(' ', '-')}\"><h3>Trailhead #{name}</h3></a><span>€#{price}</span></div>"

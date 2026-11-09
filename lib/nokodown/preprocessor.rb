@@ -61,10 +61,16 @@ module Nokodown
 
     private
 
+    # Slots are found by id in a hash: an id put into a selector can break it
+    # ("S:1']"). A slot inside a fallback removed for an earlier segment is gone.
     def place_streamed_segments
-      @body.css("div[hidden][id^='S:']").each do |segment|
-        number = segment["id"].delete_prefix("S:")
-        slot = @body.at_css("template[id='B:#{number}'], template[id='P:#{number}']")
+      segments = @body.css("div[hidden][id^='S:']")
+      return if segments.empty?
+
+      slots = Hash.new { |hash, number| hash[number] = [] }
+      @body.css("template[id^='B:'], template[id^='P:']").each { |template| slots[template["id"][2..]] << template }
+      segments.each do |segment|
+        slot = slots[segment["id"].delete_prefix("S:")].find { |template| template.ancestors.include?(@body) }
         next if slot.nil? || link_list?(segment)
 
         remove_fallback(slot) if slot["id"].start_with?("B:")
