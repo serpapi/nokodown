@@ -218,6 +218,18 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should_not match(/^\s*· /)
   end
 
+  it "finds the posts among many dated siblings in linear time" do
+    posts = Array.new(2_000) do |index|
+      "<div class='post-#{index} post'><div class='post-head'><a class='username' href='/u/#{index}'>member#{index}</a> " \
+        "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></div><div class='post-body'><p>#{answer}</p></div></div>"
+    end
+    body = Nokolexbor::HTML("<html><body><div class='posts'>#{posts.join}</div></body></html>").at_css("body")
+    Nokodown::Dom.assign_keys(body)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    described_class.new(body).call
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+  end
+
   it "leaves answers signed below their body alone" do
     answers = [question, answer].map.with_index do |body, index|
       "<div class='answer'><div class='post-text'><p>#{body}</p></div>" \

@@ -98,9 +98,10 @@ module Nokodown
     # from the inner one, which holds the machine-readable date.
     def dated_posts
       dates = @body.css(DATES).reject { |node| quoted?(node) || node.at_css(DATES) || member_date?(node) }
-      holders = dates.flat_map { |date| date.ancestors.select(&:element?) }.map { |node| Dom.key(node) }.compact.to_set
+      @holders = dates.flat_map { |date| date.ancestors.select(&:element?) }.map { |node| Dom.key(node) }.compact.to_set
+      @kinds = {}
       posts = dates.each_with_object({}) do |date, found|
-        post = post_of(date, holders)
+        post = post_of(date)
         found[Dom.key(post)] ||= [post, date] if post
       end
       posts = posts.values
@@ -137,10 +138,10 @@ module Nokodown
 
     # Posts repeat: a date's post is its lowest ancestor that has a sibling of
     # the same kind holding a date too, and that names an author.
-    def post_of(date, holders)
+    def post_of(date)
       date.ancestors.each do |ancestor|
         return if !ancestor.element? || ancestor.name == "body"
-        return ancestor if repeated?(ancestor, holders) && @authors.include?(Dom.key(ancestor))
+        return ancestor if repeated?(ancestor) && @authors.include?(Dom.key(ancestor))
       end
       nil
     end
@@ -164,11 +165,16 @@ module Nokodown
       Dom.squish(label)
     end
 
-    def repeated?(node, holders)
-      key = Dom.key(node)
-      node.parent.element_children.any? do |sibling|
-        Dom.key(sibling) != key && holders.include?(Dom.key(sibling)) && kind(sibling) == kind(node)
-      end
+    # The node holds a date, so it repeats when its parent has another child
+    # of its kind that holds one. Counted once per parent: every date in a
+    # long thread climbs through the same list of posts.
+    def repeated?(node)
+      kinds = @kinds[Dom.key(node.parent)] ||= dated_kinds(node.parent)
+      kinds.fetch(kind(node), 0) > 1
+    end
+
+    def dated_kinds(parent)
+      parent.element_children.select { |child| @holders.include?(Dom.key(child)) }.map { |child| kind(child) }.tally
     end
 
     # The first class, so an opening post marked "b-post--first" still
