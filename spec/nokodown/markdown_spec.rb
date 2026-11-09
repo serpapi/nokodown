@@ -212,6 +212,16 @@ RSpec.describe "Markdown conversion" do
         "[Slash](javascript%5C:alert(1)) [Entity](javascript%26colon;alert(1)) [Code](%26#x6a;avascript:alert(1)) [Query](/search?q=a&b=c)"
     end
 
+    it "writes a URL so that Markdown reads it as one destination" do
+      html = '<p><a data-href="mailto:x)[Run](javascript:alert(1))(">Mail</a> <a href="mailto:x(a)[Run](javascript:alert(1))">Pair</a> ' \
+             '<a href="mailto:x&#11;)[Run](javascript:alert(1))">Tab</a> <a href="/wiki/Coffee_(disambiguation)">Wiki</a></p>' \
+             '<audio src="/a.mp3)[Run](javascript:alert(1))("></audio>'
+      convert(html).should == "[Mail](mailto:x%29[Run]%28javascript:alert%281%29%29%28) [Pair](mailto:x(a)[Run](javascript:alert(1))) " \
+                              "[Tab](mailto:x%0B%29[Run]%28javascript:alert%281%29%29) [Wiki](https://example.com/wiki/Coffee_(disambiguation))\n\n" \
+                              "[Audio](https://example.com/a.mp3%29%5BRun%5D%28javascript:alert%281%29%29%28)"
+      convert("<a href=\"/x#{'(' * 33}y#{')' * 33}\">Deep</a>").should == "[Deep](https://example.com/x#{'%28' * 33}y#{'%29' * 33})"
+    end
+
     it "drops permalink symbols and read-more links" do
       convert('<h2>Setup<a href="#setup">¶</a></h2><p>Intro. <a href="/post">Read more »</a></p>').should == "## Setup\n\nIntro."
     end
