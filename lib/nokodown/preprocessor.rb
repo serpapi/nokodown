@@ -199,24 +199,26 @@ module Nokodown
       img["src"] = source if source
     end
 
-    # The first of the attributes that holds an image location, skipping
-    # spacer and placeholder files.
+    # The first of the attributes that holds an image location, as opposed
+    # to "false", an ID, a fragment, a template, another scheme or a spacer
+    # file. On a marked image any path, file name or query counts, spaces
+    # and all, as a loader may serve images from any relative URL. An
+    # unmarked image's src is replaced only by an image file or a path.
     def lazy_source(img, names, marked:)
       names.map { |name| img[name].to_s.strip }.find do |value|
-        image_location?(value, marked) && !value.match?(Markdown::Image::TRACKING)
+        lazy_candidate?(value) && (marked ? value.match?(%r{[/.?]}) : image_location?(value))
       end
     end
 
-    # A path or a web URL, as opposed to "false", an ID, a fragment or a
-    # template. Where a loader marks the image, anything with a path or a
-    # file name counts, spaces and all; an attribute that only replaces src
-    # has to name an image file or hold a path, with no spaces.
-    def image_location?(value, marked)
-      return false if value.empty? || value.start_with?("#") || value.match?(marked ? /[{}<>]/ : /[\s{}<>]/)
-      return true if value.match?(%r{\A(?:https?:)?//}i)
-      return false if value.match?(/\A[a-z][a-z\d+.-]*:/i)
+    def lazy_candidate?(value)
+      return false if value.empty? || value.start_with?("#") || value.match?(/[{}<>]/)
+      return false if value.match?(/\A[a-z][a-z\d+.-]*:/i) && !value.match?(%r{\Ahttps?://}i)
 
-      value.include?("/") || (marked ? value.include?(".") : value.match?(IMAGE_URL))
+      !value.match?(Markdown::Image::TRACKING)
+    end
+
+    def image_location?(value)
+      !value.match?(/\s/) && (value.start_with?("//") || value.include?("/") || value.match?(IMAGE_URL))
     end
 
     def restore_from_any_attribute(img)

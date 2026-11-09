@@ -286,6 +286,13 @@ RSpec.describe "Markdown conversion" do
       convert('<img data-src="logo.svg" src="/logo.png" alt="Logo">').should == "![Logo](https://example.com/logo.png)"
     end
 
+    it "takes a query or an endpoint from a marked image's lazy-loading attributes" do
+      html = '<p><img class="lazyload" data-src="?image=7" alt="Query"> <img class="lazyload" data-src="image?id=7" alt="Endpoint"> ' \
+             '<img class="lazyload" src="/thumb.jpg" data-src="false" alt="Word"></p>'
+      convert(html).should == "![Query](https://example.com/dir/page?image=7) ![Endpoint](https://example.com/dir/image?id=7) " \
+                              "![Word](https://example.com/thumb.jpg)"
+    end
+
     it "reads a marked image's lazy-loading file name with a query, in linear time" do
       convert('<img class="lazyload" data-src="logo.svg?text=hello world" alt="Logo">').should ==
         "![Logo](https://example.com/dir/logo.svg?text=hello%20world)"
