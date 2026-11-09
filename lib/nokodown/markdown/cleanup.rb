@@ -24,6 +24,9 @@ module Nokodown
       SENTENCE_END = /(?<![.!?…])[.!?…]++["'”’)\]*_]*+(?=\s+[^\p{Ll}\p{N}]|\s*\z)/.freeze
       # From where the last sentence ended through the end of the next one.
       SENTENCE = /\G.*?#{SENTENCE_END}/m.freeze
+      # What makes a line more than stray punctuation when converting the
+      # whole page: a letter, a digit or a symbol such as a rating star.
+      WORD_OR_SYMBOL = /[\p{L}\p{N}\p{So}]/.freeze
 
       module_function
 
@@ -40,7 +43,7 @@ module Nokodown
 
       # Separators and stray marks ("•", "...", a zero-width joiner).
       def punctuation?(block)
-        block.kind == :paragraph && !block.text.match?(/[\p{L}\p{N}\p{So}]/) && !block.text.include?("](")
+        block.kind == :paragraph && !block.text.match?(WORD_OR_SYMBOL) && !block.text.include?("](")
       end
 
       def noise?(block)

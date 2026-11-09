@@ -42,7 +42,7 @@ module Nokodown
           next true if text == block.text
 
           block.text = text
-          text.match?(/[\p{L}\p{N}]/) && (@full || !Cleanup.noise?(block))
+          @full ? text.match?(Cleanup::WORD_OR_SYMBOL) : text.match?(/[\p{L}\p{N}]/) && !Cleanup.noise?(block)
         end
       end
 

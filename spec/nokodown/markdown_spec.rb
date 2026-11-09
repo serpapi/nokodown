@@ -859,6 +859,11 @@ RSpec.describe "Markdown conversion" do
       convert("<p>Text</p><p>Advertisement</p><p>★★★</p><p>•</p><p>...</p>").should == "Text\n\nAdvertisement\n\n★★★"
     end
 
+    it "keeps the symbols an image repeated elsewhere leaves behind when converting the whole page" do
+      convert('<img src="/a.jpg"><p><img src="/a.jpg"><br>★★★</p>').should == "![](https://example.com/a.jpg)\n\n★★★"
+      convert('<img src="/a.jpg"><p><img src="/a.jpg"><br>•</p>').should == "![](https://example.com/a.jpg)"
+    end
+
     it "keeps a trailing list of linked titles" do
       html = '<h2>Candles</h2><p>3 products</p><h3><a href="/fig">Fig candle</a></h3>' \
              '<h3><a href="/pear">Pear candle</a></h3><h3><a href="/sage">Sage candle</a></h3>'
