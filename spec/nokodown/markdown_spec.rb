@@ -226,6 +226,13 @@ RSpec.describe "Markdown conversion" do
       convert('<h2>Setup<a href="#setup">¶</a></h2><p>Intro. <a href="/post">Read more »</a></p>').should == "## Setup\n\nIntro."
     end
 
+    it "ends link text at its own bracket, whatever backslashes and brackets it holds" do
+      html = '<p><a data-href="mailto:[Run](javascript:alert(1))">Go\\</a> <a href="/x">a\\]</a> <a href="/x">]x[</a> ' \
+             '<a href="/x">[1] note</a></p><img src="/i.jpg" alt="Photo\\">'
+      convert(html).should == "[Go\\\\](mailto:[Run](javascript:alert(1))) [a\\\\\\]](https://example.com/x) " \
+                              "[\\]x\\[](https://example.com/x) [[1] note](https://example.com/x)\n\n![Photo\\\\](https://example.com/i.jpg)"
+    end
+
     it "writes a link whose text is its URL as a bare URL" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
     end
@@ -233,7 +240,7 @@ RSpec.describe "Markdown conversion" do
     it "writes a link whose URL holds Markdown as a link, even when its text is the URL" do
       html = '<p><a data-href="mailto:[Run](javascript:alert(1))">[Run](javascript:alert(1))</a> ' \
              '<a href="https://example.org/a`b">https://example.org/a`b</a></p>'
-      convert(html).should == "[[Run\\](javascript:alert(1))](mailto:[Run](javascript:alert(1))) " \
+      convert(html).should == "[\\[Run\\](javascript:alert(1))](mailto:[Run](javascript:alert(1))) " \
                               "[https://example.org/a\\`b](https://example.org/a%60b)"
     end
 

@@ -61,10 +61,28 @@ module Nokodown
         "`" * [3, longest + 1].max
       end
 
+      # Escaped text as link text, so that it ends at the "]" written after
+      # it. Brackets stay only where they pair in order; otherwise each one
+      # not escaped is. A backslash left at the end, which would escape that
+      # "]", is escaped too.
       def link_text(text)
-        return text if text.count("[") == text.count("]")
+        return text unless text.match?(/[\[\]\\]/)
 
-        text.gsub(/(?<!\\)([\[\]])/, "\\\\\\1")
+        paired = paired_brackets?(text)
+        text.gsub(/\\.|\\\z|[\[\]]/m) do |match|
+          match.length == 2 || (paired && match != "\\") ? match : "\\#{match}"
+        end
+      end
+
+      def paired_brackets?(text)
+        depth = 0
+        text.scan(/\\.|[\[\]]/m) do |match|
+          next if match.length == 2
+
+          depth += match == "[" ? 1 : -1
+          return false if depth.negative?
+        end
+        depth.zero?
       end
 
       # Text not escaped yet, as link text with every bracket escaped, so no
