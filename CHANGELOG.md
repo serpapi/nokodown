@@ -17,6 +17,10 @@
 - With `main_content: false`, headings without a section and boilerplate
   lines ("Advertisement", "Share") are kept, so converting a selection of
   headings no longer gives empty Markdown.
+- Links and images whose `javascript:` or `vbscript:` scheme is disguised
+  by tabs, line breaks or leading control characters (`java&#9;script:`),
+  or that a `<base>` with such a scheme would produce, are dropped like
+  any other script link.
 - Extraction is faster on large pages, with the same output: about 30%
   on Wikipedia's Coffee article (390 to 260 ms on Ruby 2.7) and 20% at the
   median of WCXB.
