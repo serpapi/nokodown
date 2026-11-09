@@ -25,6 +25,7 @@ module Nokodown
     RESPONSIVE_SHOW = /\A(?:(?:sm|md|lg|xl|2xl):(?:block|flex|grid|inline|inline-block|inline-flex|table|contents)|d-(?:sm|md|lg|xl|xxl)-(?:block|flex|grid|inline|inline-block|inline-flex|table))\z/.freeze
 
     STREAMED_LINK_SHARE = 0.5
+    SUSPENSE_OPEN = %w[$ $? $!].freeze
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
@@ -88,10 +89,20 @@ module Nokodown
       text.positive? && links >= text * STREAMED_LINK_SHARE
     end
 
+    # The fallback runs to the comment that closes the boundary, past any
+    # boundaries nested in it ("$", "$?" or "$!" open one, "/$" closes it).
     def remove_fallback(slot)
       fallback = []
+      depth = 0
       node = slot.next_sibling
-      until node.nil? || (node.comment? && node.content == "/$")
+      until node.nil?
+        if node.comment? && SUSPENSE_OPEN.include?(node.content)
+          depth += 1
+        elsif node.comment? && node.content == "/$"
+          break if depth.zero?
+
+          depth -= 1
+        end
         fallback << node
         node = node.next_sibling
       end

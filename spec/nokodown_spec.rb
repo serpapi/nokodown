@@ -304,6 +304,14 @@ RSpec.describe Nokodown do
       convert(html).should == "## Index funds\n\nAn index fund tracks a market index.\n\nFees matter."
     end
 
+    it "removes a loading fallback that holds a boundary of its own" do
+      html = '<h1>Index funds</h1><!--$?--><template id="B:0"></template><p>Loading the article.</p>' \
+             '<!--$--><p>Loading the chart.</p><!--/$--><p>Still loading.</p><!--/$--><p>Fees matter.</p>' \
+             '<div hidden id="S:0"><p>An index fund tracks a market index.</p></div>'
+
+      convert(html).should == "# Index funds\n\nAn index fund tracks a market index.\n\nFees matter."
+    end
+
     it "places a streamed segment whose id would break a selector" do
       html = '<h1>Index funds</h1><template id="P:1\']"></template><div hidden id="S:1\']"><p>An index fund tracks a market index.</p></div>' \
              '<div hidden id="S:\\"><p>Never placed.</p></div>'
