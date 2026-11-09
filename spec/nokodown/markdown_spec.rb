@@ -237,6 +237,13 @@ RSpec.describe "Markdown conversion" do
                               "[IPv6](http://[2001:db8::1]/a%5Bb%5D) [Filter](https://example.com/search?f%5B0%5D=a)"
     end
 
+    it "keeps only the brackets of an IPv6 host as they are, and encodes its user info" do
+      html = '<p><a href="http://&lt;img src=x&gt;@[::1]/">Tag</a> <a href="http://a b@[::1]:8080/x y">Space</a> ' \
+             '<a href="http://[2001:db8::1]/a[b]">Path</a></p>'
+      convert(html).should == "[Tag](http://%3Cimg%20src=x%3E@[::1]/) [Space](http://a%20b@[::1]:8080/x%20y) " \
+                              "[Path](http://[2001:db8::1]/a%5Bb%5D)"
+    end
+
     it "drops permalink symbols and read-more links" do
       convert('<h2>Setup<a href="#setup">¶</a></h2><p>Intro. <a href="/post">Read more »</a></p>').should == "## Setup\n\nIntro."
     end
