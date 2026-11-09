@@ -45,6 +45,21 @@ RSpec.describe Nokodown::PostAttribution do
     ["#1", "/members/", "Well-known member", "Messages", "avatars"].each { |noise| markdown.should_not include(noise) }
   end
 
+  it "writes one line where the member panel beside the post names the poster too" do
+    posts = [["wren", question], ["basil", answer]].map do |name, body|
+      "<article class='message'><div class='message-user'><a class='avatar' href='/members/#{name}'><img src='/avatars/#{name}.jpg' alt='#{name}'></a>" \
+        "<h4 class='message-name'><a class='username' href='/members/#{name}'>#{name}</a></h4><h5 class='message-userTitle'>Well-known member</h5></div>" \
+        "<div class='message-main'><header class='message-attribution'><a class='username' href='/members/#{name}'>#{name}</a> " \
+        "<a href='/posts/1'><time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></a></header>" \
+        "<div class='message-content'><div class='bbWrapper'>#{body}</div></div></div></article>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+    markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+  end
+
   it "shows a full date where the page shows a relative one" do
     markdown = thread([
       post("wren", "<time datetime='2024-04-02T05:03:15Z'><span>April 2, 2024</span><span>1 yr</span></time>", question),

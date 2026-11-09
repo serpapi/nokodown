@@ -225,11 +225,22 @@ module Nokodown
     end
 
     # The line stands in for the header it was read from: the date line, the
-    # panel around the name, and copies of the date above the body.
+    # panel around the name, the member panels beside the post, and copies
+    # of the date above the body.
     def replaced(post)
       placement = post.placement
       header = placement.header if repeats?(placement, post.author, post.date)
-      [header, author_panel(post.author, post.date, placement.body), *copies(post.node, post.date)].compact
+      [header, author_panel(post.author, post.date, placement.body), *member_panels(post.node, placement.body),
+       *copies(post.node, post.date)].compact
+    end
+
+    # The member panel beside a post (XenForo's message-user) names the
+    # poster as well when the name is read from the header: Boilerplate
+    # would reduce it to a second line.
+    def member_panels(post, body)
+      post.css("[class]").select do |node|
+        MemberPanel.panel?(node) && !quoted?(node) && !inside?(node, body) && !inside?(body, node)
+      end
     end
 
     # The names before the date, nearest first: a thread's header reads
