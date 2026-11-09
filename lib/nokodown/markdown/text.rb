@@ -17,11 +17,12 @@ module Nokodown
       # How deep CommonMark (cmark, markdown-it) nests parentheses in a
       # destination before it stops reading it as one.
       MAX_PARENTHESES = 32
+      # Link text in pieces: backticks, a backslash, a bracket, a "<" or
+      # anything else.
+      LINK_TEXT_TOKEN = /`+|\\|[\[\]<]|[^\\`\[\]<]+/.freeze
       # The longest backtick run that CommonMarker (cmark-gfm) reads as the
       # fence of a code span; a longer one is text.
       MAX_BACKTICKS = 80
-      # Link text in pieces: backticks, a backslash, a bracket or anything else.
-      LINK_TEXT_TOKEN = /`+|\\|[\[\]]|[^\\`\[\]]+/.freeze
 
       module_function
 
@@ -71,14 +72,15 @@ module Nokodown
       # Escaped text as link text, so that it ends at the "]" written after
       # it. It is read as Markdown reads it: a code span is literal, so its
       # brackets and backslashes stay as they are. Outside code spans, a "]"
-      # before "(" or "[" is escaped, so the text holds no link of its own
+      # before "(" or "[" is escaped, and so is a "<" that would open an
+      # autolink or an HTML tag, so the text holds no link or tag of its own
       # (raw TeX can), and brackets stay only where they pair in order;
       # otherwise each one not escaped is. Backticks that open no code span
       # within the text are escaped, so none can pair with one around the
       # link, and so is a backslash left at the end, which would escape
       # that "]".
       def link_text(text)
-        return text unless text.match?(/[\[\]\\`]/)
+        return text unless text.match?(/[\[\]\\`<]/)
 
         tokens = text.scan(LINK_TEXT_TOKEN)
         runs = backtick_runs(tokens)
@@ -93,6 +95,9 @@ module Nokodown
             index = code_span_in_link_text(tokens, index, token.length, runs, pieces)
           elsif token == "]" && tokens[index + 1]&.start_with?("(", "[")
             pieces << "\\]"
+            index += 1
+          elsif token == "<" && tokens[index + 1]&.match?(%r{\A[A-Za-z/!?]})
+            pieces << "\\<"
             index += 1
           else
             brackets << pieces.length if token == "[" || token == "]"
@@ -124,7 +129,7 @@ module Nokodown
           return index + 2 if following.length == 1
 
           code_span_in_link_text(tokens, index + 1, following.length - 1, runs, pieces)
-        elsif following == "\\" || following == "[" || following == "]"
+        elsif following == "\\" || following == "[" || following == "]" || following == "<"
           pieces << "\\#{following}"
           index + 2
         else

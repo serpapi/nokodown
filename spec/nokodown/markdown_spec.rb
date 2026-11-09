@@ -278,6 +278,13 @@ RSpec.describe "Markdown conversion" do
       convert(%(<p><a href="/x"><code>#{'`' * 79}[a]</code></a></p>)).should == "[#{ticks} #{'`' * 79}[a] #{ticks}](https://example.com/x)"
     end
 
+    it "writes no autolink or HTML tag inside link text, whatever TeX it holds" do
+      html = '<p><a data-href="/x"><code>``x``</code><math alttext="&lt;javascript:alert(1)&gt;``"></math></a> ' \
+             '<a data-href="/y"><math alttext="&lt;img src=x onerror=alert(1)&gt;"></math></a> <a href="/z"><math alttext="a &lt; 1"></math></a></p>'
+      convert(html).should == "[``` ``x`` ```$\\<javascript:alert(1)>\\`\\`$](https://example.com/x) " \
+                              "[$\\<img src=x onerror=alert(1)>$](https://example.com/y) [$a < 1$](https://example.com/z)"
+    end
+
     it "writes a link whose text is its URL as a bare URL" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
     end
