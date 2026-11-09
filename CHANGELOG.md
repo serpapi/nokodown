@@ -21,7 +21,8 @@
   by tabs, line breaks or leading control characters (`java&#9;script:`),
   or that a `<base>` with such a scheme would produce, are dropped like
   any other script link. A link's URL can no longer end its Markdown
-  destination early with a stray `)` and write a link of its own.
+  destination early with a stray `)`, nor its text end the label early
+  with a stray `]` or a trailing backslash, and write a link of its own.
 - Extraction is faster on large pages, with the same output: about 30%
   on Wikipedia's Coffee article (390 to 260 ms on Ruby 2.7) and 20% at the
   median of WCXB.
