@@ -683,6 +683,13 @@ RSpec.describe "Markdown conversion" do
         "> #{quote}\n\nDesert yoga at sunset\n\n> #{quote}"
     end
 
+    it "looks for sentence ends in a long run of dots in linear time" do
+      text = "The harbor footpath connects the station with the coast#{'.' * 30_000} the path remains open"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      convert("<p>#{text}</p><blockquote><p>#{text}</p></blockquote>").should start_with("The harbor footpath")
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+    end
+
     it "keeps a quote of text that is not on the page" do
       quote = "The tide is the most predictable renewable resource we have, more than wind or sun."
       convert("<p>Engineers agree.</p><blockquote><p>#{quote}</p></blockquote>").should == "Engineers agree.\n\n> #{quote}"

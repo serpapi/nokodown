@@ -16,7 +16,9 @@ module Nokodown
       REPEATED_QUOTE_SHARE = 0.5
       QUOTE_OPENING = 12
       # Not before a lowercase word or a number, as after "e.g." or "v.".
-      SENTENCE_END = /[.!?…]+["'”’)\]*_]*(?=\s+[^\p{Ll}\p{N}]|\s*\z)/.freeze
+      # Matched from the first mark of a run and without backtracking, so a long
+      # run of dots is not rescanned from each one on Ruby 2.7.
+      SENTENCE_END = /(?<![.!?…])[.!?…]++["'”’)\]*_]*+(?=\s+[^\p{Ll}\p{N}]|\s*\z)/.freeze
 
       module_function
 
