@@ -14,7 +14,7 @@ module Nokodown
     HIDDEN_CLASSES = Set.new(%w[
       hidden hide d-none is-hidden u-hidden visually-hidden visuallyhidden sr-only screen-reader-text
       screen-reader-only screenreader-only a11y-hidden offscreen invisible element-invisible
-      print-only visible-print d-print-block show-for-sr
+      print-only visible-print d-print-block show-for-sr w-condition-invisible
     ]).freeze
 
     # Found by Lexbor's selector engine, so the checks below only run on
@@ -23,6 +23,11 @@ module Nokodown
 
     # Utility classes that make a "hidden" element visible again at some breakpoint.
     RESPONSIVE_SHOW = /\A(?:(?:sm|md|lg|xl|2xl):(?:block|flex|grid|inline|inline-block|inline-flex|table|contents)|d-(?:sm|md|lg|xl|xxl)-(?:block|flex|grid|inline|inline-block|inline-flex|table))\z/.freeze
+
+    STREAMED_LINK_SHARE = 0.5
+    SUSPENSE_OPEN = %w[$ $? $!].freeze
+    # The site's home page, maybe for one language ("/en/").
+    HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?(?:/(?:[a-z]{2}(?:[-_][a-z]{2})?/?)?(?:index\.\w+)?)?\z}i.freeze
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
@@ -43,6 +48,7 @@ module Nokodown
     end
 
     def call
+      place_streamed_segments
       @body.xpath(".//comment()").each(&:remove)
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
@@ -52,10 +58,58 @@ module Nokodown
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
       remove_form_controls
+      HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
     end
 
     private
+
+    # Slots are found by id in a hash: an id put into a selector can break it
+    # ("S:1']"). A slot inside a fallback removed for an earlier segment is gone.
+    def place_streamed_segments
+      segments = @body.css("div[hidden][id^='S:']")
+      return if segments.empty?
+
+      slots = Hash.new { |hash, number| hash[number] = [] }
+      @body.css("template[id^='B:'], template[id^='P:']").each { |template| slots[template["id"][2..]] << template }
+      segments.each do |segment|
+        slot = slots[segment["id"].delete_prefix("S:")].find { |template| template.ancestors.include?(@body) }
+        next if slot.nil? || link_list?(segment)
+
+        remove_fallback(slot) if slot["id"].start_with?("B:")
+        slot.replace(segment.children)
+        segment.remove
+      end
+    end
+
+    # What a page streams last waits on another service, and on shops and
+    # news sites that is mostly carousels of recommended products and stories.
+    # Made of links, such a segment stays hidden, as it is without scripts.
+    def link_list?(segment)
+      text = visible_char_count(segment)
+      links = segment.css("a[href]").sum { |link| Dom.char_count(link.content) }
+      text.positive? && links >= text * STREAMED_LINK_SHARE
+    end
+
+    # The fallback runs to the comment that closes the boundary, past any
+    # boundaries nested in it ("$", "$?" or "$!" open one, "/$" closes it).
+    def remove_fallback(slot)
+      fallback = []
+      depth = 0
+      node = slot.next_sibling
+      until node.nil?
+        if node.comment? && SUSPENSE_OPEN.include?(node.content)
+          depth += 1
+        elsif node.comment? && node.content == "/$"
+          break if depth.zero?
+
+          depth -= 1
+        end
+        fallback << node
+        node = node.next_sibling
+      end
+      fallback.each(&:remove) if node
+    end
 
     # Lexbor keeps <noscript> content as text. Lazy loaders put the real <img>
     # there, and some apps (Discourse) put the whole page there for crawlers.
@@ -76,9 +130,9 @@ module Nokodown
       @empty_without_noscript
     end
 
-    def visible_char_count
-      invisible = @body.css("script, style, noscript, template").sum { |node| Dom.char_count(node.content) }
-      Dom.char_count(@body.content) - invisible
+    def visible_char_count(root = @body)
+      invisible = root.css("script, style, noscript, template").sum { |node| Dom.char_count(node.content) }
+      Dom.char_count(root.content) - invisible
     end
 
     # The lazy copy sits just before the <noscript>, or just after it when it
@@ -156,10 +210,31 @@ module Nokodown
         next unless hidden?(node)
         # A hidden wrapper around most of the page is an anti-flicker snippet
         # or an open modal in the snapshot, not something readers cannot see.
-        next if total > 500 && Dom.char_count(node.content) > total * 0.3
+        next if total > 500 && Dom.char_count(node.content) > total * 0.3 && page_like?(node)
 
         node.remove
       end
+    end
+
+    def page_like?(node)
+      titles(node).size == titles(@body).size
+    end
+
+    # A site logo marked up as an <h1> is on every page, outside any wrapper.
+    def titles(root)
+      root.css("h1").reject { |h1| logo?(h1) }
+    end
+
+    def logo?(h1)
+      return true if Dom.ancestors_named(h1, "nav").any?
+      return !h1.at_css("img").nil? if Dom.text(h1).empty?
+
+      home = [*Dom.ancestors_named(h1, "a"), *h1.css("a")].find { |link| home_link?(link["href"].to_s.strip) }
+      home && Dom.text(h1).length <= Dom.text(home).length
+    end
+
+    def home_link?(href)
+      !href.empty? && href.match?(HOME_LINK)
     end
 
     def hidden?(node)
@@ -176,7 +251,11 @@ module Nokodown
     end
 
     def disclosure?(node)
-      node["role"] == "tabpanel" || Dom.signature(node).match?(Patterns::DISCLOSURE)
+      node["role"] == "tabpanel" || Dom.signature(node).match?(Patterns::DISCLOSURE) || accordion_panel?(node)
+    end
+
+    def accordion_panel?(node)
+      @panel_ids.include?(node["id"]) && (node.key?("aria-labelledby") || node["role"] == "region")
     end
 
     # Accordions and tabs mark closed panels aria-hidden, but icons and the

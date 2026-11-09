@@ -3,6 +3,7 @@
 module Nokodown
   class Extractor
     TITLE_SIMILARITY = 0.75
+    OPENING_PROSE = 150
     MIN_ARTICLE_LENGTH = 500
     CONDITIONAL_SHARE = 0.5
     REMOVED_LINK_SHARE = 0.5
@@ -92,21 +93,33 @@ module Nokodown
       kept < MIN_ARTICLE_LENGTH && kept < nodes.sum { |node| Dom.text(node).length } * 0.25
     end
 
-    # One H1 at the top: the page's own if the content has one, otherwise the
-    # metadata title, replacing a near-duplicate heading right below it.
+    # One H1 at the top: the page's own if the content opens with one,
+    # otherwise the metadata title, replacing a near-duplicate heading right
+    # below it.
     # Nothing found stays empty, so a script-rendered shell or a bot wall does
     # not pass for a page; Result#title still has the title.
     def with_title(blocks, title)
       return blocks if blocks.empty?
 
       first_h1 = blocks.find { |block| block.kind == :heading && block.level == 1 }
-      return demote_h1s(blocks, first_h1) if first_h1
+      return demote_h1s(blocks, first_h1) if first_h1 && (title.nil? || page_heading?(blocks, first_h1, title))
       return blocks if title.nil?
 
       duplicate = blocks.first(3).find do |block|
         block.kind == :heading && Dom.similarity(title, Markdown::Cleanup.heading_text(block)) > TITLE_SIMILARITY
       end
-      [Markdown::Block.new(:heading, "# #{Markdown::Text.escape(title)}", 1)] + blocks.reject { |block| block.equal?(duplicate) }
+      rest = demote_h1s(blocks.reject { |block| block.equal?(duplicate) }, nil)
+      [Markdown::Block.new(:heading, "# #{Markdown::Text.escape(title)}", 1)] + rest
+    end
+
+    # When the page's title block is left out of the content, the first H1
+    # left can be a section heading below the body's opening paragraphs. A
+    # headline may follow a caption or a promo line, but not the body.
+    def page_heading?(blocks, h1, title)
+      return true if Dom.similarity(title, Markdown::Cleanup.heading_text(h1)) > TITLE_SIMILARITY
+
+      opening = blocks.take_while { |block| !block.equal?(h1) }.select { |block| block.kind == :paragraph }
+      opening.sum { |block| Markdown::Text.plain(block.text).length } < OPENING_PROSE
     end
 
     def demote_h1s(blocks, keep)

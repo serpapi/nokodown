@@ -29,12 +29,18 @@ module Nokodown
     KEY = "data-nokodown-key"
 
     UUID = /\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/.freeze
+    # One level of brackets may nest ("[&>[data-slot=icon]]"). Possessive, so
+    # a run of unclosed "[" is not rescanned from each one.
+    ARBITRARY_VALUE = /\[(?:[^\s\[\]]|\[[^\s\[\]]*+\])*+\]/.freeze
     CSS_MODULE_HASH = /__(?=[\w-]{0,4}[A-Z\d])[\w-]{5}(?![\w-])/.freeze
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
     # survives the copy that article cleaning works on.
     THREAD = "data-nokodown-thread"
+
+    # Set by HeadingAnchors on elements whose id is made from their heading.
+    ANCHOR = "data-nokodown-anchor"
 
     module_function
 
@@ -109,13 +115,20 @@ module Nokodown
 
     def signature(node)
       classes = node["class"]
-      id = node["id"]
+      id = name_id(node)
       return "" if classes.nil? && id.nil?
 
       signature_of("#{classes} #{id}")
     end
 
+    # The id as a name for the element; a heading anchor only repeats the heading.
+    def name_id(node)
+      node.key?(ANCHOR) ? nil : node["id"]
+    end
+
     def signature_of(value)
+      # A Tailwind arbitrary value ("lg:h-[calc(100vh-var(--nav-height))]") is CSS, not a name.
+      value = value.gsub(ARBITRARY_VALUE, "") if value.include?("[")
       # Generated ids (Webflow "w-node-<uuid>") would otherwise read as words.
       value = value.gsub(UUID, " ") if value.match?(UUID)
       value = value.gsub(CSS_MODULE_HASH, "") if value.include?("__")

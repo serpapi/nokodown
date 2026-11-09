@@ -13,8 +13,15 @@ Gem::Specification.new do |spec|
   spec.license = "Apache-2.0"
   spec.required_ruby_version = ">= 2.7"
 
-  spec.files = Dir["lib/**/*.rb", "LICENSE", "NOTICE", "README.md"]
+  spec.files = Dir["lib/**/*.rb", "CHANGELOG.md", "LICENSE", "NOTICE", "README.md"]
   spec.require_paths = ["lib"]
 
-  spec.add_dependency "nokolexbor", ">= 0.6"
+  spec.metadata = {
+    "homepage_uri" => spec.homepage,
+    "source_code_uri" => spec.homepage,
+    "changelog_uri" => "#{spec.homepage}/blob/main/CHANGELOG.md",
+    "bug_tracker_uri" => "#{spec.homepage}/issues"
+  }
+
+  spec.add_dependency "nokolexbor", "~> 0.6"
 end
