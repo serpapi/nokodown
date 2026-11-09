@@ -122,11 +122,17 @@ module Nokodown
 
     ARIA_LABEL = /breadcrumb|pagination|share|social|advert|cookie|newsletter|navigation|\bmenu\b|footer|related/i.freeze
 
+    # Labels that mark a block as an ad wherever they stand. Not "Ad", "Ads"
+    # or "Advert", which can also be a name: Ad is a Dutch first name.
+    AD_LABEL = /
+      advertisement|advertising|sponsored(?:\scontent)?|paid\scontent|anzeige|werbung|
+      publicit[eé]|publicidad|pubblicit[aà]|реклама|广告
+    /xi.freeze
+
     # Whole-text matches for short blocks and links that carry no content.
     BOILERPLATE_TEXT = /
       \A(?:
-        advertisement|advertising|advert|ad|ads|sponsored(?:\scontent)?|paid\scontent|anzeige|werbung|
-        publicit[eé]|publicidad|pubblicit[aà]|реклама|广告|
+        #{AD_LABEL}|advert|ads?|
         skip\sto\s(?:main\s)?(?:content|navigation)|jump\sto\s(?:main\s)?content|
         share(?:\sthis)?(?:\s(?:article|story|post|page))?|share\son\s\w+|tweet(?:\sthis)?|pin\sit|
         email(?:\sthis)?|print(?:\sthis)?(?:\s(?:article|page))?|
