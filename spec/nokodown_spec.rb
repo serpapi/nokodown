@@ -40,6 +40,23 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should == "# Is the ferry running today?"
     end
 
+    it "puts the title above a section H1 that follows the opening paragraphs" do
+      intro = "<p>#{'Vertical mice and trackballs spare the wrist in different ways, and we tested both kinds. ' * 3}</p>"
+      section = "<p>#{'The first pick suits most hands and works on any desk surface we tried. ' * 3}</p>"
+      html = "<title>The Best Ergonomic Mice</title><body><article>#{intro}<h1>Deeper Dive: Our Picks</h1>#{section}</article></body>"
+
+      Nokodown.to_markdown(html).should start_with("# The Best Ergonomic Mice\n\nVertical mice")
+      Nokodown.to_markdown(html).should include("\n\n## Deeper Dive: Our Picks\n\n")
+    end
+
+    it "keeps the page's own headline below a photo caption" do
+      body = "<p>#{'Yamada earned its first star this year, and twelve more places joined the list. ' * 3}</p>"
+      html = "<title>Michelin Restaurants in New York on Resy</title><body><article>" \
+             "<p>Photo by Ben Hon for Resy</p><h1>The Resy Guide to the Michelin Winners</h1>#{body}</article></body>"
+
+      Nokodown.to_markdown(html).should start_with("Photo by Ben Hon for Resy\n\n# The Resy Guide to the Michelin Winners")
+    end
+
     it "accepts nil" do
       Nokodown.extract(nil).markdown.should == ""
     end
@@ -243,6 +260,13 @@ RSpec.describe Nokodown do
       convert(html).should == "Do you ship abroad?\n\nYes, to most of Europe."
     end
 
+    it "keeps a closed accordion panel hidden by style that its header controls" do
+      html = '<h3 id="ship-q"><button aria-controls="ship-a" aria-expanded="false">Do you ship abroad?</button></h3>' \
+             '<div id="ship-a" role="region" aria-labelledby="ship-q" style="display:none"><p>Yes, to most of Europe.</p></div>'
+
+      convert(html).should == "### Do you ship abroad?\n\nYes, to most of Europe."
+    end
+
     it "keeps a closed tab panel labelled by its tab" do
       convert('<div role="tabpanel" aria-labelledby="tab-2" aria-hidden="true"><p>Weighs 85 g.</p></div>').should == "Weighs 85 g."
     end
@@ -269,6 +293,64 @@ RSpec.describe Nokodown do
       markdown = article("<div role='tablist'><h2>Can it burn white gas?</h2><p>#{answer}</p></div>")
 
       markdown.should include("## Can it burn white gas?\n\nNo. It only takes")
+    end
+  end
+
+  describe "hidden content" do
+    it "places React streamed segments where their templates are, without the loading fallback" do
+      html = '<div><h2>Index funds</h2><!--$?--><template id="B:0"></template><div>Loading paragraph...</div><!--/$-->' \
+             '<p>Fees matter.</p></div><div hidden id="S:0"><p>An index fund tracks a market index.</p></div>'
+
+      convert(html).should == "## Index funds\n\nAn index fund tracks a market index.\n\nFees matter."
+    end
+
+    it "removes a loading fallback that holds a boundary of its own" do
+      html = '<h1>Index funds</h1><!--$?--><template id="B:0"></template><p>Loading the article.</p>' \
+             '<!--$--><p>Loading the chart.</p><!--/$--><p>Still loading.</p><!--/$--><p>Fees matter.</p>' \
+             '<div hidden id="S:0"><p>An index fund tracks a market index.</p></div>'
+
+      convert(html).should == "# Index funds\n\nAn index fund tracks a market index.\n\nFees matter."
+    end
+
+    it "places a streamed segment whose id would break a selector" do
+      html = '<h1>Index funds</h1><template id="P:1\']"></template><div hidden id="S:1\']"><p>An index fund tracks a market index.</p></div>' \
+             '<div hidden id="S:\\"><p>Never placed.</p></div>'
+
+      convert(html).should == "# Index funds\n\nAn index fund tracks a market index."
+    end
+
+    it "leaves a streamed segment made of links hidden, as it is without scripts" do
+      cards = [["Camp kettle", "19.99"], ["Titanium pot set", "39.99"], ["Folding windscreen", "12.50"]].map do |name, price|
+        "<div><a href=\"/p/#{name.downcase.tr(' ', '-')}\"><h3>Trailhead #{name}</h3></a><span>€#{price}</span></div>"
+      end
+      html = '<h1>Trail stove</h1><template id="P:0"></template><template id="P:1"></template>' \
+             '<div hidden id="S:0"><p>Boils a litre in three minutes on <a href="/fuel">isobutane</a>.</p></div>' \
+             "<div hidden id=\"S:1\"><h2>More from Trailhead</h2>#{cards.join}</div>"
+
+      convert(html).should == "# Trail stove\n\nBoils a litre in three minutes on [isobutane](https://example.com/fuel)."
+    end
+
+    it "drops elements Webflow hides when their condition fails" do
+      convert('<p>Open daily.</p><div class="w-condition-invisible"><p>Closed for the holidays.</p></div>').should == "Open daily."
+    end
+
+    it "drops a large hidden block beside the visible title, but not an anti-flicker wrapper around the page" do
+      article = "<h1>Trail stoves</h1><p>#{'A trail stove boils a litre in three minutes. ' * 14}</p>"
+      copy = "<pre hidden>#{'# Trail stoves raw markdown copy of the article. ' * 8}</pre>"
+
+      convert(article + copy).should_not include("raw markdown copy")
+      convert("<div style='visibility:hidden'>#{article}</div>").should include("boils a litre")
+    end
+
+    it "keeps an anti-flicker wrapper when only the site logo's h1 is outside it" do
+      article = "<h1>Trail stoves</h1><p>#{'A trail stove boils a litre in three minutes. ' * 14}</p>"
+      logos = ["<h1><a href='/'>Trailhead</a></h1>", "<a href='https://example.com/en/'><h1>Trailhead</h1></a>",
+               "<h1><img src='/logo.png' alt='Trailhead'></h1>", "<nav><h1>Trailhead</h1></nav>"]
+
+      logos.each do |logo|
+        convert("<header>#{logo}</header><div style='display:none'>#{article}</div>").should include("boils a litre")
+      end
+      convert("<h1><a href='/stoves'>Stoves</a></h1><div style='display:none'>#{article}</div>").should_not include("boils a litre")
     end
   end
 
@@ -332,6 +414,58 @@ RSpec.describe Nokodown do
 
       markdown.should include("modest maintenance costs.")
       markdown.should_not include("copy of the intro")
+    end
+  end
+
+  describe "articles split into blocks" do
+    def block(heading, topic, count)
+      paragraphs = Array.new(count) { |index| "<p>#{topic} matters for a working parent, and part #{index + 1} explains why, with an example or two.</p>" }
+      "<div class='block html'><div class='block-content'><div class='text-block'><div class='html-content'>#{heading}#{paragraphs.join}</div></div></div></div>"
+    end
+
+    it "keeps every block of the body, not only the longest" do
+      body = block("", "Balance", 10) + "<div class='block image'><img src='/desk.jpg' alt=''></div>" +
+             block("<h2>Release perfection</h2>", "Letting go", 4) + block("<h2>Stop multitasking</h2>", "Focus", 4)
+      html = "<head><title>Balance</title><meta property='og:type' content='article'></head>" \
+             "<body><main><article><h1>Balance</h1><div class='row'><div class='col'>#{body}</div></div></article></main></body>"
+
+      markdown = Nokodown.to_markdown(html)
+      markdown.should include("Balance matters for a working parent")
+      markdown.should include("## Release perfection")
+      markdown.should include("Focus matters for a working parent")
+    end
+
+    def band(topic)
+      cards = Array.new(3) do |index|
+        "<div class='card'><h3>#{topic} #{index + 1}</h3><p>#{topic} shows each campaign on one screen, " \
+          "so a falling conversion rate is caught on Monday, not at month end.</p></div>"
+      end
+      "<div class='band'><div class='container'><div class='row'><h2>#{topic}</h2>#{cards.join}</div></div></div>"
+    end
+
+    it "keeps a landing page's other bands when only its sibling sections would make it an article" do
+      answers = Array.new(4) do |index|
+        "<h3>Question #{index + 1}?</h3><p>Answer #{index + 1} covers search, paid media and email, " \
+          "so budgets follow what works and every plan starts with an audit.</p>"
+      end
+      html = "<title>Harbor Analytics</title><body>" \
+             "<div class='hero'><h1>Harbor Analytics</h1><p>We turn the data your campaigns already collect " \
+             "into clear weekly decisions that your whole team can act on.</p></div>#{band("Dashboards")}" \
+             "<div class='claim'><h2>Teams that measure every channel improve their targeting within a quarter.</h2>" \
+             "<p><a href='/cases'>How we do it</a></p></div>#{band("Reports")}" \
+             "<div class='faq'><div class='container'><div class='row'>#{answers.join}</div></div></div></body>"
+
+      markdown = Nokodown.to_markdown(html)
+      markdown.should include("We turn the data your campaigns already collect")
+      markdown.should include("[How we do it](/cases)")
+    end
+
+    it "drops a disclaimer at the end of the body" do
+      paragraphs = Array.new(5) { |index| "<p>Index funds track a market index at low cost, and part #{index + 1} explains how.</p>" }
+      disclaimer = "<div class='cmp-richtext--disclaimer'><p>Rates are subject to change and are not an offer of credit.</p></div>"
+      html = "<title>Index funds</title><body><article><h1>Index funds</h1>#{paragraphs.join}#{disclaimer}</article></body>"
+
+      Nokodown.to_markdown(html).should_not include("subject to change")
     end
   end
 

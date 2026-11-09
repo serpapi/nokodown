@@ -189,6 +189,28 @@ RSpec.describe "Main content of different kinds of pages" do
     end
   end
 
+  describe "a forum thread with a member panel beside each post" do
+    it "names the poster of each post in one line, without the member's details" do
+      posts = { "Ana Ruiz" => "Bleed the radiators from the top floor down, with the pump off.",
+                "Tom" => "Then top the pressure back up to one and a half bar on the gauge." }
+      html = posts.map.with_index do |(name, text), index|
+        <<~HTML
+          <article class="message" id="post-#{index}">
+            <div class="message-user"><a href="/members/#{index}/" class="avatar"><img src="/a/#{index}.jpg" alt="#{name}"></a>
+              <h4 class="message-name"><a href="/members/#{index}/" class="username">#{name}</a></h4>
+              <dl class="pairs"><dt>Joined</dt><dd>Jan 2020</dd><dt>Messages</dt><dd>12#{index}</dd></dl></div>
+            <div class="message-content"><p>#{text}</p></div>
+          </article>
+        HTML
+      end
+      markdown = Nokodown.to_markdown("<html><body><main><h1>Bleeding radiators</h1>#{html.join}</main></body></html>", images: false)
+
+      markdown.should include("**Ana Ruiz**\n\nBleed the radiators")
+      markdown.should include("**Tom**\n\nThen top the pressure")
+      markdown.should_not include("Joined")
+    end
+  end
+
   describe "a forum thread whose posts are named like comments" do
     it "keeps replies in a replies section" do
       markdown = extract("forum_replies").markdown

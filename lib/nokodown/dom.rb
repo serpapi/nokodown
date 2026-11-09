@@ -29,6 +29,9 @@ module Nokodown
     KEY = "data-nokodown-key"
 
     UUID = /\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/.freeze
+    # One level of brackets may nest ("[&>[data-slot=icon]]"). Possessive, so
+    # a run of unclosed "[" is not rescanned from each one.
+    ARBITRARY_VALUE = /\[(?:[^\s\[\]]|\[[^\s\[\]]*+\])*+\]/.freeze
     CSS_MODULE_HASH = /__(?=[\w-]{0,4}[A-Z\d])[\w-]{5}(?![\w-])/.freeze
 
     # On a forum, the replies sit in containers named like a comment section.
@@ -124,6 +127,8 @@ module Nokodown
     end
 
     def signature_of(value)
+      # A Tailwind arbitrary value ("lg:h-[calc(100vh-var(--nav-height))]") is CSS, not a name.
+      value = value.gsub(ARBITRARY_VALUE, "") if value.include?("[")
       # Generated ids (Webflow "w-node-<uuid>") would otherwise read as words.
       value = value.gsub(UUID, " ") if value.match?(UUID)
       value = value.gsub(CSS_MODULE_HASH, "") if value.include?("__")

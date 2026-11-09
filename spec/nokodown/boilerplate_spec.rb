@@ -1,12 +1,16 @@
 # frozen_string_literal: true
 
 RSpec.describe Nokodown::Boilerplate do
-  # Text left by boilerplate removal alone, before the content is located.
-  def remaining(html)
+  def cleaned(html)
     body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
     Nokodown::Preprocessor.new(body).call
     Nokodown::Boilerplate.new(body).call
-    Nokodown::Dom.text(body)
+    body
+  end
+
+  # Text left by boilerplate removal alone, before the content is located.
+  def remaining(html)
+    Nokodown::Dom.text(cleaned(html))
   end
 
   def prose(topic, count)
@@ -40,6 +44,27 @@ RSpec.describe Nokodown::Boilerplate do
       HTML
 
       remaining(html).should == "Heat pumps move heat instead of making it."
+    end
+  end
+
+  describe "Tailwind class names" do
+    it "does not read names into arbitrary values, but still reads the utility name" do
+      html = <<~HTML
+        <p>Heat pumps move heat instead of making it.</p>
+        <div class="lg:h-[calc(100vh-var(--nav-height))]">They keep working at minus twenty degrees.</div>
+        <div class="data-[state=open]:sidebar-shown">Find an installer near you.</div>
+      HTML
+
+      remaining(html).should == "Heat pumps move heat instead of making it. They keep working at minus twenty degrees."
+    end
+
+    it "reads no names into a variant with brackets inside its brackets" do
+      html = <<~HTML
+        <p>Heat pumps move heat instead of making it.</p>
+        <div class="[&:not([hidden])_.share-row]:flex">They keep working at minus twenty degrees.</div>
+      HTML
+
+      remaining(html).should == "Heat pumps move heat instead of making it. They keep working at minus twenty degrees."
     end
   end
 
@@ -81,6 +106,176 @@ RSpec.describe Nokodown::Boilerplate do
       text.should_not include("Running costs")
       text.should_not include("Our company")
       text.should_not include("Our newsletter")
+    end
+  end
+
+  describe "noise names" do
+    it "removes a related block even when its classes also name content" do
+      html = "<article>#{prose('Sizing', 8)}</article><div class=\"related-posts entry-related\">#{prose('Another heat pump story', 2)}</div>"
+
+      remaining(html).should_not include("Another heat pump story")
+    end
+
+    it "reads no names into WooCommerce's product terms" do
+      description = "Two dozen ginger biscuits baked with butter and dark molasses, in a tin that keeps them crisp. " * 3
+      html = <<~HTML
+        <div class="product type-product post-12 status-publish product_cat-cookies product_tag-social-gifts">
+          <h1>Ginger cookies</h1><p>#{description}</p>
+        </div>
+        <section>#{prose('Shipping', 3)}</section>
+      HTML
+
+      remaining(html).should include("Two dozen ginger biscuits")
+    end
+
+    it "removes forum signatures, not the post" do
+      html = <<~HTML
+        <div class="message">
+          <div class="message-userContent">#{prose('Bleeding the radiators', 2)}</div>
+          <aside class="message-signature">My rig: a 7 kW air source pump and twelve radiators.</aside>
+        </div>
+      HTML
+
+      text = remaining(html)
+      text.should include("Bleeding the radiators is explained")
+      text.should_not include("My rig")
+    end
+
+    it "keeps a function's signature in API docs, and a post that has a signature" do
+      html = <<~HTML
+        <section class="tsd-panel"><div class="tsd-signature">heatOutput(flowTemperature: number): number</div></section>
+        <div class="member-signature">public double copAt(double outdoorTemperature)</div>
+        <h3 class="signature">#start_defrost(cycle) ⇒ Boolean</h3>
+        <div class="post"><div class="post-text has-signature">Bleed the radiators once a year.</div></div>
+      HTML
+
+      text = remaining(html)
+      text.should include("heatOutput(flowTemperature: number)")
+      text.should include("public double copAt")
+      text.should include("#start_defrost(cycle)")
+      text.should include("Bleed the radiators once a year.")
+    end
+
+    it "keeps the largest guessed block when removing furniture would leave nothing" do
+      products = Array.new(6) { |index| "<a href=\"/mower-#{index}\">Robotic mower KR#{index}00 for lawns up to #{index + 1} acres</a>" }
+      html = "<header><a href='/'>Home</a></header><section class=\"related-product\">#{products.join}</section><footer>Contact us</footer>"
+
+      remaining(html).should include("Robotic mower KR500")
+    end
+  end
+
+  describe "disclaimers" do
+    it "removes fine print about the site and its offers" do
+      html = <<~HTML
+        <div class="disclaimer">We may earn money when you click on our links.</div>
+        #{prose('Choosing a mover', 3)}
+        <figure><img src="/truck.jpg" alt=""></figure>
+        <div class="disclaimer"><div class="disclaimer__text"><p>*Offer valid for new bookings only.</p></div></div>
+      HTML
+
+      text = remaining(html)
+      text.should include("Choosing a mover is explained")
+      text.should_not include("earn money")
+      text.should_not include("Offer valid")
+    end
+
+    it "keeps the footnote to a mark in the table right before it" do
+      table = "<table><tr><th>Mover</th><th>Coverage</th></tr><tr><td>Atlas Vans</td><td>40-46 states*</td></tr></table>"
+      note = "<div class=\"disclaimer\"><div class=\"disclaimer__text\"><p>*Atlas serves 40 states for pickup and 46 for delivery.</p></div></div>"
+
+      remaining("#{prose('Choosing a mover', 3)}#{table}#{note}").should include("*Atlas serves 40 states")
+    end
+
+    it "keeps a note that continues the prose, but not one after a line of links" do
+      html = <<~HTML
+        #{prose('Choosing hemp gummies', 2)}
+        <h2>Is it legal in your state?</h2>
+        <p>Hemp gummies with less than 0.3% THC by dry weight are legal under federal law across the country.</p>
+        <p class="gray-disclaimer">Note: state laws vary, so check yours before you buy.</p>
+        <p><a href="/terms">Terms</a> <a href="/privacy">Privacy</a></p>
+        <p class="gray-disclaimer">Statements here have not been evaluated by the FDA.</p>
+      HTML
+
+      text = remaining(html)
+      text.should include("Note: state laws vary")
+      text.should_not include("not been evaluated")
+    end
+
+    it "removes a footer disclaimer right after the prose" do
+      %w[footer__disclaimer footer_disclaimer site-footer-disclaimer disclaimer-footer].each do |name|
+        html = "#{prose('Choosing an index fund', 3)}<p class=\"#{name}\">All content on this website is for information only.</p>"
+
+        remaining(html).should_not include("for information only")
+      end
+    end
+
+    it "keeps a block whose modifier says it has a disclaimer" do
+      html = "#{prose('Choosing a smart lock', 2)}<div class=\"chart hasDisclaimer\"><p>Smart locks open with a code, a phone or a key.</p></div>"
+
+      remaining(html).should include("Smart locks open")
+    end
+  end
+
+  describe "member panels" do
+    def post(panel)
+      "<div class=\"message\">#{panel}<div class=\"message-userContent\">#{prose('Bleeding the radiators', 2)}</div></div>"
+    end
+
+    # The line the panel beside the post was reduced to.
+    def line(panel)
+      line = cleaned(post(panel)).at_css(".message > p")
+      line && Nokodown::Dom.text(line)
+    end
+
+    it "reduces the panel beside a post to the poster's name" do
+      panel = <<~HTML
+        <div class="message-user">
+          <div class="message-avatar"><a href="/members/ana.12/"><img src="/avatars/12.jpg" alt="Ana"></a></div>
+          <h4 class="message-name"><a href="/members/ana.12/" class="username">Ana Ruiz</a></h4>
+          <h5 class="userTitle">Well-known member</h5>
+          <dl class="pairs"><dt>Joined</dt><dd>Jan 2020</dd><dt>Messages</dt><dd>120</dd></dl>
+        </div>
+      HTML
+
+      line(panel).should == "Ana Ruiz"
+      remaining(post(panel)).should_not include("member")
+      remaining(post(panel)).should_not include("Joined")
+    end
+
+    it "takes the name from the profile link a panel opens with" do
+      panel = '<dl class="postprofile"><dt><a href="/u/7"><img src="/a/7.png" alt="avatar"></a> <a href="/u/7">Ana</a></dt>' \
+              "<dd>Senator</dd><dd><strong>Posts:</strong> 4032</dd></dl>"
+
+      line(panel).should == "Ana"
+      remaining(post(panel)).should_not include("Posts")
+    end
+
+    it "leaves no line when the post opens with a by-line naming the poster" do
+      html = '<div class="post"><dl class="postprofile"><dt><a href="/u/7" class="username">Ana</a></dt><dd>Posts: 12</dd></dl>' \
+             '<div class="postbody"><p class="author">by <strong><a href="/u/7">Ana</a></strong> » Mon Jan 8, 2024</p>' \
+             "#{prose('Bleeding the radiators', 2)}</div></div>"
+
+      remaining(html).scan("Ana").size.should == 1
+    end
+
+    it "removes a panel of member details that names no one" do
+      panel = '<div class="message-userExtras"><dl><dt>Joined</dt><dd>Jan 2020</dd><dt>Location</dt>' \
+              '<dd><a href="/location?q=Leeds">Leeds</a></dd></dl></div>'
+
+      line(panel).should be_nil
+      remaining(post(panel)).should_not include("Leeds")
+    end
+
+    it "keeps the post's date that a panel holds, not the member's" do
+      panel = <<~HTML
+        <div class="user-info">
+          <div class="member-since">Member since <time datetime="2019-03-01">Mar 2019</time></div>
+          <div class="user-action-time">answered <span class="relativetime">Jan 4, 2024</span></div>
+          <div class="user-details" itemprop="author"><a href="/users/7/ana">Ana</a> <span class="reputation">2,301</span></div>
+        </div>
+      HTML
+
+      line(panel).should == "Ana · answered Jan 4, 2024"
     end
   end
 
