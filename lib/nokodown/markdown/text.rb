@@ -11,7 +11,9 @@ module Nokodown
       # What CommonMark reads as an entity reference.
       ENTITY = /&(?=(?:[A-Za-z][A-Za-z0-9]{1,31}|#\d{1,7}|#[xX]\h{1,6});)/.freeze
       SCHEME = /\A[A-Za-z][A-Za-z0-9+.-]*:/.freeze
-      DESTINATION_UNSAFE = /[\x00-\x20\x7F<>\\]/.freeze
+      DESTINATION_UNSAFE = /[\x00-\x20\x7F<>\\\[\]`]/.freeze
+      # An IPv6 host keeps its brackets; no "(" can follow them.
+      IPV6_HOST = %r{\A[A-Za-z][A-Za-z0-9+.-]*://(?:[^/?#\[\]]*@)?\[[\h:.]+\](?=[:/?#]|\z)}.freeze
       # How deep CommonMark (cmark, markdown-it) nests parentheses in a
       # destination before it stops reading it as one.
       MAX_PARENTHESES = 32
@@ -162,9 +164,13 @@ module Nokodown
       # that comes before the path of a URL without a scheme, where it could
       # spell one. Parentheses stay only where Markdown pairs them, or a
       # ")" would end the destination early and let the rest of the URL
-      # write a link of its own.
+      # write a link of its own. Brackets and backticks are percent-encoded
+      # too: if text around the link keeps Markdown from reading it as one
+      # (a backslash or a backtick before it), the URL is read as text, and
+      # must not hold a link or a code span of its own.
       def destination(url)
-        url = url.gsub(DESTINATION_UNSAFE) { |char| format("%%%02X", char.ord) }
+        host = url[IPV6_HOST].to_s
+        url = host + url[host.length..-1].gsub(DESTINATION_UNSAFE) { |char| format("%%%02X", char.ord) }
         url = encode_scheme_entities(url) if url.include?("&") && !url.match?(SCHEME)
         url = url.gsub("(", "%28").gsub(")", "%29") unless paired_parentheses?(url)
         url

@@ -223,10 +223,18 @@ RSpec.describe "Markdown conversion" do
       html = '<p><a data-href="mailto:x)[Run](javascript:alert(1))(">Mail</a> <a href="mailto:x(a)[Run](javascript:alert(1))">Pair</a> ' \
              '<a href="mailto:x&#11;)[Run](javascript:alert(1))">Tab</a> <a href="/wiki/Coffee_(disambiguation)">Wiki</a></p>' \
              '<audio src="/a.mp3)[Run](javascript:alert(1))("></audio>'
-      convert(html).should == "[Mail](mailto:x%29[Run]%28javascript:alert%281%29%29%28) [Pair](mailto:x(a)[Run](javascript:alert(1))) " \
-                              "[Tab](mailto:x%0B%29[Run]%28javascript:alert%281%29%29) [Wiki](https://example.com/wiki/Coffee_(disambiguation))\n\n" \
+      convert(html).should == "[Mail](mailto:x%29%5BRun%5D%28javascript:alert%281%29%29%28) [Pair](mailto:x(a)%5BRun%5D(javascript:alert(1))) " \
+                              "[Tab](mailto:x%0B%29%5BRun%5D%28javascript:alert%281%29%29) [Wiki](https://example.com/wiki/Coffee_(disambiguation))\n\n" \
                               "[Audio](https://example.com/a.mp3%29%5BRun%5D%28javascript:alert%281%29%29%28)"
       convert("<a href=\"/x#{'(' * 33}y#{')' * 33}\">Deep</a>").should == "[Deep](https://example.com/x#{'%28' * 33}y#{'%29' * 33})"
+    end
+
+    it "writes a URL so that it holds no link or code of its own when the text before it keeps the link from forming" do
+      html = '<p>a\\<a data-href="mailto:[Run](javascript:alert(1))">Go</a></p><p><math alttext="a`b"></math> ' \
+             '<a data-href="mailto:x`[Run](javascript:alert(1))">Go</a></p>' \
+             '<p><a href="http://[2001:db8::1]/a[b]">IPv6</a> <a href="/search?f[0]=a">Filter</a></p>'
+      convert(html).should == "a\\[Go](mailto:%5BRun%5D(javascript:alert(1)))\n\n$a`b$ [Go](mailto:x%60%5BRun%5D(javascript:alert(1)))\n\n" \
+                              "[IPv6](http://[2001:db8::1]/a%5Bb%5D) [Filter](https://example.com/search?f%5B0%5D=a)"
     end
 
     it "drops permalink symbols and read-more links" do
@@ -236,14 +244,14 @@ RSpec.describe "Markdown conversion" do
     it "ends link text at its own bracket, whatever backslashes and brackets it holds" do
       html = '<p><a data-href="mailto:[Run](javascript:alert(1))">Go\\</a> <a href="/x">a\\]</a> <a href="/x">]x[</a> ' \
              '<a href="/x">[1] note</a></p><img src="/i.jpg" alt="Photo\\">'
-      convert(html).should == "[Go\\\\](mailto:[Run](javascript:alert(1))) [a\\\\\\]](https://example.com/x) " \
+      convert(html).should == "[Go\\\\](mailto:%5BRun%5D(javascript:alert(1))) [a\\\\\\]](https://example.com/x) " \
                               "[\\]x\\[](https://example.com/x) [[1] note](https://example.com/x)\n\n![Photo\\\\](https://example.com/i.jpg)"
     end
 
     it "reads code in link text as Markdown does, keeping its brackets and backslashes as they are" do
       html = '<p><a href="/x"><code>][</code></a> <a data-href="mailto:[Run](javascript:alert(1))">Go <code>[</code>]</a> ' \
              '<a href="/z"><code>[\\]</code>]</a> <a href="/w"><kbd>a</kbd>`<code>b`c</code></a></p>'
-      convert(html).should == "[`][`](https://example.com/x) [Go `[`\\]](mailto:[Run](javascript:alert(1))) " \
+      convert(html).should == "[`][`](https://example.com/x) [Go `[`\\]](mailto:%5BRun%5D(javascript:alert(1))) " \
                               "[`[\\]`\\]](https://example.com/z) [`a`\\```b`c``](https://example.com/w)"
     end
 
@@ -254,7 +262,7 @@ RSpec.describe "Markdown conversion" do
     it "writes a link whose URL holds Markdown as a link, even when its text is the URL" do
       html = '<p><a data-href="mailto:[Run](javascript:alert(1))">[Run](javascript:alert(1))</a> ' \
              '<a href="https://example.org/a`b">https://example.org/a`b</a></p>'
-      convert(html).should == "[\\[Run\\](javascript:alert(1))](mailto:[Run](javascript:alert(1))) " \
+      convert(html).should == "[\\[Run\\](javascript:alert(1))](mailto:%5BRun%5D(javascript:alert(1))) " \
                               "[https://example.org/a\\`b](https://example.org/a%60b)"
     end
 
