@@ -15,6 +15,8 @@ module Nokodown
       # How deep CommonMark (cmark, markdown-it) nests parentheses in a
       # destination before it stops reading it as one.
       MAX_PARENTHESES = 32
+      # Link text in pieces: backticks, a backslash, a bracket or anything else.
+      LINK_TEXT_TOKEN = /`+|\\|[\[\]]|[^\\`\[\]]+/.freeze
 
       module_function
 
@@ -62,24 +64,84 @@ module Nokodown
       end
 
       # Escaped text as link text, so that it ends at the "]" written after
-      # it. Brackets stay only where they pair in order; otherwise each one
-      # not escaped is. A backslash left at the end, which would escape that
-      # "]", is escaped too.
+      # it. It is read as Markdown reads it: a code span is literal, so its
+      # brackets and backslashes stay as they are. Outside code spans,
+      # brackets stay only where they pair in order; otherwise each one not
+      # escaped is. Backticks that open no code span within the text are
+      # escaped, so none can pair with one around the link, and so is a
+      # backslash left at the end, which would escape that "]".
       def link_text(text)
-        return text unless text.match?(/[\[\]\\]/)
+        return text unless text.match?(/[\[\]\\`]/)
 
-        paired = paired_brackets?(text)
-        text.gsub(/\\.|\\\z|[\[\]]/m) do |match|
-          match.length == 2 || (paired && match != "\\") ? match : "\\#{match}"
+        tokens = text.scan(LINK_TEXT_TOKEN)
+        runs = backtick_runs(tokens)
+        pieces = []
+        brackets = []
+        index = 0
+        while index < tokens.length
+          token = tokens[index]
+          if token == "\\"
+            index = escape_in_link_text(tokens, index, runs, pieces)
+          elsif token.start_with?("`")
+            index = code_span_in_link_text(tokens, index, token.length, runs, pieces)
+          else
+            brackets << pieces.length if token == "[" || token == "]"
+            pieces << token
+            index += 1
+          end
+        end
+        brackets.each { |at| pieces[at] = "\\#{pieces[at]}" } unless paired_brackets?(brackets.map { |at| pieces[at] })
+        pieces.join
+      end
+
+      # Token indexes of the backtick runs of each length, in order.
+      def backtick_runs(tokens)
+        runs = Hash.new { |hash, length| hash[length] = [] }
+        tokens.each_with_index { |token, index| runs[token.length] << index if token.start_with?("`") }
+        runs
+      end
+
+      # A backslash escapes what follows it, or the "]" after the text if
+      # nothing does. An escaped backtick leaves the rest of its run, which
+      # can open a code span.
+      def escape_in_link_text(tokens, index, runs, pieces)
+        following = tokens[index + 1]
+        if following.nil?
+          pieces << "\\\\"
+          index + 1
+        elsif following.start_with?("`")
+          pieces << "\\`"
+          return index + 2 if following.length == 1
+
+          code_span_in_link_text(tokens, index + 1, following.length - 1, runs, pieces)
+        elsif following == "\\" || following == "[" || following == "]"
+          pieces << "\\#{following}"
+          index + 2
+        else
+          pieces << "\\"
+          index + 1
         end
       end
 
-      def paired_brackets?(text)
-        depth = 0
-        text.scan(/\\.|[\[\]]/m) do |match|
-          next if match.length == 2
+      # The last `length` backticks of the run at `index` open a code span
+      # if a later run is as long; inside it, nothing is escaped. Otherwise
+      # they are escaped one by one.
+      def code_span_in_link_text(tokens, index, length, runs, pieces)
+        closer = runs[length].bsearch { |at| at > index }
+        unless closer
+          pieces << ("\\`" * length)
+          return index + 1
+        end
 
-          depth += match == "[" ? 1 : -1
+        pieces << ("`" * length) << tokens[(index + 1)..closer].join
+        closer + 1
+      end
+
+      # Every "]" closes an earlier "[".
+      def paired_brackets?(brackets)
+        depth = 0
+        brackets.each do |bracket|
+          depth += bracket == "[" ? 1 : -1
           return false if depth.negative?
         end
         depth.zero?

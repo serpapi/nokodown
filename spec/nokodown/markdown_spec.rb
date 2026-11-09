@@ -240,6 +240,13 @@ RSpec.describe "Markdown conversion" do
                               "[\\]x\\[](https://example.com/x) [[1] note](https://example.com/x)\n\n![Photo\\\\](https://example.com/i.jpg)"
     end
 
+    it "reads code in link text as Markdown does, keeping its brackets and backslashes as they are" do
+      html = '<p><a href="/x"><code>][</code></a> <a data-href="mailto:[Run](javascript:alert(1))">Go <code>[</code>]</a> ' \
+             '<a href="/z"><code>[\\]</code>]</a> <a href="/w"><kbd>a</kbd>`<code>b`c</code></a></p>'
+      convert(html).should == "[`][`](https://example.com/x) [Go `[`\\]](mailto:[Run](javascript:alert(1))) " \
+                              "[`[\\]`\\]](https://example.com/z) [`a`\\```b`c``](https://example.com/w)"
+    end
+
     it "writes a link whose text is its URL as a bare URL" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
     end
