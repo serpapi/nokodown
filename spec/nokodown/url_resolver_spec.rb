@@ -13,6 +13,16 @@ RSpec.describe Nokodown::UrlResolver do
     end
   end
 
+  it "reads a URL as a browser does, in linear time" do
+    described_class.normalize(" \x01 java\tscript:x\n \x7F").should == "javascript:x \x7F"
+    described_class.normalize(" \x05\t").should == ""
+
+    url = "/a#{' ' * 50_000}b"
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    described_class.normalize(" #{url} ").should == url
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 0.5
+  end
+
   it "is not changed by changes to a string it was given or returned" do
     href = +"/a"
     first = urls.resolve(href)

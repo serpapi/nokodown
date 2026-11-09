@@ -62,11 +62,17 @@ module Nokodown
     SCRIPT_SCHEME = /\A(?:javascript|vbscript|data):/i.freeze
     # A browser ignores spaces and control characters around a URL, and tabs
     # and line breaks anywhere in it ("java&#9;script:" is "javascript:").
-    OUTER_CONTROLS = /\A[\x00-\x20]+|[\x00-\x20]+\z/.freeze
+    VISIBLE = /[^\x00-\x20]/.freeze
 
-    # The URL a browser would read from an attribute value.
+    # The URL a browser would read from an attribute value. Trimmed by index:
+    # on Ruby 2.7 a regex for trailing controls rescans a run of spaces
+    # inside the URL from each of its characters.
     def self.normalize(href)
-      href.to_s.gsub(OUTER_CONTROLS, "").delete("\t\n\r")
+      href = href.to_s
+      first = href.index(VISIBLE)
+      return "" unless first
+
+      href[first..href.rindex(VISIBLE)].delete("\t\n\r")
     end
 
     def self.script?(url)
