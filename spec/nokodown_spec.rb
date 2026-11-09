@@ -221,6 +221,17 @@ RSpec.describe Nokodown do
       markdown.should include("- [Alan Turing](https://example.com/authors/alan)")
     end
 
+    it "keeps the text of links that blocks cut into copies" do
+      html = "<article><h1>Title</h1><p>#{'Introduction, important body text. ' * 10}</p><div><a href=\"/x\">" \
+             "<div>Details, useful content, and more.</div><section><span>Supplement, helpful text about this.</span></a></section></div></article>"
+      markdown = extract(html)
+      markdown.should include("Details, useful content, and more.")
+      markdown.should include("Supplement, helpful text about this.")
+
+      html = "#{'Intro. ' * 80}<a href=/s><p>#{'Lead. ' * 160}<div><img src=/i.jpg alt=I><article>#{'TAIL. ' * 80}<a href=/s>"
+      extract(html).should include("TAIL. TAIL.")
+    end
+
     it "keeps highlighted code whose tokens look like page furniture" do
       html = "<article>#{prose}<pre><code class=\"language-python\"><span class=\"nb\">print</span>(x)</code></pre>#{prose}</article>"
 

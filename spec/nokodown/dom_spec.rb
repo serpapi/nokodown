@@ -28,11 +28,12 @@ RSpec.describe Nokodown::Dom do
     end
 
     # Lexbor copies a link that is cut by a block into several elements that
-    # share one attribute list, so the copies share a key too.
-    it "does not take a div with a block in a misnested link for a paragraph" do
-      body = keyed('<div id="wrapper"><a href="/cart"><div>Offer</div><footer><span>Sale</span></a></footer></div>')
-
-      paragraphs(body).should == []
+    # share one attribute list, so the copies share a key too. The copy
+    # visited last in a bottom-up pass decides, as it always has.
+    it "lets the last copy of a misnested link decide whether it holds a block" do
+      paragraphs(keyed('<div id="wrapper"><a href="/cart"><div>Offer</div><footer><span>Sale</span></a></footer></div>')).should ==
+        %w[wrapper]
+      paragraphs(keyed('<div id="wrapper"><a href="/cart"><span>Offer</span><footer><div>Sale</div></a></footer></div>')).should == []
     end
   end
 

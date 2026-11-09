@@ -16,6 +16,10 @@ module Nokodown
     PARAGRAPH_BREAKERS = Set.new(%w[blockquote dl div img ol p pre table ul]).freeze
     PARAGRAPH_BREAKER_SELECTOR = PARAGRAPH_BREAKERS.to_a.join(", ").freeze
 
+    # The elements the HTML parser reopens after a block cuts them.
+    FORMATTING = Set.new(%w[a b big code em font i nobr s small strike strong tt u]).freeze
+    FORMATTING_XPATH = FORMATTING.map { |name| ".//#{name}" }.join("|").freeze
+
     CODE = %w[pre code].freeze
 
     NBSP = "\u00A0"
@@ -72,17 +76,19 @@ module Nokodown
 
     # Keys of the <p>s and of the divs Readability would rewrite into <p>
     # (no block-level descendants). Breakers are rare, so marking their
-    # ancestors is much faster than visiting every node. The walk cannot stop
-    # at an ancestor already marked: the copies Lexbor makes of a misnested
-    # <a> or <b> share one attribute list, so two elements can share a key.
+    # ancestors, up to one already marked, is much faster than visiting every
+    # node. But Lexbor copies a formatting element that a block cuts
+    # (<a><div>…</a>) into elements sharing one attribute list, and so one
+    # key, and then which copy holds the block decides. A root with such
+    # copies keeps the bottom-up pass, which content selection and cleaning
+    # were tuned with: there the copy visited last decides.
     def paragraph_keys(root)
+      return paragraph_keys_bottom_up(root) if shared_keys?(root)
+
       broken = Set.new
       root.css(PARAGRAPH_BREAKER_SELECTOR).each do |breaker|
         ancestor = breaker.parent
-        while ancestor&.element?
-          broken << key(ancestor)
-          ancestor = ancestor.parent
-        end
+        ancestor = ancestor.parent while ancestor&.element? && broken.add?(key(ancestor))
       end
 
       candidates = root.css("p, div").to_a
@@ -91,6 +97,29 @@ module Nokodown
         key = key(node)
         keys << key if node.name == "p" || !broken.include?(key)
       end
+    end
+
+    # Elements are at most Preprocessor::MAX_DEPTH levels deep, so the
+    # recursion in traverse is bounded.
+    def paragraph_keys_bottom_up(root)
+      keys = Set.new
+      breaks = {}
+      root.traverse do |node|
+        next unless node.element?
+
+        key = key(node)
+        breaks[key] = node.element_children.any? { |child| PARAGRAPH_BREAKERS.include?(child.name) || breaks[key(child)] }
+        keys << key if node.name == "p" || (node.name == "div" && !breaks[key])
+      end
+      keys
+    end
+
+    # XPath, because Lexbor's CSS engine takes several times longer to
+    # match a list of tag names.
+    def shared_keys?(root)
+      keys = root.xpath(FORMATTING_XPATH).map { |node| key(node) }
+      keys << key(root) if FORMATTING.include?(root.name)
+      keys.uniq.size != keys.size
     end
 
     # Nokolexbor answers ancestors(selector) by running CSS matching per
