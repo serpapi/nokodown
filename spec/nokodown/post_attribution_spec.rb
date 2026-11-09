@@ -172,6 +172,18 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("**basil** · May 3, 2024\n\nAgreed.")
   end
 
+  it "takes a body that has a signature for the body, not for the signature" do
+    posts = [["wren", question], ["basil", answer]].map do |name, body|
+      "<div class='post'><div class='post-head'><a class='username' href='/u/#{name}'>#{name}</a> " \
+        "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></div><div class='post-text has-signature'><p>#{body}</p></div>" \
+        "<div class='signature'>Baking rye and spelt loaves since 1998, mostly by hand.</div></div>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+  end
+
   it "dates a post by its own date, not the member's join date" do
     posts = [["wren", question], ["basil", answer]].map do |name, body|
       "<div class='post'><div class='post-user'><a class='username' href='/u/#{name}'>#{name}</a> " \

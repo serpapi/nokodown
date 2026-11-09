@@ -29,8 +29,8 @@ module Nokodown
       mitglied\sseit|registriert(?:\sseit)?|membre\sdepuis|inscrit(?:\sle)?|miembro\sdesde|registrado)\W*\z
     /xi.freeze
     # A sibling that ends a post: what the climb passed over before it was
-    # the body.
-    CLOSING = /(?<![a-z])(?:signature|footer)(?![a-z])/.freeze
+    # the body. A modifier ("has-signature") names a body that has one.
+    CLOSING = /(?<![a-z])(?<!has-|with-)(?:signature|footer)(?![a-z])/.freeze
     YEAR = /(?<!\d)(?:19|20)\d\d(?!\d)/.freeze
     ISO_DATE = /\A\d{4}-\d\d-\d\d/.freeze
     LETTER = /\p{L}/.freeze
