@@ -425,12 +425,14 @@ module Nokodown
     # The date as the page shows it when that is a full date. "1 yr" or
     # "10 hours ago" depends on when the page was saved, so the machine
     # readable date replaces it, without its time down to the millisecond.
+    # Without one, the date the page shows ("Yesterday at 10:40") is all
+    # there is, and the header the line replaces showed it.
     def date_text(date)
       shown = [Dom.text(date)] + date.element_children.map { |child| Dom.text(child) } + [Dom.squish(date["title"].to_s)]
       text = shown.find { |candidate| candidate.length <= MAX_DATE && candidate.match?(YEAR) }
       return text unless text.nil? || text.match?(ISO_DATE)
 
-      (text || date["datetime"] || date["content"]).to_s[ISO_DATE]
+      (text || date["datetime"] || date["content"]).to_s[ISO_DATE] || (shown.first if shown.first.length.between?(1, MAX_DATE))
     end
 
     def line(name, date)

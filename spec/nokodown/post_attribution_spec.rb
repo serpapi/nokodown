@@ -70,6 +70,16 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("**basil** · 2024-04-02\n\n")
   end
 
+  it "shows a relative date as the page does when it has no other" do
+    markdown = thread([
+      post("wren", "<time>Yesterday at 10:40</time>", question),
+      post("basil", "<time>Today at 09:30</time>", answer)
+    ])
+
+    markdown.should include("**wren** · Yesterday at 10:40\n\n#{question}")
+    markdown.should include("**basil** · Today at 09:30\n\n#{answer}")
+  end
+
   it "drops a copy of the date shown above the body" do
     time = "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time>"
     copy = "<div class='meta'><span class='date'>#{time}</span></div>"
