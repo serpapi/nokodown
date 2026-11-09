@@ -690,6 +690,13 @@ RSpec.describe "Markdown conversion" do
       (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
     end
 
+    it "shortens a quote of many short sentences in linear time" do
+      text = "Take these six words as advice #{'! ' * 64_000}then read the full description of the route before you leave"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      convert("<p>#{text}</p><p>Other text.</p><blockquote><p>#{text}</p></blockquote>").should start_with("Take these")
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+    end
+
     it "keeps a quote of text that is not on the page" do
       quote = "The tide is the most predictable renewable resource we have, more than wind or sun."
       convert("<p>Engineers agree.</p><blockquote><p>#{quote}</p></blockquote>").should == "Engineers agree.\n\n> #{quote}"

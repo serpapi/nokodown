@@ -19,6 +19,8 @@ module Nokodown
       # Matched from the first mark of a run and without backtracking, so a long
       # run of dots is not rescanned from each one on Ruby 2.7.
       SENTENCE_END = /(?<![.!?…])[.!?…]++["'”’)\]*_]*+(?=\s+[^\p{Ll}\p{N}]|\s*\z)/.freeze
+      # From where the last sentence ended through the end of the next one.
+      SENTENCE = /\G.*?#{SENTENCE_END}/m.freeze
 
       module_function
 
@@ -129,11 +131,23 @@ module Nokodown
 
       # The line up to the first sentence end after `needed` words, never
       # inside brackets or code, closing bold it cuts; the whole line when
-      # there is none.
+      # there is none. The head grows a sentence at a time, so a line of many
+      # short sentences is read once rather than once per sentence.
       def sentence_head(line, needed)
-        line.to_enum(:scan, SENTENCE_END).each do
-          head = line[0, Regexp.last_match.end(0)]
-          next if words(head).size < needed || head.count("[") != head.count("]") || head.count("`").odd?
+        head = +""
+        uncounted = +""
+        size = open_brackets = ticks = 0
+        line.scan(SENTENCE) do |sentence|
+          head << sentence
+          uncounted << sentence
+          open_brackets += sentence.count("[") - sentence.count("]")
+          ticks += sentence.count("`")
+          next unless open_brackets.zero? && ticks.even?
+
+          # Counted once its brackets close, so a link that spans sentences is read whole.
+          size += words(uncounted).size
+          uncounted.clear
+          next if size < needed
 
           return head.scan("**").size.odd? ? "#{head}**" : head
         end
