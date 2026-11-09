@@ -279,6 +279,15 @@ RSpec.describe "Markdown conversion" do
       convert('<img data-src="logo.svg" src="/logo.png" alt="Logo">').should == "![Logo](https://example.com/logo.png)"
     end
 
+    it "reads a marked image's lazy-loading file name with a query, in linear time" do
+      convert('<img class="lazyload" data-src="logo.svg?text=hello world" alt="Logo">').should ==
+        "![Logo](https://example.com/dir/logo.svg?text=hello%20world)"
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      convert(%(<img class="lazyload" data-src="#{'a.svg?' * 16_000} b" alt="Photo">)).should start_with("![Photo](")
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 0.5
+    end
+
     it "uses the <noscript> copy of a lazy image once, on either side of the placeholder" do
       html = '<p><noscript><img src="/a.jpg" alt="Harbour"></noscript>' \
              '<img class="lazyload" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/a.jpg" alt="Harbour">' \

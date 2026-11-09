@@ -36,7 +36,6 @@ module Nokodown
     VIDEO_HOSTS = %r{//(?:www\.)?(?:(?:dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq|bilibili|live\.bilibili)\.com|(?:archive|upload\.wikimedia)\.org|player\.twitch\.tv|fast\.wistia\.(?:net|com)|play\.vidyard\.com|loom\.com/embed)}i.freeze
 
     IMAGE_URL = /\.(?:jpe?g|png|webp|gif|avif)(?:[?#]\S*)?\s*\z/i.freeze
-    FILE_NAME = /\.[a-z\d]{2,5}(?:[?#]\S*)?\z/i.freeze
     IMAGE_SRCSET = /\.(?:jpe?g|png|webp|gif|avif)(?:\?\S*)?\s+\d/i.freeze
     LAZY_SRC = %w[
       data-src data-lazy-src data-original data-lazy data-url data-hi-res-src data-full-src
@@ -208,16 +207,16 @@ module Nokodown
       end
     end
 
-    # A path or a web URL, as opposed to "false", an ID, a fragment, a
-    # template or a caption. Where a loader marks the image, any file name
-    # or path counts, spaces and all; an attribute that only replaces src
-    # has to name an image file or hold a path.
+    # A path or a web URL, as opposed to "false", an ID, a fragment or a
+    # template. Where a loader marks the image, anything with a path or a
+    # file name counts, spaces and all; an attribute that only replaces src
+    # has to name an image file or hold a path, with no spaces.
     def image_location?(value, marked)
       return false if value.empty? || value.start_with?("#") || value.match?(marked ? /[{}<>]/ : /[\s{}<>]/)
       return true if value.match?(%r{\A(?:https?:)?//}i)
       return false if value.match?(/\A[a-z][a-z\d+.-]*:/i)
 
-      value.include?("/") || value.match?(marked ? FILE_NAME : IMAGE_URL)
+      value.include?("/") || (marked ? value.include?(".") : value.match?(IMAGE_URL))
     end
 
     def restore_from_any_attribute(img)
