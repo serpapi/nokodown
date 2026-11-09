@@ -23,6 +23,9 @@
   any other script link. A link's URL can no longer end its Markdown
   destination early with a stray `)`, nor its text end the label early
   with a stray `]` or a trailing backslash, and write a link of its own.
+  Brackets and backticks in a URL are percent-encoded, so a URL read as
+  text holds no link either.
+- Code inside link text keeps its brackets and backslashes as they are.
 - Extraction is faster on large pages, with the same output: about 30%
   on Wikipedia's Coffee article (390 to 260 ms on Ruby 2.7) and 20% at the
   median of WCXB.
