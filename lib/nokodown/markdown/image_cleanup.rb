@@ -18,9 +18,10 @@ module Nokodown
       LIST_MARKERS = /\A *(?:(?:[-*+]|\d+\.) )+/.freeze
       # The indentation and markers before a line's text.
       LINE_PREFIX = /\A(?: |>|(?:[-*+]|\d+\.) )*/.freeze
-      # Text never starts a line with ``` (Text.escape_line_starts), so this
-      # is the fence of a code block nested in a list or a quote.
-      FENCE = /#{LINE_PREFIX.source}(`{3,})/.freeze
+      # Text starts a line with ``` only to open a code span, closed later on
+      # the line (Text.escape_line_starts), so a run with no backtick after
+      # it is the fence of a code block nested in a list or a quote.
+      FENCE = /#{LINE_PREFIX.source}(`{3,})(?=[^`]*\z)/.freeze
 
       def initialize(images, full: false)
         @images = images

@@ -64,9 +64,13 @@ module Nokodown
       end
 
       # Block syntax that plain text could trigger at the start of a line.
+      # Three backticks open a code block only if no backtick follows on the
+      # line; then each is escaped, so none is left to pair with a run on a
+      # later line. Otherwise they open a code span and stay.
       def escape_line_starts(string)
         string.gsub(/^(#{'#'}{1,6})(?=\s|$)/) { "\\#{Regexp.last_match(1)}" }
-              .gsub(/^(>|```|~~~)/) { "\\#{Regexp.last_match(1)}" }
+              .gsub(/^(>|~~~)/) { "\\#{Regexp.last_match(1)}" }
+              .gsub(/^`{3,}(?=[^`\n]*$)/) { |run| "\\`" * run.length }
       end
 
       # Tidy an inline run: no spaces around line breaks, no doubled spaces.

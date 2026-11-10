@@ -307,6 +307,12 @@ RSpec.describe "Markdown conversion" do
         "`a` ``` ``x ``` [`[Run](javascript:alert(1))[`](https://example.com/x)"
     end
 
+    it "escapes every backtick of a run that would open a code block, and keeps one that opens a code span" do
+      convert("<p>```x<br>y ``z</p>").should == "\\`\\`\\`x\ny \\`\\`z"
+      convert('<p><code>``x</code> <a href="/x"><code>``[Run](javascript:alert(1))[</code></a></p>').should ==
+        "``` ``x ``` [``` ``[Run](javascript:alert(1))[ ```](https://example.com/x)"
+    end
+
     it "writes code with a backtick run too long to fence as text" do
       ticks = "`" * 80
       convert(%(<p><code>#{ticks}[Run](javascript:alert(1))</code> <code>#{'`' * 79}a</code></p>)).should ==

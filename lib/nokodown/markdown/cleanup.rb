@@ -107,7 +107,7 @@ module Nokodown
       # above has them.
       def quote_opening(block)
         lines = block.text.split("\n").map { |line| line.sub(/\A> ?/, "") }
-        own = lines.reject { |line| line.start_with?(">") }.take_while { |line| !line.start_with?("```", "~~~") }
+        own = lines.reject { |line| line.start_with?(">") }.take_while { |line| !line.match?(/\A(?:`{3,}[^`]*|~~~.*)\z/) }
         opening = squeeze_blank(opening_lines(own.map { |line| Text.unlink(line).strip }))
         return block if opening.empty? || words(block.text).size - words(opening.join(" ")).size < QUOTE_OPENING
 
