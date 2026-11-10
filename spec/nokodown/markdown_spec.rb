@@ -127,6 +127,11 @@ RSpec.describe "Markdown conversion" do
       convert('<p><a href="/real" data-href="/other">Real</a></p>').should == "[Real](https://example.com/real)"
     end
 
+    it "takes the target from its data attributes when href is blank" do
+      convert('<p>Visit <a href="" data-href="/article">Article</a>.</p>').should == "Visit [Article](https://example.com/article)."
+      convert('<p>Visit <a href=" &#10;" data-url="/news">News</a>.</p>').should == "Visit [News](https://example.com/news)."
+    end
+
     it "keeps only the text of data attribute targets that are templates or scripts" do
       convert('<p><a data-href="mailto:?subject={title}">Mail</a> <a data-href="javascript:share()">Share</a></p>').should == "Mail Share"
     end

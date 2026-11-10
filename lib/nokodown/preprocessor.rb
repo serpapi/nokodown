@@ -83,7 +83,7 @@ module Nokodown
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
       restore_picture_sources
-      @body.css("a:not([href])").each { |link| restore_link_target(link) }
+      @body.css("a").each { |link| restore_link_target(link) if UrlResolver.normalize(link["href"]).empty? }
       @body.css("video, audio").each { |media| keep_playable(media) }
       @body.css(JUNK).each(&:remove)
       @body.css("iframe").each { |iframe| iframe.remove unless Preprocessor.video_embed?(iframe["src"]) }
@@ -259,8 +259,8 @@ module Nokodown
       src.length < 300 || img.attribute_nodes.any? { |a| a.name != "src" && a.value.to_s.match?(IMAGE_URL) }
     end
 
-    # Every later step reads href. A template placeholder ("{url}") is no
-    # target.
+    # Every later step reads href, which may be missing or blank. A
+    # template placeholder ("{url}") is no target.
     def restore_link_target(link)
       target = LINK_TARGETS.lazy.map { |name| link[name].to_s.strip }.find { |value| !value.empty? }
       link["href"] = target if target && !target.match?(/[{}]/)
