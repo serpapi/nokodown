@@ -29,6 +29,7 @@ module Nokodown
       EMAIL_LOCAL = "A-Za-z0-9.!\\#$%&'*+/=?^_`{|}~-"
       AUTOLINK_START = %r{[A-Za-z/!?]|[#{EMAIL_LOCAL}]+@}.freeze
       AUTOLINK = /<(?=#{AUTOLINK_START.source})/.freeze
+      AUTOLINK_AFTER = /\A(?:#{AUTOLINK_START.source})/.freeze
       EMAIL_PART = /\A[#{EMAIL_LOCAL}]+\z/.freeze
       EMAIL_END = /\A[#{EMAIL_LOCAL}]*@/.freeze
       # Markdown syntax in raw TeX, after the backslashes that do not escape

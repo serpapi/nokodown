@@ -12,6 +12,10 @@ module Nokodown
       # What could start a link, an autolink, HTML or code where a URL is
       # written as text.
       MARKUP_IN_URL = /[\[\]<>`\\]/.freeze
+      WEB_URL = %r{\A(?:https?|ftp)://}i.freeze
+      BACKSLASH = "\\".ord
+      LESS_THAN = "<".ord
+      EMAIL_LOCAL_BYTES = Set.new((0..127).select { |byte| byte.chr.match?(/[#{Text::EMAIL_LOCAL}]/) }).freeze
       UNSAFE_SCHEME = /\A\s*(?:javascript|vbscript|data|tel|sms):/i.freeze
       FOOTNOTE_MARKER = /\A\s*(?:\[[^\]]{1,8}\]|[*†‡§]+)\s*\z/.freeze
       # Exponents are often written with the minus sign "−", not "-".
@@ -85,10 +89,51 @@ module Nokodown
       # Pieces written side by side must not join into Markdown that neither
       # holds: a code span's closing fence and a backtick after it would read
       # as one longer run. A backslash before the backtick may be code's own
-      # (`C:\\`), so a space goes between any two backticks.
+      # (`C:\\`), so a space goes between any two backticks. A "<" that
+      # would open an autolink or a tag, a "!" before "[" and a "]" before
+      # "(" are escaped, unless the next piece is a web URL written as text,
+      # which "<" and ">" around it mean to link. The string is changed only
+      # at its end, in bytes, so a long non-ASCII run is not rescanned.
       def append(out, piece)
-        out << " " if piece.start_with?("`") && out.end_with?("`")
+        if piece.start_with?("`") && out.end_with?("`")
+          out << " "
+        elsif joins_markup?(out, piece) && unescaped?(out, out.bytesize - 1)
+          escape_from(out, out.bytesize - 1)
+        end
+        escape_email_opener(out) if piece.match?(Text::EMAIL_END)
         out << piece
+      end
+
+      def joins_markup?(out, piece)
+        if out.end_with?("<")
+          piece.match?(Text::AUTOLINK_AFTER) && !piece.match?(WEB_URL)
+        elsif out.end_with?("!")
+          piece.start_with?("[")
+        else
+          out.end_with?("]") && piece.start_with?("(")
+        end
+      end
+
+      # An email address can run over pieces: "<0" then "`@h.co>`". Walks
+      # back over its local part only.
+      def escape_email_opener(out)
+        at = out.bytesize - 1
+        at -= 1 while at >= 0 && EMAIL_LOCAL_BYTES.include?(out.getbyte(at))
+        escape_from(out, at) if at >= 0 && out.getbyte(at) == LESS_THAN && unescaped?(out, at)
+      end
+
+      # Whether no backslash escapes the byte at `at`.
+      def unescaped?(string, at)
+        index = at - 1
+        index -= 1 while index >= 0 && string.getbyte(index) == BACKSLASH
+        (at - 1 - index).even?
+      end
+
+      # A backslash before the ASCII tail that starts at byte `at`.
+      def escape_from(out, at)
+        tail = out.byteslice(at, out.bytesize - at)
+        out.chomp!(tail)
+        out << "\\" << tail
       end
 
       def node_text(node)

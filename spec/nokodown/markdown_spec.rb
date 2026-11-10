@@ -313,6 +313,14 @@ RSpec.describe "Markdown conversion" do
         "``` ``x ``` [``` ``[Run](javascript:alert(1))[ ```](https://example.com/x)"
     end
 
+    it "escapes the link, image, autolink or tag that pieces of text side by side would write" do
+      html = '<p>Wow!<a href="/x">x</a> [1]<span>(note)</span> &lt;<span>javascript:alert(1)&gt;</span> &lt;0<code>@h.co&gt;</code> ' \
+             '&lt;<a href="https://b.org/doc">https://b.org/doc</a>&gt;</p>'
+      convert(html).should == "Wow\\![x](https://example.com/x) [1\\](note) \\<javascript:alert(1)> \\<0`@h.co>` <https://b.org/doc>"
+      convert(%q{<p>&lt;<span>a title='</span><a href="/x"><code>'&gt;[Run](javascript:alert(1))[</code></a></p>}).should ==
+        "\\<a title='[`'>[Run](javascript:alert(1))[`](https://example.com/x)"
+    end
+
     it "writes code with a backtick run too long to fence as text" do
       ticks = "`" * 80
       convert(%(<p><code>#{ticks}[Run](javascript:alert(1))</code> <code>#{'`' * 79}a</code></p>)).should ==
