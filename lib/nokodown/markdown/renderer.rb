@@ -16,21 +16,46 @@ module Nokodown
       LEADING_SYMBOLS = /\A[^\p{L}\p{N}\s]+(?=\s)/.freeze
       # Native players, each a link of its own.
       MEDIA = Set.new(%w[video audio]).freeze
+      # Elements rendered as a whole, whose blocks depend on all of their
+      # content (a list's spacing, a table's grid). Any other element only
+      # lays its children's blocks end to end.
+      WHOLE = Set.new(%w[h1 h2 h3 h4 h5 h6 ul ol menu dir li blockquote pre code table dl hr iframe video audio summary a]).freeze
 
-      def initialize(urls, images: true, links: true, redundant_images: {})
+      # budget: stop once about this many characters are rendered, between
+      # two blocks that do not belong to one element rendered as a whole, so
+      # the blocks are the start of what rendering everything gives.
+      def initialize(urls, images: true, links: true, redundant_images: {}, budget: nil)
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
         @links = links
         @contains_block = {}
+        @budget = budget
+        @rendered = 0
+        @whole = 0
+        @spent = false
+        @cut = false
       end
 
       def render(nodes)
-        nodes.flat_map { |node| block_level?(node) ? block(node) : children_blocks(node) }
+        blocks = []
+        nodes.each do |node|
+          break @cut = true if @spent
+
+          blocks.concat(block_level?(node) ? block(node) : children_blocks(node))
+        end
+        blocks
+      end
+
+      # Whether content was left out once the budget ran out.
+      def cut?
+        @cut
       end
 
       def children_blocks(node)
         blocks = []
         run = []
         node.children.each do |child|
+          break @cut = true if @spent && @whole.zero?
+
           if block_level?(child)
             blocks.concat(paragraphs(run))
             run = []
@@ -43,7 +68,9 @@ module Nokodown
       end
 
       def paragraphs(nodes)
-        nodes.empty? ? [] : text_paragraphs(@inline.render(nodes))
+        return [] if nodes.empty?
+
+        counted(text_paragraphs(@inline.render(nodes)))
       end
 
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
@@ -83,9 +110,28 @@ module Nokodown
 
       private
 
+      # Blocks rendered outside any element rendered as a whole count
+      # toward the budget.
+      def counted(blocks)
+        return blocks unless @budget && @whole.zero?
+
+        @rendered += blocks.sum { |block| block.text.length + 2 }
+        @spent = @rendered >= @budget
+        blocks
+      end
+
       # Rendering recurses once per level of nesting, which Preprocessor
       # bounds by flattening deeper elements into text.
       def block(node)
+        return children_blocks(node) unless WHOLE.include?(node.name)
+
+        @whole += 1
+        blocks = whole_block(node)
+        @whole -= 1
+        counted(blocks)
+      end
+
+      def whole_block(node)
         case node.name
         when "h1", "h2", "h3", "h4", "h5", "h6" then heading(node)
         when "ul", "ol", "menu", "dir" then list(node)

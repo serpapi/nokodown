@@ -30,14 +30,19 @@ module Nokodown
 
       module_function
 
-      # images: the Renderer's rendered_images.
-      def call(blocks, images = {}, full: false)
+      # images: the Renderer's rendered_images. more: the blocks are only the
+      # start of the content, and only those that also start the whole
+      # content's cleaned blocks are kept: a repeat at the end can still be
+      # the first of a run, and headings and rules at the end can still get
+      # a section or lose it.
+      def call(blocks, images = {}, full: false, more: false)
         return blocks.reject { |block| punctuation?(block) } if full
 
         blocks = blocks.reject { |block| noise?(block) }
         blocks = dedupe(blocks)
-        blocks = drop_repeated_runs(blocks)
+        blocks = drop_repeated_runs(blocks, more)
         blocks = shorten_repeated_quotes(blocks)
+        blocks = without_open_end(blocks) if more
         blocks = trim_rules(blocks)
         blocks = drop_empty_sections(blocks)
         images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
@@ -68,9 +73,14 @@ module Nokodown
         end
       end
 
-      def drop_repeated_runs(blocks)
+      def drop_repeated_runs(blocks, more = false)
         seen = Set.new
         repeated = blocks.map { |block| repeatable?(block) && !seen.add?(block.text) }
+        if more
+          open = repeated.reverse.take_while(&:itself).size
+          blocks = blocks.first(blocks.size - open)
+          repeated = repeated.first(blocks.size)
+        end
         return blocks unless repeated.include?(true)
 
         runs = blocks.each_index.chunk_while { |a, b| repeated[a] && repeated[b] }
@@ -194,6 +204,11 @@ module Nokodown
         end
         blocks.pop while blocks.last&.kind == :rule
         blocks
+      end
+
+      # Headings and rules that end the start of the content.
+      def without_open_end(blocks)
+        blocks.first((blocks.rindex { |block| block.kind != :heading && block.kind != :rule } || -1) + 1)
       end
 
       # A heading followed by nothing, or by a heading at the same or a higher

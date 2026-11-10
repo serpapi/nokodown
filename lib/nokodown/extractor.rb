@@ -7,14 +7,21 @@ module Nokodown
     MIN_ARTICLE_LENGTH = 500
     CONDITIONAL_SHARE = 0.5
     REMOVED_LINK_SHARE = 0.5
+    MIN_BUDGET = 1000
+    # A paragraph that long makes the excerpt when the page gives none.
+    EXCERPT_MIN = 80
 
-    def initialize(html, url: nil, main_content: true, title: true, images: true, links: true)
+    def initialize(html, url: nil, main_content: true, title: true, images: true, links: true, max_length: nil)
       @html = html
       @url = url
       @main_content = main_content
       @title = title
       @images = images
       @links = links
+      @max_length = max_length
+      return if max_length.nil? || (max_length.is_a?(Integer) && !max_length.negative?)
+
+      raise ArgumentError, "max_length must be nil or a non-negative Integer, not #{max_length.inspect}"
     end
 
     def call
@@ -33,15 +40,48 @@ module Nokodown
       product_page = @main_content && ProductReviews.product_page?(doc, metadata[:page_type])
       Preprocessor.new(body, full: !@main_content).call
       nodes, mode = select_content(body, metadata[:page_type], product_page)
-      blocks = render(nodes, mode, urls)
-      blocks = with_title(blocks, metadata[:title]) if @title
+      blocks = content(nodes, mode, urls, metadata)
       result(blocks, metadata, mode)
     end
 
-    def render(nodes, mode, urls)
+    # With max_length, rendering stops after about twice that much. When that
+    # settles the result it is kept; otherwise the whole content is rendered,
+    # so a page costs at most one short render and a whole one.
+    def content(nodes, mode, urls, metadata)
       redundant = redundant_images(nodes, mode, urls)
-      renderer = Markdown::Renderer.new(urls, images: @images, links: @links, redundant_images: redundant)
-      Markdown::Cleanup.call(renderer.render(nodes), renderer.rendered_images, full: mode == :full)
+      budget = @max_length && [@max_length * 2, MIN_BUDGET].max
+      blocks, settled = render(nodes, mode, urls, redundant, metadata, budget)
+      settled ? blocks : render(nodes, mode, urls, redundant, metadata, nil).first
+    end
+
+    # The blocks, and whether they settle the result: either all of the
+    # content was rendered, or the whole content gives the same first
+    # max_length characters, title and excerpt. Cleanup keeps only blocks
+    # that start the whole content's when content was left out.
+    def render(nodes, mode, urls, redundant, metadata, budget)
+      renderer = Markdown::Renderer.new(urls, images: @images, links: @links, redundant_images: redundant, budget: budget)
+      rendered = renderer.render(nodes)
+      more = renderer.cut?
+      blocks = Markdown::Cleanup.call(rendered, renderer.rendered_images, full: mode == :full, more: more)
+      h1 = blocks.any? { |block| block.kind == :heading && block.level == 1 }
+      blocks = with_title(blocks, metadata[:title]) if @title
+      [blocks, !more || settled?(blocks, h1, renderer.rendered_images, nodes, metadata)]
+    end
+
+    # An image whose copies so far are all redundant can still have one that
+    # is not; a page title depends on the first H1, which must be among the
+    # blocks or nowhere; the excerpt, when the page gives none, on the first
+    # long paragraph.
+    def settled?(blocks, h1, images, nodes, metadata)
+      return false if images.each_value.any?(&:redundant)
+      return false if @title && !h1 && metadata[:title] && nodes.any? { |node| node.name == "h1" || node.at_css("h1") }
+      return false if metadata[:excerpt].nil? && blocks.none? { |block| long_paragraph?(block) }
+
+      blocks.sum { |block| block.text.length + 2 } - 2 >= @max_length
+    end
+
+    def long_paragraph?(block)
+      block.kind == :paragraph && Markdown::Text.plain(block.text).length >= EXCERPT_MIN
     end
 
     # Converting the whole page keeps every visible image.
@@ -168,8 +208,9 @@ module Nokodown
     end
 
     def result(blocks, metadata, mode)
+      markdown = blocks.map(&:text).join("\n\n")
       Result.new(
-        markdown: blocks.map(&:text).join("\n\n"),
+        markdown: @max_length ? markdown[0, @max_length] : markdown,
         title: metadata[:title],
         byline: metadata[:byline],
         excerpt: metadata[:excerpt] || first_paragraph(blocks),
@@ -182,7 +223,7 @@ module Nokodown
 
     def first_paragraph(blocks)
       paragraphs = blocks.select { |block| block.kind == :paragraph }.map { |block| Markdown::Text.plain(block.text) }
-      paragraphs.find { |text| text.length >= 80 } || paragraphs.find { |text| !text.empty? }
+      paragraphs.find { |text| text.length >= EXCERPT_MIN } || paragraphs.find { |text| !text.empty? }
     end
   end
 end

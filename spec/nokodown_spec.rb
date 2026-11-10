@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "zlib"
+
 RSpec.describe Nokodown do
   describe ".extract" do
     it "returns the markdown with the page metadata" do
@@ -533,6 +535,92 @@ RSpec.describe Nokodown do
       html = "#{'<div>' * 60}<h2>Title</h2><p>Some <em>text</em></p>#{'</div>' * 60}"
 
       convert(html).should == "## Title\n\nSome *text*"
+    end
+  end
+
+  describe "max_length:" do
+    def prose(index)
+      "<p>Paragraph #{index} tells how the river rose through the night and the town woke to water in the streets and fields.</p>"
+    end
+
+    # The lengths at which max_length does not give the start of the whole
+    # conversion, or changes the excerpt.
+    def prefix_mismatches(html, lengths, **options)
+      whole = Nokodown.extract(html, url: "https://example.com/page", **options)
+      lengths.reject do |length|
+        cut = Nokodown.extract(html, url: "https://example.com/page", max_length: length, **options)
+        cut.markdown == whole.markdown[0, length] && cut.excerpt == whole.excerpt
+      end
+    end
+
+    # Pages long enough for rendering to stop early, each with something
+    # the whole content decides later on: a headline far down, a thumbnail
+    # shown again without its link, the excerpt, a list's spacing, a repeat
+    # that turns into a run, and a section label in an outline.
+    {
+      "a late H1" => ["<title>Flood night</title><article>%<prose>s<h1>Flood night</h1>%<one>s</article>", {}],
+      "a thumbnail" => ["<article><p><a href='/story'><img src='/photo.jpg'></a> <a href='/story'>Story</a> %<sentence>s</p>%<prose>s<p><img src='/photo.jpg'></p>%<one>s</article>", { title: false }],
+      "the excerpt" => ["<body>%<lines>s%<prose>s</body>", { main_content: false, title: false }],
+      "a loose list" => ["<head><meta name='description' content='A list'></head><body><ul>%<items>s<li><p>Last</p><p>item</p></li></ul></body>", { main_content: false, title: false }],
+      "a repeated run" => ["<article><p>%<long>s</p>%<one>s%<filler>s<p>%<long>s</p>%<one>s%<prose>s</article>", { title: false }],
+      "an outline" => ["<head><meta name='description' content='Outline'></head><body><article><h1>Outline</h1>%<headings>s%<one>s</article></body>", { title: false }]
+    }.each do |name, (template, options)|
+      it "gives the start of the whole conversion of a page with #{name}" do
+        html = format(template, prose: Array.new(40) { |index| prose(index) }.join, one: prose(1), long: "x" * 1000, filler: "<p>#{'z' * 90}</p>" * 12,
+                                sentence: "The river rose through the night.", lines: Array.new(120) { |index| "<p>Line #{index}</p>" }.join,
+                                items: Array.new(120) { |index| "<li>Item #{index}</li>" }.join,
+                                headings: Array.new(150) { |index| index == 3 ? "<h2>Tags</h2>" : "<h2>Heading #{index}</h2>" }.join)
+
+        prefix_mismatches(html, (0..3000).step(25), **options).should == []
+      end
+    end
+
+    it "gives the start of the whole conversion of each fixture" do
+      Dir[File.join(__dir__, "fixtures", "*.html")].sort.each do |path|
+        html = File.read(path) * 3
+        [true, false].each do |main_content|
+          [path, prefix_mismatches(html, [0, 1, 40, 300, 1000, 2500, 6000], main_content: main_content)].should == [path, []]
+        end
+      end
+    end
+
+    it "renders long content once, and only its start" do
+      html = "<article>#{Array.new(2000) { |index| prose(index) }.join}</article>"
+      renderers = []
+      Nokodown::Markdown::Renderer.should_receive(:new).once.and_wrap_original do |original, *args, **options|
+        original.call(*args, **options).tap { |renderer| renderers << renderer }
+      end
+
+      Nokodown.to_markdown(html, max_length: 500).length.should == 500
+      renderers.first.should be_cut
+    end
+
+    it "changes nothing when nil" do
+      html = "<title>Flood night</title><article>#{Array.new(40) { |index| prose(index) }.join}</article>"
+
+      Nokodown.extract(html, max_length: nil).should == Nokodown.extract(html)
+    end
+
+    it "gives empty Markdown for 0" do
+      Nokodown.to_markdown("<article>#{Array.new(40) { |index| prose(index) }.join}</article>", max_length: 0).should == ""
+    end
+
+    it "rejects a negative or non-integer length" do
+      -> { Nokodown.extract("<p>x</p>", max_length: -1) }.should raise_error(ArgumentError)
+      -> { Nokodown.extract("<p>x</p>", max_length: "50") }.should raise_error(ArgumentError)
+    end
+
+    # WCXB=tmp/corpora/wcxb bundle exec rspec checks every WCXB page.
+    it "gives the start of the whole conversion of every WCXB page" do
+      corpus = ENV["WCXB"]
+      skip "set WCXB to a WCXB checkout to run" unless corpus
+
+      Dir[File.join(corpus, "{dev,test}", "html", "*.html.gz")].sort.each do |path|
+        html = Zlib::GzipReader.open(path, &:read)
+        [true, false].each do |main_content|
+          [path, main_content, prefix_mismatches(html, [0, 1000, 5000, 50_000], main_content: main_content)].should == [path, main_content, []]
+        end
+      end
     end
   end
 

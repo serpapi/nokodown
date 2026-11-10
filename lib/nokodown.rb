@@ -48,6 +48,8 @@ module Nokodown
   #                 a page with no content gives empty Markdown, not the title
   #   images:       include images
   #   links:        keep links; false renders link text only
+  #   max_length:   nil (default) or the most characters of Markdown to return;
+  #                 the result is the start of what nil gives, cut there
   def self.extract(html, **options)
     Extractor.new(html, **options).call
   end
