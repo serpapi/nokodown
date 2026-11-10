@@ -932,6 +932,13 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Hero\n\n[Watch](https://example.com/watch)"
     end
 
+    it "keeps the thumbnail and link of a preview player inside a link" do
+      html = '<p>Watch film</p><a href="/watch"><video src="/preview.mp4"><img src="/thumb.jpg" alt="Thumb"></video></a>'
+      convert(html).should == "Watch film\n\n[![Thumb](https://example.com/thumb.jpg)](https://example.com/watch)"
+      Nokodown.to_markdown(html, url: "https://example.com/").should ==
+        "Watch film\n\n[![Thumb](https://example.com/thumb.jpg)](https://example.com/watch)"
+    end
+
     it "uses a <source> of the player itself, not one of a player nested in it" do
       convert('<video><video><source src="/inner.mp4"></video><source src="/outer.mp4"></video>').should ==
         "[Video](https://example.com/outer.mp4)"

@@ -274,14 +274,23 @@ module Nokodown
     end
 
     # A player is kept as an empty element with the file it plays, for the
-    # renderer to link to. Muted videos are autoplaying backgrounds, and one
-    # inside a link is a preview of the page it links to; neither is content.
+    # renderer to link to. Muted videos are autoplaying backgrounds. One
+    # inside a link is a preview of the page it links to: its file is not
+    # content, but a thumbnail it holds for browsers without video stays in
+    # its place, inside the link. Fallback text only says the player failed.
+    # Only its own children are read: a search of each nested player's
+    # subtree would take quadratic time.
     def keep_playable(media)
       src = playable_source(media)
-      return media.remove if src.nil? || media.key?("muted") || !standalone_player?(media)
+      return media.remove if src.nil? || media.key?("muted")
+      return media.replace(thumbnails(media)) unless standalone_player?(media)
 
       media.children.remove
       media["src"] = src
+    end
+
+    def thumbnails(media)
+      Nokolexbor::NodeSet.new(media.document, media.element_children.select { |child| %w[img picture].include?(child.name) })
     end
 
     # Its src, or that of a <source> in it. Blob URLs exist only in the
