@@ -899,6 +899,17 @@ RSpec.describe "Markdown conversion" do
       convert("<table>#{row * 4}</table>").should start_with("| Talk | [Video](https://example.com/talk.mp4) | 12 min |")
     end
 
+    it "renders a single column under a header cell or a caption as a table" do
+      convert("<table><tr><th>Col</th></tr><tr><td>a|b</td></tr></table>").should == "| Col |\n| --- |\n| a\\|b |"
+      convert("<table><caption>Sizes</caption><tr><td>S</td></tr><tr><td>M</td></tr></table>").should ==
+        "Sizes\n\n| S |\n| --- |\n| M |"
+      Nokodown.to_markdown("<table><tr><th>Col</th></tr><tr><td>a|b</td></tr></table>").should == "| Col |\n| --- |\n| a\\|b |"
+    end
+
+    it "unwraps a single column with neither header cell nor caption" do
+      convert("<table><tr><td>One</td></tr><tr><td>Two</td></tr></table>").should == "One\n\nTwo"
+    end
+
     it "keeps the caption" do
       convert("<table><caption>Results</caption><tr><th>A</th><th>B</th></tr><tr><td>1</td><td>2</td></tr></table>").should ==
         "Results\n\n| A | B |\n| --- | --- |\n| 1 | 2 |"

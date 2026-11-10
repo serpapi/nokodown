@@ -17,12 +17,21 @@ module Nokodown
         return layout_blocks unless Tables.data_table?(@node)
 
         grid = trimmed_grid
-        return layout_blocks if grid.size < 2 || grid.first.size < 2
+        return layout_blocks if grid.size < 2 || (grid.first.size < 2 && !headed?)
 
         caption + [Block.new(:table, gfm(grid))]
       end
 
       private
+
+      # A column with a header cell or a caption is a list of values that
+      # name it, not a layout column.
+      def headed?
+        return true if @node.at_css("th")
+
+        caption = @node.at_css("caption")
+        !caption.nil? && !Dom.text(caption).empty?
+      end
 
       def gfm(grid)
         lines = grid.map { |row| "| #{row.join(' | ')} |" }
