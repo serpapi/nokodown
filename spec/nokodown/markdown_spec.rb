@@ -285,6 +285,15 @@ RSpec.describe "Markdown conversion" do
                               "[$\\<img src=x onerror=alert(1)>$](https://example.com/y) [$a < 1$](https://example.com/z)"
     end
 
+    it "writes no email autolink in text, link text or a player's title, whatever its address starts with" do
+      html = '<p>Mail &lt;0@host.com&gt; or &lt;.a@host.com&gt;, not a &lt; 1</p>' \
+             '<p><a data-href="/x"><code>``x``</code><math alttext="&lt;0@host.com&gt;``"></math></a> ' \
+             '<a href="/y"><code>a</code>&lt;0<code>a`b</code>c@host.com&gt;</a></p><audio src="/a.mp3" title="&lt;0@host.com&gt;"></audio>'
+      convert(html).should == "Mail \\<0@host.com> or \\<.a@host.com>, not a < 1\n\n" \
+                              "[``` ``x`` ```$\\<0@host.com>\\`\\`$](https://example.com/x) [`a`\\<0``a`b``c@host.com>](https://example.com/y)\n\n" \
+                              "[\\<0@host.com>](https://example.com/a.mp3)"
+    end
+
     it "writes a link whose text is its URL as a bare URL" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
     end

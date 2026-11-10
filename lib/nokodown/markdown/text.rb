@@ -23,6 +23,14 @@ module Nokodown
       # The longest backtick run that CommonMarker (cmark-gfm) reads as the
       # fence of a code span; a longer one is text.
       MAX_BACKTICKS = 80
+      # What can follow the "<" of an autolink or an HTML tag: a letter
+      # (scheme or tag name), "/", "!" or "?", or the local part of an email
+      # address and its "@".
+      EMAIL_LOCAL = "A-Za-z0-9.!\\#$%&'*+/=?^_`{|}~-"
+      AUTOLINK_START = %r{[A-Za-z/!?]|[#{EMAIL_LOCAL}]+@}.freeze
+      AUTOLINK = /<(?=#{AUTOLINK_START.source})/.freeze
+      EMAIL_PART = /\A[#{EMAIL_LOCAL}]+\z/.freeze
+      EMAIL_END = /\A[#{EMAIL_LOCAL}]*@/.freeze
 
       module_function
 
@@ -39,7 +47,7 @@ module Nokodown
         string = string.gsub(/(?<!\s)\*|\*(?!\s)/, "\\\\*")
         string = string.gsub(/(?<![\p{L}\p{N}\\])_|_(?![\p{L}\p{N}])/, "\\\\_")
         string = string.gsub(/\](?=[(\[])/, "\\\\]")
-        string.gsub(/<(?=[A-Za-z\/!?])/, "\\\\<")
+        string.gsub(AUTOLINK, "\\\\<")
       end
 
       # Block syntax that plain text could trigger at the start of a line.
@@ -96,7 +104,7 @@ module Nokodown
           elsif token == "]" && tokens[index + 1]&.start_with?("(", "[")
             pieces << "\\]"
             index += 1
-          elsif token == "<" && tokens[index + 1]&.match?(%r{\A[A-Za-z/!?]})
+          elsif token == "<" && autolink_start?(tokens, index + 1)
             pieces << "\\<"
             index += 1
           else
@@ -107,6 +115,25 @@ module Nokodown
         end
         brackets.each { |at| pieces[at] = "\\#{pieces[at]}" } unless paired_brackets?(brackets.map { |at| pieces[at] })
         pieces.join
+      end
+
+      # Whether the tokens from `index` on continue a "<" into an autolink
+      # or an HTML tag. An email address can hold backticks, so its local
+      # part may run over several tokens; it ends at the first token that
+      # is not part of it, so no token is read twice.
+      def autolink_start?(tokens, index)
+        token = tokens[index]
+        return false unless token
+        return true if token.match?(%r{\A[A-Za-z/!?]})
+
+        while token
+          return true if token.match?(EMAIL_END)
+          return false unless token.match?(EMAIL_PART)
+
+          index += 1
+          token = tokens[index]
+        end
+        false
       end
 
       # Token indexes of the backtick runs of each length, in order.
