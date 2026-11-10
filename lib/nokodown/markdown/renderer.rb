@@ -295,12 +295,17 @@ module Nokodown
         end
       end
 
+      # A player from a video host links to its page, labelled with its
+      # title, or "Video" like a native player; the URL is always written as
+      # a destination, never as text that could hold Markdown.
       def embed(node)
-        url = @inline.link_url(Image.video_page(node["src"].to_s))
-        return [] unless url && @links
+        return [] unless @links && Preprocessor.video_embed?(node["src"])
+
+        url = @inline.link_url(Image.video_page(UrlResolver.normalize(node["src"])))
+        return [] unless url&.match?(%r{\A(?:https?:)?//}i)
 
         title = Dom.squish(node["title"].to_s)
-        [Block.new(:paragraph, title.empty? ? url : "[#{Text.link_text(Text.escape(title))}](#{Text.destination(url)})")]
+        [Block.new(:paragraph, "[#{title.empty? ? 'Video' : Text.link_text(Text.escape(title))}](#{Text.destination(url)})")]
       end
 
       def summary(node)

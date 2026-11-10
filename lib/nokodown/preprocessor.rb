@@ -33,7 +33,12 @@ module Nokodown
 
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
 
-    VIDEO_HOSTS = %r{//(?:www\.)?(?:(?:dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq|bilibili|live\.bilibili)\.com|(?:archive|upload\.wikimedia)\.org|player\.twitch\.tv|fast\.wistia\.(?:net|com)|play\.vidyard\.com|loom\.com/embed)}i.freeze
+    # A player page on a video host: an http(s) or scheme-relative URL whose
+    # host is the provider's and which has a path, not a mention of the host
+    # anywhere in another URL ("mailto:x//player.vimeo.com/…").
+    VIDEO_HOSTS = %r{\A(?:https?:)?//(?:www\.)?(?:(?:(?:dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq|bilibili|live\.bilibili)\.com|
+                     (?:archive|upload\.wikimedia)\.org|player\.twitch\.tv|fast\.wistia\.(?:net|com)|play\.vidyard\.com)(?::\d+)?/[^/?#\s]|
+                     loom\.com/embed/)}ix.freeze
 
     IMAGE_URL = /\.(?:jpe?g|png|webp|gif|avif)(?:[?#]\S*)?\s*\z/i.freeze
     IMAGE_SRCSET = /\.(?:jpe?g|png|webp|gif|avif)(?:\?\S*)?\s+\d/i.freeze
@@ -64,6 +69,10 @@ module Nokodown
       "tr" => %w[td], "dl" => %w[dd]
     }.freeze
 
+    def self.video_embed?(src)
+      UrlResolver.normalize(src).match?(VIDEO_HOSTS)
+    end
+
     def initialize(body)
       @body = body
     end
@@ -77,7 +86,7 @@ module Nokodown
       @body.css("a:not([href])").each { |link| restore_link_target(link) }
       @body.css("video, audio").each { |media| keep_playable(media) }
       @body.css(JUNK).each(&:remove)
-      @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
+      @body.css("iframe").each { |iframe| iframe.remove unless Preprocessor.video_embed?(iframe["src"]) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
       remove_form_controls

@@ -97,7 +97,7 @@ module Nokodown
       return true if player?
 
       @node.css("object, embed, iframe").any? do |embed|
-        embed.attribute_nodes.any? { |attribute| attribute.value.to_s.match?(Preprocessor::VIDEO_HOSTS) }
+        embed.attribute_nodes.any? { |attribute| Preprocessor.video_embed?(attribute.value) }
       end
     end
 

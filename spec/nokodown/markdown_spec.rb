@@ -886,6 +886,15 @@ RSpec.describe "Markdown conversion" do
         "[Demo video](https://www.youtube.com/watch?v=dQw4w9WgXcQ)"
     end
 
+    it "links an embed without a title as a video, and only from a video host" do
+      convert('<p>Watch</p><iframe src="https://player.vimeo.com/video/123"></iframe>').should ==
+        "Watch\n\n[Video](https://player.vimeo.com/video/123)"
+      convert('<p>Watch</p><iframe src="mailto:x//player.vimeo.com/video/[Run](javascript:alert(1))"></iframe>').should == "Watch"
+      convert('<p>Watch</p><iframe src="https://evil.example/?u=//www.youtube.com/embed/x"></iframe>').should == "Watch"
+      convert('<p>Watch</p><iframe src="https://player.vimeo.com/video/1?q=[Run](javascript:alert(1))"></iframe>').should ==
+        "Watch\n\n[Video](https://player.vimeo.com/video/1?q=%5BRun%5D(javascript:alert(1)))"
+    end
+
     it "links native video and audio players to the file they play" do
       html = '<p>Clip:</p><video controls src="/clip.mp4" title="Demo clip"></video>' \
              '<video controls><source src="/b.webm">Your browser does not support video.</video>' \
