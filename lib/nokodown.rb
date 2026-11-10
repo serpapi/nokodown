@@ -42,8 +42,8 @@ module Nokodown
   # Options:
   #   url:          page URL, used to resolve relative links and images
   #   main_content: true (default) keeps only the main content; false converts
-  #                 the whole page, removing only invisible elements and scripts,
-  #                 and keeps headings without a section
+  #                 the whole page, or a selection of it, as it is: only invisible
+  #                 elements, scripts, form inputs and punctuation-only lines go
   #   title:        prepend the page title as an H1 when the content has none;
   #                 a page with no content gives empty Markdown, not the title
   #   images:       include images

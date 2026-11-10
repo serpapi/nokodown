@@ -464,7 +464,7 @@ RSpec.describe "Markdown conversion" do
     it "drops repeated responsive variants of one image" do
       html = '<figure><img src="/a-small.jpg" alt="Harbour at dawn"><figcaption>Credit</figcaption>' \
              '<img src="/a-large.jpg" alt="Harbour at dawn"><figcaption>Credit</figcaption></figure>'
-      convert(html).should == "![Harbour at dawn](https://example.com/a-small.jpg)\n\nCredit"
+      convert_content(html).should == "![Harbour at dawn](https://example.com/a-small.jpg)\n\nCredit"
     end
 
     it "drops image CDN size, quality and version parameters" do
@@ -539,7 +539,7 @@ RSpec.describe "Markdown conversion" do
       html = '<h2>Trusted by</h2><ul><li><img src="/acme.png" alt="Acme"></li><li><img src="/globex.png" alt="Globex"></li></ul>' \
              '<div><img src="/acme.png" alt="Acme"><img src="/globex.png" alt="Globex"></div>' \
              '<p>Rated <img src="/star.png" alt="star"><img src="/star.png" alt="star"> by 2,000 teams</p>'
-      convert(html).should == "## Trusted by\n\n- ![Acme](https://example.com/acme.png)\n- ![Globex](https://example.com/globex.png)\n\n" \
+      convert_content(html).should == "## Trusted by\n\n- ![Acme](https://example.com/acme.png)\n- ![Globex](https://example.com/globex.png)\n\n" \
                               "Rated ![star](https://example.com/star.png)![star](https://example.com/star.png) by 2,000 teams"
     end
 
@@ -555,20 +555,20 @@ RSpec.describe "Markdown conversion" do
       html = %w[Member Moderator Member].each_with_index.map do |role, i|
         "<div><img src=\"/#{role.downcase}.png\" alt=\"#{role}\"><img src=\"/online.png\" alt=\"\"></div><p>Post #{i + 1}</p>"
       end.join
-      convert(html).should == "![Member](https://example.com/member.png)![](https://example.com/online.png)\n\nPost 1\n\n" \
+      convert_content(html).should == "![Member](https://example.com/member.png)![](https://example.com/online.png)\n\nPost 1\n\n" \
                               "![Moderator](https://example.com/moderator.png)\n\nPost 2\n\n![Member](https://example.com/member.png)\n\nPost 3"
     end
 
     it "keeps nested list markers when it drops a repeated image" do
       html = '<p><img src="https://ex.com/avatar.png"> Forum</p><ol><li><p>First post</p></li>' \
              '<li><ol><li><ul><li><img src="https://ex.com/avatar.png"><p>Reply</p></li></ul></li></ol></li></ol>'
-      convert(html).should == "![](https://ex.com/avatar.png) Forum\n\n1. First post\n\n   1. - Reply"
+      convert_content(html).should == "![](https://ex.com/avatar.png) Forum\n\n1. First post\n\n   1. - Reply"
     end
 
     it "does not remove repeated images from code blocks, nested ones included" do
       code = "<pre><code>![](https://example.com/logo.png)\n\n\nend</code></pre>"
       html = %(<p><img src="/logo.png" alt=""></p>#{code}<ul><li><img src="/logo.png" alt=""></li><li>Use this:#{code}</li></ul>)
-      convert(html).should == "![](https://example.com/logo.png)\n\n```\n![](https://example.com/logo.png)\n\n\nend\n```\n\n" \
+      convert_content(html).should == "![](https://example.com/logo.png)\n\n```\n![](https://example.com/logo.png)\n\n\nend\n```\n\n" \
                               "- Use this:\n\n  ```\n  ![](https://example.com/logo.png)\n\n\n  end\n  ```"
     end
 
@@ -879,7 +879,7 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "keeps one rule between blocks" do
-      convert("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "a\n\n---\n\nb"
+      convert_content("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "a\n\n---\n\nb"
     end
 
     it "renders details with a bold summary" do
@@ -985,7 +985,7 @@ RSpec.describe "Markdown conversion" do
       post = "The stove boils a litre in three minutes on a full canister. It is a bit slower in the cold, " \
              "and the piezo lighter fails above 3000 metres, so carry matches."
       html = "<p>#{post}</p><blockquote><p><a href=\"/posts/1\">Sam said:</a></p><p>#{post}</p></blockquote><p>Same here.</p>"
-      convert(html).should ==
+      convert_content(html).should ==
         "#{post}\n\n> Sam said:\n>\n> The stove boils a litre in three minutes on a full canister. …\n\nSame here."
     end
 
@@ -1000,13 +1000,13 @@ RSpec.describe "Markdown conversion" do
       reply = "Mine takes four minutes. The wind matters more than the cold, so I always bring a windscreen along."
       html = "<p>#{post}</p><blockquote><p>#{post}</p></blockquote><p>#{reply}</p>" \
              "<blockquote><p>Ann wrote:</p><blockquote><p>#{post}</p></blockquote><p>#{reply}</p></blockquote><p>Agreed.</p>"
-      convert(html).should == "#{post}\n\n> #{post}\n\n#{reply}\n\n> Ann wrote:\n>\n> #{reply} …\n\nAgreed."
+      convert_content(html).should == "#{post}\n\n> #{post}\n\n#{reply}\n\n> Ann wrote:\n>\n> #{reply} …\n\nAgreed."
     end
 
     it "closes the bold a shortened quote cuts through" do
       post = "The stove boils a full litre of water in three minutes on a canister. It is a bit slower in the cold, " \
              "and the piezo lighter fails above 3000 metres, so carry matches."
-      convert("<p><b>#{post}</b></p><blockquote><p><b>#{post}</b></p></blockquote>").should ==
+      convert_content("<p><b>#{post}</b></p><blockquote><p><b>#{post}</b></p></blockquote>").should ==
         "**#{post}**\n\n> **The stove boils a full litre of water in three minutes on a canister.** …"
     end
 
@@ -1039,8 +1039,8 @@ RSpec.describe "Markdown conversion" do
     it "drops a section rendered a second time, but keeps a single repeated paragraph" do
       first = "The stove boils a litre in three minutes on a full canister, and a little slower in cold mountain weather."
       second = "It weighs 85 grams and folds into its own pot, so it takes almost no room at all in a pack or a bike bag."
-      convert("<div><p>#{first}</p><p>#{second}</p></div><div><p>#{first}</p><p>#{second}</p></div>").should == "#{first}\n\n#{second}"
-      convert("<p>#{first}</p><p>Day two.</p><p>#{first}</p>").should == "#{first}\n\nDay two.\n\n#{first}"
+      convert_content("<div><p>#{first}</p><p>#{second}</p></div><div><p>#{first}</p><p>#{second}</p></div>").should == "#{first}\n\n#{second}"
+      convert_content("<p>#{first}</p><p>Day two.</p><p>#{first}</p>").should == "#{first}\n\nDay two.\n\n#{first}"
     end
 
     it "drops the placeholder a script-loaded widget leaves, and its heading, from the main content" do
@@ -1065,9 +1065,29 @@ RSpec.describe "Markdown conversion" do
       convert("<p>Text</p><p>Advertisement</p><p>★★★</p><p>•</p><p>...</p>").should == "Text\n\nAdvertisement\n\n★★★"
     end
 
-    it "keeps the symbols an image repeated elsewhere leaves behind when converting the whole page" do
-      convert('<img src="/a.jpg"><p><img src="/a.jpg"><br>★★★</p>').should == "![](https://example.com/a.jpg)\n\n★★★"
-      convert('<img src="/a.jpg"><p><img src="/a.jpg"><br>•</p>').should == "![](https://example.com/a.jpg)"
+    it "keeps an image repeated elsewhere, and the symbols beside it, when converting the whole page" do
+      convert('<img src="/a.jpg"><p><img src="/a.jpg"><br>★★★</p>').should ==
+        "![](https://example.com/a.jpg)\n\n![](https://example.com/a.jpg)\n★★★"
+    end
+
+    it "keeps everything selected but stray punctuation when converting the whole page" do
+      convert("<main><h1>Sample</h1><button>Download paper</button><dialog open>Visible dialog</dialog><dialog>Closed</dialog></main>")
+        .should == "# Sample\n\nDownload paper\n\nVisible dialog"
+      convert("<button>Download paper</button><dialog open>Visible dialog</dialog>").should == "Download paper\n\nVisible dialog"
+      convert('<form><label for="n">Note</label> <textarea id="n">Prefilled text</textarea></form>').should == "Note Prefilled text"
+      convert("<h2>Size</h2><h2>Size</h2><h2>Size</h2>").should == "## Size\n\n## Size\n\n## Size"
+      convert("<h3>Mug</h3><h3>Mug</h3><h3>Cup</h3>").should == "### Mug\n\n### Mug\n\n### Cup"
+      convert("<p>First line</p><p>First line</p><p>Third line</p>").should == "First line\n\nFirst line\n\nThird line"
+      convert('<div><img src="/front.jpg" alt="Product photo"></div><div><img src="/back.jpg" alt="Product photo"></div>').should ==
+        "![Product photo](https://example.com/front.jpg)\n\n![Product photo](https://example.com/back.jpg)"
+      convert("<hr>").should == "---"
+      convert("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "---\n\na\n\n---\n\n---\n\nb\n\n---"
+      convert("<p>Text</p><p>•</p><p>...</p>").should == "Text"
+    end
+
+    it "removes what a reader cannot see when converting the whole page" do
+      convert('<p>Shown</p><script>alert(1)</script><style>p{}</style><div hidden>Hidden</div><p style="display:none">None</p>' \
+              '<form role="search"><input type="search"><button>Search</button></form>').should == "Shown\n\nSearch"
     end
 
     it "keeps a trailing list of linked titles" do

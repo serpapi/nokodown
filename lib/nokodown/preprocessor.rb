@@ -7,9 +7,12 @@ module Nokodown
   class Preprocessor
     JUNK = %w[
       script style noscript template link meta base object embed applet param canvas map area svg
-      source track dialog select option optgroup datalist textarea output progress meter
-      keygen frame frameset portal slot
+      source track select option optgroup datalist progress meter keygen frame frameset portal slot
     ].join(",").freeze
+    # Visible text that is not content, but is when a whole page, or a
+    # selection of it, is converted; a closed dialog is never visible.
+    CONTROLS = "dialog, textarea, output"
+    FULL_CONTROLS = "dialog:not([open])"
 
     HIDDEN_CLASSES = Set.new(%w[
       hidden hide d-none is-hidden u-hidden visually-hidden visuallyhidden sr-only screen-reader-text
@@ -73,8 +76,11 @@ module Nokodown
       UrlResolver.normalize(src).match?(VIDEO_HOSTS)
     end
 
-    def initialize(body)
+    # full: the whole page, or a selection of it, is converted, so only what
+    # a reader cannot see goes; forms, buttons, labels and open dialogs stay.
+    def initialize(body, full: false)
       @body = body
+      @full = full
     end
 
     def call
@@ -86,6 +92,7 @@ module Nokodown
       @body.css("a").each { |link| restore_link_target(link) if UrlResolver.normalize(link["href"]).empty? }
       @body.css("video, audio").each { |media| keep_playable(media) }
       @body.css(JUNK).each(&:remove)
+      @body.css(@full ? FULL_CONTROLS : CONTROLS).each(&:remove)
       @body.css("iframe").each { |iframe| iframe.remove unless Preprocessor.video_embed?(iframe["src"]) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
@@ -379,11 +386,19 @@ module Nokodown
     end
 
     def remove_form_controls
+      return remove_inputs if @full
+
       @body.css("form").each { |form| form.remove if utility_form?(form) }
       @body.css("input").each { |input| input.remove unless task_checkbox?(input) }
       @body.css("button").each { |button| disclosure_button?(button) ? button.replace(button.children) : button.remove }
       @body.css("label").each { |label| label.remove if label["for"] || Dom.ancestors_named(label, "form").any? }
       @body.css("form").each { |form| form.remove if leftover_form?(form) }
+    end
+
+    # Converting the whole page keeps the text of forms, buttons and labels.
+    def remove_inputs
+      @body.css("input").each { |input| input.remove unless task_checkbox?(input) }
+      @body.css("button").each { |button| button.replace(button.children) }
     end
 
     # Only a prompt such as "Search:" is left once the controls are gone.

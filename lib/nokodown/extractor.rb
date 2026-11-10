@@ -31,7 +31,7 @@ module Nokodown
       return result([], metadata, :none) if body.nil?
 
       product_page = @main_content && ProductReviews.product_page?(doc, metadata[:page_type])
-      Preprocessor.new(body).call
+      Preprocessor.new(body, full: !@main_content).call
       nodes, mode = select_content(body, metadata[:page_type], product_page)
       blocks = render(nodes, mode, urls)
       blocks = with_title(blocks, metadata[:title]) if @title

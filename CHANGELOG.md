@@ -14,9 +14,12 @@
   preferred over its `src`, also without a "lazy" class, so the real image
   replaces a placeholder or a low-quality thumbnail. Spacer and placeholder
   files no longer count as a `src`.
-- With `main_content: false`, headings without a section and boilerplate
-  lines ("Advertisement", "Share") are kept, so converting a selection of
-  headings no longer gives empty Markdown.
+- With `main_content: false`, everything visible is converted, so a
+  selection comes out whole: headings without a section, boilerplate lines
+  ("Advertisement", "Share"), repeated headings, paragraphs and images,
+  quotes, rules, buttons, form text and open dialogs are kept. Only
+  scripts, styles, hidden elements, form inputs, closed dialogs and
+  punctuation-only lines are dropped.
 - Links and images whose `javascript:` or `vbscript:` scheme is disguised
   by tabs, line breaks or leading control characters (`java&#9;script:`),
   or that a `<base>` with such a scheme would produce, are dropped like
