@@ -347,6 +347,7 @@ module Nokodown
         tex = (annotation&.content || node["alttext"]).to_s.strip
         return Text.escape(Text.collapse(node.content).strip) if tex.empty?
 
+        tex = Text.tex(tex)
         node["display"] == "block" ? "$$#{tex}$$" : "$#{tex}$"
       end
     end

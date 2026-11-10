@@ -233,7 +233,7 @@ RSpec.describe "Markdown conversion" do
       html = '<p>a\\<a data-href="mailto:[Run](javascript:alert(1))">Go</a></p><p><math alttext="a`b"></math> ' \
              '<a data-href="mailto:x`[Run](javascript:alert(1))">Go</a></p>' \
              '<p><a href="http://[2001:db8::1]/a[b]">IPv6</a> <a href="/search?f[0]=a">Filter</a></p>'
-      convert(html).should == "a\\[Go](mailto:%5BRun%5D(javascript:alert(1)))\n\n$a`b$ [Go](mailto:x%60%5BRun%5D(javascript:alert(1)))\n\n" \
+      convert(html).should == "a\\[Go](mailto:%5BRun%5D(javascript:alert(1)))\n\n$a\\`b$ [Go](mailto:x%60%5BRun%5D(javascript:alert(1)))\n\n" \
                               "[IPv6](http://[2001:db8::1]/a%5Bb%5D) [Filter](https://example.com/search?f%5B0%5D=a)"
     end
 
@@ -907,6 +907,14 @@ RSpec.describe "Markdown conversion" do
     it "uses the TeX source of MathML" do
       math = '<math><semantics><mi>x</mi><annotation encoding="application/x-tex">x^2</annotation></semantics></math>'
       convert("<p>Area #{math}</p>").should == "Area $x^2$"
+    end
+
+    it "writes raw TeX so that nothing in it reaches past it, and keeps its backslashes and braces" do
+      html = '<p><math alttext="`"></math><a href="/x"><code>[Run](javascript:alert(1))[</code></a></p>' \
+             '<p><math alttext="\\frac{a}{b} \\{x\\} \\` 0&lt;x&lt;1 [a](b)"></math> ' \
+             '<img class="mwe-math-fallback-image-inline" src="/m.png" alt="{\\displaystyle a&lt;b`}"></p>'
+      convert(html).should == "$\\`$[`[Run](javascript:alert(1))[`](https://example.com/x)\n\n" \
+                              "$\\frac{a}{b} \\{x\\} \\` 0\\<x<1 [a\\](b)$ $a\\<b\\`$"
     end
 
     it "shortens a quote that repeats an earlier post to its opening sentence, without links" do

@@ -50,7 +50,7 @@ module Nokodown
 
       # Wikipedia's math fallback images carry the TeX source as alt text.
       def tex(alt)
-        tex = alt.sub(/\A\{\\displaystyle\s*(.*)\}\z/m, '\1').strip
+        tex = Text.tex(alt.sub(/\A\{\\displaystyle\s*(.*)\}\z/m, '\1'))
         tex.empty? ? "" : "$#{tex}$"
       end
 

@@ -31,6 +31,9 @@ module Nokodown
       AUTOLINK = /<(?=#{AUTOLINK_START.source})/.freeze
       EMAIL_PART = /\A[#{EMAIL_LOCAL}]+\z/.freeze
       EMAIL_END = /\A[#{EMAIL_LOCAL}]*@/.freeze
+      # Markdown syntax in raw TeX, after the backslashes that do not escape
+      # it (an even run).
+      TEX_SYNTAX = /(?<!\\)((?:\\\\)*+)(`|<(?=#{AUTOLINK_START.source})|\](?=[(\[]))/.freeze
 
       module_function
 
@@ -48,6 +51,16 @@ module Nokodown
         string = string.gsub(/(?<![\p{L}\p{N}\\])_|_(?![\p{L}\p{N}])/, "\\\\_")
         string = string.gsub(/\](?=[(\[])/, "\\\\]")
         string.gsub(AUTOLINK, "\\\\<")
+      end
+
+      # Raw TeX keeps its backslashes and braces, so "\\frac" or "\\{" reach a
+      # math renderer as written, but nothing in it may start Markdown that
+      # reaches past it: a backtick, a "<" that would open an autolink or an
+      # HTML tag, or a "]" before "(" or "[" gets a backslash unless one
+      # escapes it already. Line breaks become spaces, so no line of it
+      # starts a block.
+      def tex(tex)
+        collapse(tex).strip.gsub(TEX_SYNTAX, "\\1\\\\\\2")
       end
 
       # Block syntax that plain text could trigger at the start of a line.
