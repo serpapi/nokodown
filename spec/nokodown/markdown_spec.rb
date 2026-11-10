@@ -305,6 +305,8 @@ RSpec.describe "Markdown conversion" do
         "`a` ``` ``x ``` `Ctrl` `C` `C:\\` `x` x\\``y`"
       convert("<p>x`<span>q`</span><code>y</code> <span><code>C:\\</code></span><code>x</code> x`<wbr><code>y</code></p>").should ==
         "x\\`q\\``y` `C:\\` `x` x\\``y`"
+      convert('<p><sup>`</sup><code>x</code> <span><a href="#x"><b>`</b></a></span><code>y</code> <sup><code>C:\\</code></sup><code>z</code></p>').should ==
+        "\\``x` \\``y` `C:\\` `z`"
       convert('<p><code>a</code><code>``x</code> <a href="/x"><code>[Run](javascript:alert(1))[</code></a></p>').should ==
         "`a` ``` ``x ``` [`[Run](javascript:alert(1))[`](https://example.com/x)"
     end
@@ -313,6 +315,9 @@ RSpec.describe "Markdown conversion" do
       code = "a" * 297 + "\\"
       convert(%(<a href="/x"><p><code>#{code}</code></p></a>)).should == "[`#{code}`](https://example.com/x)"
       convert(%(<h2><code>#{code}</code></h2><p>x</p>)).should == "## `#{code}`\n\nx"
+      text = "a" * 295
+      convert(%(<a href="/x"><p>#{text}<sup>`</sup><code>x</code></p></a>)).should == "[#{text}\\``x`](https://example.com/x)"
+      convert(%(<h2>#{text}<sup>`</sup><code>x</code></h2><p>x</p>)).should == "## #{text}\\``x`\n\nx"
     end
 
     it "escapes every backtick of a run that would open a code block, and keeps one that opens a code span" do

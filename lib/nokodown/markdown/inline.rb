@@ -73,22 +73,22 @@ module Nokodown
       # and repeats.
       attr_reader :rendered_images
 
-      # Notes whether the text ends with a backtick that text escaped, for the
-      # element that writes it unchanged (see #append).
+      # Notes whether the text ends with code that ends with a backslash, for
+      # the element around it (see #append).
       def render(nodes, heading: false)
         outer = @in_heading
         @in_heading ||= heading
         out = +""
-        escaped_tick = false
+        backslash_fence = false
         nodes.each do |node|
           piece = node_text(node)
           next if piece.empty?
 
-          append(out, piece, escaped_tick)
-          escaped_tick = @escaped_tick
+          append(out, piece, backslash_fence)
+          backslash_fence = @backslash_fence
         end
-        @escaped_tick = escaped_tick
-        @rendered = out
+        @backslash_fence = backslash_fence
+        out
       ensure
         @in_heading = outer
       end
@@ -101,15 +101,16 @@ module Nokodown
 
       # Pieces written side by side must not join into Markdown that neither
       # holds: a code span's closing fence and a backtick after it would read
-      # as one longer run, so a space goes between them. Only a backtick that
-      # text escaped stays next to code: code may end with a backslash
-      # ("`C:\\`"), so the string cannot tell the two apart. A "<" that
+      # as one longer run, so a space goes between them. Text escapes its
+      # backticks, so a backtick after a backslash is text and stays next to
+      # code, unless it closes code that ends with a backslash ("`C:\\`"),
+      # which the string cannot tell apart and is noted instead. A "<" that
       # would open an autolink or a tag, a "!" before "[" and a "]" before
       # "(" are escaped, unless the next piece is a web URL written as text,
       # which "<" and ">" around it mean to link. The string is changed only
       # at its end, in bytes, so a long non-ASCII run is not rescanned.
-      def append(out, piece, escaped_tick)
-        if piece.start_with?("`") && out.end_with?("`") && !escaped_tick
+      def append(out, piece, backslash_fence)
+        if piece.start_with?("`") && out.end_with?("`") && (backslash_fence || unescaped?(out, out.bytesize - 1))
           out << " "
         elsif joins_markup?(out, piece) && unescaped?(out, out.bytesize - 1)
           escape_from(out, out.bytesize - 1)
@@ -168,18 +169,14 @@ module Nokodown
         out << "\\" << tail
       end
 
-      # A piece ends with a backtick that text escaped if it is text, or the
-      # text of an element written unchanged. Any other piece counts as one
-      # that may end with a fence.
+      # An element's text ends with the code that ends its last inline text,
+      # if any, so the note of the last #render or #code_span in it holds.
       def node_text(node)
+        @backslash_fence = false
         if node.text? || node.cdata?
-          piece = Text.escape(Text.collapse(node.content))
-          @escaped_tick = piece.end_with?("`")
-          piece
+          Text.escape(Text.collapse(node.content))
         elsif node.element?
-          piece = element_text(node)
-          @escaped_tick &&= piece.equal?(@rendered)
-          piece
+          element_text(node)
         else
           ""
         end
@@ -224,7 +221,10 @@ module Nokodown
         core = text.strip
         return text.empty? ? "" : " " if core.empty?
 
-        "#{text[/\A\s*/]}#{Text.code_span(core)}#{text[/\s*\z/]}"
+        span = Text.code_span(core)
+        trailing = text[/\s*\z/]
+        @backslash_fence = trailing.empty? && span.start_with?("`") && span.end_with?("\\`")
+        "#{text[/\A\s*/]}#{span}#{trailing}"
       end
 
       # Images inside a link are written before it rather than inside its text.
