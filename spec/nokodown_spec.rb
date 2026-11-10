@@ -53,6 +53,16 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should include("\n\n## Deeper Dive: Our Picks\n\n")
     end
 
+    it "keeps the page's headline above an article body chosen inside main" do
+      long = "Meaningful sentence with several useful words inside it. " * 10
+      page = "<main><div>Breadcrumb trail</div><div><h1>Story</h1><div>Subtitle</div></div>" \
+             "<article><p>#{long}</p></article><aside>Related story</aside></main>"
+
+      Nokodown.to_markdown("<body>#{page}</body>").should start_with("# Story\n\nMeaningful sentence")
+      Nokodown.to_markdown("<title>Story</title><body>#{page}</body>").should start_with("# Story\n\nMeaningful sentence")
+      Nokodown.to_markdown("<title>Story</title><body>#{page}</body>", title: false).should start_with("Meaningful sentence")
+    end
+
     it "keeps the page's own headline below a photo caption" do
       body = "<p>#{'Yamada earned its first star this year, and twelve more places joined the list. ' * 3}</p>"
       html = "<title>Michelin Restaurants in New York on Resy</title><body><article>" \

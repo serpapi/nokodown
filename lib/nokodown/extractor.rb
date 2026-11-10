@@ -59,10 +59,42 @@ module Nokodown
       ProductReviews.new(body).call if product_page
       selection = ContentLocator.new(body, page_type: page_type).call
       attribution&.write(selection.nodes)
-      return [cleaned_article(selection.nodes, page_type), :article] if selection.mode == :article
+      if selection.mode == :article
+        lead = @title ? title_lead(selection.nodes) : []
+        return [lead + cleaned_article(selection.nodes, page_type), :article]
+      end
 
       Pruner.new(selection.nodes, :page).call
       [selection.nodes, :page]
+    end
+
+    # An article body chosen inside <main> can leave out the headline above
+    # it; the page's H1, when it comes before the body there, opens the
+    # content again, as the title would. A deck or subtitle below it stays
+    # out: the article references of the benchmarks leave it out too.
+    def title_lead(nodes)
+      first = nodes.first
+      return [] if first.nil? || nodes.any? { |node| node.name == "h1" || node.at_css("h1") }
+
+      path = [first, *first.ancestors.select(&:element?)]
+      main = path.drop(1).find { |node| node.name == "main" || node["role"] == "main" }
+      h1 = main&.at_css("h1")
+      return [] if h1.nil? || Dom.text(h1).empty?
+
+      before?(h1, main, path.map { |node| Dom.key(node) }.to_set) ? [h1] : []
+    end
+
+    # Whether the body follows the headline inside <main>.
+    def before?(h1, main, path_keys)
+      current = h1
+      until current == main
+        sibling = current
+        while (sibling = sibling.next_element)
+          return true if path_keys.include?(Dom.key(sibling))
+        end
+        current = current.parent
+      end
+      false
     end
 
     # Like Readability, fall back to lighter cleaning when conditional cleaning
