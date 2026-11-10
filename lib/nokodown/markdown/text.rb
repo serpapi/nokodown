@@ -83,16 +83,13 @@ module Nokodown
         tidy(string).gsub(/\s*\n\s*/, " ")
       end
 
-      # Code with a backtick run too long to fence is written as text. Code
-      # that ends with a backslash is padded like code next to a backtick, so
-      # no backslash comes before a closing fence, where it would read as one
-      # that escapes it once the code is joined to other text.
+      # Code with a backtick run too long to fence is written as text.
       def code_span(text)
         longest = text.scan(/`+/).map(&:length).max || 0
         return escape(text) if longest >= MAX_BACKTICKS
 
         fence = "`" * (longest + 1)
-        pad = text.start_with?("`") || text.end_with?("`", "\\") ? " " : ""
+        pad = text.start_with?("`") || text.end_with?("`") ? " " : ""
         "#{fence}#{pad}#{text}#{pad}#{fence}"
       end
 

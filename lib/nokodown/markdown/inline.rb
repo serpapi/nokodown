@@ -73,10 +73,22 @@ module Nokodown
       # and repeats.
       attr_reader :rendered_images
 
+      # Notes whether the text ends with a backtick that text escaped, for the
+      # element that writes it unchanged (see #append).
       def render(nodes, heading: false)
         outer = @in_heading
         @in_heading ||= heading
-        nodes.each_with_object(+"") { |node, out| append(out, node_text(node)) }
+        out = +""
+        escaped_tick = false
+        nodes.each do |node|
+          piece = node_text(node)
+          next if piece.empty?
+
+          append(out, piece, escaped_tick)
+          escaped_tick = @escaped_tick
+        end
+        @escaped_tick = escaped_tick
+        @rendered = out
       ensure
         @in_heading = outer
       end
@@ -89,16 +101,15 @@ module Nokodown
 
       # Pieces written side by side must not join into Markdown that neither
       # holds: a code span's closing fence and a backtick after it would read
-      # as one longer run, so a space goes between them. A backtick that ends
-      # the text and no backslash escapes is a closing fence: text escapes
-      # its backticks, and code never ends with a backslash next to its fence
-      # (Text.code_span). An escaped backtick stays next to code. A "<" that
+      # as one longer run, so a space goes between them. Only a backtick that
+      # text escaped stays next to code: code may end with a backslash
+      # ("`C:\\`"), so the string cannot tell the two apart. A "<" that
       # would open an autolink or a tag, a "!" before "[" and a "]" before
       # "(" are escaped, unless the next piece is a web URL written as text,
       # which "<" and ">" around it mean to link. The string is changed only
       # at its end, in bytes, so a long non-ASCII run is not rescanned.
-      def append(out, piece)
-        if piece.start_with?("`") && out.end_with?("`") && unescaped?(out, out.bytesize - 1)
+      def append(out, piece, escaped_tick)
+        if piece.start_with?("`") && out.end_with?("`") && !escaped_tick
           out << " "
         elsif joins_markup?(out, piece) && unescaped?(out, out.bytesize - 1)
           escape_from(out, out.bytesize - 1)
@@ -157,11 +168,18 @@ module Nokodown
         out << "\\" << tail
       end
 
+      # A piece ends with a backtick that text escaped if it is text, or the
+      # text of an element written unchanged. Any other piece counts as one
+      # that may end with a fence.
       def node_text(node)
         if node.text? || node.cdata?
-          Text.escape(Text.collapse(node.content))
+          piece = Text.escape(Text.collapse(node.content))
+          @escaped_tick = piece.end_with?("`")
+          piece
         elsif node.element?
-          element_text(node)
+          piece = element_text(node)
+          @escaped_tick &&= piece.equal?(@rendered)
+          piece
         else
           ""
         end

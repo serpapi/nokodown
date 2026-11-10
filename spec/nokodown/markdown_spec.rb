@@ -302,9 +302,17 @@ RSpec.describe "Markdown conversion" do
 
     it "keeps a space between a code span and a backtick after it, so their runs do not merge" do
       convert("<p><code>a</code><code>``x</code> <kbd>Ctrl</kbd><kbd>C</kbd> <code>C:\\</code><code>x</code> x`<code>y</code></p>").should ==
-        "`a` ``` ``x ``` `Ctrl` `C` ` C:\\ ` `x` x\\``y`"
+        "`a` ``` ``x ``` `Ctrl` `C` `C:\\` `x` x\\``y`"
+      convert("<p>x`<span>q`</span><code>y</code> <span><code>C:\\</code></span><code>x</code> x`<wbr><code>y</code></p>").should ==
+        "x\\`q\\``y` `C:\\` `x` x\\``y`"
       convert('<p><code>a</code><code>``x</code> <a href="/x"><code>[Run](javascript:alert(1))[</code></a></p>').should ==
         "`a` ``` ``x ``` [`[Run](javascript:alert(1))[`](https://example.com/x)"
+    end
+
+    it "writes code that ends with a backslash unpadded, so a link or heading of 300 characters keeps its form" do
+      code = "a" * 297 + "\\"
+      convert(%(<a href="/x"><p><code>#{code}</code></p></a>)).should == "[`#{code}`](https://example.com/x)"
+      convert(%(<h2><code>#{code}</code></h2><p>x</p>)).should == "## `#{code}`\n\nx"
     end
 
     it "escapes every backtick of a run that would open a code block, and keeps one that opens a code span" do
