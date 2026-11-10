@@ -15,6 +15,7 @@ module Nokodown
       WEB_URL = %r{\A(?:https?|ftp)://}i.freeze
       BACKSLASH = "\\".ord
       LESS_THAN = "<".ord
+      BACKTICK = "`".ord
       EMAIL_LOCAL_BYTES = Set.new((0..127).select { |byte| byte.chr.match?(/[#{Text::EMAIL_LOCAL}]/) }).freeze
       UNSAFE_SCHEME = /\A\s*(?:javascript|vbscript|data|tel|sms):/i.freeze
       FOOTNOTE_MARKER = /\A\s*(?:\[[^\]]{1,8}\]|[*†‡§]+)\s*\z/.freeze
@@ -116,12 +117,30 @@ module Nokodown
         end
       end
 
-      # An email address can run over pieces: "<0" then "`@h.co>`". Walks
-      # back over its local part only.
+      # An email address can run over pieces: "<0" then "`@h.co>`", and over
+      # code spans, which it would outrank if it started first. Walks back
+      # over its local part only, from fence to fence, so a "<" inside a
+      # closed code span, which is literal there, is left as it is.
       def escape_email_opener(out)
         at = out.bytesize - 1
-        at -= 1 while at >= 0 && EMAIL_LOCAL_BYTES.include?(out.getbyte(at))
-        escape_from(out, at) if at >= 0 && out.getbyte(at) == LESS_THAN && unescaped?(out, at)
+        fence = nil
+        while at >= 0
+          byte = out.getbyte(at)
+          if byte == BACKTICK
+            start = at
+            start -= 1 while start.positive? && out.getbyte(start - 1) == BACKTICK
+            return if fence.nil? && start.positive? && out.getbyte(start - 1) == BACKSLASH
+
+            length = at - start + 1
+            fence = fence ? (fence == length ? nil : fence) : length
+            at = start - 1
+          elsif EMAIL_LOCAL_BYTES.include?(byte)
+            at -= 1
+          else
+            break
+          end
+        end
+        escape_from(out, at) if fence.nil? && at >= 0 && out.getbyte(at) == LESS_THAN && unescaped?(out, at)
       end
 
       # Whether no backslash escapes the byte at `at`.

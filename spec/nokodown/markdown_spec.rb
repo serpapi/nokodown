@@ -319,6 +319,8 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Wow\\![x](https://example.com/x) [1\\](note) \\<javascript:alert(1)> \\<0`@h.co>` <https://b.org/doc>"
       convert(%q{<p>&lt;<span>a title='</span><a href="/x"><code>'&gt;[Run](javascript:alert(1))[</code></a></p>}).should ==
         "\\<a title='[`'>[Run](javascript:alert(1))[`](https://example.com/x)"
+      convert('<p>&lt;0<code>a`b</code>c@host.com&gt; <code>&lt;</code>user@example.com&gt; <a href="/x"><code>&lt;</code>user@example.com&gt;</a></p>').should ==
+        "\\<0``a`b``c@host.com> `<`user@example.com> [`<`user@example.com>](https://example.com/x)"
     end
 
     it "writes code with a backtick run too long to fence as text" do
