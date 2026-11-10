@@ -78,8 +78,11 @@ module Nokodown
         tidy(string).gsub(/\s*\n\s*/, " ")
       end
 
+      # Code with a backtick run too long to fence is written as text.
       def code_span(text)
         longest = text.scan(/`+/).map(&:length).max || 0
+        return escape(text) if longest >= MAX_BACKTICKS
+
         fence = "`" * (longest + 1)
         pad = text.start_with?("`") || text.end_with?("`") ? " " : ""
         "#{fence}#{pad}#{text}#{pad}#{fence}"

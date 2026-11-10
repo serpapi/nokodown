@@ -280,7 +280,7 @@ RSpec.describe "Markdown conversion" do
     it "reads no backtick run longer than Markdown's fence limit as code in link text" do
       ticks = "`" * 80
       convert(%(<p><a href="/x"><code>#{ticks}[Run](javascript:alert(1))[</code></a></p>)).should ==
-        "[#{'\\`' * 81} #{'\\`' * 80}\\[Run\\](javascript:alert(1))\\[ #{'\\`' * 81}](https://example.com/x)"
+        "[#{'\\`' * 80}\\[Run\\](javascript:alert(1))\\[](https://example.com/x)"
       convert(%(<p><a href="/x"><code>#{'`' * 79}[a]</code></a></p>)).should == "[#{ticks} #{'`' * 79}[a] #{ticks}](https://example.com/x)"
     end
 
@@ -298,6 +298,12 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Mail \\<0@host.com> or \\<.a@host.com>, not a < 1\n\n" \
                               "[``` ``x`` ```$\\<0@host.com>\\`\\`$](https://example.com/x) [`a`\\<0``a`b``c@host.com>](https://example.com/y)\n\n" \
                               "[\\<0@host.com>](https://example.com/a.mp3)"
+    end
+
+    it "writes code with a backtick run too long to fence as text" do
+      ticks = "`" * 80
+      convert(%(<p><code>#{ticks}[Run](javascript:alert(1))</code> <code>#{'`' * 79}a</code></p>)).should ==
+        "#{'\\`' * 80}[Run\\](javascript:alert(1)) #{ticks} #{'`' * 79}a #{ticks}"
     end
 
     it "writes a link whose text is its URL as a bare URL" do
