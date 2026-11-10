@@ -88,14 +88,16 @@ module Nokodown
 
       # Pieces written side by side must not join into Markdown that neither
       # holds: a code span's closing fence and a backtick after it would read
-      # as one longer run. A backslash before the backtick may be code's own
-      # (`C:\\`), so a space goes between any two backticks. A "<" that
+      # as one longer run, so a space goes between them. A backtick that ends
+      # the text and no backslash escapes is a closing fence: text escapes
+      # its backticks, and code never ends with a backslash next to its fence
+      # (Text.code_span). An escaped backtick stays next to code. A "<" that
       # would open an autolink or a tag, a "!" before "[" and a "]" before
       # "(" are escaped, unless the next piece is a web URL written as text,
       # which "<" and ">" around it mean to link. The string is changed only
       # at its end, in bytes, so a long non-ASCII run is not rescanned.
       def append(out, piece)
-        if piece.start_with?("`") && out.end_with?("`")
+        if piece.start_with?("`") && out.end_with?("`") && unescaped?(out, out.bytesize - 1)
           out << " "
         elsif joins_markup?(out, piece) && unescaped?(out, out.bytesize - 1)
           escape_from(out, out.bytesize - 1)
