@@ -205,7 +205,11 @@ module Nokodown
         kept.pop while kept.any? && blocks[kept.last].kind == :heading && !titles.include?(kept.last)
         return blocks.values_at(*kept) if kept.any?
 
-        [blocks.find { |block| block.kind == :heading && block.level == 1 }].compact
+        h1 = blocks.find { |block| block.kind == :heading && block.level == 1 }
+        return [] if h1.nil?
+
+        # A page of nothing but headings under its headline is its outline.
+        blocks.all? { |block| block.kind == :heading } ? blocks : [h1]
       end
 
       def empty_section?(blocks, index)

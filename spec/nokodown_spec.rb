@@ -40,6 +40,10 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should == "# Is the ferry running today?"
     end
 
+    it "keeps every heading of a page made of headings alone" do
+      Nokodown.to_markdown("<h1>One</h1><h2>Two</h2><h3>Three</h3>").should == "# One\n\n## Two\n\n### Three"
+    end
+
     it "puts the title above a section H1 that follows the opening paragraphs" do
       intro = "<p>#{'Vertical mice and trackballs spare the wrist in different ways, and we tested both kinds. ' * 3}</p>"
       section = "<p>#{'The first pick suits most hands and works on any desk surface we tried. ' * 3}</p>"
