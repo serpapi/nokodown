@@ -587,7 +587,7 @@ RSpec.describe "Markdown conversion" do
         extract(html).should == "# Hiking boots\n\n" \
                                 "- ### [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
                                 "- ### [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes.\n\n" \
-                                "- ![Boots on a mountain trail](https://example.com/lookbook-small.jpg)"
+                                "- [![Boots on a mountain trail](https://example.com/lookbook-small.jpg)](https://example.com/lookbook.jpg)"
       end
 
       it "moves a card's list marker past a nested list of thumbnails" do
@@ -610,10 +610,20 @@ RSpec.describe "Markdown conversion" do
                '<div><a href="/c/4"><img src="/4.jpg" alt="Harbour wall at dawn"></a><p><a href="/c/4">Oct 1, 2026</a></p></div>' \
                '<div><a href="/c/3"><img src="/3.jpg" alt="Globex conveyor belts"></a><h4><a href="/c/3">Globex</a></h4></div></main>'
         extract(html).should == "# Case studies\n\nHow our customers ship faster with our software.\n\n" \
-                                "![Acme warehouse floor](https://example.com/1.jpg)\n\nAcme cut picking time in half.\n\n" \
-                                "![Canvas tote bag](https://example.com/2.jpg)\n\n[$40](https://example.com/c/2)\n\n" \
-                                "![Harbour wall at dawn](https://example.com/4.jpg)\n\n[Oct 1, 2026](https://example.com/c/4)\n\n" \
-                                "![Globex conveyor belts](https://example.com/3.jpg)"
+                                "[![Acme warehouse floor](https://example.com/1.jpg)](https://example.com/c/1)\n\nAcme cut picking time in half.\n\n" \
+                                "[![Canvas tote bag](https://example.com/2.jpg)](https://example.com/c/2)\n\n[$40](https://example.com/c/2)\n\n" \
+                                "[![Harbour wall at dawn](https://example.com/4.jpg)](https://example.com/c/4)\n\n[Oct 1, 2026](https://example.com/c/4)\n\n" \
+                                "[![Globex conveyor belts](https://example.com/3.jpg)](https://example.com/c/3)"
+      end
+
+      it "keeps the destination of a link made only of an image, in a heading too" do
+        extract('<p>Portrait</p><a href="/full"><img src="/thumb.jpg" alt="Portrait"></a>')
+          .should == "Portrait\n\n[![Portrait](https://example.com/thumb.jpg)](https://example.com/full)"
+        extract('<h1><a href="/manual"><img src="/title.jpg" alt="Manual"></a></h1><p>Instructions follow</p>')
+          .should == "[![Manual](https://example.com/title.jpg)](https://example.com/manual)\n\nInstructions follow"
+        Nokodown.to_markdown('<p>Portrait</p><a href="/full"><img src="/thumb.jpg" alt="Portrait"></a>',
+                             url: "https://example.com/", main_content: false, title: false)
+                .should == "Portrait\n\n[![Portrait](https://example.com/thumb.jpg)](https://example.com/full)"
       end
 
       it "keeps article images unless a short alt repeats a text link to the same page" do
@@ -643,7 +653,8 @@ RSpec.describe "Markdown conversion" do
 
         markdown.should include("![](https://example.com/media/lagoon.jpg)")
         markdown.should include("Start here: [Tides explained](https://example.com/tides)")
-        markdown.should include("Or: ![Map of the Severn estuary](https://example.com/severn.jpg) [Severn guide](https://example.com/severn)")
+        markdown.should include("Or: [![Map of the Severn estuary](https://example.com/severn.jpg)](https://example.com/severn) " \
+                                "[Severn guide](https://example.com/severn)")
       end
 
       it "drops images marked decorative, but not the ticks of a comparison table" do

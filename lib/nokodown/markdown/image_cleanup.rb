@@ -12,6 +12,10 @@ module Nokodown
       # rare URL with nested parentheses is not matched, so its image stays.
       IMAGE = /!\[(?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*\]\((?:[^()\s]|\([^()\s]*\))*\)/.freeze
       DESTINATION = /\]\(((?:[^()\s]|\([^()\s]*\))*)\)/.freeze
+      # An image linked as a whole ("[![alt](src)](href)"), which goes with
+      # it; the image is the first group.
+      LINKED_IMAGE = /\[(#{IMAGE.source})#{DESTINATION.source}/.freeze
+      PLACED_IMAGE = /#{LINKED_IMAGE.source}|#{IMAGE.source}/.freeze
       # A line with nothing but list or quote markers, nested lists included.
       BARE_LINE = /\A(?:\s|>|[-*+]|\d+\.)*\z/.freeze
       LIST_MARKER = /\A *(?:[-*+]|\d+\.) /.freeze
@@ -48,10 +52,25 @@ module Nokodown
 
       private
 
-      # Pages the final Markdown still links to.
+      # Pages the final Markdown still links to in words: a linked image
+      # does not make itself redundant.
       def linked_pages(blocks)
-        destinations = blocks.reject { |block| block.kind == :code }.flat_map { |block| block.text.scan(DESTINATION).flatten }
+        destinations = blocks.reject { |block| block.kind == :code }.flat_map do |block|
+          text = block.text.include?("[![") ? block.text.gsub(LINKED_IMAGE, "") : block.text
+          text.scan(DESTINATION).flatten
+        end
         Set.new(destinations.map { |destination| RedundantImages.page(destination) })
+      end
+
+      # Each image in the line, linked or not, replaced by the block's
+      # result for the image alone; a linked image that is replaced goes
+      # with its link.
+      def replace_images(line)
+        line.gsub(PLACED_IMAGE) do |markup|
+          image = Regexp.last_match(1) || markup
+          replacement = yield(image)
+          replacement.equal?(image) ? markup : replacement
+        end
       end
 
       def without_images(text)
@@ -85,7 +104,7 @@ module Nokodown
         removed = removed_images(line)
         return line if removed.empty?
 
-        kept = line.gsub(IMAGE) { |markup| removed.include?(markup) ? " " : markup }
+        kept = replace_images(line) { |markup| removed.include?(markup) ? " " : markup }
         prefix = line[LINE_PREFIX]
         prefix + Text.escape_line_starts(kept[prefix.length..].strip.squeeze(" "))
       end
@@ -95,7 +114,7 @@ module Nokodown
       def removed_images(line)
         markups = line.scan(IMAGE).select { |markup| @images.key?(markup) }
         content = markups.reject { |markup| redundant?(@images[markup]) }
-        alone = line.gsub(IMAGE) { |markup| @images.key?(markup) ? "" : markup }.match?(BARE_LINE)
+        alone = replace_images(line) { |markup| @images.key?(markup) ? "" : markup }.match?(BARE_LINE)
         removed = Set.new(markups - content)
         removed.merge(repeats(content)) if alone
         content.each { |markup| @seen[@images[markup].url] = @text_lines }

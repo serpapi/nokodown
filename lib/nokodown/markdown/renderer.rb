@@ -104,10 +104,12 @@ module Nokodown
         end
       end
 
-      # Text that long is a paragraph some site wrapped in a heading tag.
+      # Text that long is a paragraph some site wrapped in a heading tag. A
+      # heading made only of images, such as a linked title graphic, keeps
+      # them as a paragraph.
       def heading(node)
         text = Text.single_line(@inline.render(node.children, heading: true))
-        return [] if text.empty?
+        return paragraphs(node.children) if text.empty?
         return [Block.new(:paragraph, text)] if text.length > 300
 
         level = node.name[1].to_i
@@ -330,7 +332,7 @@ module Nokodown
       end
 
       def link_target(blocks)
-        target = blocks.find { |b| b.kind == :heading } || blocks.find { |b| b.kind == :paragraph && !b.text.start_with?("![") }
+        target = blocks.find { |b| b.kind == :heading } || blocks.find { |b| b.kind == :paragraph && !b.text.start_with?("![", "[![") }
         target if target && target.text.length <= 300 && !target.text.include?("](")
       end
     end

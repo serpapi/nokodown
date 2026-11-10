@@ -227,7 +227,8 @@ module Nokodown
         "#{text[/\A\s*/]}#{span}#{trailing}"
       end
 
-      # Images inside a link are written before it rather than inside its text.
+      # Images inside a link with text are written before it rather than
+      # inside its text. A link made only of images links each of them.
       def link(node)
         outer_images = @link_images
         outer_link = @in_link
@@ -238,8 +239,18 @@ module Nokodown
         @link_images = outer_images
         @in_link = outer_link
 
-        parts = images + [link_markup(Text.single_line(content), node["href"].to_s)]
+        text = Text.single_line(content)
+        return surround_like(content, linked_images(images, node["href"].to_s)) if text.empty?
+
+        parts = images + [link_markup(text, node["href"].to_s)]
         surround_like(content, parts.reject(&:empty?).join(" "))
+      end
+
+      def linked_images(images, href)
+        url = @links && !@in_link && link_url(href)
+        return images.join(" ") unless url
+
+        images.map { |image| "[#{image}](#{Text.destination(url)})" }.join(" ")
       end
 
       def link_markup(text, href)
