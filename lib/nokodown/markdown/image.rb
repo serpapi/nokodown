@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "strscan"
+
 module Nokodown
   module Markdown
     module Image
@@ -19,12 +21,20 @@ module Nokodown
         urls.resolve_image(src)
       end
 
+      # Parsed as browsers do: a URL is a run without spaces, so it may
+      # hold commas ("c_fill,w_50"), and its descriptor runs to the next
+      # comma, with or without a space after it ("650w,https://…").
       def largest_srcset(srcset)
-        candidates = srcset.split(/,\s+/).map do |candidate|
-          url, descriptor = candidate.strip.split(/\s+/, 2)
-          [url, descriptor.to_f]
+        scanner = StringScanner.new(srcset)
+        best = nil
+        best_size = -1.0
+        until scanner.skip(/[\s,]*/) && scanner.eos?
+          url = scanner.scan(/\S+/)
+          size = url.end_with?(",") ? 0.0 : scanner.scan(/[^,]*/).to_f
+          url = url.sub(/,+\z/, "")
+          best, best_size = url, size if !url.empty? && size > best_size
         end
-        candidates.reject { |url, _| url.nil? || url.empty? }.max_by { |_, size| size }&.first
+        best
       end
 
       # Icons, spacers, tracking pixels, placeholders and badges.

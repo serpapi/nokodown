@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "json"
+
 module Nokodown
   # Removes everything that can never be content: scripts, invisible elements,
   # form controls, embeds. Lazy-loaded images are restored first so their
@@ -45,13 +47,17 @@ module Nokodown
 
     IMAGE_URL = /\.(?:jpe?g|png|webp|gif|avif)(?:[?#]\S*)?\s*\z/i.freeze
     IMAGE_SRCSET = /\.(?:jpe?g|png|webp|gif|avif)(?:\?\S*)?\s+\d/i.freeze
+    # Where lazy loaders keep the real image, high-resolution names first,
+    # then other loaders' names.
     LAZY_SRC = %w[
-      data-src data-lazy-src data-original data-lazy data-url data-hi-res-src data-full-src
-      data-large-src data-orig-src data-actualsrc data-echo data-img-src data-image
+      data-a-hires data-src-hq data-client-src-hq data-original data-full-src data-original-src data-src
+      data-lazy-src data-lazy data-lazysrc data-bsrc data-iurl data-thumb data-image data-img
+      data-a-image-source data-fallback-src data-hi-res-src data-large-src data-orig-src data-actualsrc
+      data-url data-echo data-img-src
     ].freeze
-    # The ones that only ever hold the image a loader swaps in, so they win
-    # over any src: a placeholder, a spacer or a low-quality thumbnail.
-    LAZY_ONLY_SRC = (LAZY_SRC - %w[data-url data-echo data-img-src data-image]).freeze
+    # All but the generic names that hold an image only on an image marked
+    # as lazy; on others they are links or IDs.
+    LAZY_ONLY_SRC = (LAZY_SRC - %w[data-url data-echo data-img-src]).freeze
     LAZY_SRCSET = %w[data-srcset data-lazy-srcset data-original-set].freeze
     # What a template writes for a missing value.
     NO_VALUE = /\A(?:false|true|null|nil|none|undefined|NaN)\z/i.freeze
@@ -198,23 +204,32 @@ module Nokodown
     end
 
     # Loaders mark their images with a "lazy" class or with nothing but the
-    # attribute, so an attribute that only loaders use wins over any src: a
-    # spacer, a placeholder or a low-quality thumbnail. Generic names such as
-    # data-url and data-image count only on a marked image.
+    # attribute, so the attributes win over any src: a spacer, a
+    # placeholder or a low-quality thumbnail. Amazon lists its sizes in
+    # data-a-dynamic-image, of which the largest wins. A lazy srcset
+    # gives its largest image, after the plain attributes.
     def restore_lazy_image(img)
-      img.remove_attribute("src") if placeholder_src?(img)
-      return restore_unmarked_image(img) if img["src"] && !img["class"].to_s.downcase.include?("lazy")
+      dynamic = dynamic_image(img["data-a-dynamic-image"])
+      return img["src"] = dynamic if dynamic
 
-      source = lazy_source(img, LAZY_SRC, marked: true)
+      img.remove_attribute("src") if placeholder_src?(img)
+      marked = img["src"].to_s.strip.empty? || img["class"].to_s.downcase.include?("lazy")
+      source = lazy_source(img, marked ? LAZY_SRC : LAZY_ONLY_SRC, marked: marked) || lazy_srcset_source(img, marked)
       img["src"] = source if source
-      srcset = LAZY_SRCSET.map { |name| img[name].to_s.strip }.find { |value| !value.empty? && !value.start_with?("data:") }
-      img["srcset"] = srcset if srcset
-      restore_from_any_attribute(img) unless img["src"] || img["srcset"]
+      restore_from_any_attribute(img) if marked && img["src"].to_s.strip.empty? && !img["srcset"]
     end
 
-    def restore_unmarked_image(img)
-      source = lazy_source(img, LAZY_ONLY_SRC, marked: false)
-      img["src"] = source if source
+    # The largest of the image URLs mapped to [width, height].
+    def dynamic_image(value)
+      return unless value.to_s.lstrip.start_with?("{")
+
+      sizes = JSON.parse(value)
+      return unless sizes.is_a?(Hash)
+
+      urls = sizes.select { |url, _| lazy_candidate?(url.strip) }
+      urls.max_by { |_, size| size.is_a?(Array) && size[0].is_a?(Numeric) && size[1].is_a?(Numeric) ? size[0] * size[1] : 0 }&.first&.strip
+    rescue JSON::ParserError
+      nil
     end
 
     # The first of the attributes that holds an image location, as opposed
@@ -223,13 +238,21 @@ module Nokodown
     # and all, as a loader may serve images from any relative URL. Without
     # a src to fall back on (none, or an empty one), so does a bare word
     # ("portrait"), in attribute order. An unmarked image's src is replaced
-    # only by an image file or a path.
+    # only by a path, a query or a file name.
     def lazy_source(img, names, marked:)
       values = names.map { |name| img[name].to_s.strip }.select { |value| lazy_candidate?(value) }
       return values.find { |value| image_location?(value) } unless marked
       return values.find { |value| !value.match?(NO_VALUE) } if img["src"].to_s.strip.empty?
 
       values.find { |value| value.match?(%r{[/.?]}) }
+    end
+
+    def lazy_srcset_source(img, marked)
+      LAZY_SRCSET.each do |name|
+        url = Markdown::Image.largest_srcset(img[name].to_s.strip).to_s.strip
+        return url if lazy_candidate?(url) && (marked || image_location?(url))
+      end
+      nil
     end
 
     def lazy_candidate?(value)
@@ -239,8 +262,10 @@ module Nokodown
       !value.match?(Markdown::Image::TRACKING)
     end
 
+    # A path, a query or a file name with an extension, without spaces: not
+    # a word ("Facebook", "X (formerly Twitter)"), an ID or a number ("1.5").
     def image_location?(value)
-      !value.match?(/\s/) && (value.start_with?("//") || value.include?("/") || value.match?(IMAGE_URL))
+      !value.match?(/\s/) && value.match?(%r{[/?]|\.[a-z][a-z\d]{1,4}(?:[?#]|\z)}i)
     end
 
     def restore_from_any_attribute(img)

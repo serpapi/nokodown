@@ -384,6 +384,28 @@ RSpec.describe "Markdown conversion" do
       convert('<img data-src="https://cdn.example.org/photo?id=7" src="/assets/spacer.gif" alt="Photo">').should == "![Photo](https://cdn.example.org/photo?id=7)"
     end
 
+    it "takes the real image from lazy-loading attributes in priority order, over a placeholder or thumbnail src" do
+      names = %w[data-a-hires data-src-hq data-client-src-hq data-original data-full-src data-original-src data-src data-lazy-src
+                 data-lazy data-lazysrc data-bsrc data-iurl data-thumb data-image data-img data-a-image-source data-fallback-src]
+      names.each do |name|
+        convert(%(<img #{name}="/real.jpg" src="/placeholder-image" alt="Lazy">)).should == "![Lazy](https://example.com/real.jpg)"
+      end
+      convert('<img data-srcset="/small.jpg 100w, /real.jpg 1000w" src="/placeholder-image" alt="Lazy">').should ==
+        "![Lazy](https://example.com/real.jpg)"
+      convert('<img data-src="/second.jpg" data-original="/first.jpg" src="/thumb.jpg" alt="First">').should ==
+        "![First](https://example.com/first.jpg)"
+      convert('<img data-src="portrait.svg" src="/thumb.jpg" alt="Svg"> <img data-src="?image=portrait" src="/thumb.jpg" alt="Query">').should ==
+        "![Svg](https://example.com/dir/portrait.svg) ![Query](https://example.com/dir/page?image=portrait)"
+    end
+
+    it "takes the largest of Amazon's dynamic image sizes" do
+      sizes = '{"https://m.media-amazon.com/I/a._SX300_.jpg":[300,300],"https://m.media-amazon.com/I/a._SX679_.jpg":[679,679]}'
+      convert(%(<img src="https://m.media-amazon.com/I/a._SX300_.jpg" data-a-dynamic-image='#{sizes}' alt="Mug">)).should ==
+        "![Mug](https://m.media-amazon.com/I/a._SX679_.jpg)"
+      convert(%(<img src="/a.jpg" data-a-dynamic-image='{"javascript:alert(1)":[9,9]}' alt="A"> <img src="/b.jpg" data-a-dynamic-image="{oops" alt="B">)).should ==
+        "![A](https://example.com/a.jpg) ![B](https://example.com/b.jpg)"
+    end
+
     it "keeps src when the lazy-loading attributes hold no image location" do
       html = '<p><img data-src="false" src="/a.jpg" alt="A"> <img data-src="Facebook" src="/b.jpg" alt="B"> ' \
              '<img data-image="322851" data-url="/c-other.jpg" src="/c.jpg" alt="C"></p>'
@@ -404,7 +426,6 @@ RSpec.describe "Markdown conversion" do
              '<img class="lazyload" data-src="javascript:alert(1)" alt="Script"></p>'
       convert(html).should == "![Logo](https://example.com/dir/logo.svg) ![Photo](https://example.com/my%20photo.jpg) " \
                               "![Chart](https://example.com/dir/chart.svg)"
-      convert('<img data-src="logo.svg" src="/logo.png" alt="Logo">').should == "![Logo](https://example.com/logo.png)"
     end
 
     it "takes a query or an endpoint from a marked image's lazy-loading attributes" do
@@ -423,7 +444,7 @@ RSpec.describe "Markdown conversion" do
 
     it "takes the first bare relative URL from a marked image whose src is empty, before a later path" do
       html = '<p><img class="lazyload" src="" data-src="portrait" alt="Empty"> ' \
-             '<img class="lazyload" data-src="portrait" data-original="/fallback.jpg" alt="First"></p>'
+             '<img class="lazyload" data-src="portrait" data-lazy-src="/fallback.jpg" alt="First"></p>'
       convert(html).should == "![Empty](https://example.com/dir/portrait) ![First](https://example.com/dir/portrait)"
     end
 
