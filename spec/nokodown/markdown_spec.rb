@@ -402,8 +402,10 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Text"
     end
 
-    it "uses the alt text of emoji images" do
+    it "uses the alt text of emoji images, escaped like any text" do
       convert('<p>Done <img class="wp-smiley" src="/e.png" alt="🎉"></p>').should == "Done 🎉"
+      convert('<p><img class="emoji" src="/e.png" alt="`"><a href="/x"><code>[Run](javascript:alert(1))[</code></a></p>').should ==
+        "\\`[`[Run](javascript:alert(1))[`](https://example.com/x)"
     end
 
     it "drops repeated responsive variants of one image" do

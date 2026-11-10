@@ -179,7 +179,7 @@ module Nokodown
       def image(node)
         alt = Dom.squish(node["alt"].to_s)
         return Image.tex(alt) if node["class"].to_s.include?("mwe-math-fallback-image")
-        return alt if Image.emoji?(node, alt)
+        return Text.escape(alt) if Image.emoji?(node, alt)
         return "" if !@images || @in_heading
 
         src = Image.source(node, @urls)
