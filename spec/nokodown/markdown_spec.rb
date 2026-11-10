@@ -265,7 +265,7 @@ RSpec.describe "Markdown conversion" do
       html = '<p><a href="/x"><code>][</code></a> <a data-href="mailto:[Run](javascript:alert(1))">Go <code>[</code>]</a> ' \
              '<a href="/z"><code>[\\]</code>]</a> <a href="/w"><kbd>a</kbd>`<code>b`c</code></a></p>'
       convert(html).should == "[`][`](https://example.com/x) [Go `[`\\]](mailto:%5BRun%5D(javascript:alert(1))) " \
-                              "[`[\\]`\\]](https://example.com/z) [`a`\\```b`c``](https://example.com/w)"
+                              "[`[\\]`\\]](https://example.com/z) [`a`\\` ``b`c``](https://example.com/w)"
     end
 
     it "writes no link or image inside link text, whatever TeX it holds" do
@@ -298,6 +298,13 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Mail \\<0@host.com> or \\<.a@host.com>, not a < 1\n\n" \
                               "[``` ``x`` ```$\\<0@host.com>\\`\\`$](https://example.com/x) [`a`\\<0``a`b``c@host.com>](https://example.com/y)\n\n" \
                               "[\\<0@host.com>](https://example.com/a.mp3)"
+    end
+
+    it "keeps a space between a code span and a backtick after it, so their runs do not merge" do
+      convert("<p><code>a</code><code>``x</code> <kbd>Ctrl</kbd><kbd>C</kbd> <code>C:\\</code><code>x</code></p>").should ==
+        "`a` ``` ``x ``` `Ctrl` `C` `C:\\` `x`"
+      convert('<p><code>a</code><code>``x</code> <a href="/x"><code>[Run](javascript:alert(1))[</code></a></p>').should ==
+        "`a` ``` ``x ``` [`[Run](javascript:alert(1))[`](https://example.com/x)"
     end
 
     it "writes code with a backtick run too long to fence as text" do

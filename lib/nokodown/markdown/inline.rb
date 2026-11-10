@@ -71,7 +71,7 @@ module Nokodown
       def render(nodes, heading: false)
         outer = @in_heading
         @in_heading ||= heading
-        nodes.map { |node| node_text(node) }.join
+        nodes.each_with_object(+"") { |node, out| append(out, node_text(node)) }
       ensure
         @in_heading = outer
       end
@@ -81,6 +81,15 @@ module Nokodown
       end
 
       private
+
+      # Pieces written side by side must not join into Markdown that neither
+      # holds: a code span's closing fence and a backtick after it would read
+      # as one longer run. A backslash before the backtick may be code's own
+      # (`C:\\`), so a space goes between any two backticks.
+      def append(out, piece)
+        out << " " if piece.start_with?("`") && out.end_with?("`")
+        out << piece
+      end
 
       def node_text(node)
         if node.text? || node.cdata?
