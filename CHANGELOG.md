@@ -24,7 +24,13 @@
   destination early with a stray `)`, nor its text end the label early
   with a stray `]` or a trailing backslash, and write a link of its own.
   Link text holds no link, autolink or HTML tag of its own either, from
-  raw TeX or from a backtick run too long to fence code.
+  raw TeX or from a backtick run too long to fence code. Raw TeX, emoji
+  alt text and email addresses, whatever they start with, cannot start
+  Markdown that reaches past them; code with a backtick run too long to
+  fence is written as text; a backslash at the end of a text escapes
+  nothing after it; code spans side by side keep their own fences; and
+  text side by side cannot join into a link, an image, an autolink or a
+  tag.
   Brackets and backticks in a URL are percent-encoded, so a URL read as
   text holds no link either.
 - Code inside link text keeps its brackets and backslashes as they are.
