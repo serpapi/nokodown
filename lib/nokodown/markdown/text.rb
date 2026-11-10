@@ -45,7 +45,7 @@ module Nokodown
       def escape(string)
         return string unless string.match?(ESCAPABLE)
 
-        string = string.gsub(/\\(?=[!-\/:-@\[-`{-~])/, "\\\\\\\\")
+        string = string.gsub(/\\(?=[!-\/:-@\[-`{-~]|\z)/, "\\\\\\\\")
         string = string.gsub("`", "\\\\`")
         string = string.gsub(/(?<!\s)\*|\*(?!\s)/, "\\\\*")
         string = string.gsub(/(?<![\p{L}\p{N}\\])_|_(?![\p{L}\p{N}])/, "\\\\_")

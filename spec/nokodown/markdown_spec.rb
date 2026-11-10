@@ -23,6 +23,12 @@ RSpec.describe "Markdown conversion" do
       convert("<p>[a](b) &lt;b&gt; C:\\* _x_ plain text</p>").should == "[a\\](b) \\<b> C:\\\\\\* \\_x\\_ plain text"
     end
 
+    it "doubles a backslash at the end of a text, so it escapes nothing after it" do
+      convert('<p><b>/!\\ Restart /!\\</b> hosted only.\\<br>next</p>').should == "**/!\\ Restart /!\\\\** hosted only.\\\\\nnext"
+      convert('<p>a\\<code>[Run](javascript:alert(1))[</code> <a href="/x"><code>[Run](javascript:alert(1))[</code></a></p>').should ==
+        "a\\\\`[Run](javascript:alert(1))[` [`[Run](javascript:alert(1))[`](https://example.com/x)"
+    end
+
     it "escapes text that would start a heading or a quote" do
       convert("<p># not a heading</p><p>&gt; not a quote</p>").should == "\\# not a heading\n\n\\> not a quote"
     end
@@ -229,11 +235,11 @@ RSpec.describe "Markdown conversion" do
       convert("<a href=\"/x#{'(' * 33}y#{')' * 33}\">Deep</a>").should == "[Deep](https://example.com/x#{'%28' * 33}y#{'%29' * 33})"
     end
 
-    it "writes a URL so that it holds no link or code of its own when the text before it keeps the link from forming" do
+    it "writes a URL so that it holds no link or code of its own, should text before it keep the link from forming" do
       html = '<p>a\\<a data-href="mailto:[Run](javascript:alert(1))">Go</a></p><p><math alttext="a`b"></math> ' \
              '<a data-href="mailto:x`[Run](javascript:alert(1))">Go</a></p>' \
              '<p><a href="http://[2001:db8::1]/a[b]">IPv6</a> <a href="/search?f[0]=a">Filter</a></p>'
-      convert(html).should == "a\\[Go](mailto:%5BRun%5D(javascript:alert(1)))\n\n$a\\`b$ [Go](mailto:x%60%5BRun%5D(javascript:alert(1)))\n\n" \
+      convert(html).should == "a\\\\[Go](mailto:%5BRun%5D(javascript:alert(1)))\n\n$a\\`b$ [Go](mailto:x%60%5BRun%5D(javascript:alert(1)))\n\n" \
                               "[IPv6](http://[2001:db8::1]/a%5Bb%5D) [Filter](https://example.com/search?f%5B0%5D=a)"
     end
 
