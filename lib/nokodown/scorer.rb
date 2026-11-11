@@ -77,8 +77,7 @@ module Nokodown
 
     def score_paragraphs
       ignored = secondary_keys
-      @root.traverse do |node|
-        next unless node.element?
+      Dom.elements_bottom_up(@root).each do |node|
         next if ignored.include?(Dom.key(node))
 
         if SCORED.include?(node.name) || paragraph?(node)
@@ -259,8 +258,8 @@ module Nokodown
 
     def best_score_within(node)
       best = -Float::INFINITY
-      node.traverse do |descendant|
-        value = descendant.element? && score(descendant)
+      Dom.elements_bottom_up(node).each do |descendant|
+        value = score(descendant)
         best = value if value && value > best
       end
       best

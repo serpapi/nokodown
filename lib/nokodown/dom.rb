@@ -84,6 +84,26 @@ module Nokodown
       found
     end
 
+    # Root and the elements under it, children before their parent, in the
+    # order Node#traverse yields them. Walking the element pointers skips
+    # the text nodes and the NodeSet traverse builds for every element.
+    def elements_bottom_up(root)
+      found = []
+      stack = [[root, root.first_element_child]]
+      until stack.empty?
+        entry = stack.last
+        child = entry[1]
+        if child
+          entry[1] = child.next_element
+          stack << [child, child.first_element_child]
+        else
+          stack.pop
+          found << entry[0]
+        end
+      end
+      found
+    end
+
     def mark_as_thread(node)
       node[THREAD] = "1"
       elements(node).each { |descendant| descendant[THREAD] = "1" }
@@ -122,14 +142,10 @@ module Nokodown
       end
     end
 
-    # Elements are at most Preprocessor::MAX_DEPTH levels deep, so the
-    # recursion in traverse is bounded.
     def paragraph_keys_bottom_up(root)
       keys = Set.new
       breaks = {}
-      root.traverse do |node|
-        next unless node.element?
-
+      elements_bottom_up(root).each do |node|
         key = key(node)
         breaks[key] = node.element_children.any? { |child| PARAGRAPH_BREAKERS.include?(child.name) || breaks[key(child)] }
         keys << key if node.name == "p" || (node.name == "div" && !breaks[key])

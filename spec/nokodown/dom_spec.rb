@@ -65,6 +65,30 @@ RSpec.describe Nokodown::Dom do
     end
   end
 
+  describe ".elements_bottom_up" do
+    def traversed(root)
+      found = []
+      root.traverse { |node| found << node if node.element? }
+      found
+    end
+
+    it "lists root and its elements children first, as traverse yields them" do
+      body = Nokolexbor::HTML("<body><main><h1>Title</h1>text<!-- note --><section><p>One <b>bold</b></p><ul><li>a</li></ul></section></main><p>End</p></body>").at_css("body")
+
+      described_class.elements_bottom_up(body).map(&:name).should == %w[h1 b p li ul section main p body]
+      described_class.elements_bottom_up(body).map(&:name).should == traversed(body).map(&:name)
+      described_class.elements_bottom_up(body.at_css("b")).map(&:name).should == %w[b]
+    end
+
+    it "visits every copy of a misnested formatting element" do
+      body = Nokolexbor::HTML("<body><a href='/x'><span>A</span><div>B</div></a><p>C</p></body>").at_css("body")
+      described_class.assign_keys(body)
+
+      described_class.elements_bottom_up(body).map { |node| [node.name, described_class.key(node)] }
+        .should == traversed(body).map { |node| [node.name, described_class.key(node)] }
+    end
+  end
+
   describe ".ancestors_named" do
     it "lists the ancestors with the given names, nearest first" do
       doc = Nokolexbor::HTML("<table><tr><td><div><p><b>Cell</b></p></div></td></tr></table>")
