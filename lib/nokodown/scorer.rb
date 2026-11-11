@@ -94,7 +94,7 @@ module Nokodown
     def secondary_keys
       limit = @stats.text_chars(@root) * 0.5
       regions = @root.css("*").select do |node|
-        Dom.signature(node).match?(Patterns::SECONDARY) && @stats.text_chars(node) < limit
+        Patterns.secondary?(Dom.signature(node)) && @stats.text_chars(node) < limit
       end
       regions.flat_map { |region| [region] + region.css("*").to_a }.map { |node| Dom.key(node) }.to_set
     end

@@ -38,7 +38,7 @@ module Nokodown
       # Card grids repeat the same class list hundreds of times, and class
       # names repeat across lists. No furniture pattern spans a space, so a
       # list is furniture when one of its names is.
-      @furniture_tokens = Hash.new { |cache, token| cache[token] = token.match?(Patterns::PAGE_FURNITURE) }
+      @furniture_tokens = Hash.new { |cache, token| cache[token] = Patterns.furniture?(token) }
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.split.any? { |token| @furniture_tokens[token] } }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
       @signature_only = Hash.new { |cache, signature| cache[signature] = signature_only?(signature) }
@@ -191,12 +191,12 @@ module Nokodown
     # Only a signature that is furniture for its disclaimer name alone can be
     # a note; "ad-disclaimer" or "footer__disclaimer" stays furniture.
     def disclaimer_only?(signature)
-      signature.match?(Patterns::DISCLAIMER) && !signature.gsub(DISCLAIMER_WORD, " ").match?(Patterns::PAGE_FURNITURE)
+      signature.match?(Patterns::DISCLAIMER) && !Patterns.furniture?(signature.gsub(DISCLAIMER_WORD, " "))
     end
 
     # Furniture for its signature name alone ("signature", "member-signature").
     def signature_only?(signature)
-      signature.match?(Patterns::SIGNATURE) && !signature.gsub(SIGNATURE_WORD, " ").match?(Patterns::PAGE_FURNITURE)
+      signature.match?(Patterns::SIGNATURE) && !Patterns.furniture?(signature.gsub(SIGNATURE_WORD, " "))
     end
 
     # A member's signature is named after the post ("message-signature") or

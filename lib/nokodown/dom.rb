@@ -71,7 +71,7 @@ module Nokodown
     end
 
     def thread_post?(node)
-      thread?(node) && signature(node).match?(Patterns::SECONDARY)
+      thread?(node) && Patterns.secondary?(signature(node))
     end
 
     # Keys of the <p>s and of the divs Readability would rewrite into <p>

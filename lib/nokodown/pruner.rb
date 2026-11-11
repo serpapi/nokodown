@@ -166,7 +166,7 @@ module Nokodown
       root.element_children.each do |node|
         next if Dom.thread?(node)
 
-        if Dom.signature(node).match?(Patterns::SECONDARY) && Dom.text(node).length <= total * 0.5
+        if Patterns.secondary?(Dom.signature(node)) && Dom.text(node).length <= total * 0.5
           remove(node)
         else
           remove_secondary(node, total)
