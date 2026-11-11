@@ -13,7 +13,8 @@ module Nokodown
     SECTIONS_SHARE = 0.75
     SECTION_LINK_DENSITY = 0.25
     TOP_CANDIDATES = 5
-    COMMAS = /[,\u060C\uFE50\uFE10\uFE11\u2E41\u2E34\u2E32\uFF0C]/.freeze
+    # The commas Readability counts, for String#count.
+    COMMAS = ",\u060C\uFE50\uFE10\uFE11\u2E41\u2E34\u2E32\uFF0C"
 
     def self.class_weight(node)
       [node["class"], node["id"]].sum { |value| words_weight(value.to_s.downcase) }
@@ -123,7 +124,8 @@ module Nokodown
     def add_score(text, parent)
       return if text.length < PARAGRAPH_MIN || parent.nil? || !within_root?(parent)
 
-      points = 1 + text.split(COMMAS, -1).size + [text.length / 100, 3].min
+      # Readability counts the pieces between commas; text here is never empty.
+      points = 2 + text.count(COMMAS) + [text.length / 100, 3].min
       ancestors_from(parent).each_with_index do |ancestor, level|
         key = Dom.key(ancestor)
         @nodes[key] ||= ancestor
@@ -152,8 +154,15 @@ module Nokodown
       list
     end
 
+    # A walk up the parents: Node#ancestors builds a NodeSet of every
+    # ancestor first, which cost more than the rest of the scoring.
     def within_root?(node)
-      Dom.key(node) == @root_key || node.ancestors.any? { |ancestor| ancestor.element? && Dom.key(ancestor) == @root_key }
+      while node
+        return true if node.element? && Dom.key(node) == @root_key
+
+        node = node.parent
+      end
+      false
     end
 
     def initial_score(node)
