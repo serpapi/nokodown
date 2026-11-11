@@ -37,9 +37,21 @@
   Brackets and backticks in a URL are percent-encoded, so a URL read as
   text holds no link either.
 - Code inside link text keeps its brackets and backslashes as they are.
-- Extraction is faster on large pages, with the same output: about 30%
-  on Wikipedia's Coffee article (390 to 260 ms on Ruby 2.7) and 20% at the
-  median of WCXB.
+- `max_length:` returns exactly the first `max_length` characters of the
+  Markdown, and the same `excerpt`, and stops rendering once they are
+  known: at most one short render and one whole render. `nil`, the
+  default, changes nothing; a negative or non-Integer value raises
+  `ArgumentError`.
+- A link whose `href` is blank takes its target from `data-href` and the
+  like too. A link made only of images keeps its target, as
+  `[![alt](src)](href)`, and a player inside a link keeps its thumbnail.
+- An iframe embed is linked only from an http(s) URL on the video host's
+  own domain, and one without a title is written as `[Video](url)`.
+- A page made only of headings keeps all of them, a one-column table with
+  a header cell or a caption stays a table, and the H1 above an article
+  body chosen inside `<main>` opens the content.
+- Extraction is faster, with the same output: about 40% on Wikipedia's
+  Coffee article (364 to 214 ms on Ruby 2.7) and 27% on WCXB (ms per page).
 
 ## 0.1.0 (2026-11-02)
 
