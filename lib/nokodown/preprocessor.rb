@@ -47,17 +47,20 @@ module Nokodown
 
     IMAGE_URL = /\.(?:jpe?g|png|webp|gif|avif)(?:[?#]\S*)?\s*\z/i.freeze
     IMAGE_SRCSET = /\.(?:jpe?g|png|webp|gif|avif)(?:\?\S*)?\s+\d/i.freeze
-    # Where lazy loaders keep the real image, high-resolution names first,
-    # then other loaders' names.
-    LAZY_SRC = %w[
-      data-a-hires data-src-hq data-client-src-hq data-original data-full-src data-original-src data-src
-      data-lazy-src data-lazy data-lazysrc data-bsrc data-iurl data-thumb data-image data-img
-      data-a-image-source data-fallback-src data-hi-res-src data-large-src data-orig-src data-actualsrc
-      data-url data-echo data-img-src
+    # Where lazy loaders keep the real image: high-resolution names, then
+    # other loaders' names, thumbnails last.
+    HIGH_RES_SRC = %w[
+      data-a-hires data-src-hq data-client-src-hq data-hi-res-src data-large-src data-original data-full-src
+      data-original-src data-orig-src
     ].freeze
+    OTHER_LAZY_SRC = %w[
+      data-src data-lazy-src data-lazy data-lazysrc data-bsrc data-iurl data-image data-img data-a-image-source
+      data-fallback-src data-actualsrc data-thumb data-url data-echo data-img-src
+    ].freeze
+    LAZY_SRC = (HIGH_RES_SRC + OTHER_LAZY_SRC).freeze
     # All but the generic names that hold an image only on an image marked
     # as lazy; on others they are links or IDs.
-    LAZY_ONLY_SRC = (LAZY_SRC - %w[data-url data-echo data-img-src]).freeze
+    OTHER_LAZY_ONLY_SRC = (OTHER_LAZY_SRC - %w[data-url data-echo data-img-src]).freeze
     LAZY_SRCSET = %w[data-srcset data-lazy-srcset data-original-set].freeze
     # What a template writes for a missing value.
     NO_VALUE = /\A(?:false|true|null|nil|none|undefined|NaN)\z/i.freeze
@@ -206,15 +209,14 @@ module Nokodown
     # Loaders mark their images with a "lazy" class or with nothing but the
     # attribute, so the attributes win over any src: a spacer, a
     # placeholder or a low-quality thumbnail. Amazon lists its sizes in
-    # data-a-dynamic-image, of which the largest wins. A lazy srcset
-    # gives its largest image, after the plain attributes.
+    # data-a-dynamic-image, of which the largest wins after the
+    # high-resolution names. A lazy srcset gives its largest image, after
+    # the plain attributes.
     def restore_lazy_image(img)
-      dynamic = dynamic_image(img["data-a-dynamic-image"])
-      return img["src"] = dynamic if dynamic
-
       img.remove_attribute("src") if placeholder_src?(img)
       marked = img["src"].to_s.strip.empty? || img["class"].to_s.downcase.include?("lazy")
-      source = lazy_source(img, marked ? LAZY_SRC : LAZY_ONLY_SRC, marked: marked) || lazy_srcset_source(img, marked)
+      source = lazy_source(img, HIGH_RES_SRC, marked: marked) || dynamic_image(img["data-a-dynamic-image"]) ||
+               lazy_source(img, marked ? OTHER_LAZY_SRC : OTHER_LAZY_ONLY_SRC, marked: marked) || lazy_srcset_source(img, marked)
       img["src"] = source if source
       restore_from_any_attribute(img) if marked && img["src"].to_s.strip.empty? && !img["srcset"]
     end

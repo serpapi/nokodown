@@ -398,6 +398,17 @@ RSpec.describe "Markdown conversion" do
         "![Svg](https://example.com/dir/portrait.svg) ![Query](https://example.com/dir/page?image=portrait)"
     end
 
+    it "prefers a high-resolution attribute to a thumbnail or a dynamic image map" do
+      convert('<img class="lazy" src="/thumb.jpg" data-thumb="/small.jpg" data-hi-res-src="/large.jpg" alt="Photo">').should ==
+        "![Photo](https://example.com/large.jpg)"
+      %w[data-original data-a-hires].each do |name|
+        convert(%(<img class="lazy" src="/thumb.jpg" #{name}="/large.jpg" data-a-dynamic-image='{"/small.jpg":[100,100]}' alt="Photo">)).should ==
+          "![Photo](https://example.com/large.jpg)"
+      end
+      convert(%(<img src="/thumb.jpg" data-thumb="/small.jpg" data-a-dynamic-image='{"/large.jpg":[600,600]}' alt="Photo">)).should ==
+        "![Photo](https://example.com/large.jpg)"
+    end
+
     it "takes the largest of Amazon's dynamic image sizes" do
       sizes = '{"https://m.media-amazon.com/I/a._SX300_.jpg":[300,300],"https://m.media-amazon.com/I/a._SX679_.jpg":[679,679]}'
       convert(%(<img src="https://m.media-amazon.com/I/a._SX300_.jpg" data-a-dynamic-image='#{sizes}' alt="Mug">)).should ==
