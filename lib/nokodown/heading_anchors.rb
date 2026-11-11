@@ -20,7 +20,7 @@ module Nokodown
     module_function
 
     def mark(root)
-      root.css("[id]").each { |node| node[Dom::ANCHOR] = "1" if anchor?(node) }
+      Dom.elements(root).each { |node| node[Dom::ANCHOR] = "1" if node.key?("id") && anchor?(node) }
     end
 
     def anchor?(node)

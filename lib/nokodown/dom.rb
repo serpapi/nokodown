@@ -54,16 +54,39 @@ module Nokodown
 
     def assign_keys(root)
       root[KEY] = "0"
-      root.css("*").each_with_index { |node, index| node[KEY] = (index + 1).to_s }
+      elements(root).each_with_index { |node, index| node[KEY] = (index + 1).to_s }
     end
 
     def key(node)
       node[KEY]
     end
 
+    # The elements under root in document order, as css("*") lists them.
+    # Lexbor's selector engine took several times longer to list them
+    # than walking the tree from Ruby.
+    def elements(root)
+      found = []
+      stack = []
+      child = root.last_element_child
+      while child
+        stack << child
+        child = child.previous_element
+      end
+      until stack.empty?
+        node = stack.pop
+        found << node
+        child = node.last_element_child
+        while child
+          stack << child
+          child = child.previous_element
+        end
+      end
+      found
+    end
+
     def mark_as_thread(node)
       node[THREAD] = "1"
-      node.css("*").each { |descendant| descendant[THREAD] = "1" }
+      elements(node).each { |descendant| descendant[THREAD] = "1" }
     end
 
     def thread?(node)

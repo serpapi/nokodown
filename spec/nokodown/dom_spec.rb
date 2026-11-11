@@ -37,6 +37,34 @@ RSpec.describe Nokodown::Dom do
     end
   end
 
+  describe ".elements" do
+    it "lists the elements under a root in document order, as css(\"*\") does" do
+      html = <<~HTML
+        <body><main><h1>Title</h1>text<!-- note --><section><p>One <b>bold</b> <i>two</i></p><ul><li>a</li><li><a>b</a></li></ul></section></main><footer><p>End</p></footer></body>
+      HTML
+      body = Nokolexbor::HTML(html).at_css("body")
+
+      described_class.elements(body).map(&:name).should == body.css("*").map(&:name)
+      described_class.elements(body.at_css("section")).map(&:name).should == %w[p b i ul li li a]
+      described_class.elements(body.at_css("b")).should == []
+    end
+
+    # Copies of a formatting element a block cuts share one attribute list
+    # in Lexbor; the walk must still visit each copy.
+    it "visits every copy of a misnested formatting element" do
+      body = Nokolexbor::HTML("<body><a href='/x'><span>A</span><div>B</div></a><p>C</p></body>").at_css("body")
+
+      described_class.elements(body).map(&:name).should == body.css("*").map(&:name)
+    end
+
+    it "keys every element in document order" do
+      body = Nokolexbor::HTML("<body><div><p>x</p><p><b>y</b></p></div><p>z</p></body>").at_css("body")
+      described_class.assign_keys(body)
+
+      body.css("*").map { |node| described_class.key(node) }.should == %w[1 2 3 4 5]
+    end
+  end
+
   describe ".ancestors_named" do
     it "lists the ancestors with the given names, nearest first" do
       doc = Nokolexbor::HTML("<table><tr><td><div><p><b>Cell</b></p></div></td></tr></table>")

@@ -253,7 +253,7 @@ module Nokodown
     # is link text, so all characters count.
     def card_classes
       min_chars = @stats.chars(@body) * CARD_RUN_SHARE
-      runs = @body.css("[class]").group_by { |node| node["class"] }
+      runs = Dom.elements(@body).select { |node| node.key?("class") }.group_by { |node| node["class"] }
       runs.each_with_object(Set.new) do |(classes, nodes), cards|
         cards << classes if card_run?(classes, nodes, min_chars)
       end

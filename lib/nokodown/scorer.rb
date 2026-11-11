@@ -93,10 +93,10 @@ module Nokodown
     # article. A thread holding most of the page (a forum) still counts.
     def secondary_keys
       limit = @stats.text_chars(@root) * 0.5
-      regions = @root.css("*").select do |node|
+      regions = Dom.elements(@root).select do |node|
         Patterns.secondary?(Dom.signature(node)) && @stats.text_chars(node) < limit
       end
-      regions.flat_map { |region| [region] + region.css("*").to_a }.map { |node| Dom.key(node) }.to_set
+      regions.flat_map { |region| [region] + Dom.elements(region) }.map { |node| Dom.key(node) }.to_set
     end
 
     # A div wrapping a single paragraph is that paragraph, as far as scoring goes.
