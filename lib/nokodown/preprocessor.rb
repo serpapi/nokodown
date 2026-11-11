@@ -303,19 +303,22 @@ module Nokodown
     # inside a link is a preview of the page it links to: its file is not
     # content, but a thumbnail it holds for browsers without video stays in
     # its place, inside the link. Fallback text only says the player failed.
-    # Only its own children are read: a search of each nested player's
-    # subtree would take quadratic time.
+    # A hidden one goes with its thumbnail, which would otherwise lose the
+    # attributes that hide it. Only its own children are read: a search of
+    # each nested player's subtree would take quadratic time.
     def keep_playable(media)
       src = playable_source(media)
       return media.remove if src.nil? || media.key?("muted")
-      return media.replace(thumbnails(media)) unless standalone_player?(media)
+      return keep_thumbnails(media) unless standalone_player?(media)
 
       media.children.remove
       media["src"] = src
     end
 
-    def thumbnails(media)
-      Nokolexbor::NodeSet.new(media.document, media.element_children.select { |child| %w[img picture].include?(child.name) })
+    def keep_thumbnails(media)
+      return media.remove if hidden_player?(media)
+
+      media.replace(Nokolexbor::NodeSet.new(media.document, media.element_children.select { |child| %w[img picture].include?(child.name) }))
     end
 
     # Its src, or that of a <source> in it. Blob URLs exist only in the
@@ -397,6 +400,15 @@ module Nokodown
       return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE)
 
       hidden_by_class?(node) && !disclosure?(node)
+    end
+
+    # As hidden? judges it, without the panels and page wrappers a player
+    # never is.
+    def hidden_player?(media)
+      return true if media.key?("hidden") && media["hidden"] != "until-found"
+      return !media["class"].to_s.include?("fallback-image") if media["aria-hidden"] == "true"
+
+      media["style"].to_s.match?(HIDDEN_STYLE) || hidden_by_class?(media)
     end
 
     def hidden_by_class?(node)

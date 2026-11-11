@@ -971,6 +971,13 @@ RSpec.describe "Markdown conversion" do
         "Watch film\n\n[![Thumb](https://example.com/thumb.jpg)](https://example.com/watch)"
     end
 
+    it "drops the thumbnail of a hidden preview player inside a link" do
+      ['hidden', 'aria-hidden="true"', 'style="display: none"', 'class="hidden"'].each do |hidden|
+        convert(%(<p>Visible</p><a href="/watch"><video #{hidden} src="/preview.mp4"><img src="/thumb.jpg" alt="Hidden"></video></a>)).should == "Visible"
+        convert(%(<p>Visible</p><a href="/listen"><audio #{hidden} src="/ep.mp3"><img src="/cover.jpg" alt="Hidden"></audio></a>)).should == "Visible"
+      end
+    end
+
     it "uses a <source> of the player itself, not one of a player nested in it" do
       convert('<video><video><source src="/inner.mp4"></video><source src="/outer.mp4"></video>').should ==
         "[Video](https://example.com/outer.mp4)"
