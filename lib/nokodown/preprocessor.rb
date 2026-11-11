@@ -226,7 +226,7 @@ module Nokodown
       sizes = JSON.parse(value)
       return unless sizes.is_a?(Hash)
 
-      urls = sizes.select { |url, _| lazy_candidate?(url.strip) }
+      urls = sizes.select { |url, _| lazy_candidate?(url.strip) && image_location?(url.strip) }
       urls.max_by { |_, size| size.is_a?(Array) && size[0].is_a?(Numeric) && size[1].is_a?(Numeric) ? size[0] * size[1] : 0 }&.first&.strip
     rescue JSON::ParserError
       nil
@@ -240,19 +240,21 @@ module Nokodown
     # ("portrait"), in attribute order. An unmarked image's src is replaced
     # only by a path, a query or a file name.
     def lazy_source(img, names, marked:)
-      values = names.map { |name| img[name].to_s.strip }.select { |value| lazy_candidate?(value) }
-      return values.find { |value| image_location?(value) } unless marked
-      return values.find { |value| !value.match?(NO_VALUE) } if img["src"].to_s.strip.empty?
-
-      values.find { |value| value.match?(%r{[/.?]}) }
+      names.map { |name| img[name].to_s.strip }.find { |value| lazy_location?(img, value, marked) }
     end
 
+    # The largest image of a lazy srcset, judged as the plain attributes are.
     def lazy_srcset_source(img, marked)
-      LAZY_SRCSET.each do |name|
-        url = Markdown::Image.largest_srcset(img[name].to_s.strip).to_s.strip
-        return url if lazy_candidate?(url) && (marked || image_location?(url))
-      end
-      nil
+      urls = LAZY_SRCSET.map { |name| Markdown::Image.largest_srcset(img[name].to_s.strip).to_s.strip }
+      urls.find { |url| lazy_location?(img, url, marked) }
+    end
+
+    def lazy_location?(img, value, marked)
+      return false unless lazy_candidate?(value)
+      return image_location?(value) unless marked
+      return !value.match?(NO_VALUE) if img["src"].to_s.strip.empty?
+
+      value.match?(%r{[/.?]})
     end
 
     def lazy_candidate?(value)

@@ -412,6 +412,15 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "![A](https://example.com/a.jpg) ![B](https://example.com/b.jpg) ![C](https://example.com/c.jpg)"
     end
 
+    it "keeps src when a lazy srcset or a dynamic image map holds no image location" do
+      %w[false 123].each do |value|
+        convert(%(<img class="lazy" src="/real.jpg" data-srcset="#{value} 2x" alt="Photo">)).should == "![Photo](https://example.com/real.jpg)"
+        convert(%(<img src="/real.jpg" data-srcset="#{value} 2x" alt="Photo">)).should == "![Photo](https://example.com/real.jpg)"
+        convert(%(<img src="/real.jpg" data-a-dynamic-image="{&quot;#{value}&quot;:[600,600]}" alt="Photo">)).should ==
+          "![Photo](https://example.com/real.jpg)"
+      end
+    end
+
     it "takes no spacer file, word or fragment from the lazy-loading attributes" do
       convert('<img src="/real.jpg" data-src="/spacer.gif" alt="Photo">').should == "![Photo](https://example.com/real.jpg)"
       convert('<img class="lazyload" src="/real.jpg" data-src="/img/blank.gif" alt="Photo">').should == "![Photo](https://example.com/real.jpg)"
