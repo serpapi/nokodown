@@ -29,4 +29,17 @@ RSpec.describe Nokodown::Scorer do
 
     calls.should < 10
   end
+
+  it "weighs class lists from the cache an extraction keeps as without it, and drops the cache after" do
+    names = ["comment", "article", "comment", "content", "sidebar body", "", "h-social-media-tips", "article"]
+    nodes = names.map { |name| Nokolexbor::HTML("<div class=\"#{name}\" id=\"x\"></div>").at_css("div") }
+    weights = -> { nodes.map { |node| [described_class.class_weight(node), described_class.cleaning_weight(node)] } }
+    uncached = weights.call
+
+    cached = Nokodown::Dom.caching_signatures { Array.new(2) { weights.call } }
+
+    uncached.map(&:first).should == [-25, 25, -25, 25, 0, 0, -25, 25]
+    cached.should == [uncached, uncached]
+    Thread.current[Nokodown::Dom::WEIGHTS].should be_nil
+  end
 end

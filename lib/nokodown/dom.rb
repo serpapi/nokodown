@@ -45,6 +45,7 @@ module Nokodown
     CAMEL_CASE = /(?<=[a-z\d])(?=[A-Z])/.freeze
     SIGNATURES = :nokodown_signatures
     SECONDARY = :nokodown_secondary
+    WEIGHTS = :nokodown_weights
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
@@ -259,12 +260,15 @@ module Nokodown
     def caching_signatures
       outer = Thread.current[SIGNATURES]
       outer_secondary = Thread.current[SECONDARY]
+      outer_weights = Thread.current[WEIGHTS]
       Thread.current[SIGNATURES] = outer || {}
       Thread.current[SECONDARY] = outer_secondary || {}
+      Thread.current[WEIGHTS] = outer_weights || {}
       yield
     ensure
       Thread.current[SIGNATURES] = outer
       Thread.current[SECONDARY] = outer_secondary
+      Thread.current[WEIGHTS] = outer_weights
     end
 
     # Whether the element is named like a secondary region. The stages ask

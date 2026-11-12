@@ -38,12 +38,21 @@ module Nokodown
       token.rpartition(":").last.match?(Patterns::UTILITY_CLASS)
     end
 
+    # Pages repeat their class lists, so an extraction weighs each one once,
+    # in a cache kept and dropped with the signatures.
     def self.words_weight(value)
       return 0 if value.empty?
 
+      weights = Thread.current[Dom::WEIGHTS]
+      return weigh(value) unless weights
+
+      weights.fetch(value) { weights[value] = weigh(value) }
+    end
+
+    def self.weigh(value)
       (value.match?(Patterns::POSITIVE) ? 25 : 0) - (value.match?(Patterns::NEGATIVE) ? 25 : 0)
     end
-    private_class_method :utility_class?, :words_weight
+    private_class_method :utility_class?, :words_weight, :weigh
 
     def initialize(root, stats)
       @root = root
