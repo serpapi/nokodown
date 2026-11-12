@@ -227,8 +227,8 @@ module Nokodown
       return false if signature.empty?
 
       chrome = @furniture[signature]
-      return site_header?(node) if !chrome && signature.match?(Patterns::HEADER)
-      return @stats.link_density(node) > 0.5 if !chrome && signature.match?(Patterns::MENU)
+      return site_header?(node) if !chrome && Patterns.site_header?(signature)
+      return @stats.link_density(node) > 0.5 if !chrome && Patterns.menu?(signature)
       return false unless chrome
       return false if @signature_only[signature] && !forum_signature?(node, signature)
       return false if prose_section?(node, signature)
@@ -275,7 +275,7 @@ module Nokodown
 
     def furniture_name?(classes)
       signature = Dom.signature_of("#{classes} ")
-      @furniture[signature] || signature.match?(Patterns::HEADER) || signature.match?(Patterns::MENU)
+      @furniture[signature] || Patterns.site_header?(signature) || Patterns.menu?(signature)
     end
 
     # Menus repeat their items too, so a run named after a place is never

@@ -65,6 +65,18 @@ RSpec.describe Nokodown::Patterns do
     end
   end
 
+{ HEADER: :site_header?, MENU: :menu? }.each do |pattern, check|
+  it "answers #{check} for every name #{pattern} matches, and only for those" do
+    names = spellings(described_class.const_get(pattern).source)
+
+    names.size.should > 3
+    names.reject { |name| described_class.public_send(check, "x #{name} y") }.should == []
+    (names.map(&:upcase) + ["card-header", "menuitem", "headers", "nav", "masthead-x"]).each do |name|
+      described_class.public_send(check, name).should == name.match?(described_class.const_get(pattern))
+    end
+  end
+end
+
   it "answers furniture? and secondary? as the full patterns do" do
     ["site-footer", "cookie-banner", "ad-slot", "share-bar", "post-body", "article-content", "comments", "tag-cloud", "tag-news"].each do |name|
       described_class.furniture?(name).should == name.match?(described_class::PAGE_FURNITURE)

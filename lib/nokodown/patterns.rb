@@ -113,6 +113,16 @@ module Nokodown
     # The same for SECONDARY.
     SECONDARY_HINT = word_hint(%w[comment disqus respond repl popular trending most author rss tag])
 
+    # HEADER and MENU only match a name holding one of these words, which
+    # most names do not, so checking for the word first skips the pattern.
+    def self.site_header?(value)
+      (value.include?("header") || value.include?("masthead")) && value.match?(HEADER)
+    end
+
+    def self.menu?(value)
+      value.include?("menu") && value.match?(MENU)
+    end
+
     def self.furniture?(value)
       value.match?(FURNITURE_HINT) && value.match?(PAGE_FURNITURE)
     end
