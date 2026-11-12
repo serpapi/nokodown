@@ -67,7 +67,7 @@ module Nokodown
       def children_blocks(node)
         blocks = []
         run = []
-        node.children.each do |child|
+        Dom.children(node).each do |child|
           break @cut = true if @spent && @whole.zero?
 
           if block_level?(child)
@@ -168,8 +168,8 @@ module Nokodown
       # heading made only of images, such as a linked title graphic, keeps
       # them as a paragraph.
       def heading(node)
-        text = Text.single_line(@inline.render(node.children, heading: true))
-        return paragraphs(node.children) if text.empty?
+        text = Text.single_line(@inline.render(Dom.children(node), heading: true))
+        return paragraphs(Dom.children(node)) if text.empty?
         return [Block.new(:paragraph, text)] if text.length > 300
 
         level = node.name[1].to_i
@@ -214,7 +214,7 @@ module Nokodown
 
       # Wrappers between a list and its items (<ul><div><li>) are transparent.
       def list_children(node)
-        node.children.flat_map do |child|
+        Dom.children(node).flat_map do |child|
           wrapper = child.element? && !%w[li ul ol].include?(child.name) && child.element_children.any? { |c| c.name == "li" }
           wrapper ? list_children(child) : [child]
         end
@@ -371,7 +371,7 @@ module Nokodown
       end
 
       def summary(node)
-        text = Text.single_line(@inline.render(node.children))
+        text = Text.single_line(@inline.render(Dom.children(node)))
         text.empty? ? [] : [Block.new(:paragraph, "**#{text}**")]
       end
 

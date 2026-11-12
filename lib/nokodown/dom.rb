@@ -84,6 +84,19 @@ module Nokodown
       found
     end
 
+    # A node's children, text included, as an Array. Nokolexbor builds a
+    # NodeSet and wraps every node again when it is read by index;
+    # following the sibling pointers reads each node once.
+    def children(node)
+      found = []
+      child = node.child
+      while child
+        found << child
+        child = child.next_sibling
+      end
+      found
+    end
+
     # Root and the elements under it, children before their parent, in the
     # order Node#traverse yields them. Walking the element pointers skips
     # the text nodes and the NodeSet traverse builds for every element.

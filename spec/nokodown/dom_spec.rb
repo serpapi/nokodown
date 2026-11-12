@@ -68,6 +68,20 @@ RSpec.describe Nokodown::Dom do
     end
   end
 
+  describe ".children" do
+    it "lists a node's children with text, comments and templates, as children does" do
+      html = "<body><main>One <b>bold</b><!-- note --><template><i>t</i></template><svg><title>s</title></svg>" \
+             "<a href=\"/x\"><p>Block</p></a><pre>\n code</pre></main><p>End</p></body>"
+      body = Nokolexbor::HTML(html).at_css("body")
+
+      [body, body.at_css("main"), body.at_css("template"), body.at_css("svg"), body.at_css("b"), body.at_css("pre")].each do |node|
+        described_class.children(node).should == node.children.to_a
+      end
+      described_class.children(body.at_css("main")).map(&:name).should == %w[#text b #comment template svg a pre]
+      described_class.children(body.at_css("main b").child).should == []
+    end
+  end
+
   describe ".elements_bottom_up" do
     def traversed(root)
       found = []

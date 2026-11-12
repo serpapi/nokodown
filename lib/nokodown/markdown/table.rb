@@ -41,7 +41,7 @@ module Nokodown
 
       def caption
         node = @node.at_css("caption")
-        text = node ? Text.single_line(@renderer.inline(node.children)) : ""
+        text = node ? Text.single_line(@renderer.inline(Dom.children(node))) : ""
         text.empty? ? [] : [Block.new(:paragraph, text)]
       end
 
@@ -96,7 +96,7 @@ module Nokodown
         Tables.rows(@node).flat_map do |row|
           cells = Tables.cells(row).reject { |cell| Tables.blank?(cell) }
           if cells.none? { |cell| @renderer.contains_block?(cell) }
-            @renderer.text_paragraphs(cells.map { |cell| @renderer.inline(cell.children) }.join(" "))
+            @renderer.text_paragraphs(cells.map { |cell| @renderer.inline(Dom.children(cell)) }.join(" "))
           else
             cells.flat_map { |cell| @renderer.children_blocks(cell) }
           end

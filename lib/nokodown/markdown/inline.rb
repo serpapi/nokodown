@@ -193,22 +193,22 @@ module Nokodown
         when "a" then link(node)
         when "img" then image(node)
         when "video", "audio" then media(node)
-        when "q" then "\"#{render(node.children)}\""
+        when "q" then "\"#{render(Dom.children(node))}\""
         when "math" then math(node)
         when "sup", "sub" then script(node)
         when "input" then node.key?("checked") ? "[x] " : "[ ] "
         else
-          text = render(node.children)
+          text = render(Dom.children(node))
           Dom::BLOCK.include?(name) ? " #{text} " : text
         end
       end
 
       # Headings are bold already; nested emphasis of the same kind is dropped.
       def emphasis(node, marker)
-        return render(node.children) if @emphasis[marker].positive? || (@in_heading && marker == "**")
+        return render(Dom.children(node)) if @emphasis[marker].positive? || (@in_heading && marker == "**")
 
         @emphasis[marker] += 1
-        content = render(node.children)
+        content = render(Dom.children(node))
         @emphasis[marker] -= 1
         core = content.strip
         return content if core.empty? || core.match?(/\A[^\p{L}\p{N}]*\z/)
@@ -234,7 +234,7 @@ module Nokodown
         outer_link = @in_link
         @link_images = []
         @in_link = true
-        content = render(node.children)
+        content = render(Dom.children(node))
         images = @link_images
         @link_images = outer_images
         @in_link = outer_link
@@ -323,7 +323,7 @@ module Nokodown
       # symbols such as ® and small print read fine as plain text. The plain
       # text decides, so 2<sup><i>p</i></sup> is 2^p like 2<sup>p</sup>.
       def script(node)
-        text = render(node.children)
+        text = render(Dom.children(node))
         core = Text.collapse(node.content).strip
         return text if core.empty? || core.match?(FOOTNOTE_MARKER) || node.at_css("a, img, math")
 
