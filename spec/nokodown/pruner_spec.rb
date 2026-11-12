@@ -85,6 +85,21 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "#button?" do
+    it "reads the button words in the class or id in any case, without downcasing them" do
+      root = content("<a class='Hero BTN-Primary'>a</a><span id='mainCTA' class='Btn'>b</span><a class='lead'>c</a>" \
+                     "<span id='notes'>d</span><p class='bt' id='n'>e</p><a class='button-link'>f</a><b role='button'>g</b>")
+      pruner = described_class.new([root], :article, conditional: false)
+      downcased = 0
+      trace = TracePoint.new(:c_call) { |point| downcased += 1 if point.method_id == :downcase }
+      quiet = trace.enable { root.css("a.lead, span#notes, p.bt").map { |node| pruner.send(:button?, node) } }
+
+      quiet.should == [false, false, false]
+      downcased.should == 0
+      root.element_children.map { |node| pruner.send(:button?, node) }.should == [true, true, false, false, false, false, true]
+    end
+  end
+
   describe "article pruning with conditional cleaning off" do
     let(:html) do
       "<p class='byline'>By Jo Pine</p>#{story}#{cards}" \

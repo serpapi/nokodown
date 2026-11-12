@@ -16,7 +16,9 @@ module Nokodown
       (?:\A|[-_])(?:btn|btns|button|buttons|cta|ctas)\d*
       (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|sm|md|lg))?\z
     /x.freeze
-    BUTTON_WORD = /btn|button|cta/.freeze
+    # Matched case-insensitively against the class and the id; no Unicode
+    # letter folds to these, so it answers as downcasing first would.
+    BUTTON_WORD = /btn|button|cta/i.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
     # XPath finds a list of tags faster than CSS.
     CALL_TO_ACTION_HOLDERS = ".//a|.//span|.//div|.//p"
@@ -302,7 +304,7 @@ module Nokodown
 
     def button?(node)
       return true if node["role"] == "button"
-      return false unless "#{node["class"]} #{node["id"]}".downcase.match?(BUTTON_WORD)
+      return false unless node["class"]&.match?(BUTTON_WORD) || node["id"]&.match?(BUTTON_WORD)
 
       tokens = Dom.signature(node).split
       tokens.any? { |token| token.match?(BUTTON_CLASS) } && tokens.none? { |token| token.match?(LINK_STYLED_BUTTON) }
