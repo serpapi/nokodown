@@ -70,6 +70,21 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "calls to action" do
+    it "removes buttons of each holder tag, nested ones too, finding them with one XPath query" do
+      root = content("#{story}<div class='btn-primary'><a class='button' href='/buy'>Buy now</a></div>" \
+                     "<p><span class='cta'>Sign up</span></p><p class='btn'>Book a demo</p>" \
+                     "<p>Read the <a class='btn-link' href='/report'>full report</a> online.</p>")
+      root.should_not_receive(:css)
+      described_class.new([root], :article, conditional: false).send(:remove_calls_to_action, root)
+      text = Nokodown::Dom.text(root)
+
+      ["Buy now", "Sign up", "Book a demo"].each { |noise| text.should_not include(noise) }
+      text.should include("Read the full report online.")
+      text.should include("Crews replaced six bearings")
+    end
+  end
+
   describe "article pruning with conditional cleaning off" do
     let(:html) do
       "<p class='byline'>By Jo Pine</p>#{story}#{cards}" \

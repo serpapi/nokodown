@@ -18,6 +18,8 @@ module Nokodown
     /x.freeze
     BUTTON_WORD = /btn|button|cta/.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
+    # XPath finds a list of tags faster than CSS.
+    CALL_TO_ACTION_HOLDERS = ".//a|.//span|.//div|.//p"
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
@@ -254,10 +256,11 @@ module Nokodown
 
     # Links and boxes styled as buttons ("Add to cart", "Book a demo") are
     # controls, not content. Cards (an image, a heading, a list) are content.
-    # All are judged before any is removed, so document order does not matter.
+    # All are judged before any is removed, so the order XPath returns them in
+    # does not matter.
     def remove_calls_to_action(root)
       @running_text = {}
-      root.css("a, span, div, p").select { |node| call_to_action?(node) }.each { |node| remove(node) }
+      root.xpath(CALL_TO_ACTION_HOLDERS).select { |node| call_to_action?(node) }.each { |node| remove(node) }
     end
 
     def destination(link)
