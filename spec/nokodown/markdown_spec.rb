@@ -640,6 +640,20 @@ RSpec.describe "Markdown conversion" do
                                 "- [![Boots on a mountain trail](https://example.com/lookbook-small.jpg)](https://example.com/lookbook.jpg)"
       end
 
+      it "searches only links with an element inside for thumbnails" do
+        html = '<main><h1>Boots</h1><p><a href="/p/1">Trail boot</a> and <a href="/p/2"><b>Ridge</b> runner</a></p>' \
+               '<p><a href="/p/2"><img src="/2.jpg" alt="Ridge"></a> <a href="/p/3">Fell boot</a></p></main>'
+        searched = []
+        trace = TracePoint.new(:call) do |point|
+          searched << point.self["href"] if point.method_id == :css && point.self.name == "a"
+        end
+        markdown = trace.enable { extract(html) }
+
+        markdown.should == "# Boots\n\n[Trail boot](https://example.com/p/1) and [**Ridge** runner](https://example.com/p/2)\n\n" \
+                           "[Fell boot](https://example.com/p/3)"
+        searched.should == ["/p/2", "/p/2"]
+      end
+
       it "moves a card's list marker past a nested list of thumbnails" do
         html = "<main><h1>Hiking boots</h1><ul>" \
                '<li><ul><li><a href="/p/1"><img src="/1a.jpg" alt="Trail boot, front"></a></li>' \
