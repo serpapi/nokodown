@@ -19,18 +19,22 @@ module Nokodown
     AMAZON_PRODUCT = %r{\A.*?/(?:dp|gp/product|gp/aw/d)/[A-Z0-9]{10}(?![A-Za-z0-9])}.freeze
     # Bestseller links put the session id after the ref segment.
     AMAZON_REF = %r{/ref=[^/]*(?:/\d{3}-\d{7}-\d{7})?\z}.freeze
+    # Anchored once, so the regex engine rejects most hosts at the first
+    # character instead of trying every branch from every position.
     REDIRECTOR = %r{
-      \A(?:www\.)?google\.(?:com?\.)?[a-z]{2,3}/url\z |
-      \A(?:www\.)?youtube\.com/redirect\z |
-      \Alm?\.facebook\.com/l\.php\z |
-      \.safelinks\.protection\.outlook\.com/?\z |
-      \Ago\.(?:skimresources|redirectingat)\.com/?\z |
-      \Aredirect\.viglink\.com/?\z |
-      \Aclick\.linksynergy\.com/ |
-      \A(?:www\.)?avantlink\.com/click\.php\z |
-      \A[\w-]+\.(?:pxf|sjv)\.io/c/ |
-      \A(?:www\.)?(?:anrdoezrs\.net|dpbolvw\.net|jdoqocy\.com|kqzyfj\.com|tkqlhce\.com)/click- |
-      \Asteamcommunity\.com/linkfilter/?\z
+      \A(?:
+        (?:www\.)?google\.(?:com?\.)?[a-z]{2,3}/url\z |
+        (?:www\.)?youtube\.com/redirect\z |
+        lm?\.facebook\.com/l\.php\z |
+        go\.(?:skimresources|redirectingat)\.com/?\z |
+        redirect\.viglink\.com/?\z |
+        click\.linksynergy\.com/ |
+        (?:www\.)?avantlink\.com/click\.php\z |
+        [\w-]+\.(?:pxf|sjv)\.io/c/ |
+        (?:www\.)?(?:anrdoezrs\.net|dpbolvw\.net|jdoqocy\.com|kqzyfj\.com|tkqlhce\.com)/click- |
+        steamcommunity\.com/linkfilter/?\z
+      ) |
+      \.safelinks\.protection\.outlook\.com/?\z
     }xi.freeze
     DESTINATION_PARAM = /\A(?:url|u|murl|q)\z/.freeze
     MAX_REDIRECTS = 3
@@ -105,8 +109,9 @@ module Nokodown
 
     private
 
+    # Only a URL with a fragment can be an anchor.
     def page_anchor?(url)
-      return false unless @base
+      return false unless @base && url.include?("#")
 
       uri = parse(url)
       return false unless uri
@@ -144,6 +149,8 @@ module Nokodown
     end
 
     def encode(string)
+      return string unless string.match?(UNSAFE)
+
       string.gsub(UNSAFE) { |char| char.bytes.map { |byte| format("%%%02X", byte) }.join }
     end
 

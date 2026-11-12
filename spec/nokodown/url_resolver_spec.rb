@@ -32,4 +32,35 @@ RSpec.describe Nokodown::UrlResolver do
     urls.resolve("/a").should == "https://example.com/a"
     urls.resolve(href).should == "https://example.com/ab"
   end
+
+  it "unwraps each known click redirector, and the same paths on other hosts are kept" do
+    target = "https%3A%2F%2Fexample.org%2Fdoc"
+    redirectors = %w[
+      https://www.google.co.uk/url?q= https://youtube.com/redirect?q= https://lm.facebook.com/l.php?u= https://l.facebook.com/l.php?u=
+      https://eur01.safelinks.protection.outlook.com/?url= https://go.redirectingat.com?url=
+      https://redirect.viglink.com/?u= https://click.linksynergy.com/deeplink?murl=
+      https://www.avantlink.com/click.php?url= https://shop.pxf.io/c/1/2/3?u= https://www.kqzyfj.com/click-1-2?url=
+      https://steamcommunity.com/linkfilter/?url=
+    ]
+    redirectors.each { |href| urls.resolve("#{href}#{target}").should == "https://example.org/doc" }
+
+    kept = %w[
+      https://example.com/www.google.com/url?q= https://mygoogle.com/url?q= https://youtube.com/redirect/x?q=
+      https://safelinks.protection.outlook.com.example/?url= https://xgo.skimresources.com/?url=
+      https://www.avantlink.com/click.php/x?url= https://kqzyfj.com/click?url=
+    ]
+    kept.each { |href| urls.resolve("#{href}#{target}").should == "#{href}#{target}" }
+  end
+
+  it "finds anchors to the page only in URLs with a fragment" do
+    urls.same_page?("https://example.com/dir/page").should == false
+    urls.same_page?("https://example.com/dir/page#").should == true
+    urls.same_page?("mailto:a@example.com#x").should == false
+  end
+
+  it "encodes only the characters a URL cannot hold" do
+    urls.resolve("/a b/é?x=<1>&y=[2]#|").should == "https://example.com/a%20b/%C3%A9?x=%3C1%3E&y=%5B2%5D#%7C"
+    urls.resolve("/é|").should == "https://example.com/%C3%A9%7C"
+    urls.resolve("/a-b._~:@!$&'()*+,;=%41").should == "https://example.com/a-b._~:@!$&'()*+,;=%41"
+  end
 end
