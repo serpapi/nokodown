@@ -92,7 +92,7 @@ module Nokodown
         key = Dom.key(node)
         next if article_keys.include?(key) || Dom.thread?(node)
 
-        if Patterns.secondary?(Dom.signature(node)) && !article_ancestor_keys.include?(key)
+        if Dom.secondary?(node) && !article_ancestor_keys.include?(key)
           total += stats.text_chars(node)
         else
           stack.concat(Dom.element_children(node))
@@ -119,7 +119,7 @@ module Nokodown
       stack = Dom.element_children(root)
       until stack.empty?
         node = stack.pop
-        if Patterns.secondary?(Dom.signature(node))
+        if Dom.secondary?(node)
           found << node
         else
           stack.concat(Dom.element_children(node))

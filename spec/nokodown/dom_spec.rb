@@ -175,5 +175,20 @@ RSpec.describe Nokodown::Dom do
       cached.should == [uncached, uncached]
       Thread.current[described_class::SIGNATURES].should be_nil
     end
+
+    it "answers secondary? from the cache as the pattern does, and drops the cache after" do
+      nodes = ["comments", "comments", "post-body", "most-read", "most-read x", "related"].map { |name| element("class=\"#{name}\"") }
+      nodes << element('id="comments"') << element("")
+      uncached = nodes.map { |node| Nokodown::Patterns.secondary?(described_class.signature(node)) }
+
+      cached = described_class.caching_signatures do
+        Array.new(2) { nodes.map { |node| described_class.secondary?(node) } }
+      end
+
+      uncached.should == [true, true, false, true, true, false, true, false]
+      cached.should == [uncached, uncached]
+      nodes.map { |node| described_class.secondary?(node) }.should == uncached
+      Thread.current[described_class::SECONDARY].should be_nil
+    end
   end
 end

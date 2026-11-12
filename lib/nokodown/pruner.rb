@@ -174,7 +174,7 @@ module Nokodown
       while node
         following = node.next_element
         unless Dom.thread?(node)
-          if Patterns.secondary?(Dom.signature(node)) && Dom.text(node).length <= total * 0.5
+          if Dom.secondary?(node) && Dom.text(node).length <= total * 0.5
             remove(node)
           else
             remove_secondary(node, total)

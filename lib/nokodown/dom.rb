@@ -44,6 +44,7 @@ module Nokodown
     CSS_MODULE_HASH = /__(?=[\w-]{0,4}[A-Z\d])[\w-]{5}(?![\w-])/.freeze
     CAMEL_CASE = /(?<=[a-z\d])(?=[A-Z])/.freeze
     SIGNATURES = :nokodown_signatures
+    SECONDARY = :nokodown_secondary
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
@@ -142,7 +143,7 @@ module Nokodown
     end
 
     def thread_post?(node)
-      thread?(node) && Patterns.secondary?(signature(node))
+      thread?(node) && secondary?(node)
     end
 
     # Keys of the <p>s and of the divs Readability would rewrite into <p>
@@ -257,10 +258,23 @@ module Nokodown
     # The cache lives only as long as the block, so pages share nothing.
     def caching_signatures
       outer = Thread.current[SIGNATURES]
+      outer_secondary = Thread.current[SECONDARY]
       Thread.current[SIGNATURES] = outer || {}
+      Thread.current[SECONDARY] = outer_secondary || {}
       yield
     ensure
       Thread.current[SIGNATURES] = outer
+      Thread.current[SECONDARY] = outer_secondary
+    end
+
+    # Whether the element is named like a secondary region. The stages ask
+    # it of the same names again, so the answer is kept with the signatures.
+    def secondary?(node)
+      signature = signature(node)
+      answers = Thread.current[SECONDARY]
+      return Patterns.secondary?(signature) unless answers
+
+      answers.fetch(signature) { answers[signature] = Patterns.secondary?(signature) }
     end
 
     # The id as a name for the element; a heading anchor only repeats the heading.
