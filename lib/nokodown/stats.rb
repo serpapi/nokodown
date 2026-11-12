@@ -6,36 +6,41 @@ module Nokodown
   # in the source do not skew them.
   class Stats
     FRAGMENT_LINK_WEIGHT = 0.3
+    # What an element without a key reads as.
+    UNKNOWN = [nil, nil].freeze
 
     def initialize(root)
-      @chars = {}
-      @link_chars = {}
+      # [chars, link_chars] by key, so a lookup reads one entry.
+      @counts = {}
       measure(root, 0.0)
     end
 
     def chars(node)
-      lookup(@chars, node)
+      counts(node)[0]
     end
 
     def link_chars(node)
-      lookup(@link_chars, node)
+      counts(node)[1]
     end
 
     def text_chars(node)
-      chars(node) - link_chars(node)
+      chars, link_chars = counts(node)
+      chars - link_chars
     end
 
     def link_density(node)
-      total = chars(node)
-      total.zero? ? 0.0 : link_chars(node) / total
+      total, link_chars = counts(node)
+      total.zero? ? 0.0 : link_chars / total
     end
 
     private
 
-    def lookup(table, node)
+    def counts(node)
       key = Dom.key(node)
-      measure(node, inherited_link_weight(node)) unless table.key?(key)
-      table[key]
+      @counts.fetch(key) do
+        measure(node, inherited_link_weight(node))
+        @counts.fetch(key, UNKNOWN)
+      end
     end
 
     def measure(node, link_weight)
@@ -58,12 +63,11 @@ module Nokodown
     end
 
     def store(node, chars, link_chars)
+      counts = [chars, link_chars]
       key = Dom.key(node)
-      if key
-        @chars[key] = chars
-        @link_chars[key] = link_chars
-      end
-      [chars, link_chars]
+      # A frozen key is stored as is; Hash would copy it.
+      @counts[key.freeze] = counts if key
+      counts
     end
 
     def link_weight_for(node, inherited)
