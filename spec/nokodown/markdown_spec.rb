@@ -895,6 +895,13 @@ RSpec.describe "Markdown conversion" do
         "| Key | Value |\n| --- | --- |\n| a\\|b | 1 |"
     end
 
+    it "keeps a backslash before a pipe in a table cell" do
+      convert('<table><tr><th>Pattern</th></tr><tr><td><code>a\|b</code></td></tr></table>').should ==
+        "| Pattern |\n| --- |\n| `a\\\\|b` |"
+      convert('<table><tr><th>Key</th><th>Value</th></tr><tr><td>a\|b</td><td>1</td></tr></table>').should ==
+        "| Key | Value |\n| --- | --- |\n| a\\\\\\|b | 1 |"
+    end
+
     it "carries rowspans down and leaves colspans blank" do
       html = "<table><thead><tr><th>Group</th><th>Item</th><th>Qty</th></tr></thead>" \
              '<tr><td rowspan="2">Fruit</td><td>Apple</td><td>3</td></tr><tr><td>Pear</td><td>5</td></tr>' \

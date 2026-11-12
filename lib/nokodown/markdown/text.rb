@@ -278,7 +278,7 @@ module Nokodown
       end
 
       def table_cell(text)
-        single_line(text).gsub(/(?<!\\)\|/, "\\|")
+        single_line(text).gsub("|", "\\|")
       end
     end
   end
