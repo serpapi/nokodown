@@ -52,7 +52,10 @@ RSpec.describe Nokodown::Dom do
     # Copies of a formatting element a block cuts share one attribute list
     # in Lexbor; the walk must still visit each copy.
     it "visits every copy of a misnested formatting element" do
-      body = Nokolexbor::HTML("<body><a href='/x'><span>A</span><div>B</div></a><p>C</p></body>").at_css("body")
+      body = Nokolexbor::HTML('<body><a href="/cart"><span>Offer</span><footer><div>Sale</div></a></footer><p>C</p></body>').at_css("body")
+
+      described_class.assign_keys(body)
+      described_class.shared_keys?(body).should == true
 
       described_class.elements(body).map(&:name).should == body.css("*").map(&:name)
     end
@@ -81,8 +84,9 @@ RSpec.describe Nokodown::Dom do
     end
 
     it "visits every copy of a misnested formatting element" do
-      body = Nokolexbor::HTML("<body><a href='/x'><span>A</span><div>B</div></a><p>C</p></body>").at_css("body")
+      body = Nokolexbor::HTML('<body><a href="/cart"><span>Offer</span><footer><div>Sale</div></a></footer><p>C</p></body>').at_css("body")
       described_class.assign_keys(body)
+      described_class.shared_keys?(body).should == true
 
       described_class.elements_bottom_up(body).map { |node| [node.name, described_class.key(node)] }
         .should == traversed(body).map { |node| [node.name, described_class.key(node)] }
