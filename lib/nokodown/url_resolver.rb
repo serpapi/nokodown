@@ -20,7 +20,9 @@ module Nokodown
     # Bestseller links put the session id after the ref segment.
     AMAZON_REF = %r{/ref=[^/]*(?:/\d{3}-\d{7}-\d{7})?\z}.freeze
     # Anchored once, so the regex engine rejects most hosts at the first
-    # character instead of trying every branch from every position.
+    # character instead of trying every branch from every position. Outlook
+    # safelinks match at the end, in a pattern of their own: as a branch
+    # here they made the engine try every position after all.
     REDIRECTOR = %r{
       \A(?:
         (?:www\.)?google\.(?:com?\.)?[a-z]{2,3}/url\z |
@@ -33,9 +35,9 @@ module Nokodown
         [\w-]+\.(?:pxf|sjv)\.io/c/ |
         (?:www\.)?(?:anrdoezrs\.net|dpbolvw\.net|jdoqocy\.com|kqzyfj\.com|tkqlhce\.com)/click- |
         steamcommunity\.com/linkfilter/?\z
-      ) |
-      \.safelinks\.protection\.outlook\.com/?\z
+      )
     }xi.freeze
+    SAFELINKS = %r{\.safelinks\.protection\.outlook\.com/?\z}i.freeze
     DESTINATION_PARAM = /\A(?:url|u|murl|q)\z/.freeze
     MAX_REDIRECTS = 3
     # Image CDN size, crop and format options; the default rendition shows the
@@ -171,7 +173,8 @@ module Nokodown
     end
 
     def redirect_target(uri)
-      return unless "#{uri.host}#{uri.path}".match?(REDIRECTOR)
+      location = "#{uri.host}#{uri.path}"
+      return unless location.match?(REDIRECTOR) || location.match?(SAFELINKS)
 
       param_values(uri, DESTINATION_PARAM).map { |value| parse(value) }.find { |target| web?(target) }
     end

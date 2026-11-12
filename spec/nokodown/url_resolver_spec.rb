@@ -45,6 +45,14 @@ RSpec.describe Nokodown::UrlResolver do
     urls.resolve(href).should == "https://example.com/ab"
   end
 
+  it "anchors the redirector pattern at the start of the host, and matches Outlook safelinks apart" do
+    host = "eur01.safelinks.protection.outlook.com/"
+
+    described_class::REDIRECTOR.source.gsub(/\s+/, "").should match(/\A\\A\(\?:.*\)\z/)
+    described_class::REDIRECTOR.match?(host).should == false
+    described_class::SAFELINKS.match?(host).should == true
+  end
+
   it "unwraps each known click redirector, and the same paths on other hosts are kept" do
     target = "https%3A%2F%2Fexample.org%2Fdoc"
     redirectors = %w[
