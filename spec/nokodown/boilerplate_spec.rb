@@ -391,4 +391,17 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should == "Heat pumps"
     end
   end
+
+  it "judges a repeated furniture name as noise once" do
+    html = "#{prose('Heat pumps', 3)}#{'<div class="share-bar tag-heat"><a href="/s">Share</a></div>' * 20}"
+    calls = 0
+    trace = TracePoint.new(:c_call) { |point| calls += 1 if point.method_id == :gsub }
+
+    body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
+    Nokodown::Preprocessor.new(body).call
+    trace.enable { Nokodown::Boilerplate.new(body).call }
+
+    body.css(".share-bar").should be_empty
+    calls.should < 5
+  end
 end

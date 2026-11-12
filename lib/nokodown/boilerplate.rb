@@ -42,6 +42,7 @@ module Nokodown
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.split.any? { |token| @furniture_tokens[token] } }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
       @signature_only = Hash.new { |cache, signature| cache[signature] = signature_only?(signature) }
+      @noise = Hash.new { |cache, signature| cache[signature] = signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE) }
       @notes = Set.new
       @prose_blocks = Set.new
       @card_classes = card_classes
@@ -232,7 +233,7 @@ module Nokodown
       return false unless chrome
       return false if @signature_only[signature] && !forum_signature?(node, signature)
       return false if prose_section?(node, signature)
-      return true if signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE)
+      return true if @noise[signature]
 
       !(signature.match?(Patterns::POSITIVE) && @stats.text_chars(node) >= 200)
     end
