@@ -41,4 +41,14 @@ RSpec.describe Nokodown::HeadingAnchors do
     anchor?('<h3 id="share-this-article"><a href="#share-this-article">#</a> Share this article</h3>').should == false
     anchor?(%(<h2 class="anchor" id="related-posts">Related posts<a class="hash-link" href="#related-posts">\u200B</a></h2>)).should == false
   end
+
+  it "marks the anchors around every heading, and nothing else" do
+    html = '<body id="intro-2"><h2 id="intro">Intro</h2><div><section id="s-setup"><span id="setup"></span>' \
+           '<h3><span class="mw-headline" id="Setup">Setup</span></h3><p id="setup-2">Setup</p></section>' \
+           '<div id="usage"><div><h4 id="x">Usage</h4></div></div></div></body>'
+    body = Nokolexbor::HTML(html).at_css("body")
+    described_class.mark(body)
+    body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.sort.should == %w[Setup intro s-setup]
+    body.key?(Nokodown::Dom::ANCHOR).should == false
+  end
 end

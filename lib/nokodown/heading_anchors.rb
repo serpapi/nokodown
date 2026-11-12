@@ -10,6 +10,8 @@ module Nokodown
   module HeadingAnchors
     PREFIX = /\A[a-z][-_]/i.freeze
     COUNTER = /[-_]\d+\z/.freeze
+    # XPath, because Lexbor's CSS engine takes longer to match a list of tag names.
+    HEADINGS = ".//h1|.//h2|.//h3|.//h4|.//h5|.//h6"
 
     # Headings that are nothing but the name of a widget: "Feedback", "Table
     # of contents". Reviews are only removed from product pages, where a
@@ -19,8 +21,14 @@ module Nokodown
 
     module_function
 
+    # Only a heading, an element in one or the section one opens has a
+    # label, so only the elements around headings are read.
     def mark(root)
-      Dom.elements(root).each { |node| node[Dom::ANCHOR] = "1" if node.key?("id") && anchor?(node) }
+      root.xpath(HEADINGS).each do |heading|
+        [heading, heading.parent, *heading.element_children].each do |node|
+          node[Dom::ANCHOR] = "1" if node != root && node.key?("id") && anchor?(node)
+        end
+      end
     end
 
     def anchor?(node)
