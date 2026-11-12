@@ -66,11 +66,16 @@ module Nokodown
         end
       end
 
+      # Only the outermost table escapes pipes: a table nested in a cell is
+      # text that the outer cell escapes, and escaping it twice would add a
+      # backslash to its code.
       def place_cells(row, line, spans)
         column = 0
+        nested = @renderer.in_table_cell?
         Tables.cells(row).each do |cell|
           column += 1 while line.key?(column)
-          text = Text.table_cell(@renderer.children_blocks(cell).map(&:text).join(" "))
+          text = @renderer.table_cell_blocks(cell).map(&:text).join(" ")
+          text = nested ? Text.single_line(text) : Text.table_cell(text)
           rows = span(cell, "rowspan", MAX_ROWSPAN)
           span(cell, "colspan", MAX_COLSPAN).times do |offset|
             value = offset.zero? ? text : ""

@@ -33,6 +33,7 @@ module Nokodown
         @whole = 0
         @spent = false
         @cut = false
+        @table_cells = 0
       end
 
       def render(nodes)
@@ -43,6 +44,19 @@ module Nokodown
           blocks.concat(block_level?(node) ? block(node) : children_blocks(node))
         end
         blocks
+      end
+
+      # The blocks of a data table's cell. A table in it is written in the
+      # cell's text, which escapes its pipes once for the outer table.
+      def table_cell_blocks(cell)
+        @table_cells += 1
+        children_blocks(cell)
+      ensure
+        @table_cells -= 1
+      end
+
+      def in_table_cell?
+        @table_cells.positive?
       end
 
       # Whether content was left out once the budget ran out.

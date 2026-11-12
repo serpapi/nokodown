@@ -902,6 +902,14 @@ RSpec.describe "Markdown conversion" do
         "| Key | Value |\n| --- | --- |\n| a\\\\\\|b | 1 |"
     end
 
+    it "escapes the pipes of a table nested in a cell once, for the outer table" do
+      inner = '<table><tr><th>I</th></tr><tr><td><code>a|b</code> x\|y</td></tr></table>'
+      convert("<table><tr><th>O</th></tr><tr><td>#{inner}</td></tr></table>").should ==
+        "| O |\n| --- |\n| \\| I \\| \\| --- \\| \\| `a\\|b` x\\\\\\|y \\| |"
+      convert("<table><tr><th>O</th></tr><tr><td><table><tr><th>M</th></tr><tr><td>#{inner}</td></tr></table></td></tr></table>").should ==
+        "| O |\n| --- |\n| \\| M \\| \\| --- \\| \\| \\| I \\| \\| --- \\| \\| `a\\|b` x\\\\\\|y \\| \\| |"
+    end
+
     it "carries rowspans down and leaves colspans blank" do
       html = "<table><thead><tr><th>Group</th><th>Item</th><th>Qty</th></tr></thead>" \
              '<tr><td rowspan="2">Fruit</td><td>Apple</td><td>3</td></tr><tr><td>Pear</td><td>5</td></tr>' \
