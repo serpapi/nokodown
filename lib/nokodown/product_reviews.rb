@@ -61,7 +61,7 @@ module Nokodown
     end
 
     def outermost_widgets(node, found = [])
-      node.element_children.each do |child|
+      Dom.element_children(node).each do |child|
         signature = Dom.signature(child)
         next if signature.match?(SELLER_CONTENT)
 

@@ -82,6 +82,20 @@ RSpec.describe Nokodown::Dom do
     end
   end
 
+  describe ".element_children" do
+    it "lists a node's element children, as element_children does" do
+      html = "<body><main>One <b>bold</b><!-- note --><template><i>t</i></template><svg><title>s</title></svg>" \
+             "<a href=\"/x\"><p>Block</p></a> tail</main><p>End</p></body>"
+      body = Nokolexbor::HTML(html).at_css("body")
+
+      [body, body.at_css("main"), body.at_css("template"), body.at_css("svg"), body.at_css("a"), body.at_css("b")].each do |node|
+        described_class.element_children(node).should == node.element_children.to_a
+      end
+      described_class.element_children(body.at_css("main")).map(&:name).should == %w[b template svg a]
+      described_class.element_children(body.at_css("main b")).should == []
+    end
+  end
+
   describe ".min_text_length" do
     it "never exceeds the length of the squished text" do
       strings = ["", " ", "a", " a  b ", "a\0", "\0a\0 ", "a\v\fb\r\n", "a\u00A0\u00A0b", "\u3000\u2003x\u2028y\u0085",

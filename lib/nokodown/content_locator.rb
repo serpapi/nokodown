@@ -86,7 +86,7 @@ module Nokodown
       article_keys = article_nodes.map { |node| Dom.key(node) }
       article_ancestor_keys = article_nodes.flat_map { |node| node.ancestors.map { |ancestor| Dom.key(ancestor) } }
       total = 0.0
-      stack = root.element_children.to_a
+      stack = Dom.element_children(root)
       until stack.empty?
         node = stack.pop
         key = Dom.key(node)
@@ -95,7 +95,7 @@ module Nokodown
         if Patterns.secondary?(Dom.signature(node)) && !article_ancestor_keys.include?(key)
           total += stats.text_chars(node)
         else
-          stack.concat(node.element_children.to_a)
+          stack.concat(Dom.element_children(node))
         end
       end
       total
@@ -116,13 +116,13 @@ module Nokodown
 
     def outermost_secondary(root)
       found = []
-      stack = root.element_children.to_a
+      stack = Dom.element_children(root)
       until stack.empty?
         node = stack.pop
         if Patterns.secondary?(Dom.signature(node))
           found << node
         else
-          stack.concat(node.element_children.to_a)
+          stack.concat(Dom.element_children(node))
         end
       end
       found

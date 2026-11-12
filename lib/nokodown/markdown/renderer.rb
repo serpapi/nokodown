@@ -115,7 +115,7 @@ module Nokodown
         key = Dom.key(node)
         return @contains_block[key] if key && @contains_block.key?(key)
 
-        found = node.element_children.any? do |child|
+        found = Dom.element_children(node).any? do |child|
           Dom::BLOCK.include?(child.name) || MEDIA.include?(child.name) || contains_block?(child)
         end
         @contains_block[key] = found if key
@@ -215,7 +215,7 @@ module Nokodown
       # Wrappers between a list and its items (<ul><div><li>) are transparent.
       def list_children(node)
         Dom.children(node).flat_map do |child|
-          wrapper = child.element? && !%w[li ul ol].include?(child.name) && child.element_children.any? { |c| c.name == "li" }
+          wrapper = child.element? && !%w[li ul ol].include?(child.name) && Dom.element_children(child).any? { |c| c.name == "li" }
           wrapper ? list_children(child) : [child]
         end
       end

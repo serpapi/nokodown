@@ -100,6 +100,18 @@ module Nokodown
       found
     end
 
+    # A node's element children as an Array, read through the element
+    # pointers like children above.
+    def element_children(node)
+      found = []
+      child = node.first_element_child
+      while child
+        found << child
+        child = child.next_element
+      end
+      found
+    end
+
     # Root and the elements under it, children before their parent, in the
     # order Node#traverse yields them. Walking the element pointers skips
     # the text nodes and the NodeSet traverse builds for every element.
@@ -163,7 +175,7 @@ module Nokodown
       breaks = {}
       elements_bottom_up(root).each do |node|
         key = key(node)
-        breaks[key] = node.element_children.any? { |child| PARAGRAPH_BREAKERS.include?(child.name) || breaks[key(child)] }
+        breaks[key] = element_children(node).any? { |child| PARAGRAPH_BREAKERS.include?(child.name) || breaks[key(child)] }
         keys << key if node.name == "p" || (node.name == "div" && !breaks[key])
       end
       keys
