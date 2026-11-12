@@ -105,10 +105,13 @@ module Nokodown
     # Datelines and "follow us" lines.
     def remove_stray_lines(root)
       root.css("p, div, span, li, small, time").each do |node|
-        next if Dom.ancestors_named(node, "table").any?
+        content = node.content
+        next if Dom.min_text_length(content) > 120
 
-        text = Dom.text(node)
-        remove(node) if text.length <= 120 && text.match?(Patterns::STRAY_LINE)
+        text = Dom.squish(content)
+        next unless text.length <= 120 && text.match?(Patterns::STRAY_LINE)
+
+        remove(node) if Dom.ancestors_named(node, "table").none?
       end
     end
 
@@ -237,7 +240,10 @@ module Nokodown
 
     def remove_boilerplate_text(root)
       root.css(TEXT_BLOCKS).each do |node|
-        text = Dom.text(node)
+        content = node.content
+        next if Dom.min_text_length(content) > 200
+
+        text = Dom.squish(content)
         next if text.empty? || text.length > 200
 
         boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)

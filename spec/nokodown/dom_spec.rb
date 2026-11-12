@@ -82,6 +82,17 @@ RSpec.describe Nokodown::Dom do
     end
   end
 
+  describe ".min_text_length" do
+    it "never exceeds the length of the squished text" do
+      strings = ["", " ", "a", " a  b ", "a\0", "\0a\0 ", "a\v\fb\r\n", "a\u00A0\u00A0b", "\u3000\u2003x\u2028y\u0085",
+                 "é \u00A0 ü\0", "tab\tand\nline", "\u200Bzero width\u200B", "a\u2000-\u200Ab"]
+      strings.each do |string|
+        described_class.min_text_length(string).should <= described_class.squish(string).length
+      end
+      described_class.min_text_length(" one two ").should == 6
+    end
+  end
+
   describe ".elements_bottom_up" do
     def traversed(root)
       found = []

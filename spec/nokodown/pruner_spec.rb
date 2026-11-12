@@ -55,6 +55,21 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "stray lines and boilerplate text" do
+    it "measures them after squishing, so indentation does not hide them" do
+      pad = "\n#{' ' * 150}\t\n"
+      root = content("#{story}<div>#{pad}Published on March 3, 2024#{pad}</div><span>#{pad}Advertisement#{pad}</span>" \
+                     "<p>#{pad}Follow us on Twitter and Facebook for updates.#{pad}</p>" \
+                     "<table><tr><td><div>Updated 4 March 2024</div></td></tr></table>")
+      described_class.new([root], :article, conditional: false).call
+      text = Nokodown::Dom.text(root)
+
+      ["Published on", "Advertisement", "Follow us"].each { |noise| text.should_not include(noise) }
+      text.should include("Updated 4 March 2024")
+      text.should include("Crews replaced six bearings")
+    end
+  end
+
   describe "article pruning with conditional cleaning off" do
     let(:html) do
       "<p class='byline'>By Jo Pine</p>#{story}#{cards}" \

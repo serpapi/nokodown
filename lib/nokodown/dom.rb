@@ -29,6 +29,9 @@ module Nokodown
     # than a regex gsub on large subtrees.
     UNICODE_SPACES = "\t\n\v\f\r\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000"
     ASCII_SPACES = "\t\n\v\f\r"
+    # What squish can drop: spaces, and a NUL that strip takes off the end.
+    ASCII_BLANKS = "#{ASCII_SPACES} \0"
+    UNICODE_BLANKS = "#{UNICODE_SPACES} \0"
 
     # Nokolexbor returns a new Ruby object every time a node is read, so nodes
     # cannot be hash keys. Elements get a numbered attribute to key on instead.
@@ -207,6 +210,13 @@ module Nokodown
 
     def text(node)
       squish(node.content)
+    end
+
+    # The length squish(string) has at least, since squishing keeps every
+    # other character. Comparing it with a limit first skips squishing a
+    # long subtree only to find it too long.
+    def min_text_length(string)
+      string.length - string.count(string.ascii_only? ? ASCII_BLANKS : UNICODE_BLANKS)
     end
 
     def squish(string)
