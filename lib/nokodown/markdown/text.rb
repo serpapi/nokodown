@@ -32,6 +32,8 @@ module Nokodown
       AUTOLINK_AFTER = /\A(?:#{AUTOLINK_START.source})/.freeze
       EMAIL_PART = /\A[#{EMAIL_LOCAL}]+\z/.freeze
       EMAIL_END = /\A[#{EMAIL_LOCAL}]*@/.freeze
+      # What any rule of escape_line_starts needs somewhere in the text.
+      LINE_START_SYNTAX = /[#>]|~~~|```/.freeze
       # Markdown syntax in raw TeX, after the backslashes that do not escape
       # it (an even run).
       TEX_SYNTAX = /(?<!\\)((?:\\\\)*+)(`|<(?=#{AUTOLINK_START.source})|\](?=[(\[]))/.freeze
@@ -69,6 +71,8 @@ module Nokodown
       # line; then each is escaped, so none is left to pair with a run on a
       # later line. Otherwise they open a code span and stay.
       def escape_line_starts(string)
+        return string unless string.match?(LINE_START_SYNTAX)
+
         string.gsub(/^(#{'#'}{1,6})(?=\s|$)/) { "\\#{Regexp.last_match(1)}" }
               .gsub(/^(>|~~~)/) { "\\#{Regexp.last_match(1)}" }
               .gsub(/^`{3,}(?=[^`\n]*$)/) { |run| "\\`" * run.length }
@@ -76,7 +80,9 @@ module Nokodown
 
       # Tidy an inline run: no spaces around line breaks, no doubled spaces.
       def tidy(string)
-        string.gsub(/[ \t]*\n[ \t]*/, "\n").gsub(/ {2,}/, " ").strip
+        string = string.gsub(/[ \t]*\n[ \t]*/, "\n") if string.include?("\n")
+        string = string.gsub(/ {2,}/, " ") if string.include?("  ")
+        string.strip
       end
 
       def single_line(string)

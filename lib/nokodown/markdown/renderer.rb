@@ -89,10 +89,18 @@ module Nokodown
 
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
-        text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          chunk = Text.tidy(chunk).lines.reject { |line| line.match?(SEPARATOR_LINE) }.join.strip
+        chunks = text.include?("\n") ? text.split(/[ \t]*\n[ \t]*\n\s*/) : [text]
+        chunks.filter_map do |chunk|
+          chunk = without_separator_lines(Text.tidy(chunk))
           Block.new(:paragraph, Text.escape_line_starts(chunk)) unless chunk.empty?
         end
+      end
+
+      # Most chunks are one line, which needs no splitting into lines.
+      def without_separator_lines(chunk)
+        return chunk.match?(SEPARATOR_LINE) ? "" : chunk unless chunk.include?("\n")
+
+        chunk.lines.reject { |line| line.match?(SEPARATOR_LINE) }.join.strip
       end
 
       def inline(nodes)

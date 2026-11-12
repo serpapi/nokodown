@@ -33,8 +33,17 @@ RSpec.describe "Markdown conversion" do
       convert("<p># not a heading</p><p>&gt; not a quote</p>").should == "\\# not a heading\n\n\\> not a quote"
     end
 
+    it "escapes fences and quote markers at the start of any line, and only there" do
+      convert("<p>~~~ tilde</p><p>a<br>&gt; quote<br>~~~ end</p><p>a &gt; b, c#d ~~~e</p>").should ==
+        "\\~~~ tilde\n\na\n\\> quote\n\\~~~ end\n\na > b, c#d ~~~e"
+      Nokodown::Markdown::Text.escape_line_starts("a\n```` b").should == "a\n\\`\\`\\`\\` b"
+      Nokodown::Markdown::Text.escape_line_starts("a ``` b").should == "a ``` b"
+    end
+
     it "drops decorative separator lines" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
+      convert("<p>above</p><p> ***** </p><p>below \t<br> \tnext</p>").should == "above\n\nbelow\nnext"
+      convert("<blockquote><p>-----</p><p>quoted</p></blockquote><ul><li>a</li><li>=====</li></ul>").should == "> quoted\n\n- a"
     end
 
     it "writes raised and lowered digits as Unicode characters and drops the tag from footnote markers" do
