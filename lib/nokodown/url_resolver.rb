@@ -70,9 +70,13 @@ module Nokodown
 
     # The URL a browser would read from an attribute value. Trimmed by index:
     # on Ruby 2.7 a regex for trailing controls rescans a run of spaces
-    # inside the URL from each of its characters.
+    # inside the URL from each of its characters. Most values start and end
+    # with a visible character, which two bytes show without a search.
     def self.normalize(href)
       href = href.to_s
+      edge = href.getbyte(0)
+      return href.delete("\t\n\r") if edge && edge > 32 && href.getbyte(-1) > 32
+
       first = href.index(VISIBLE)
       return "" unless first
 

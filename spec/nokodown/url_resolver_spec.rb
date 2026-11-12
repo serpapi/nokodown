@@ -23,6 +23,18 @@ RSpec.describe Nokodown::UrlResolver do
     (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 0.5
   end
 
+  it "reads a URL with visible ends without searching it" do
+    searches = 0
+    trace = TracePoint.new(:c_call) { |point| searches += 1 if %i[index rindex].include?(point.method_id) }
+
+    trace.enable { described_class.normalize("/a\tb?c=d\n#e").should == "/ab?c=d#e" }
+
+    searches.should == 0
+    described_class.normalize("é/ü").should == "é/ü"
+    described_class.normalize("/a ").should == "/a"
+    -> { described_class.normalize("/a\xFF".dup.force_encoding("UTF-8")) }.should raise_error(ArgumentError)
+  end
+
   it "is not changed by changes to a string it was given or returned" do
     href = +"/a"
     first = urls.resolve(href)
