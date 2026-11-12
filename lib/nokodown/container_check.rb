@@ -10,6 +10,7 @@ module Nokodown
     AD_WORDS = /\A(?:ad(?:vertising|vertisement)?|pub(?:licité)?|werb(?:ung)?|广告|Реклама|Anuncio)\z/i.freeze
     LOADING_WORDS = /\A(?:(?:loading|正在加载|Загрузка|chargement|cargando)(?:…|\.\.\.)?)\z/i.freeze
     POST_BODY_SHARE = 0.8
+    PLAYER_CLASS = /media/.freeze
 
     def initialize(node, content_length, paragraph_keys, memo = {})
       @node = node
@@ -44,8 +45,10 @@ module Nokodown
       @text.length > @content_length * 0.5
     end
 
+    # "media" in a class is Readability's sign of social-media widgets, but on
+    # a container holding a player it names the player.
     def weight
-      @weight ||= Scorer.cleaning_weight(@node)
+      @weight ||= Scorer.cleaning_weight(@node, ignore: (PLAYER_CLASS if player?))
     end
 
     def data_table_involved?(outer_tables)
@@ -83,9 +86,18 @@ module Nokodown
       !post.nil? && @text.length >= post_length(post) * POST_BODY_SHARE
     end
 
+    # Native players the preprocessor kept play a file, so they are content.
+    def player?
+      return @player if defined?(@player)
+
+      @player = !@node.at_css("video, audio").nil?
+    end
+
     def video_embed?
+      return true if player?
+
       @node.css("object, embed, iframe").any? do |embed|
-        embed.attribute_nodes.any? { |attribute| attribute.value.to_s.match?(Preprocessor::VIDEO_HOSTS) }
+        embed.attribute_nodes.any? { |attribute| Preprocessor.video_embed?(attribute.value) }
       end
     end
 

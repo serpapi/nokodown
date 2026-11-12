@@ -65,10 +65,11 @@ public API. Other classes are internal and can change in any release.
 | Option | Default | |
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
-| `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
+| `main_content` | `true` | Keep only the main content. `false` converts the whole page, or a selection of it, as it is: only scripts, styles, hidden elements, form inputs, closed dialogs and punctuation-only lines are dropped, and repeats, buttons, headings without a section and lines such as "Advertisement" or "Share" stay. |
 | `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |
+| `max_length` | `nil` | Return at most this many characters of Markdown: exactly the first `max_length` characters of what `nil` gives, and the same `excerpt`. Rendering stops once the result is known, so a huge page costs less; when the start alone cannot settle it (an `<h1>` or a thumbnail further down can change it), the whole content is rendered once more. |
 
 `mode` says how the content was chosen: `:article` when the page was narrowed
 to one body of prose, `:page` when the whole main region was kept, `:full`
@@ -126,7 +127,10 @@ region, or most of the page's text, is never removed because of its class name.
 2. **Metadata**: JSON-LD, Open Graph and other `<meta>` tags, then the
    document, in Readability's order of preference.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
-   `<noscript>` copies), drop scripts, invisible elements and form controls.
+   `<noscript>` copies, preferred over a placeholder or thumbnail `src`) and
+   link targets kept in `data-href` and similar attributes, drop scripts,
+   invisible elements and form controls, and turn elements nested more than
+   64 levels deep into plain text.
 4. **Boilerplate**: remove page chrome and noise widgets across the whole page.
 5. **ContentLocator**: score paragraphs with Readability's algorithm. When one
    candidate holds most of the page's prose the content is narrowed to it
@@ -154,8 +158,8 @@ region, or most of the page's text, is never removed because of its class name.
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data
    tables while layout tables are unwrapped, definition lists, details, TeX
    from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
-   other scripts as 2^(n-1) and a_n. Text is escaped only where it would
-   otherwise change meaning.
+   other scripts as 2^(n-1) and a_n, and video embeds and native players as
+   links. Text is escaped only where it would otherwise change meaning.
 
 ## Quality
 

@@ -41,7 +41,8 @@ module Nokodown
     def measure(node, link_weight)
       chars = 0.0
       link_chars = 0.0
-      node.children.each do |child|
+      child = node.child
+      while child
         if child.text? || child.cdata?
           count = Dom.char_count(child.content)
           chars += count
@@ -51,6 +52,7 @@ module Nokodown
           chars += child_chars
           link_chars += child_link_chars
         end
+        child = child.next_sibling
       end
       store(node, chars, link_chars)
     end

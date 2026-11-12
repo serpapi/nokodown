@@ -17,12 +17,21 @@ module Nokodown
         return layout_blocks unless Tables.data_table?(@node)
 
         grid = trimmed_grid
-        return layout_blocks if grid.size < 2 || grid.first.size < 2
+        return layout_blocks if grid.size < 2 || (grid.first.size < 2 && !headed?)
 
         caption + [Block.new(:table, gfm(grid))]
       end
 
       private
+
+      # A column with a header cell or a caption is a list of values that
+      # name it, not a layout column.
+      def headed?
+        return true if @node.at_css("th")
+
+        caption = @node.at_css("caption")
+        !caption.nil? && !Dom.text(caption).empty?
+      end
 
       def gfm(grid)
         lines = grid.map { |row| "| #{row.join(' | ')} |" }
@@ -57,11 +66,16 @@ module Nokodown
         end
       end
 
+      # Only the outermost table escapes pipes: a table nested in a cell is
+      # text that the outer cell escapes, and escaping it twice would add a
+      # backslash to its code.
       def place_cells(row, line, spans)
         column = 0
+        nested = @renderer.in_table_cell?
         Tables.cells(row).each do |cell|
           column += 1 while line.key?(column)
-          text = Text.table_cell(@renderer.children_blocks(cell).map(&:text).join(" "))
+          text = @renderer.table_cell_blocks(cell).map(&:text).join(" ")
+          text = nested ? Text.single_line(text) : Text.table_cell(text)
           rows = span(cell, "rowspan", MAX_ROWSPAN)
           span(cell, "colspan", MAX_COLSPAN).times do |offset|
             value = offset.zero? ? text : ""
@@ -80,7 +94,7 @@ module Nokodown
       # rendered cell by cell.
       def layout_blocks
         Tables.rows(@node).flat_map do |row|
-          cells = Tables.cells(row).reject { |cell| cell.content.strip.empty? && cell.at_css("img").nil? }
+          cells = Tables.cells(row).reject { |cell| Tables.blank?(cell) }
           if cells.none? { |cell| @renderer.contains_block?(cell) }
             @renderer.text_paragraphs(cells.map { |cell| @renderer.inline(cell.children) }.join(" "))
           else

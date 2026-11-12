@@ -130,7 +130,9 @@ module Nokodown
       root.css("aside").each do |node|
         remove(node) if Dom.text(node).length < 200 || ContainerCheck.new(node, content_length, Set.new).remove?
       end
-      root.css("[class], [id]").each do |node|
+      Dom.elements(root).each do |node|
+        next unless node.key?("class") || node.key?("id")
+
         remove(node) if Dom.signature(node).match?(SHARE) && Dom.text(node).length < 500
       end
     end
@@ -166,7 +168,7 @@ module Nokodown
       root.element_children.each do |node|
         next if Dom.thread?(node)
 
-        if Dom.signature(node).match?(Patterns::SECONDARY) && Dom.text(node).length <= total * 0.5
+        if Patterns.secondary?(Dom.signature(node)) && Dom.text(node).length <= total * 0.5
           remove(node)
         else
           remove_secondary(node, total)
@@ -177,7 +179,7 @@ module Nokodown
     # The author line is returned as metadata, like Readability does. Many of
     # them mean a thread or a list of posts, where the authors are content.
     def remove_bylines(root)
-      bylines = root.css("*").select do |node|
+      bylines = Dom.elements(root).select do |node|
         byline = node["rel"] == "author" || node["itemprop"].to_s.include?("author") || Dom.signature(node).match?(BYLINE)
         byline && Dom.text(node).length.between?(1, 99)
       end
@@ -248,8 +250,8 @@ module Nokodown
     end
 
     def destination(link)
-      href = link["href"].to_s.strip
-      href unless href.empty? || href.start_with?("#") || href.match?(/\Ajavascript:/i)
+      href = UrlResolver.normalize(link["href"])
+      href unless href.empty? || href.start_with?("#") || UrlResolver.script?(href)
     end
 
     def links_of(node)

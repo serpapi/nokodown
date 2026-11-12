@@ -4,7 +4,10 @@ module Nokodown
   module Markdown
     # Block-level tidying after rendering: repeated blocks, stray rules,
     # punctuation-only lines, section headings left without a section, and
-    # redundant or repeated images.
+    # redundant or repeated images. Converting the whole page (full), or a
+    # selection of it, keeps everything but punctuation-only lines: what
+    # repeats, boilerplate lines, symbols such as rating stars, rules and
+    # headings without a section can all be what was selected.
     module Cleanup
       DEDUPE_WINDOW = 4
       IMAGE_ONLY = /\A!\[([^\]]*)\]\([^)]*\)\z/.freeze
@@ -21,18 +24,33 @@ module Nokodown
       SENTENCE_END = /(?<![.!?…])[.!?…]++["'”’)\]*_]*+(?=\s+[^\p{Ll}\p{N}]|\s*\z)/.freeze
       # From where the last sentence ended through the end of the next one.
       SENTENCE = /\G.*?#{SENTENCE_END}/m.freeze
+      # What makes a line more than stray punctuation when converting the
+      # whole page: a letter, a digit or a symbol such as a rating star.
+      WORD_OR_SYMBOL = /[\p{L}\p{N}\p{So}]/.freeze
 
       module_function
 
-      # images: the Renderer's rendered_images.
-      def call(blocks, images = {})
+      # images: the Renderer's rendered_images. more: the blocks are only the
+      # start of the content, and only those that also start the whole
+      # content's cleaned blocks are kept: a repeat at the end can still be
+      # the first of a run, and headings and rules at the end can still get
+      # a section or lose it.
+      def call(blocks, images = {}, full: false, more: false)
+        return blocks.reject { |block| punctuation?(block) } if full
+
         blocks = blocks.reject { |block| noise?(block) }
         blocks = dedupe(blocks)
-        blocks = drop_repeated_runs(blocks)
+        blocks = drop_repeated_runs(blocks, more)
         blocks = shorten_repeated_quotes(blocks)
+        blocks = without_open_end(blocks) if more
         blocks = trim_rules(blocks)
         blocks = drop_empty_sections(blocks)
         images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
+      end
+
+      # Separators and stray marks ("•", "...", a zero-width joiner).
+      def punctuation?(block)
+        block.kind == :paragraph && !block.text.match?(WORD_OR_SYMBOL) && !block.text.include?("](")
       end
 
       def noise?(block)
@@ -55,9 +73,14 @@ module Nokodown
         end
       end
 
-      def drop_repeated_runs(blocks)
+      def drop_repeated_runs(blocks, more = false)
         seen = Set.new
         repeated = blocks.map { |block| repeatable?(block) && !seen.add?(block.text) }
+        if more
+          open = repeated.reverse.take_while(&:itself).size
+          blocks = blocks.first(blocks.size - open)
+          repeated = repeated.first(blocks.size)
+        end
         return blocks unless repeated.include?(true)
 
         runs = blocks.each_index.chunk_while { |a, b| repeated[a] && repeated[b] }
@@ -96,7 +119,7 @@ module Nokodown
       # above has them.
       def quote_opening(block)
         lines = block.text.split("\n").map { |line| line.sub(/\A> ?/, "") }
-        own = lines.reject { |line| line.start_with?(">") }.take_while { |line| !line.start_with?("```", "~~~") }
+        own = lines.reject { |line| line.start_with?(">") }.take_while { |line| !line.match?(/\A(?:`{3,}[^`]*|~~~.*)\z/) }
         opening = squeeze_blank(opening_lines(own.map { |line| Text.unlink(line).strip }))
         return block if opening.empty? || words(block.text).size - words(opening.join(" ")).size < QUOTE_OPENING
 
@@ -183,6 +206,11 @@ module Nokodown
         blocks
       end
 
+      # Headings and rules that end the start of the content.
+      def without_open_end(blocks)
+        blocks.first((blocks.rindex { |block| block.kind != :heading && block.kind != :rule } || -1) + 1)
+      end
+
       # A heading followed by nothing, or by a heading at the same or a higher
       # level, lost its section during extraction. Title lists are content in
       # their own right, and a page that is only its headline keeps it.
@@ -192,7 +220,11 @@ module Nokodown
         kept.pop while kept.any? && blocks[kept.last].kind == :heading && !titles.include?(kept.last)
         return blocks.values_at(*kept) if kept.any?
 
-        [blocks.find { |block| block.kind == :heading && block.level == 1 }].compact
+        h1 = blocks.find { |block| block.kind == :heading && block.level == 1 }
+        return [] if h1.nil?
+
+        # A page of nothing but headings under its headline is its outline.
+        blocks.all? { |block| block.kind == :heading } ? blocks : [h1]
       end
 
       def empty_section?(blocks, index)

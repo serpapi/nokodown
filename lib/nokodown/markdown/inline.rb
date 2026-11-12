@@ -9,6 +9,14 @@ module Nokodown
     class Inline
       EMPHASIS = { "strong" => "**", "b" => "**", "em" => "*", "i" => "*", "del" => "~~", "s" => "~~", "strike" => "~~" }.freeze
       CODE = Set.new(%w[code kbd samp tt]).freeze
+      # What could start a link, an autolink, HTML or code where a URL is
+      # written as text.
+      MARKUP_IN_URL = /[\[\]<>`\\]/.freeze
+      WEB_URL = %r{\A(?:https?|ftp)://}i.freeze
+      BACKSLASH = "\\".ord
+      LESS_THAN = "<".ord
+      BACKTICK = "`".ord
+      EMAIL_LOCAL_BYTES = Set.new((0..127).select { |byte| byte.chr.match?(/[#{Text::EMAIL_LOCAL}]/) }).freeze
       UNSAFE_SCHEME = /\A\s*(?:javascript|vbscript|data|tel|sms):/i.freeze
       FOOTNOTE_MARKER = /\A\s*(?:\[[^\]]{1,8}\]|[*†‡§]+)\s*\z/.freeze
       # Exponents are often written with the minus sign "−", not "-".
@@ -41,7 +49,7 @@ module Nokodown
       # Absolute URL worth linking to, or nil for in-page anchors, scripts and
       # phone numbers.
       def self.link_url(href, urls)
-        href = href.strip
+        href = UrlResolver.normalize(href)
         return if href.empty? || href.start_with?("#") || href.match?(UNSAFE_SCHEME)
 
         url = urls.resolve(href)
@@ -65,10 +73,22 @@ module Nokodown
       # and repeats.
       attr_reader :rendered_images
 
+      # Notes whether the text ends with code that ends with a backslash, for
+      # the element around it (see #append).
       def render(nodes, heading: false)
         outer = @in_heading
         @in_heading ||= heading
-        nodes.map { |node| node_text(node) }.join
+        out = +""
+        backslash_fence = false
+        nodes.each do |node|
+          piece = node_text(node)
+          next if piece.empty?
+
+          append(out, piece, backslash_fence)
+          backslash_fence = @backslash_fence
+        end
+        @backslash_fence = backslash_fence
+        out
       ensure
         @in_heading = outer
       end
@@ -79,7 +99,80 @@ module Nokodown
 
       private
 
+      # Pieces written side by side must not join into Markdown that neither
+      # holds: a code span's closing fence and a backtick after it would read
+      # as one longer run, so a space goes between them. Text escapes its
+      # backticks, so a backtick after a backslash is text and stays next to
+      # code, unless it closes code that ends with a backslash ("`C:\\`"),
+      # which the string cannot tell apart and is noted instead. A "<" that
+      # would open an autolink or a tag, a "!" before "[" and a "]" before
+      # "(" are escaped, unless the next piece is a web URL written as text,
+      # which "<" and ">" around it mean to link. The string is changed only
+      # at its end, in bytes, so a long non-ASCII run is not rescanned.
+      def append(out, piece, backslash_fence)
+        if piece.start_with?("`") && out.end_with?("`") && (backslash_fence || unescaped?(out, out.bytesize - 1))
+          out << " "
+        elsif joins_markup?(out, piece) && unescaped?(out, out.bytesize - 1)
+          escape_from(out, out.bytesize - 1)
+        end
+        escape_email_opener(out) if piece.match?(Text::EMAIL_END)
+        out << piece
+      end
+
+      def joins_markup?(out, piece)
+        if out.end_with?("<")
+          piece.match?(Text::AUTOLINK_AFTER) && !piece.match?(WEB_URL)
+        elsif out.end_with?("!")
+          piece.start_with?("[")
+        else
+          out.end_with?("]") && piece.start_with?("(")
+        end
+      end
+
+      # An email address can run over pieces: "<0" then "`@h.co>`", and over
+      # code spans, which it would outrank if it started first. Walks back
+      # over its local part only, from fence to fence, so a "<" inside a
+      # closed code span, which is literal there, is left as it is.
+      def escape_email_opener(out)
+        at = out.bytesize - 1
+        fence = nil
+        while at >= 0
+          byte = out.getbyte(at)
+          if byte == BACKTICK
+            start = at
+            start -= 1 while start.positive? && out.getbyte(start - 1) == BACKTICK
+            return if fence.nil? && start.positive? && out.getbyte(start - 1) == BACKSLASH
+
+            length = at - start + 1
+            fence = fence ? (fence == length ? nil : fence) : length
+            at = start - 1
+          elsif EMAIL_LOCAL_BYTES.include?(byte)
+            at -= 1
+          else
+            break
+          end
+        end
+        escape_from(out, at) if fence.nil? && at >= 0 && out.getbyte(at) == LESS_THAN && unescaped?(out, at)
+      end
+
+      # Whether no backslash escapes the byte at `at`.
+      def unescaped?(string, at)
+        index = at - 1
+        index -= 1 while index >= 0 && string.getbyte(index) == BACKSLASH
+        (at - 1 - index).even?
+      end
+
+      # A backslash before the ASCII tail that starts at byte `at`.
+      def escape_from(out, at)
+        tail = out.byteslice(at, out.bytesize - at)
+        out.chomp!(tail)
+        out << "\\" << tail
+      end
+
+      # An element's text ends with the code that ends its last inline text,
+      # if any, so the note of the last #render or #code_span in it holds.
       def node_text(node)
+        @backslash_fence = false
         if node.text? || node.cdata?
           Text.escape(Text.collapse(node.content))
         elsif node.element?
@@ -99,6 +192,7 @@ module Nokodown
         when "wbr" then ""
         when "a" then link(node)
         when "img" then image(node)
+        when "video", "audio" then media(node)
         when "q" then "\"#{render(node.children)}\""
         when "math" then math(node)
         when "sup", "sub" then script(node)
@@ -127,10 +221,14 @@ module Nokodown
         core = text.strip
         return text.empty? ? "" : " " if core.empty?
 
-        "#{text[/\A\s*/]}#{Text.code_span(core)}#{text[/\s*\z/]}"
+        span = Text.code_span(core)
+        trailing = text[/\s*\z/]
+        @backslash_fence = trailing.empty? && span.start_with?("`") && span.end_with?("\\`")
+        "#{text[/\A\s*/]}#{span}#{trailing}"
       end
 
-      # Images inside a link are written before it rather than inside its text.
+      # Images inside a link with text are written before it rather than
+      # inside its text. A link made only of images links each of them.
       def link(node)
         outer_images = @link_images
         outer_link = @in_link
@@ -141,8 +239,18 @@ module Nokodown
         @link_images = outer_images
         @in_link = outer_link
 
-        parts = images + [link_markup(Text.single_line(content), node["href"].to_s)]
+        text = Text.single_line(content)
+        return surround_like(content, linked_images(images, node["href"].to_s)) if text.empty?
+
+        parts = images + [link_markup(text, node["href"].to_s)]
         surround_like(content, parts.reject(&:empty?).join(" "))
+      end
+
+      def linked_images(images, href)
+        url = @links && !@in_link && link_url(href)
+        return images.join(" ") unless url
+
+        images.map { |image| "[#{image}](#{Text.destination(url)})" }.join(" ")
       end
 
       def link_markup(text, href)
@@ -151,7 +259,7 @@ module Nokodown
 
         url = link_url(href)
         return text unless url
-        return url if same_as_url?(text, url)
+        return url if same_as_url?(text, url) && !url.match?(MARKUP_IN_URL)
 
         "[#{Text.link_text(text)}](#{Text.destination(url)})"
       end
@@ -175,7 +283,7 @@ module Nokodown
       def image(node)
         alt = Dom.squish(node["alt"].to_s)
         return Image.tex(alt) if node["class"].to_s.include?("mwe-math-fallback-image")
-        return alt if Image.emoji?(node, alt)
+        return Text.escape(alt) if Image.emoji?(node, alt)
         return "" if !@images || @in_heading
 
         src = Image.source(node, @urls)
@@ -187,6 +295,16 @@ module Nokodown
 
         @link_images << markup
         ""
+      end
+
+      # Players link to the file they play, labelled with their title, which
+      # is escaped like any text.
+      def media(node)
+        url = link_url(node["src"].to_s)
+        return "" if url.nil? || !@links || @in_link
+
+        title = Dom.squish(node["title"].to_s)
+        "[#{title.empty? ? node.name.capitalize : Text.label(title)}](#{Text.destination(url)})"
       end
 
       # An image is redundant only if every copy of it is. Targets are the
@@ -333,6 +451,7 @@ module Nokodown
         tex = (annotation&.content || node["alttext"]).to_s.strip
         return Text.escape(Text.collapse(node.content).strip) if tex.empty?
 
+        tex = Text.tex(tex)
         node["display"] == "block" ? "$$#{tex}$$" : "$#{tex}$"
       end
     end

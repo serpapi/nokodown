@@ -7,7 +7,6 @@ module Nokodown
     # Turns DOM nodes into Markdown blocks. Runs of inline content become
     # paragraphs; block elements are rendered by tag.
     class Renderer
-      MAX_DEPTH = 400
       SEPARATOR_LINE = /\A\s*([-=_*~])\1{2,}\s*\z/.freeze
       GLYPHS = "•·▪◦‣►▶▸➤→■●○"
       # A run of glyphs (●●●○○) is a rating, not a bullet.
@@ -15,22 +14,62 @@ module Nokodown
       # Any symbols before a space can be an item's marker (+ and - in pros
       # and cons, ✓ and ✗), not only the glyphs that are stripped.
       LEADING_SYMBOLS = /\A[^\p{L}\p{N}\s]+(?=\s)/.freeze
+      # Native players, each a link of its own.
+      MEDIA = Set.new(%w[video audio]).freeze
+      # Elements rendered as a whole, whose blocks depend on all of their
+      # content (a list's spacing, a table's grid). Any other element only
+      # lays its children's blocks end to end.
+      WHOLE = Set.new(%w[h1 h2 h3 h4 h5 h6 ul ol menu dir li blockquote pre code table dl hr iframe video audio summary a]).freeze
 
-      def initialize(urls, images: true, links: true, redundant_images: {})
+      # budget: stop once about this many characters are rendered, between
+      # two blocks that do not belong to one element rendered as a whole, so
+      # the blocks are the start of what rendering everything gives.
+      def initialize(urls, images: true, links: true, redundant_images: {}, budget: nil)
         @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
         @links = links
-        @depth = 0
         @contains_block = {}
+        @budget = budget
+        @rendered = 0
+        @whole = 0
+        @spent = false
+        @cut = false
+        @table_cells = 0
       end
 
       def render(nodes)
-        nodes.flat_map { |node| block_level?(node) ? block(node) : children_blocks(node) }
+        blocks = []
+        nodes.each do |node|
+          break @cut = true if @spent
+
+          blocks.concat(block_level?(node) ? block(node) : children_blocks(node))
+        end
+        blocks
+      end
+
+      # The blocks of a data table's cell. A table in it is written in the
+      # cell's text, which escapes its pipes once for the outer table.
+      def table_cell_blocks(cell)
+        @table_cells += 1
+        children_blocks(cell)
+      ensure
+        @table_cells -= 1
+      end
+
+      def in_table_cell?
+        @table_cells.positive?
+      end
+
+      # Whether content was left out once the budget ran out.
+      def cut?
+        @cut
       end
 
       def children_blocks(node)
         blocks = []
         run = []
         node.children.each do |child|
+          break @cut = true if @spent && @whole.zero?
+
           if block_level?(child)
             blocks.concat(paragraphs(run))
             run = []
@@ -43,7 +82,9 @@ module Nokodown
       end
 
       def paragraphs(nodes)
-        nodes.empty? ? [] : text_paragraphs(@inline.render(nodes))
+        return [] if nodes.empty?
+
+        counted(text_paragraphs(@inline.render(nodes)))
       end
 
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
@@ -64,7 +105,7 @@ module Nokodown
 
       def block_level?(node)
         return false unless node.element?
-        return true if Dom::BLOCK.include?(node.name)
+        return true if Dom::BLOCK.include?(node.name) || MEDIA.include?(node.name)
         return CodeBlock.standalone?(node) if node.name == "code"
 
         contains_block?(node)
@@ -74,25 +115,37 @@ module Nokodown
         key = Dom.key(node)
         return @contains_block[key] if key && @contains_block.key?(key)
 
-        found = node.element_children.any? { |child| Dom::BLOCK.include?(child.name) || contains_block?(child) }
+        found = node.element_children.any? do |child|
+          Dom::BLOCK.include?(child.name) || MEDIA.include?(child.name) || contains_block?(child)
+        end
         @contains_block[key] = found if key
         found
       end
 
       private
 
-      def block(node)
-        return paragraphs([node]) if @depth > MAX_DEPTH
+      # Blocks rendered outside any element rendered as a whole count
+      # toward the budget.
+      def counted(blocks)
+        return blocks unless @budget && @whole.zero?
 
-        @depth += 1
-        begin
-          render_block(node)
-        ensure
-          @depth -= 1
-        end
+        @rendered += blocks.sum { |block| block.text.length + 2 }
+        @spent = @rendered >= @budget
+        blocks
       end
 
-      def render_block(node)
+      # Rendering recurses once per level of nesting, which Preprocessor
+      # bounds by flattening deeper elements into text.
+      def block(node)
+        return children_blocks(node) unless WHOLE.include?(node.name)
+
+        @whole += 1
+        blocks = whole_block(node)
+        @whole -= 1
+        counted(blocks)
+      end
+
+      def whole_block(node)
         case node.name
         when "h1", "h2", "h3", "h4", "h5", "h6" then heading(node)
         when "ul", "ol", "menu", "dir" then list(node)
@@ -104,16 +157,19 @@ module Nokodown
         when "dl" then definition_list(node)
         when "hr" then [Block.new(:rule, "---")]
         when "iframe" then embed(node)
+        when "video", "audio" then paragraphs([node])
         when "summary" then summary(node)
         when "a" then linked_blocks(node)
         else children_blocks(node)
         end
       end
 
-      # Text that long is a paragraph some site wrapped in a heading tag.
+      # Text that long is a paragraph some site wrapped in a heading tag. A
+      # heading made only of images, such as a linked title graphic, keeps
+      # them as a paragraph.
       def heading(node)
         text = Text.single_line(@inline.render(node.children, heading: true))
-        return [] if text.empty?
+        return paragraphs(node.children) if text.empty?
         return [Block.new(:paragraph, text)] if text.length > 300
 
         level = node.name[1].to_i
@@ -301,12 +357,17 @@ module Nokodown
         end
       end
 
+      # A player from a video host links to its page, labelled with its
+      # title, or "Video" like a native player; the URL is always written as
+      # a destination, never as text that could hold Markdown.
       def embed(node)
-        url = @inline.link_url(Image.video_page(node["src"].to_s))
-        return [] unless url && @links
+        return [] unless @links && Preprocessor.video_embed?(node["src"])
+
+        url = @inline.link_url(Image.video_page(UrlResolver.normalize(node["src"])))
+        return [] unless url&.match?(%r{\A(?:https?:)?//}i)
 
         title = Dom.squish(node["title"].to_s)
-        [Block.new(:paragraph, title.empty? ? url : "[#{Text.link_text(Text.escape(title))}](#{Text.destination(url)})")]
+        [Block.new(:paragraph, "[#{title.empty? ? 'Video' : Text.link_text(Text.escape(title))}](#{Text.destination(url)})")]
       end
 
       def summary(node)
@@ -331,7 +392,7 @@ module Nokodown
       end
 
       def link_target(blocks)
-        target = blocks.find { |b| b.kind == :heading } || blocks.find { |b| b.kind == :paragraph && !b.text.start_with?("![") }
+        target = blocks.find { |b| b.kind == :heading } || blocks.find { |b| b.kind == :paragraph && !b.text.start_with?("![", "[![") }
         target if target && target.text.length <= 300 && !target.text.include?("](")
       end
     end

@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "zlib"
+
 RSpec.describe Nokodown do
   describe ".extract" do
     it "returns the markdown with the page metadata" do
@@ -40,6 +42,10 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should == "# Is the ferry running today?"
     end
 
+    it "keeps every heading of a page made of headings alone" do
+      Nokodown.to_markdown("<h1>One</h1><h2>Two</h2><h3>Three</h3>").should == "# One\n\n## Two\n\n### Three"
+    end
+
     it "puts the title above a section H1 that follows the opening paragraphs" do
       intro = "<p>#{'Vertical mice and trackballs spare the wrist in different ways, and we tested both kinds. ' * 3}</p>"
       section = "<p>#{'The first pick suits most hands and works on any desk surface we tried. ' * 3}</p>"
@@ -47,6 +53,16 @@ RSpec.describe Nokodown do
 
       Nokodown.to_markdown(html).should start_with("# The Best Ergonomic Mice\n\nVertical mice")
       Nokodown.to_markdown(html).should include("\n\n## Deeper Dive: Our Picks\n\n")
+    end
+
+    it "keeps the page's headline above an article body chosen inside main" do
+      long = "Meaningful sentence with several useful words inside it. " * 10
+      page = "<main><div>Breadcrumb trail</div><div><h1>Story</h1><div>Subtitle</div></div>" \
+             "<article><p>#{long}</p></article><aside>Related story</aside></main>"
+
+      Nokodown.to_markdown("<body>#{page}</body>").should start_with("# Story\n\nMeaningful sentence")
+      Nokodown.to_markdown("<title>Story</title><body>#{page}</body>").should start_with("# Story\n\nMeaningful sentence")
+      Nokodown.to_markdown("<title>Story</title><body>#{page}</body>", title: false).should start_with("Meaningful sentence")
     end
 
     it "keeps the page's own headline below a photo caption" do
@@ -219,6 +235,17 @@ RSpec.describe Nokodown do
       markdown.should include("### [Elixir Observability Engineer](https://example.com/jobs/elixir)")
       markdown.should include("- **Ingredients**: Sugar")
       markdown.should include("- [Alan Turing](https://example.com/authors/alan)")
+    end
+
+    it "keeps the text of links that blocks cut into copies" do
+      html = "<article><h1>Title</h1><p>#{'Introduction, important body text. ' * 10}</p><div><a href=\"/x\">" \
+             "<div>Details, useful content, and more.</div><section><span>Supplement, helpful text about this.</span></a></section></div></article>"
+      markdown = extract(html)
+      markdown.should include("Details, useful content, and more.")
+      markdown.should include("Supplement, helpful text about this.")
+
+      html = "#{'Intro. ' * 80}<a href=/s><p>#{'Lead. ' * 160}<div><img src=/i.jpg alt=I><article>#{'TAIL. ' * 80}<a href=/s>"
+      extract(html).should include("TAIL. TAIL.")
     end
 
     it "keeps highlighted code whose tokens look like page furniture" do
@@ -466,6 +493,134 @@ RSpec.describe Nokodown do
       html = "<title>Index funds</title><body><article><h1>Index funds</h1>#{paragraphs.join}#{disclaimer}</article></body>"
 
       Nokodown.to_markdown(html).should_not include("subject to change")
+    end
+  end
+
+  describe "deeply nested markup" do
+    # Puma serves requests in threads, whose stack is much smaller than the
+    # main thread's.
+    def in_thread(&block)
+      Thread.new(&block).value
+    end
+
+    {
+      "blocks" => "<p>Visible</p>#{'<div>' * 3000}Deep#{'</div>' * 3000}",
+      "inline elements" => "<p>Visible #{'<span>' * 3000}Deep#{'</span>' * 3000}</p>",
+      "lists" => "<p>Visible</p>#{'<ul><li>' * 1500}Deep#{'</li></ul>' * 1500}",
+      "links and emphasis" => "<p>Visible</p>#{'<a href="/x"><strong>' * 1500}Deep#{'</strong></a>' * 1500}",
+      "tables" => "<p>Visible</p>#{'<table><tr><td>' * 1000}Deep#{'</td></tr></table>' * 1000}",
+      "noscript content" => "<p>Hi</p><noscript><p>Visible #{'word ' * 100}</p>#{'<div>' * 3000}Deep#{'</div>' * 3000}</noscript>"
+    }.each do |shape, html|
+      it "renders #{shape} 3000 levels deep inside a thread" do
+        [true, false].each do |main_content|
+          in_thread { Nokodown.to_markdown(html, url: "https://example.com/", main_content: main_content) }.should include("Visible", "Deep")
+        end
+      end
+    end
+
+    it "renders 10,000 levels on the main thread" do
+      html = "<body>#{%(<div onclick="alert('deep')">) * 10_000}deep#{'</div>' * 10_000}</body>"
+
+      Nokodown.to_markdown(html).should == "deep"
+      Nokodown.to_markdown(("<div>" * 4000) + "leaf" + ("</div>" * 4000)).should == "leaf"
+    end
+
+    it "keeps the words of flattened elements apart" do
+      html = "#{'<div>' * 100}<p>One</p><p>Two<br>Three</p><span>Four</span>#{'</div>' * 100}"
+
+      convert(html).should == "One Two Three Four"
+    end
+
+    it "leaves the nesting of real pages alone" do
+      html = "#{'<div>' * 60}<h2>Title</h2><p>Some <em>text</em></p>#{'</div>' * 60}"
+
+      convert(html).should == "## Title\n\nSome *text*"
+    end
+  end
+
+  describe "max_length:" do
+    def prose(index)
+      "<p>Paragraph #{index} tells how the river rose through the night and the town woke to water in the streets and fields.</p>"
+    end
+
+    # The lengths at which max_length does not give the start of the whole
+    # conversion, or changes the excerpt.
+    def prefix_mismatches(html, lengths, **options)
+      whole = Nokodown.extract(html, url: "https://example.com/page", **options)
+      lengths.reject do |length|
+        cut = Nokodown.extract(html, url: "https://example.com/page", max_length: length, **options)
+        cut.markdown == whole.markdown[0, length] && cut.excerpt == whole.excerpt
+      end
+    end
+
+    # Pages long enough for rendering to stop early, each with something
+    # the whole content decides later on: a headline far down, a thumbnail
+    # shown again without its link, the excerpt, a list's spacing, a repeat
+    # that turns into a run, and a section label in an outline.
+    {
+      "a late H1" => ["<title>Flood night</title><article>%<prose>s<h1>Flood night</h1>%<one>s</article>", {}],
+      "a thumbnail" => ["<article><p><a href='/story'><img src='/photo.jpg'></a> <a href='/story'>Story</a> %<sentence>s</p>%<prose>s<p><img src='/photo.jpg'></p>%<one>s</article>", { title: false }],
+      "the excerpt" => ["<body>%<lines>s%<prose>s</body>", { main_content: false, title: false }],
+      "a loose list" => ["<head><meta name='description' content='A list'></head><body><ul>%<items>s<li><p>Last</p><p>item</p></li></ul></body>", { main_content: false, title: false }],
+      "a repeated run" => ["<article><p>%<long>s</p>%<one>s%<filler>s<p>%<long>s</p>%<one>s%<prose>s</article>", { title: false }],
+      "an outline" => ["<head><meta name='description' content='Outline'></head><body><article><h1>Outline</h1>%<headings>s%<one>s</article></body>", { title: false }]
+    }.each do |name, (template, options)|
+      it "gives the start of the whole conversion of a page with #{name}" do
+        html = format(template, prose: Array.new(40) { |index| prose(index) }.join, one: prose(1), long: "x" * 1000, filler: "<p>#{'z' * 90}</p>" * 12,
+                                sentence: "The river rose through the night.", lines: Array.new(120) { |index| "<p>Line #{index}</p>" }.join,
+                                items: Array.new(120) { |index| "<li>Item #{index}</li>" }.join,
+                                headings: Array.new(150) { |index| index == 3 ? "<h2>Tags</h2>" : "<h2>Heading #{index}</h2>" }.join)
+
+        prefix_mismatches(html, (0..3000).step(25), **options).should == []
+      end
+    end
+
+    it "gives the start of the whole conversion of each fixture" do
+      Dir[File.join(__dir__, "fixtures", "*.html")].sort.each do |path|
+        html = File.read(path) * 3
+        [true, false].each do |main_content|
+          [path, prefix_mismatches(html, [0, 1, 40, 300, 1000, 2500, 6000], main_content: main_content)].should == [path, []]
+        end
+      end
+    end
+
+    it "renders long content once, and only its start" do
+      html = "<article>#{Array.new(2000) { |index| prose(index) }.join}</article>"
+      renderers = []
+      Nokodown::Markdown::Renderer.should_receive(:new).once.and_wrap_original do |original, *args, **options|
+        original.call(*args, **options).tap { |renderer| renderers << renderer }
+      end
+
+      Nokodown.to_markdown(html, max_length: 500).length.should == 500
+      renderers.first.should be_cut
+    end
+
+    it "changes nothing when nil" do
+      html = "<title>Flood night</title><article>#{Array.new(40) { |index| prose(index) }.join}</article>"
+
+      Nokodown.extract(html, max_length: nil).should == Nokodown.extract(html)
+    end
+
+    it "gives empty Markdown for 0" do
+      Nokodown.to_markdown("<article>#{Array.new(40) { |index| prose(index) }.join}</article>", max_length: 0).should == ""
+    end
+
+    it "rejects a negative or non-integer length" do
+      -> { Nokodown.extract("<p>x</p>", max_length: -1) }.should raise_error(ArgumentError)
+      -> { Nokodown.extract("<p>x</p>", max_length: "50") }.should raise_error(ArgumentError)
+    end
+
+    # WCXB=tmp/corpora/wcxb bundle exec rspec checks every WCXB page.
+    it "gives the start of the whole conversion of every WCXB page" do
+      corpus = ENV["WCXB"]
+      skip "set WCXB to a WCXB checkout to run" unless corpus
+
+      Dir[File.join(corpus, "{dev,test}", "html", "*.html.gz")].sort.each do |path|
+        html = Zlib::GzipReader.open(path, &:read)
+        [true, false].each do |main_content|
+          [path, main_content, prefix_mismatches(html, [0, 1000, 5000, 50_000], main_content: main_content)].should == [path, main_content, []]
+        end
+      end
     end
   end
 

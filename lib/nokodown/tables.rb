@@ -26,8 +26,12 @@ module Nokodown
     # however many rows they have. Hacker News is the canonical example.
     def sparse?(table)
       cells = table.css("td")
-      blank = cells.count { |cell| cell.content.strip.empty? && cell.at_css("img").nil? }
-      blank > cells.size * 0.3
+      cells.count { |cell| blank?(cell) } > cells.size * 0.3
+    end
+
+    # No text, image or player.
+    def blank?(cell)
+      cell.content.strip.empty? && cell.at_css("img, video, audio").nil?
     end
 
     def size(table)

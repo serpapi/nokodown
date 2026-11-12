@@ -6,12 +6,27 @@ RSpec.describe "Markdown conversion" do
       convert("<p>  one\n   two  three  </p>").should == "one two three"
     end
 
+    it "collapses Unicode spaces and drops invisible characters, in ASCII and non-ASCII text" do
+      convert("<p>one\ttwo\r\nthree</p><p>caf\u00E9\u00A0au\u3000lait, co\u00ADoperate, zero\u200Bwidth</p>").should ==
+        "one two three\n\ncaf\u00E9 au lait, cooperate, zerowidth"
+    end
+
     it "splits paragraphs on a double <br>" do
       convert("<div>first line<br>second line<br><br>next paragraph</div>").should == "first line\nsecond line\n\nnext paragraph"
     end
 
     it "escapes only characters that would change the meaning" do
       convert("<p>snake_case, 5 * 3, *starred*, `tick`, <b>bold</b></p>").should == "snake_case, 5 * 3, \\*starred\\*, \\`tick\\`, **bold**"
+    end
+
+    it "escapes brackets, angle brackets, backslashes and lone underscores" do
+      convert("<p>[a](b) &lt;b&gt; C:\\* _x_ plain text</p>").should == "[a\\](b) \\<b> C:\\\\\\* \\_x\\_ plain text"
+    end
+
+    it "doubles a backslash at the end of a text, so it escapes nothing after it" do
+      convert('<p><b>/!\\ Restart /!\\</b> hosted only.\\<br>next</p>').should == "**/!\\ Restart /!\\\\** hosted only.\\\\\nnext"
+      convert('<p>a\\<code>[Run](javascript:alert(1))[</code> <a href="/x"><code>[Run](javascript:alert(1))[</code></a></p>').should ==
+        "a\\\\`[Run](javascript:alert(1))[` [`[Run](javascript:alert(1))[`](https://example.com/x)"
     end
 
     it "escapes text that would start a heading or a quote" do
@@ -106,6 +121,21 @@ RSpec.describe "Markdown conversion" do
         "[Guide](https://example.com/guide) and [about](https://example.com/about)"
     end
 
+    it "takes the target of a link without href from its data attributes" do
+      convert('<p>Visit <a data-href="/article">Article</a>.</p>').should == "Visit [Article](https://example.com/article)."
+      convert('<p><a data-url="" ourl="/fallback">Fallback</a></p>').should == "[Fallback](https://example.com/fallback)"
+      convert('<p><a href="/real" data-href="/other">Real</a></p>').should == "[Real](https://example.com/real)"
+    end
+
+    it "takes the target from its data attributes when href is blank" do
+      convert('<p>Visit <a href="" data-href="/article">Article</a>.</p>').should == "Visit [Article](https://example.com/article)."
+      convert('<p>Visit <a href=" &#10;" data-url="/news">News</a>.</p>').should == "Visit [News](https://example.com/news)."
+    end
+
+    it "keeps only the text of data attribute targets that are templates or scripts" do
+      convert('<p><a data-href="mailto:?subject={title}">Mail</a> <a data-href="javascript:share()">Share</a></p>').should == "Mail Share"
+    end
+
     it "strips click-tracking parameters" do
       convert('<p><a href="https://shop.example/p?id=7&utm_source=mail&gclid=abc">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
       convert('<p><a href="https://shop.example/p?id=7&_ga=2.1.2-3&srsltid=AfmBOx">Item</a></p>').should == "[Item](https://shop.example/p?id=7)"
@@ -173,12 +203,159 @@ RSpec.describe "Markdown conversion" do
       convert('<p><a href="#top">Top</a> <a href="javascript:void(0)">Open</a> <a href="tel:+1555">Call</a></p>').should == "Top Open Call"
     end
 
+    it "keeps only the text of script links that tabs, line breaks or control characters disguise" do
+      convert('<p><a href="java&#x09;script:alert(1)">Tab</a> <a data-href="java&#10;script:alert(1)">Line</a> ' \
+              '<a href="&#x01;javascript:alert(1)">Control</a> <a href=" VBScript&#13;:msgbox(1)">Basic</a></p>').should ==
+        "Tab Line Control Basic"
+      convert('<p>Clip</p><video src="java&#9;script:alert(1)"></video><p><img src="JavaScript&#10;:alert(1)" alt="Logo"></p>').should == "Clip"
+    end
+
+    it "does not take a script scheme from <base>" do
+      html = '<html><head><base href=" JavaScript:alert(1)//"></head><body><p><a href="guide">Guide</a> <img src="a.jpg" alt="A"></p></body></html>'
+      Nokodown.to_markdown(html, url: "https://example.com/", main_content: false, title: false).should ==
+        "[Guide](https://example.com/guide) ![A](https://example.com/a.jpg)"
+    end
+
+    it "writes a URL so that Markdown's escapes and entity references cannot turn it into a script" do
+      html = '<p><a href="javascript\\:alert(1)">Slash</a> <a href="javascript&amp;colon;alert(1)">Entity</a> ' \
+             '<a href="&amp;#x6a;avascript:alert(1)">Code</a> <a href="/search?q=a&amp;b=c">Query</a></p>'
+      Nokodown.to_markdown(html, main_content: false, title: false).should ==
+        "[Slash](javascript%5C:alert(1)) [Entity](javascript%26colon;alert(1)) [Code](%26#x6a;avascript:alert(1)) [Query](/search?q=a&b=c)"
+    end
+
+    it "encodes the entities of a long non-ASCII URL in linear time" do
+      url = "/%#{'é&amp;amp;' * 64_000}"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      Nokodown.to_markdown(%(<a href="#{url}">Go</a>), main_content: false, title: false).should == "[Go](/%#{'é&amp;' * 64_000})"
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+    end
+
+    it "writes a URL so that Markdown reads it as one destination" do
+      html = '<p><a data-href="mailto:x)[Run](javascript:alert(1))(">Mail</a> <a href="mailto:x(a)[Run](javascript:alert(1))">Pair</a> ' \
+             '<a href="mailto:x&#11;)[Run](javascript:alert(1))">Tab</a> <a href="/wiki/Coffee_(disambiguation)">Wiki</a></p>' \
+             '<audio src="/a.mp3)[Run](javascript:alert(1))("></audio>'
+      convert(html).should == "[Mail](mailto:x%29%5BRun%5D%28javascript:alert%281%29%29%28) [Pair](mailto:x(a)%5BRun%5D(javascript:alert(1))) " \
+                              "[Tab](mailto:x%0B%29%5BRun%5D%28javascript:alert%281%29%29) [Wiki](https://example.com/wiki/Coffee_(disambiguation))\n\n" \
+                              "[Audio](https://example.com/a.mp3%29%5BRun%5D%28javascript:alert%281%29%29%28)"
+      convert("<a href=\"/x#{'(' * 33}y#{')' * 33}\">Deep</a>").should == "[Deep](https://example.com/x#{'%28' * 33}y#{'%29' * 33})"
+    end
+
+    it "writes a URL so that it holds no link or code of its own, should text before it keep the link from forming" do
+      html = '<p>a\\<a data-href="mailto:[Run](javascript:alert(1))">Go</a></p><p><math alttext="a`b"></math> ' \
+             '<a data-href="mailto:x`[Run](javascript:alert(1))">Go</a></p>' \
+             '<p><a href="http://[2001:db8::1]/a[b]">IPv6</a> <a href="/search?f[0]=a">Filter</a></p>'
+      convert(html).should == "a\\\\[Go](mailto:%5BRun%5D(javascript:alert(1)))\n\n$a\\`b$ [Go](mailto:x%60%5BRun%5D(javascript:alert(1)))\n\n" \
+                              "[IPv6](http://[2001:db8::1]/a%5Bb%5D) [Filter](https://example.com/search?f%5B0%5D=a)"
+    end
+
+    it "keeps only the brackets of an IPv6 host as they are, and encodes its user info" do
+      html = '<p><a href="http://&lt;img src=x&gt;@[::1]/">Tag</a> <a href="http://a b@[::1]:8080/x y">Space</a> ' \
+             '<a href="http://[2001:db8::1]/a[b]">Path</a></p>'
+      convert(html).should == "[Tag](http://%3Cimg%20src=x%3E@[::1]/) [Space](http://a%20b@[::1]:8080/x%20y) " \
+                              "[Path](http://[2001:db8::1]/a%5Bb%5D)"
+    end
+
     it "drops permalink symbols and read-more links" do
       convert('<h2>Setup<a href="#setup">¶</a></h2><p>Intro. <a href="/post">Read more »</a></p>').should == "## Setup\n\nIntro."
     end
 
+    it "ends link text at its own bracket, whatever backslashes and brackets it holds" do
+      html = '<p><a data-href="mailto:[Run](javascript:alert(1))">Go\\</a> <a href="/x">a\\]</a> <a href="/x">]x[</a> ' \
+             '<a href="/x">[1] note</a></p><img src="/i.jpg" alt="Photo\\">'
+      convert(html).should == "[Go\\\\](mailto:%5BRun%5D(javascript:alert(1))) [a\\\\\\]](https://example.com/x) " \
+                              "[\\]x\\[](https://example.com/x) [[1] note](https://example.com/x)\n\n![Photo\\\\](https://example.com/i.jpg)"
+    end
+
+    it "reads code in link text as Markdown does, keeping its brackets and backslashes as they are" do
+      html = '<p><a href="/x"><code>][</code></a> <a data-href="mailto:[Run](javascript:alert(1))">Go <code>[</code>]</a> ' \
+             '<a href="/z"><code>[\\]</code>]</a> <a href="/w"><kbd>a</kbd>`<code>b`c</code></a></p>'
+      convert(html).should == "[`][`](https://example.com/x) [Go `[`\\]](mailto:%5BRun%5D(javascript:alert(1))) " \
+                              "[`[\\]`\\]](https://example.com/z) [`a`\\```b`c``](https://example.com/w)"
+    end
+
+    it "writes no link or image inside link text, whatever TeX it holds" do
+      html = '<p><a href="/x"><code>[</code><math alttext="[Run](javascript:alert(1))"></math></a> ' \
+             '<a href="/y"><math alttext="\\[[Run](javascript:alert(1))"></math></a> ' \
+             '<a href="/z"><img class="mwe-math-fallback-image-inline" src="/m.png" alt="![i](javascript:alert(1))"></a></p>'
+      convert(html).should == "[`[`$\\[Run\\](javascript:alert(1))$](https://example.com/x) " \
+                              "[$\\[\\[Run\\](javascript:alert(1))$](https://example.com/y) " \
+                              "[$!\\[i\\](javascript:alert(1))$](https://example.com/z)"
+    end
+
+    it "reads no backtick run longer than Markdown's fence limit as code in link text" do
+      ticks = "`" * 80
+      convert(%(<p><a href="/x"><code>#{ticks}[Run](javascript:alert(1))[</code></a></p>)).should ==
+        "[#{'\\`' * 80}\\[Run\\](javascript:alert(1))\\[](https://example.com/x)"
+      convert(%(<p><a href="/x"><code>#{'`' * 79}[a]</code></a></p>)).should == "[#{ticks} #{'`' * 79}[a] #{ticks}](https://example.com/x)"
+    end
+
+    it "writes no autolink or HTML tag inside link text, whatever TeX it holds" do
+      html = '<p><a data-href="/x"><code>``x``</code><math alttext="&lt;javascript:alert(1)&gt;``"></math></a> ' \
+             '<a data-href="/y"><math alttext="&lt;img src=x onerror=alert(1)&gt;"></math></a> <a href="/z"><math alttext="a &lt; 1"></math></a></p>'
+      convert(html).should == "[``` ``x`` ```$\\<javascript:alert(1)>\\`\\`$](https://example.com/x) " \
+                              "[$\\<img src=x onerror=alert(1)>$](https://example.com/y) [$a < 1$](https://example.com/z)"
+    end
+
+    it "writes no email autolink in text, link text or a player's title, whatever its address starts with" do
+      html = '<p>Mail &lt;0@host.com&gt; or &lt;.a@host.com&gt;, not a &lt; 1</p>' \
+             '<p><a data-href="/x"><code>``x``</code><math alttext="&lt;0@host.com&gt;``"></math></a> ' \
+             '<a href="/y"><code>a</code>&lt;0<code>a`b</code>c@host.com&gt;</a></p><audio src="/a.mp3" title="&lt;0@host.com&gt;"></audio>'
+      convert(html).should == "Mail \\<0@host.com> or \\<.a@host.com>, not a < 1\n\n" \
+                              "[``` ``x`` ```$\\<0@host.com>\\`\\`$](https://example.com/x) [`a`\\<0``a`b``c@host.com>](https://example.com/y)\n\n" \
+                              "[\\<0@host.com>](https://example.com/a.mp3)"
+    end
+
+    it "keeps a space between a code span and a backtick after it, so their runs do not merge" do
+      convert("<p><code>a</code><code>``x</code> <kbd>Ctrl</kbd><kbd>C</kbd> <code>C:\\</code><code>x</code> x`<code>y</code></p>").should ==
+        "`a` ``` ``x ``` `Ctrl` `C` `C:\\` `x` x\\``y`"
+      convert("<p>x`<span>q`</span><code>y</code> <span><code>C:\\</code></span><code>x</code> x`<wbr><code>y</code></p>").should ==
+        "x\\`q\\``y` `C:\\` `x` x\\``y`"
+      convert('<p><sup>`</sup><code>x</code> <span><a href="#x"><b>`</b></a></span><code>y</code> <sup><code>C:\\</code></sup><code>z</code></p>').should ==
+        "\\``x` \\``y` `C:\\` `z`"
+      convert('<p><code>a</code><code>``x</code> <a href="/x"><code>[Run](javascript:alert(1))[</code></a></p>').should ==
+        "`a` ``` ``x ``` [`[Run](javascript:alert(1))[`](https://example.com/x)"
+    end
+
+    it "writes code that ends with a backslash unpadded, so a link or heading of 300 characters keeps its form" do
+      code = "a" * 297 + "\\"
+      convert(%(<a href="/x"><p><code>#{code}</code></p></a>)).should == "[`#{code}`](https://example.com/x)"
+      convert(%(<h2><code>#{code}</code></h2><p>x</p>)).should == "## `#{code}`\n\nx"
+      text = "a" * 295
+      convert(%(<a href="/x"><p>#{text}<sup>`</sup><code>x</code></p></a>)).should == "[#{text}\\``x`](https://example.com/x)"
+      convert(%(<h2>#{text}<sup>`</sup><code>x</code></h2><p>x</p>)).should == "## #{text}\\``x`\n\nx"
+    end
+
+    it "escapes every backtick of a run that would open a code block, and keeps one that opens a code span" do
+      convert("<p>```x<br>y ``z</p>").should == "\\`\\`\\`x\ny \\`\\`z"
+      convert('<p><code>``x</code> <a href="/x"><code>``[Run](javascript:alert(1))[</code></a></p>').should ==
+        "``` ``x ``` [``` ``[Run](javascript:alert(1))[ ```](https://example.com/x)"
+    end
+
+    it "escapes the link, image, autolink or tag that pieces of text side by side would write" do
+      html = '<p>Wow!<a href="/x">x</a> [1]<span>(note)</span> &lt;<span>javascript:alert(1)&gt;</span> &lt;0<code>@h.co&gt;</code> ' \
+             '&lt;<a href="https://b.org/doc">https://b.org/doc</a>&gt;</p>'
+      convert(html).should == "Wow\\![x](https://example.com/x) [1\\](note) \\<javascript:alert(1)> \\<0`@h.co>` <https://b.org/doc>"
+      convert(%q{<p>&lt;<span>a title='</span><a href="/x"><code>'&gt;[Run](javascript:alert(1))[</code></a></p>}).should ==
+        "\\<a title='[`'>[Run](javascript:alert(1))[`](https://example.com/x)"
+      convert('<p>&lt;0<code>a`b</code>c@host.com&gt; <code>&lt;</code>user@example.com&gt; <a href="/x"><code>&lt;</code>user@example.com&gt;</a></p>').should ==
+        "\\<0``a`b``c@host.com> `<`user@example.com> [`<`user@example.com>](https://example.com/x)"
+    end
+
+    it "writes code with a backtick run too long to fence as text" do
+      ticks = "`" * 80
+      convert(%(<p><code>#{ticks}[Run](javascript:alert(1))</code> <code>#{'`' * 79}a</code></p>)).should ==
+        "#{'\\`' * 80}[Run\\](javascript:alert(1)) #{ticks} #{'`' * 79}a #{ticks}"
+    end
+
     it "writes a link whose text is its URL as a bare URL" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
+    end
+
+    it "writes a link whose URL holds Markdown as a link, even when its text is the URL" do
+      html = '<p><a data-href="mailto:[Run](javascript:alert(1))">[Run](javascript:alert(1))</a> ' \
+             '<a href="https://example.org/a`b">https://example.org/a`b</a></p>'
+      convert(html).should == "[\\[Run\\](javascript:alert(1))](mailto:%5BRun%5D(javascript:alert(1))) " \
+                              "[https://example.org/a\\`b](https://example.org/a%60b)"
     end
 
     it "puts images out of link text" do
@@ -201,6 +378,105 @@ RSpec.describe "Markdown conversion" do
       convert('<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/real.jpg" alt="Real">').should == "![Real](https://example.com/real.jpg)"
     end
 
+    it "uses lazy-loading attributes over a placeholder or thumbnail src without a lazy class" do
+      convert('<p>Visible</p><img data-src="/real.jpg" src="/placeholder.gif" alt="Lazy">').should == "Visible\n\n![Lazy](https://example.com/real.jpg)"
+      convert('<p>Visible</p><img data-src="/real.jpg" src="/thumb-small.jpg" alt="Lazy">').should == "Visible\n\n![Lazy](https://example.com/real.jpg)"
+      convert('<img data-src="https://cdn.example.org/photo?id=7" src="/assets/spacer.gif" alt="Photo">').should == "![Photo](https://cdn.example.org/photo?id=7)"
+    end
+
+    it "takes the real image from lazy-loading attributes in priority order, over a placeholder or thumbnail src" do
+      names = %w[data-a-hires data-src-hq data-client-src-hq data-original data-full-src data-original-src data-src data-lazy-src
+                 data-lazy data-lazysrc data-bsrc data-iurl data-thumb data-image data-img data-a-image-source data-fallback-src]
+      names.each do |name|
+        convert(%(<img #{name}="/real.jpg" src="/placeholder-image" alt="Lazy">)).should == "![Lazy](https://example.com/real.jpg)"
+      end
+      convert('<img data-srcset="/small.jpg 100w, /real.jpg 1000w" src="/placeholder-image" alt="Lazy">').should ==
+        "![Lazy](https://example.com/real.jpg)"
+      convert('<img data-src="/second.jpg" data-original="/first.jpg" src="/thumb.jpg" alt="First">').should ==
+        "![First](https://example.com/first.jpg)"
+      convert('<img data-src="portrait.svg" src="/thumb.jpg" alt="Svg"> <img data-src="?image=portrait" src="/thumb.jpg" alt="Query">').should ==
+        "![Svg](https://example.com/dir/portrait.svg) ![Query](https://example.com/dir/page?image=portrait)"
+    end
+
+    it "prefers a high-resolution attribute to a thumbnail or a dynamic image map" do
+      convert('<img class="lazy" src="/thumb.jpg" data-thumb="/small.jpg" data-hi-res-src="/large.jpg" alt="Photo">').should ==
+        "![Photo](https://example.com/large.jpg)"
+      %w[data-original data-a-hires].each do |name|
+        convert(%(<img class="lazy" src="/thumb.jpg" #{name}="/large.jpg" data-a-dynamic-image='{"/small.jpg":[100,100]}' alt="Photo">)).should ==
+          "![Photo](https://example.com/large.jpg)"
+      end
+      convert(%(<img src="/thumb.jpg" data-thumb="/small.jpg" data-a-dynamic-image='{"/large.jpg":[600,600]}' alt="Photo">)).should ==
+        "![Photo](https://example.com/large.jpg)"
+    end
+
+    it "takes the largest of Amazon's dynamic image sizes" do
+      sizes = '{"https://m.media-amazon.com/I/a._SX300_.jpg":[300,300],"https://m.media-amazon.com/I/a._SX679_.jpg":[679,679]}'
+      convert(%(<img src="https://m.media-amazon.com/I/a._SX300_.jpg" data-a-dynamic-image='#{sizes}' alt="Mug">)).should ==
+        "![Mug](https://m.media-amazon.com/I/a._SX679_.jpg)"
+      convert(%(<img src="/a.jpg" data-a-dynamic-image='{"javascript:alert(1)":[9,9]}' alt="A"> <img src="/b.jpg" data-a-dynamic-image="{oops" alt="B">)).should ==
+        "![A](https://example.com/a.jpg) ![B](https://example.com/b.jpg)"
+    end
+
+    it "keeps src when the lazy-loading attributes hold no image location" do
+      html = '<p><img data-src="false" src="/a.jpg" alt="A"> <img data-src="Facebook" src="/b.jpg" alt="B"> ' \
+             '<img data-image="322851" data-url="/c-other.jpg" src="/c.jpg" alt="C"></p>'
+      convert(html).should == "![A](https://example.com/a.jpg) ![B](https://example.com/b.jpg) ![C](https://example.com/c.jpg)"
+    end
+
+    it "keeps src when a lazy srcset or a dynamic image map holds no image location" do
+      %w[false 123].each do |value|
+        convert(%(<img class="lazy" src="/real.jpg" data-srcset="#{value} 2x" alt="Photo">)).should == "![Photo](https://example.com/real.jpg)"
+        convert(%(<img src="/real.jpg" data-srcset="#{value} 2x" alt="Photo">)).should == "![Photo](https://example.com/real.jpg)"
+        convert(%(<img src="/real.jpg" data-a-dynamic-image="{&quot;#{value}&quot;:[600,600]}" alt="Photo">)).should ==
+          "![Photo](https://example.com/real.jpg)"
+      end
+    end
+
+    it "takes no spacer file, word or fragment from the lazy-loading attributes" do
+      convert('<img src="/real.jpg" data-src="/spacer.gif" alt="Photo">').should == "![Photo](https://example.com/real.jpg)"
+      convert('<img class="lazyload" src="/real.jpg" data-src="/img/blank.gif" alt="Photo">').should == "![Photo](https://example.com/real.jpg)"
+      convert('<img src="/placeholder.gif" data-src="false" data-original="/photo.jpg" alt="Photo">').should ==
+        "![Photo](https://example.com/photo.jpg)"
+      convert('<img class="lazyload" data-src="#" data-original="/photo.jpg" alt="Photo">').should == "![Photo](https://example.com/photo.jpg)"
+    end
+
+    it "takes any file name or path from the lazy-loading attributes of a marked image" do
+      html = '<p><img class="lazyload" data-src="logo.svg" alt="Logo"> <img class="lazyload" data-src="/my photo.jpg" alt="Photo"> ' \
+             '<img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="false" data-original="chart.svg" alt="Chart"> ' \
+             '<img class="lazyload" data-src="javascript:alert(1)" alt="Script"></p>'
+      convert(html).should == "![Logo](https://example.com/dir/logo.svg) ![Photo](https://example.com/my%20photo.jpg) " \
+                              "![Chart](https://example.com/dir/chart.svg)"
+    end
+
+    it "takes a query or an endpoint from a marked image's lazy-loading attributes" do
+      html = '<p><img class="lazyload" data-src="?image=7" alt="Query"> <img class="lazyload" data-src="image?id=7" alt="Endpoint"> ' \
+             '<img class="lazyload" src="/thumb.jpg" data-src="false" alt="Word"></p>'
+      convert(html).should == "![Query](https://example.com/dir/page?image=7) ![Endpoint](https://example.com/dir/image?id=7) " \
+                              "![Word](https://example.com/thumb.jpg)"
+    end
+
+    it "takes a bare relative URL from a marked image without src, but no word a template wrote for a missing value" do
+      html = '<p><img class="lazyload" data-src="portrait" alt="Portrait"> <img class="lazyload" data-src="undefined" data-original="hero" alt="Hero"> ' \
+             '<img class="lazyload" src="/thumb.jpg" data-src="portrait" alt="Thumb"></p>'
+      convert(html).should == "![Portrait](https://example.com/dir/portrait) ![Hero](https://example.com/dir/hero) " \
+                              "![Thumb](https://example.com/thumb.jpg)"
+    end
+
+    it "takes the first bare relative URL from a marked image whose src is empty, before a later path" do
+      html = '<p><img class="lazyload" src="" data-src="portrait" alt="Empty"> ' \
+             '<img class="lazyload" data-src="portrait" data-lazy-src="/fallback.jpg" alt="First"></p>'
+      convert(html).should == "![Empty](https://example.com/dir/portrait) ![First](https://example.com/dir/portrait)"
+    end
+
+    it "reads a marked image's lazy-loading file name with a query, in linear time" do
+      convert('<img class="lazyload" data-src="logo.svg?text=hello world" alt="Logo">').should ==
+        "![Logo](https://example.com/dir/logo.svg?text=hello%20world)"
+
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      convert(%(<img class="lazyload" data-src="#{'a.svg?' * 16_000} b" alt="Photo">)).should start_with("![Photo](")
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 0.5
+    end
+
     it "uses the <noscript> copy of a lazy image once, on either side of the placeholder" do
       html = '<p><noscript><img src="/a.jpg" alt="Harbour"></noscript>' \
              '<img class="lazyload" src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" data-src="/a.jpg" alt="Harbour">' \
@@ -220,14 +496,16 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Text"
     end
 
-    it "uses the alt text of emoji images" do
+    it "uses the alt text of emoji images, escaped like any text" do
       convert('<p>Done <img class="wp-smiley" src="/e.png" alt="🎉"></p>').should == "Done 🎉"
+      convert('<p><img class="emoji" src="/e.png" alt="`"><a href="/x"><code>[Run](javascript:alert(1))[</code></a></p>').should ==
+        "\\`[`[Run](javascript:alert(1))[`](https://example.com/x)"
     end
 
     it "drops repeated responsive variants of one image" do
       html = '<figure><img src="/a-small.jpg" alt="Harbour at dawn"><figcaption>Credit</figcaption>' \
              '<img src="/a-large.jpg" alt="Harbour at dawn"><figcaption>Credit</figcaption></figure>'
-      convert(html).should == "![Harbour at dawn](https://example.com/a-small.jpg)\n\nCredit"
+      convert_content(html).should == "![Harbour at dawn](https://example.com/a-small.jpg)\n\nCredit"
     end
 
     it "drops image CDN size, quality and version parameters" do
@@ -302,7 +580,7 @@ RSpec.describe "Markdown conversion" do
       html = '<h2>Trusted by</h2><ul><li><img src="/acme.png" alt="Acme"></li><li><img src="/globex.png" alt="Globex"></li></ul>' \
              '<div><img src="/acme.png" alt="Acme"><img src="/globex.png" alt="Globex"></div>' \
              '<p>Rated <img src="/star.png" alt="star"><img src="/star.png" alt="star"> by 2,000 teams</p>'
-      convert(html).should == "## Trusted by\n\n- ![Acme](https://example.com/acme.png)\n- ![Globex](https://example.com/globex.png)\n\n" \
+      convert_content(html).should == "## Trusted by\n\n- ![Acme](https://example.com/acme.png)\n- ![Globex](https://example.com/globex.png)\n\n" \
                               "Rated ![star](https://example.com/star.png)![star](https://example.com/star.png) by 2,000 teams"
     end
 
@@ -318,20 +596,20 @@ RSpec.describe "Markdown conversion" do
       html = %w[Member Moderator Member].each_with_index.map do |role, i|
         "<div><img src=\"/#{role.downcase}.png\" alt=\"#{role}\"><img src=\"/online.png\" alt=\"\"></div><p>Post #{i + 1}</p>"
       end.join
-      convert(html).should == "![Member](https://example.com/member.png)![](https://example.com/online.png)\n\nPost 1\n\n" \
+      convert_content(html).should == "![Member](https://example.com/member.png)![](https://example.com/online.png)\n\nPost 1\n\n" \
                               "![Moderator](https://example.com/moderator.png)\n\nPost 2\n\n![Member](https://example.com/member.png)\n\nPost 3"
     end
 
     it "keeps nested list markers when it drops a repeated image" do
       html = '<p><img src="https://ex.com/avatar.png"> Forum</p><ol><li><p>First post</p></li>' \
              '<li><ol><li><ul><li><img src="https://ex.com/avatar.png"><p>Reply</p></li></ul></li></ol></li></ol>'
-      convert(html).should == "![](https://ex.com/avatar.png) Forum\n\n1. First post\n\n   1. - Reply"
+      convert_content(html).should == "![](https://ex.com/avatar.png) Forum\n\n1. First post\n\n   1. - Reply"
     end
 
     it "does not remove repeated images from code blocks, nested ones included" do
       code = "<pre><code>![](https://example.com/logo.png)\n\n\nend</code></pre>"
       html = %(<p><img src="/logo.png" alt=""></p>#{code}<ul><li><img src="/logo.png" alt=""></li><li>Use this:#{code}</li></ul>)
-      convert(html).should == "![](https://example.com/logo.png)\n\n```\n![](https://example.com/logo.png)\n\n\nend\n```\n\n" \
+      convert_content(html).should == "![](https://example.com/logo.png)\n\n```\n![](https://example.com/logo.png)\n\n\nend\n```\n\n" \
                               "- Use this:\n\n  ```\n  ![](https://example.com/logo.png)\n\n\n  end\n  ```"
     end
 
@@ -350,7 +628,7 @@ RSpec.describe "Markdown conversion" do
         extract(html).should == "# Hiking boots\n\n" \
                                 "- ### [Trail boot](https://example.com/p/1)\n\n  Waterproof leather for long days on rocky ground.\n\n" \
                                 "- ### [Ridge runner](https://example.com/p/2)\n\n  A light mesh boot for fast summer hikes.\n\n" \
-                                "- ![Boots on a mountain trail](https://example.com/lookbook-small.jpg)"
+                                "- [![Boots on a mountain trail](https://example.com/lookbook-small.jpg)](https://example.com/lookbook.jpg)"
       end
 
       it "moves a card's list marker past a nested list of thumbnails" do
@@ -373,10 +651,20 @@ RSpec.describe "Markdown conversion" do
                '<div><a href="/c/4"><img src="/4.jpg" alt="Harbour wall at dawn"></a><p><a href="/c/4">Oct 1, 2026</a></p></div>' \
                '<div><a href="/c/3"><img src="/3.jpg" alt="Globex conveyor belts"></a><h4><a href="/c/3">Globex</a></h4></div></main>'
         extract(html).should == "# Case studies\n\nHow our customers ship faster with our software.\n\n" \
-                                "![Acme warehouse floor](https://example.com/1.jpg)\n\nAcme cut picking time in half.\n\n" \
-                                "![Canvas tote bag](https://example.com/2.jpg)\n\n[$40](https://example.com/c/2)\n\n" \
-                                "![Harbour wall at dawn](https://example.com/4.jpg)\n\n[Oct 1, 2026](https://example.com/c/4)\n\n" \
-                                "![Globex conveyor belts](https://example.com/3.jpg)"
+                                "[![Acme warehouse floor](https://example.com/1.jpg)](https://example.com/c/1)\n\nAcme cut picking time in half.\n\n" \
+                                "[![Canvas tote bag](https://example.com/2.jpg)](https://example.com/c/2)\n\n[$40](https://example.com/c/2)\n\n" \
+                                "[![Harbour wall at dawn](https://example.com/4.jpg)](https://example.com/c/4)\n\n[Oct 1, 2026](https://example.com/c/4)\n\n" \
+                                "[![Globex conveyor belts](https://example.com/3.jpg)](https://example.com/c/3)"
+      end
+
+      it "keeps the destination of a link made only of an image, in a heading too" do
+        extract('<p>Portrait</p><a href="/full"><img src="/thumb.jpg" alt="Portrait"></a>')
+          .should == "Portrait\n\n[![Portrait](https://example.com/thumb.jpg)](https://example.com/full)"
+        extract('<h1><a href="/manual"><img src="/title.jpg" alt="Manual"></a></h1><p>Instructions follow</p>')
+          .should == "[![Manual](https://example.com/title.jpg)](https://example.com/manual)\n\nInstructions follow"
+        Nokodown.to_markdown('<p>Portrait</p><a href="/full"><img src="/thumb.jpg" alt="Portrait"></a>',
+                             url: "https://example.com/", main_content: false, title: false)
+                .should == "Portrait\n\n[![Portrait](https://example.com/thumb.jpg)](https://example.com/full)"
       end
 
       it "keeps article images unless a short alt repeats a text link to the same page" do
@@ -406,7 +694,8 @@ RSpec.describe "Markdown conversion" do
 
         markdown.should include("![](https://example.com/media/lagoon.jpg)")
         markdown.should include("Start here: [Tides explained](https://example.com/tides)")
-        markdown.should include("Or: ![Map of the Severn estuary](https://example.com/severn.jpg) [Severn guide](https://example.com/severn)")
+        markdown.should include("Or: [![Map of the Severn estuary](https://example.com/severn.jpg)](https://example.com/severn) " \
+                                "[Severn guide](https://example.com/severn)")
       end
 
       it "drops images marked decorative, but not the ticks of a comparison table" do
@@ -606,6 +895,21 @@ RSpec.describe "Markdown conversion" do
         "| Key | Value |\n| --- | --- |\n| a\\|b | 1 |"
     end
 
+    it "keeps a backslash before a pipe in a table cell" do
+      convert('<table><tr><th>Pattern</th></tr><tr><td><code>a\|b</code></td></tr></table>').should ==
+        "| Pattern |\n| --- |\n| `a\\\\|b` |"
+      convert('<table><tr><th>Key</th><th>Value</th></tr><tr><td>a\|b</td><td>1</td></tr></table>').should ==
+        "| Key | Value |\n| --- | --- |\n| a\\\\\\|b | 1 |"
+    end
+
+    it "escapes the pipes of a table nested in a cell once, for the outer table" do
+      inner = '<table><tr><th>I</th></tr><tr><td><code>a|b</code> x\|y</td></tr></table>'
+      convert("<table><tr><th>O</th></tr><tr><td>#{inner}</td></tr></table>").should ==
+        "| O |\n| --- |\n| \\| I \\| \\| --- \\| \\| `a\\|b` x\\\\\\|y \\| |"
+      convert("<table><tr><th>O</th></tr><tr><td><table><tr><th>M</th></tr><tr><td>#{inner}</td></tr></table></td></tr></table>").should ==
+        "| O |\n| --- |\n| \\| M \\| \\| --- \\| \\| \\| I \\| \\| --- \\| \\| `a\\|b` x\\\\\\|y \\| \\| |"
+    end
+
     it "carries rowspans down and leaves colspans blank" do
       html = "<table><thead><tr><th>Group</th><th>Item</th><th>Qty</th></tr></thead>" \
              '<tr><td rowspan="2">Fruit</td><td>Apple</td><td>3</td></tr><tr><td>Pear</td><td>5</td></tr>' \
@@ -616,6 +920,29 @@ RSpec.describe "Markdown conversion" do
     it "unwraps layout tables" do
       convert('<table role="presentation"><tr><td><p>Left column</p></td><td><p>Right column</p></td></tr></table>').should ==
         "Left column\n\nRight column"
+    end
+
+    it "keeps players in layout table cells" do
+      convert('<table><tr><td><video src="/clip.mp4"></video></td></tr></table>').should == "[Video](https://example.com/clip.mp4)"
+      html = '<table><tr><td>Intro</td><td><audio src="/a.mp3"></audio></td></tr>' \
+             '<tr><td><p>Outro</p></td><td><video src="/v.mp4"></video></td></tr></table>'
+      convert(html).should == "Intro\n\n[Audio](https://example.com/a.mp3)\n\nOutro\n\n[Video](https://example.com/v.mp4)"
+    end
+
+    it "does not count a cell holding a player as blank" do
+      row = '<tr><td>Talk</td><td><video src="/talk.mp4"></video></td><td>12 min</td></tr>'
+      convert("<table>#{row * 4}</table>").should start_with("| Talk | [Video](https://example.com/talk.mp4) | 12 min |")
+    end
+
+    it "renders a single column under a header cell or a caption as a table" do
+      convert("<table><tr><th>Col</th></tr><tr><td>a|b</td></tr></table>").should == "| Col |\n| --- |\n| a\\|b |"
+      convert("<table><caption>Sizes</caption><tr><td>S</td></tr><tr><td>M</td></tr></table>").should ==
+        "Sizes\n\n| S |\n| --- |\n| M |"
+      Nokodown.to_markdown("<table><tr><th>Col</th></tr><tr><td>a|b</td></tr></table>").should == "| Col |\n| --- |\n| a\\|b |"
+    end
+
+    it "unwraps a single column with neither header cell nor caption" do
+      convert("<table><tr><td>One</td></tr><tr><td>Two</td></tr></table>").should == "One\n\nTwo"
     end
 
     it "keeps the caption" do
@@ -630,7 +957,7 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "keeps one rule between blocks" do
-      convert("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "a\n\n---\n\nb"
+      convert_content("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "a\n\n---\n\nb"
     end
 
     it "renders details with a bold summary" do
@@ -642,16 +969,115 @@ RSpec.describe "Markdown conversion" do
         "[Demo video](https://www.youtube.com/watch?v=dQw4w9WgXcQ)"
     end
 
+    it "links an embed without a title as a video, and only from a video host" do
+      convert('<p>Watch</p><iframe src="https://player.vimeo.com/video/123"></iframe>').should ==
+        "Watch\n\n[Video](https://player.vimeo.com/video/123)"
+      convert('<p>Watch</p><iframe src="mailto:x//player.vimeo.com/video/[Run](javascript:alert(1))"></iframe>').should == "Watch"
+      convert('<p>Watch</p><iframe src="https://evil.example/?u=//www.youtube.com/embed/x"></iframe>').should == "Watch"
+      convert('<p>Watch</p><iframe src="https://player.vimeo.com/video/1?q=[Run](javascript:alert(1))"></iframe>').should ==
+        "Watch\n\n[Video](https://player.vimeo.com/video/1?q=%5BRun%5D(javascript:alert(1)))"
+    end
+
+    it "links native video and audio players to the file they play" do
+      html = '<p>Clip:</p><video controls src="/clip.mp4" title="Demo clip"></video>' \
+             '<video controls><source src="/b.webm">Your browser does not support video.</video>' \
+             '<audio controls src="/a.mp3"></audio>'
+      convert(html).should == "Clip:\n\n[Demo clip](https://example.com/clip.mp4)\n\n[Video](https://example.com/b.webm)\n\n" \
+                              "[Audio](https://example.com/a.mp3)"
+    end
+
+    it "escapes the title of a player like any text" do
+      convert('<p>Listen: <span><audio controls src="/ep.mp3" title="Episode 1] \\ Live"></audio></span> now</p>').should ==
+        "Listen:\n\n[Episode 1\\] \\ Live](https://example.com/ep.mp3)\n\nnow"
+      convert('<audio src="/a.mp3" title="&lt;img src=x onerror=alert(1)&gt; *loud* [b\\"></audio>').should ==
+        "[\\<img src=x onerror=alert(1)> \\*loud\\* \\[b\\\\](https://example.com/a.mp3)"
+    end
+
+    it "skips muted background videos, previews inside a link and players without a file" do
+      html = '<p>Hero</p><video autoplay muted loop src="/loop.mp4"></video>' \
+             '<a href="/watch"><video src="/preview.mp4"></video>Watch</a><video src="blob:https://example.com/1"></video><audio controls></audio>'
+      convert(html).should == "Hero\n\n[Watch](https://example.com/watch)"
+    end
+
+    it "keeps the thumbnail and link of a preview player inside a link" do
+      html = '<p>Watch film</p><a href="/watch"><video src="/preview.mp4"><img src="/thumb.jpg" alt="Thumb"></video></a>'
+      convert(html).should == "Watch film\n\n[![Thumb](https://example.com/thumb.jpg)](https://example.com/watch)"
+      Nokodown.to_markdown(html, url: "https://example.com/").should ==
+        "Watch film\n\n[![Thumb](https://example.com/thumb.jpg)](https://example.com/watch)"
+    end
+
+    it "drops the thumbnail of a hidden preview player inside a link" do
+      ['hidden', 'aria-hidden="true"', 'style="display: none"', 'class="hidden"'].each do |hidden|
+        convert(%(<p>Visible</p><a href="/watch"><video #{hidden} src="/preview.mp4"><img src="/thumb.jpg" alt="Hidden"></video></a>)).should == "Visible"
+        convert(%(<p>Visible</p><a href="/listen"><audio #{hidden} src="/ep.mp3"><img src="/cover.jpg" alt="Hidden"></audio></a>)).should == "Visible"
+      end
+    end
+
+    it "uses a <source> of the player itself, not one of a player nested in it" do
+      convert('<video><video><source src="/inner.mp4"></video><source src="/outer.mp4"></video>').should ==
+        "[Video](https://example.com/outer.mp4)"
+    end
+
+    it "finds the files of nested players in linear time" do
+      players = {
+        "nested" => "#{'<video src="/v.mp4">' * 20_000}leaf#{'</video>' * 20_000}",
+        "in nested divs" => "#{'<div><video src="/v.mp4"></video>' * 10_000}leaf#{'</div>' * 10_000}",
+        "in nested links" => "#{'<div><a href="/x"><video src="/v.mp4"></video></a>' * 10_000}leaf#{'</div>' * 10_000}"
+      }
+      players.each_value do |html|
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        convert(html)
+        (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      end
+    end
+
+    it "keeps a player and its caption in the main content" do
+      prose = "<p>#{'Tidal lagoons hold water behind a wall at high tide, then release it through turbines. ' * 4}</p>"
+      html = "<article><h1>Lagoon</h1>#{prose}<div class='media'><video controls src='/clip.mp4'></video>" \
+             "<p>Recorded demonstration.</p></div>#{prose}</article>"
+
+      Nokodown.to_markdown(html, url: "https://example.com/", title: false).should include(
+        "\n\n[Video](https://example.com/clip.mp4)\n\nRecorded demonstration.\n\n"
+      )
+    end
+
+    it "keeps players that sit with only links or other players" do
+      prose = "<p>#{'Tidal lagoons hold water behind a wall at high tide, then release it through turbines. ' * 4}</p>"
+      html = "<article><h1>Lagoon</h1>#{prose}<div><video controls src='/clip.mp4'></video><p><a href='/clip.mp4'>Download</a></p></div>" \
+             "<div><div><video controls src='/tide.mp4'></video></div><div><audio controls src='/waves.mp3'></audio></div></div>#{prose}</article>"
+
+      Nokodown.to_markdown(html, url: "https://example.com/", title: false).should include(
+        "\n\n[Video](https://example.com/clip.mp4)\n\n[Download](https://example.com/clip.mp4)\n\n" \
+        "[Video](https://example.com/tide.mp4)\n\n[Audio](https://example.com/waves.mp3)\n\n"
+      )
+    end
+
+    it "still drops a player in furniture" do
+      prose = "<p>#{'Tidal lagoons hold water behind a wall at high tide, then release it through turbines. ' * 4}</p>"
+      html = "<article><h1>Lagoon</h1>#{prose}<div class='sidebar-media'><video controls src='/promo.mp4'></video>" \
+             "<p>Watch our promo.</p></div>#{prose}</article>"
+
+      Nokodown.to_markdown(html, url: "https://example.com/", title: false).should_not include("promo")
+    end
+
     it "uses the TeX source of MathML" do
       math = '<math><semantics><mi>x</mi><annotation encoding="application/x-tex">x^2</annotation></semantics></math>'
       convert("<p>Area #{math}</p>").should == "Area $x^2$"
+    end
+
+    it "writes raw TeX so that nothing in it reaches past it, and keeps its backslashes and braces" do
+      html = '<p><math alttext="`"></math><a href="/x"><code>[Run](javascript:alert(1))[</code></a></p>' \
+             '<p><math alttext="\\frac{a}{b} \\{x\\} \\` 0&lt;x&lt;1 [a](b)"></math> ' \
+             '<img class="mwe-math-fallback-image-inline" src="/m.png" alt="{\\displaystyle a&lt;b`}"></p>'
+      convert(html).should == "$\\`$[`[Run](javascript:alert(1))[`](https://example.com/x)\n\n" \
+                              "$\\frac{a}{b} \\{x\\} \\` 0\\<x<1 [a\\](b)$ $a\\<b\\`$"
     end
 
     it "shortens a quote that repeats an earlier post to its opening sentence, without links" do
       post = "The stove boils a litre in three minutes on a full canister. It is a bit slower in the cold, " \
              "and the piezo lighter fails above 3000 metres, so carry matches."
       html = "<p>#{post}</p><blockquote><p><a href=\"/posts/1\">Sam said:</a></p><p>#{post}</p></blockquote><p>Same here.</p>"
-      convert(html).should ==
+      convert_content(html).should ==
         "#{post}\n\n> Sam said:\n>\n> The stove boils a litre in three minutes on a full canister. …\n\nSame here."
     end
 
@@ -666,13 +1092,13 @@ RSpec.describe "Markdown conversion" do
       reply = "Mine takes four minutes. The wind matters more than the cold, so I always bring a windscreen along."
       html = "<p>#{post}</p><blockquote><p>#{post}</p></blockquote><p>#{reply}</p>" \
              "<blockquote><p>Ann wrote:</p><blockquote><p>#{post}</p></blockquote><p>#{reply}</p></blockquote><p>Agreed.</p>"
-      convert(html).should == "#{post}\n\n> #{post}\n\n#{reply}\n\n> Ann wrote:\n>\n> #{reply} …\n\nAgreed."
+      convert_content(html).should == "#{post}\n\n> #{post}\n\n#{reply}\n\n> Ann wrote:\n>\n> #{reply} …\n\nAgreed."
     end
 
     it "closes the bold a shortened quote cuts through" do
       post = "The stove boils a full litre of water in three minutes on a canister. It is a bit slower in the cold, " \
              "and the piezo lighter fails above 3000 metres, so carry matches."
-      convert("<p><b>#{post}</b></p><blockquote><p><b>#{post}</b></p></blockquote>").should ==
+      convert_content("<p><b>#{post}</b></p><blockquote><p><b>#{post}</b></p></blockquote>").should ==
         "**#{post}**\n\n> **The stove boils a full litre of water in three minutes on a canister.** …"
     end
 
@@ -705,16 +1131,55 @@ RSpec.describe "Markdown conversion" do
     it "drops a section rendered a second time, but keeps a single repeated paragraph" do
       first = "The stove boils a litre in three minutes on a full canister, and a little slower in cold mountain weather."
       second = "It weighs 85 grams and folds into its own pot, so it takes almost no room at all in a pack or a bike bag."
-      convert("<div><p>#{first}</p><p>#{second}</p></div><div><p>#{first}</p><p>#{second}</p></div>").should == "#{first}\n\n#{second}"
-      convert("<p>#{first}</p><p>Day two.</p><p>#{first}</p>").should == "#{first}\n\nDay two.\n\n#{first}"
+      convert_content("<div><p>#{first}</p><p>#{second}</p></div><div><p>#{first}</p><p>#{second}</p></div>").should == "#{first}\n\n#{second}"
+      convert_content("<p>#{first}</p><p>Day two.</p><p>#{first}</p>").should == "#{first}\n\nDay two.\n\n#{first}"
     end
 
-    it "drops the placeholder a script-loaded widget leaves, and its heading" do
-      convert("<p>Fits a 1 litre pot.</p><h2>Questions &amp; Answers</h2><div>Loading Questions...</div>").should == "Fits a 1 litre pot."
+    it "drops the placeholder a script-loaded widget leaves, and its heading, from the main content" do
+      Nokodown.to_markdown("<body><p>Fits a 1 litre pot.</p><h2>Questions &amp; Answers</h2><div>Loading Questions...</div></body>", title: false).should == "Fits a 1 litre pot."
     end
 
-    it "drops a trailing heading left without content" do
-      convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
+    it "drops a trailing heading left without content from the main content" do
+      Nokodown.to_markdown("<body><h2>Intro</h2><p>Text</p><h2>Related</h2></body>", title: false).should == "## Intro\n\nText"
+    end
+
+    it "drops boilerplate lines from the main content" do
+      Nokodown.to_markdown("<body><p>Text</p><p>Advertisement</p><p>★★★</p></body>", title: false).should == "Text"
+    end
+
+    it "keeps headings without content when converting the whole page" do
+      convert("<p>First</p><h1>Second</h1>").should == "First\n\n# Second"
+      convert("<h2>A</h2><h2>B</h2>").should == "## A\n\n## B"
+      convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText\n\n## Related"
+    end
+
+    it "keeps boilerplate lines and symbols but drops stray punctuation when converting the whole page" do
+      convert("<p>Text</p><p>Advertisement</p><p>★★★</p><p>•</p><p>...</p>").should == "Text\n\nAdvertisement\n\n★★★"
+    end
+
+    it "keeps an image repeated elsewhere, and the symbols beside it, when converting the whole page" do
+      convert('<img src="/a.jpg"><p><img src="/a.jpg"><br>★★★</p>').should ==
+        "![](https://example.com/a.jpg)\n\n![](https://example.com/a.jpg)\n★★★"
+    end
+
+    it "keeps everything selected but stray punctuation when converting the whole page" do
+      convert("<main><h1>Sample</h1><button>Download paper</button><dialog open>Visible dialog</dialog><dialog>Closed</dialog></main>")
+        .should == "# Sample\n\nDownload paper\n\nVisible dialog"
+      convert("<button>Download paper</button><dialog open>Visible dialog</dialog>").should == "Download paper\n\nVisible dialog"
+      convert('<form><label for="n">Note</label> <textarea id="n">Prefilled text</textarea></form>').should == "Note Prefilled text"
+      convert("<h2>Size</h2><h2>Size</h2><h2>Size</h2>").should == "## Size\n\n## Size\n\n## Size"
+      convert("<h3>Mug</h3><h3>Mug</h3><h3>Cup</h3>").should == "### Mug\n\n### Mug\n\n### Cup"
+      convert("<p>First line</p><p>First line</p><p>Third line</p>").should == "First line\n\nFirst line\n\nThird line"
+      convert('<div><img src="/front.jpg" alt="Product photo"></div><div><img src="/back.jpg" alt="Product photo"></div>').should ==
+        "![Product photo](https://example.com/front.jpg)\n\n![Product photo](https://example.com/back.jpg)"
+      convert("<hr>").should == "---"
+      convert("<hr><p>a</p><hr><hr><p>b</p><hr>").should == "---\n\na\n\n---\n\n---\n\nb\n\n---"
+      convert("<p>Text</p><p>•</p><p>...</p>").should == "Text"
+    end
+
+    it "removes what a reader cannot see when converting the whole page" do
+      convert('<p>Shown</p><script>alert(1)</script><style>p{}</style><div hidden>Hidden</div><p style="display:none">None</p>' \
+              '<form role="search"><input type="search"><button>Search</button></form>').should == "Shown\n\nSearch"
     end
 
     it "keeps a trailing list of linked titles" do

@@ -35,8 +35,11 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
-      # Card grids repeat the same class list hundreds of times.
-      @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
+      # Card grids repeat the same class list hundreds of times, and class
+      # names repeat across lists. No furniture pattern spans a space, so a
+      # list is furniture when one of its names is.
+      @furniture_tokens = Hash.new { |cache, token| cache[token] = Patterns.furniture?(token) }
+      @furniture = Hash.new { |cache, signature| cache[signature] = signature.split.any? { |token| @furniture_tokens[token] } }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
       @signature_only = Hash.new { |cache, signature| cache[signature] = signature_only?(signature) }
       @notes = Set.new
@@ -188,12 +191,12 @@ module Nokodown
     # Only a signature that is furniture for its disclaimer name alone can be
     # a note; "ad-disclaimer" or "footer__disclaimer" stays furniture.
     def disclaimer_only?(signature)
-      signature.match?(Patterns::DISCLAIMER) && !signature.gsub(DISCLAIMER_WORD, " ").match?(Patterns::PAGE_FURNITURE)
+      signature.match?(Patterns::DISCLAIMER) && !Patterns.furniture?(signature.gsub(DISCLAIMER_WORD, " "))
     end
 
     # Furniture for its signature name alone ("signature", "member-signature").
     def signature_only?(signature)
-      signature.match?(Patterns::SIGNATURE) && !signature.gsub(SIGNATURE_WORD, " ").match?(Patterns::PAGE_FURNITURE)
+      signature.match?(Patterns::SIGNATURE) && !Patterns.furniture?(signature.gsub(SIGNATURE_WORD, " "))
     end
 
     # A member's signature is named after the post ("message-signature") or
@@ -240,7 +243,7 @@ module Nokodown
       return false if signature.match?(Patterns::PLACE) || signature.gsub(DRAWER, " ").match?(Patterns::NOISE)
       return false if node.css("p").size < 2
 
-      @prose_blocks.merge(node["class"].to_s.split.select { |token| token.downcase.match?(Patterns::PAGE_FURNITURE) })
+      @prose_blocks.merge(node["class"].to_s.split.select { |token| @furniture_tokens[token.downcase] })
       true
     end
 
@@ -250,7 +253,7 @@ module Nokodown
     # is link text, so all characters count.
     def card_classes
       min_chars = @stats.chars(@body) * CARD_RUN_SHARE
-      runs = @body.css("[class]").group_by { |node| node["class"] }
+      runs = Dom.elements(@body).select { |node| node.key?("class") }.group_by { |node| node["class"] }
       runs.each_with_object(Set.new) do |(classes, nodes), cards|
         cards << classes if card_run?(classes, nodes, min_chars)
       end

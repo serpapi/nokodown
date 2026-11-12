@@ -14,6 +14,11 @@ module Nokodown
 
     # Elements that stop Readability from treating a div as a paragraph.
     PARAGRAPH_BREAKERS = Set.new(%w[blockquote dl div img ol p pre table ul]).freeze
+    PARAGRAPH_BREAKER_SELECTOR = PARAGRAPH_BREAKERS.to_a.join(", ").freeze
+
+    # The elements the HTML parser reopens after a block cuts them.
+    FORMATTING = Set.new(%w[a b big code em font i nobr s small strike strong tt u]).freeze
+    FORMATTING_XPATH = FORMATTING.map { |name| ".//#{name}" }.join("|").freeze
 
     CODE = %w[pre code].freeze
 
@@ -23,6 +28,7 @@ module Nokodown
     # Every character [[:space:]] matches. tr/squeeze is several times faster
     # than a regex gsub on large subtrees.
     UNICODE_SPACES = "\t\n\v\f\r\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000"
+    ASCII_SPACES = "\t\n\v\f\r"
 
     # Nokolexbor returns a new Ruby object every time a node is read, so nodes
     # cannot be hash keys. Elements get a numbered attribute to key on instead.
@@ -33,6 +39,8 @@ module Nokodown
     # a run of unclosed "[" is not rescanned from each one.
     ARBITRARY_VALUE = /\[(?:[^\s\[\]]|\[[^\s\[\]]*+\])*+\]/.freeze
     CSS_MODULE_HASH = /__(?=[\w-]{0,4}[A-Z\d])[\w-]{5}(?![\w-])/.freeze
+    CAMEL_CASE = /(?<=[a-z\d])(?=[A-Z])/.freeze
+    SIGNATURES = :nokodown_signatures
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
@@ -46,16 +54,59 @@ module Nokodown
 
     def assign_keys(root)
       root[KEY] = "0"
-      root.css("*").each_with_index { |node, index| node[KEY] = (index + 1).to_s }
+      elements(root).each_with_index { |node, index| node[KEY] = (index + 1).to_s }
     end
 
     def key(node)
       node[KEY]
     end
 
+    # The elements under root in document order, as css("*") lists them.
+    # Lexbor's selector engine took several times longer to list them
+    # than walking the tree from Ruby.
+    def elements(root)
+      found = []
+      stack = []
+      child = root.last_element_child
+      while child
+        stack << child
+        child = child.previous_element
+      end
+      until stack.empty?
+        node = stack.pop
+        found << node
+        child = node.last_element_child
+        while child
+          stack << child
+          child = child.previous_element
+        end
+      end
+      found
+    end
+
+    # Root and the elements under it, children before their parent, in the
+    # order Node#traverse yields them. Walking the element pointers skips
+    # the text nodes and the NodeSet traverse builds for every element.
+    def elements_bottom_up(root)
+      found = []
+      stack = [[root, root.first_element_child]]
+      until stack.empty?
+        entry = stack.last
+        child = entry[1]
+        if child
+          entry[1] = child.next_element
+          stack << [child, child.first_element_child]
+        else
+          stack.pop
+          found << entry[0]
+        end
+      end
+      found
+    end
+
     def mark_as_thread(node)
       node[THREAD] = "1"
-      node.css("*").each { |descendant| descendant[THREAD] = "1" }
+      elements(node).each { |descendant| descendant[THREAD] = "1" }
     end
 
     def thread?(node)
@@ -63,17 +114,38 @@ module Nokodown
     end
 
     def thread_post?(node)
-      thread?(node) && signature(node).match?(Patterns::SECONDARY)
+      thread?(node) && Patterns.secondary?(signature(node))
     end
 
     # Keys of the <p>s and of the divs Readability would rewrite into <p>
-    # (no block-level descendants), found in one bottom-up pass.
+    # (no block-level descendants). Breakers are rare, so marking their
+    # ancestors, up to one already marked, is much faster than visiting every
+    # node. But Lexbor copies a formatting element that a block cuts
+    # (<a><div>…</a>) into elements sharing one attribute list, and so one
+    # key, and then which copy holds the block decides. A root with such
+    # copies keeps the bottom-up pass, which content selection and cleaning
+    # were tuned with: there the copy visited last decides.
     def paragraph_keys(root)
+      return paragraph_keys_bottom_up(root) if shared_keys?(root)
+
+      broken = Set.new
+      root.css(PARAGRAPH_BREAKER_SELECTOR).each do |breaker|
+        ancestor = breaker.parent
+        ancestor = ancestor.parent while ancestor&.element? && broken.add?(key(ancestor))
+      end
+
+      candidates = root.css("p, div").to_a
+      candidates << root if root.name == "p" || root.name == "div"
+      candidates.each_with_object(Set.new) do |node, keys|
+        key = key(node)
+        keys << key if node.name == "p" || !broken.include?(key)
+      end
+    end
+
+    def paragraph_keys_bottom_up(root)
       keys = Set.new
       breaks = {}
-      root.traverse do |node|
-        next unless node.element?
-
+      elements_bottom_up(root).each do |node|
         key = key(node)
         breaks[key] = node.element_children.any? { |child| PARAGRAPH_BREAKERS.include?(child.name) || breaks[key(child)] }
         keys << key if node.name == "p" || (node.name == "div" && !breaks[key])
@@ -81,10 +153,25 @@ module Nokodown
       keys
     end
 
+    # XPath, because Lexbor's CSS engine takes several times longer to
+    # match a list of tag names.
+    def shared_keys?(root)
+      keys = root.xpath(FORMATTING_XPATH).map { |node| key(node) }
+      keys << key(root) if FORMATTING.include?(root.name)
+      keys.uniq.size != keys.size
+    end
+
     # Nokolexbor answers ancestors(selector) by running CSS matching per
-    # ancestor, which dominated extraction time; compare tag names instead.
+    # ancestor, which dominated extraction time, and builds a NodeSet of
+    # every ancestor even without one; walk up and compare tag names instead.
     def ancestors_named(node, *names)
-      node.ancestors.select { |ancestor| ancestor.element? && names.include?(ancestor.name) }
+      found = []
+      ancestor = node.parent
+      while ancestor
+        found << ancestor if ancestor.element? && names.include?(ancestor.name)
+        ancestor = ancestor.parent
+      end
+      found
     end
 
     # Syntax highlighters wrap tokens in spans whose class ("token comment",
@@ -110,7 +197,12 @@ module Nokodown
     end
 
     def squish(string)
-      string.tr(UNICODE_SPACES, " ").squeeze(" ").strip
+      spaces_to_blanks(string).squeeze(" ").strip
+    end
+
+    # Most text is ASCII, where a shorter tr table is twice as fast.
+    def spaces_to_blanks(string)
+      string.ascii_only? ? string.tr(ASCII_SPACES, " ") : string.tr(UNICODE_SPACES, " ")
     end
 
     def signature(node)
@@ -118,7 +210,22 @@ module Nokodown
       id = name_id(node)
       return "" if classes.nil? && id.nil?
 
-      signature_of("#{classes} #{id}")
+      value = "#{classes} #{id}"
+      signatures = Thread.current[SIGNATURES]
+      return signature_of(value) unless signatures
+
+      signatures[value] ||= signature_of(value).freeze
+    end
+
+    # Every stage reads the signatures of the same elements again, and a
+    # page repeats its class lists, so an extraction computes each one once.
+    # The cache lives only as long as the block, so pages share nothing.
+    def caching_signatures
+      outer = Thread.current[SIGNATURES]
+      Thread.current[SIGNATURES] = outer || {}
+      yield
+    ensure
+      Thread.current[SIGNATURES] = outer
     end
 
     # The id as a name for the element; a heading anchor only repeats the heading.
@@ -132,7 +239,7 @@ module Nokodown
       # Generated ids (Webflow "w-node-<uuid>") would otherwise read as words.
       value = value.gsub(UUID, " ") if value.match?(UUID)
       value = value.gsub(CSS_MODULE_HASH, "") if value.include?("__")
-      value = value.gsub(/([a-z\d])([A-Z])/, '\1-\2') if value.match?(/[a-z\d][A-Z]/)
+      value = value.gsub(CAMEL_CASE, "-") if value.match?(CAMEL_CASE)
       value.downcase
     end
 
