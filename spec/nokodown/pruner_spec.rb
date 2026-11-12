@@ -43,6 +43,18 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "secondary regions" do
+    it "removes adjacent ones and those nested in kept elements" do
+      root = content("#{story}<div class='comments'><p>First!</p></div><div class='tags'><a href='/t/bridges'>bridges</a></div>" \
+                     "<div class='wrap'><p>Crews worked nights to finish early.</p><div class='popular'><p>Most read today</p></div></div>")
+      described_class.new([root], :article, conditional: false).call
+      text = Nokodown::Dom.text(root)
+
+      ["First!", "bridges", "Most read today"].each { |noise| text.should_not include(noise) }
+      text.should include("Crews worked nights")
+    end
+  end
+
   describe "article pruning with conditional cleaning off" do
     let(:html) do
       "<p class='byline'>By Jo Pine</p>#{story}#{cards}" \

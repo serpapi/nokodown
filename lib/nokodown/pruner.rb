@@ -164,15 +164,20 @@ module Nokodown
     end
 
     # A forum's thread is content.
+    # Removing a node leaves its siblings in place, so the walk reads the next
+    # one first.
     def remove_secondary(root, total)
-      root.element_children.each do |node|
-        next if Dom.thread?(node)
-
-        if Patterns.secondary?(Dom.signature(node)) && Dom.text(node).length <= total * 0.5
-          remove(node)
-        else
-          remove_secondary(node, total)
+      node = root.first_element_child
+      while node
+        following = node.next_element
+        unless Dom.thread?(node)
+          if Patterns.secondary?(Dom.signature(node)) && Dom.text(node).length <= total * 0.5
+            remove(node)
+          else
+            remove_secondary(node, total)
+          end
         end
+        node = following
       end
     end
 

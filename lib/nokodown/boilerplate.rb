@@ -64,12 +64,15 @@ module Nokodown
     end
 
     # Code is never furniture, whatever classes its highlighter gives tokens.
+    # Nothing is removed during the walk, so the element pointers stay valid.
     def walk(node, removals)
-      node.element_children.each do |child|
-        next if Dom::CODE.include?(child.name)
-
-        kind = removal(child)
-        kind ? removals << [child, kind] : walk(child, removals)
+      child = node.first_element_child
+      while child
+        unless Dom::CODE.include?(child.name)
+          kind = removal(child)
+          kind ? removals << [child, kind] : walk(child, removals)
+        end
+        child = child.next_element
       end
     end
 
