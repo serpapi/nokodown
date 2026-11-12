@@ -115,7 +115,7 @@ module Nokodown
         elsif joins_markup?(out, piece) && unescaped?(out, out.bytesize - 1)
           escape_from(out, out.bytesize - 1)
         end
-        escape_email_opener(out) if piece.match?(Text::EMAIL_END)
+        escape_email_opener(out) if piece.include?("@") && piece.match?(Text::EMAIL_END)
         out << piece
       end
 
