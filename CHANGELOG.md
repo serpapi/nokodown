@@ -6,14 +6,18 @@
   text, so deeply nested markup no longer raises `SystemStackError`, also
   inside a thread with its smaller stack.
 - Native `<video>` and `<audio>` players become links to the file they play,
-  labelled with their title. Muted videos (autoplaying backgrounds) and
-  players inside a link are skipped.
+  labelled with their title. Muted videos (autoplaying backgrounds) are
+  skipped, and a player inside a link is replaced by its thumbnail, if it
+  holds one and is not hidden.
 - Links without `href` take their target from `data-href`, `data-url` and
   the other attributes scripts keep it in.
 - An image's `data-src` (and the other attributes only lazy loaders use) is
   preferred over its `src`, also without a "lazy" class, so the real image
-  replaces a placeholder or a low-quality thumbnail. Spacer and placeholder
-  files no longer count as a `src`.
+  replaces a placeholder or a low-quality thumbnail. High-resolution
+  attributes come first, then the largest size in `data-a-dynamic-image`,
+  then the other loaders' attributes and a lazy `srcset`. A value that is
+  no image location ("false", a number, a word) never replaces `src`.
+  Spacer and placeholder files no longer count as a `src`.
 - With `main_content: false`, everything visible is converted, so a
   selection comes out whole: headings without a section, boilerplate lines
   ("Advertisement", "Share"), repeated headings, paragraphs and images,
@@ -44,12 +48,13 @@
   `ArgumentError`.
 - A link whose `href` is blank takes its target from `data-href` and the
   like too. A link made only of images keeps its target, as
-  `[![alt](src)](href)`, and a player inside a link keeps its thumbnail.
+  `[![alt](src)](href)`.
 - An iframe embed is linked only from an http(s) URL on the video host's
   own domain, and one without a title is written as `[Video](url)`.
 - A page made only of headings keeps all of them, a one-column table with
   a header cell or a caption stays a table, and the H1 above an article
   body chosen inside `<main>` opens the content.
+- A table cell escapes every pipe, so a backslash before a pipe stays.
 - Extraction is faster, with the same output: about 40% on Wikipedia's
   Coffee article (364 to 214 ms on Ruby 2.7) and 27% on WCXB (ms per page).
 
