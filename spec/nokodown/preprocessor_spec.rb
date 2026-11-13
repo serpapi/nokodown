@@ -14,4 +14,15 @@ RSpec.describe Nokodown::Preprocessor do
     by_xpath.to_html.should == by_css.to_html
     by_xpath.to_html.should include("kept")
   end
+
+  it "finds hidden candidates in one pass, as the selector list finds them and in document order" do
+    described_class::HIDDEN_CANDIDATES.should start_with(":is(")
+    html = "<body><div class='sr-only'><p hidden>a</p><span style='display:none'>b</span></div>" \
+           "<section aria-hidden='true'><b class='Hidden'>c</b><i class='x hide'>d</i></section>" \
+           "<ul><li class='d-none'>e</li><li>f</li></ul><table><tr><td style=''>g</td></tr></table></body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    found = body.css(described_class::HIDDEN_CANDIDATES).map(&:to_html)
+    found.should == body.css(described_class::HIDDEN_SELECTORS.join(", ")).map(&:to_html)
+    found.size.should == 7
+  end
 end

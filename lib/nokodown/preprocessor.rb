@@ -25,8 +25,11 @@ module Nokodown
     ]).freeze
 
     # Found by Lexbor's selector engine, so the checks below only run on
-    # elements that could be hidden.
-    HIDDEN_CANDIDATES = (["[hidden]", "[aria-hidden=true]", "[style]"] + HIDDEN_CLASSES.map { |name| ".#{name}" }).join(", ").freeze
+    # elements that could be hidden. Lexbor walks the tree once for each
+    # selector of a list, but once for :is() of them; the results and their
+    # document order are the same.
+    HIDDEN_SELECTORS = (%w[[hidden] [aria-hidden=true] [style]] + HIDDEN_CLASSES.map { |name| ".#{name}" }).freeze
+    HIDDEN_CANDIDATES = ":is(#{HIDDEN_SELECTORS.join(", ")})".freeze
 
     # Utility classes that make a "hidden" element visible again at some breakpoint.
     RESPONSIVE_SHOW = /\A(?:(?:sm|md|lg|xl|2xl):(?:block|flex|grid|inline|inline-block|inline-flex|table|contents)|d-(?:sm|md|lg|xl|xxl)-(?:block|flex|grid|inline|inline-block|inline-flex|table))\z/.freeze
