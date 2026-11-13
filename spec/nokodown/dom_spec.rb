@@ -189,6 +189,15 @@ RSpec.describe Nokodown::Dom do
       described_class.signature(node).should == "w-node-  mdx-table_root "
     end
 
+    it "searches only names long enough to hold a generated id" do
+      described_class.signature_of("w-node-b5343ad4-1c2e-ad12-9f0b-3c4d5e6f7a8b").should == "w-node- "
+      described_class.signature_of("b5343ad4-1c2e-ad12-9f0b-3c4d5e6f7a8").should == "b5343ad4-1c2e-ad12-9f0b-3c4d5e6f7a8"
+      short = +"navBar main"
+      short.stub(:match?).and_call_original
+      short.should_not_receive(:match?).with(described_class::UUID)
+      described_class.signature_of(short).should == "nav-bar main"
+    end
+
     it "is empty without class and id" do
       described_class.signature(element('title="x"')).should == ""
     end
