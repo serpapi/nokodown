@@ -833,6 +833,8 @@ RSpec.describe "Markdown conversion" do
 
     it "keeps typed numbers that are not the item's own" do
       convert("<ol><li>1.5 kg flour</li><li>3. Salt</li></ol>").should == "1. 1.5 kg flour\n2. 3. Salt"
+      convert('<ol start="9"><li>9) Nine</li><li>1. One</li><li>11. Eleven</li></ol>').should == "9. Nine\n10. 1. One\n11. Eleven"
+      convert('<ol start="-1"><li>-1. Minus</li><li>0) Zero</li></ol>').should == "-1. Minus\n0. Zero"
     end
 
     it "moves up a bulleted list that opens an item instead of printing an empty marker" do

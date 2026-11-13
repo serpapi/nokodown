@@ -264,7 +264,9 @@ module Nokodown
         return blocks unless first.kind == :paragraph
 
         text = typed_bullet ? first.text.sub(BULLET_GLYPH, "") : first.text
-        text = text.sub(/\A#{number}[.)](?!\d)\s*/, "") if number
+        # Each number makes a new pattern, so most items, which do not
+        # start with their number, skip building it.
+        text = text.sub(/\A#{number}[.)](?!\d)\s*/, "") if number && text.start_with?(number.to_s)
         return blocks if text == first.text
 
         rest = blocks.drop(1)
