@@ -11,8 +11,14 @@ module Nokodown
       script style noscript template link meta base object embed applet param canvas map area svg
       source track select option optgroup datalist progress meter keygen frame frameset portal slot
     ].join(",").freeze
-    # The same set as one XPath union, which Lexbor finds about twice as fast.
-    JUNK_XPATH = JUNK.split(",").map { |tag| ".//#{tag}" }.join("|").freeze
+    # The same set in one :is(), which Lexbor finds in less than half the
+    # time. A ".//tag" XPath union is faster still, but its streaming
+    # evaluation stops 10,000 levels down, and these run before deep
+    # elements are flattened.
+    JUNK_SELECTOR = ":is(#{JUNK})".freeze
+    # XPath lists the same links in the same order as css("a"), in half the
+    # time. The axis is spelled out because ".//a" stops 10,000 levels down.
+    LINKS_XPATH = "descendant::a"
     # Visible text that is not content, but is when a whole page, or a
     # selection of it, is converted; a closed dialog is never visible.
     CONTROLS = "dialog, textarea, output"
@@ -103,10 +109,9 @@ module Nokodown
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
       restore_picture_sources
-      # XPath lists the same links in the same order as css("a"), in half the time.
-      @body.xpath(".//a").each { |link| restore_link_target(link) if UrlResolver.normalize(link["href"]).empty? }
+      @body.xpath(LINKS_XPATH).each { |link| restore_link_target(link) if UrlResolver.normalize(link["href"]).empty? }
       @body.css("video, audio").each { |media| keep_playable(media) }
-      @body.xpath(JUNK_XPATH).each(&:remove)
+      @body.css(JUNK_SELECTOR).each(&:remove)
       @body.css(@full ? FULL_CONTROLS : CONTROLS).each(&:remove)
       @body.css("iframe").each { |iframe| iframe.remove unless Preprocessor.video_embed?(iframe["src"]) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }

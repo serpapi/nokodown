@@ -1,18 +1,30 @@
 # frozen_string_literal: true
 
 RSpec.describe Nokodown::Preprocessor do
-  it "removes the same junk with its XPath union as with the CSS list, at any depth" do
+  it "removes the same junk with its :is() selector as with the CSS list" do
     junk = described_class::JUNK.split(",").map { |tag| "<#{tag}>x</#{tag}>" }.join
     html = "<body><div>#{junk}<p>#{junk.upcase}</p><table><tr><td>#{junk}</td></tr></table>" \
            "<math><mi>x</mi><script>m</script></math><svg><g><link/><style>s</style></g></svg>" \
            "<object><param name=a><embed></object><select><optgroup><option>o</option></optgroup></select>" \
            "<map><area></map><template><script>t</script></template><span>kept</span></div></body>"
-    by_css, by_xpath = 2.times.map { Nokolexbor::HTML(html).at_css("body") }
+    by_css, by_is = 2.times.map { Nokolexbor::HTML(html).at_css("body") }
     by_css.css(described_class::JUNK).each(&:remove)
-    by_xpath.xpath(described_class::JUNK_XPATH).each(&:remove)
-    by_xpath.css(described_class::JUNK).size.should == 0
-    by_xpath.to_html.should == by_css.to_html
-    by_xpath.to_html.should include("kept")
+    by_is.css(described_class::JUNK_SELECTOR).each(&:remove)
+    by_is.css(described_class::JUNK).size.should == 0
+    by_is.to_html.should == by_css.to_html
+    by_is.to_html.should include("kept")
+  end
+
+  # XPath's ".//" stops 10,000 levels down; junk and links are read before
+  # deep elements are flattened.
+  it "finds junk and links more than 10,000 levels down" do
+    depth = 10_050
+    html = "<body>#{'<div>' * depth}<style>.x{}</style><a href=''>deep</a>#{'</div>' * depth}<a>top</a></body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+
+    body.css(described_class::JUNK_SELECTOR).size.should == 1
+    body.xpath(described_class::LINKS_XPATH).to_a.should == body.css("a").to_a
+    Nokodown.to_markdown(html, main_content: false).should_not include(".x{}")
   end
 
   it "finds hidden candidates in one pass, as the selector list finds them and in document order" do
