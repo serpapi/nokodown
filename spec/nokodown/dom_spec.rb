@@ -236,6 +236,20 @@ RSpec.describe Nokodown::Dom do
       end
     end
 
+    it "reads a cached class list once for elements with different ids" do
+      nodes = %w[a1 a2 navMain].map { |id| element("class=\"adContainer siteNav\" id=\"#{id}\"") }
+      nodes << element('class="adContainer siteNav"') << element('id="navMain"')
+      uncached = nodes.map { |node| described_class.signature(node) }
+
+      described_class.should_receive(:signature_of).with("adContainer siteNav").once.and_call_original
+      described_class.should_receive(:signature_of).with("").once.and_call_original
+      described_class.should_receive(:signature_of).with(anything).exactly(4).times.and_call_original
+      cached = described_class.caching_signatures { nodes.map { |node| described_class.signature(node) } }
+
+      uncached.should == ["ad-container site-nav a1", "ad-container site-nav a2", "ad-container site-nav nav-main", "ad-container site-nav ", " nav-main"]
+      cached.should == uncached
+    end
+
     it "answers secondary? from the cache as the pattern does, and drops the cache after" do
       nodes = ["comments", "comments", "post-body", "most-read", "most-read x", "related"].map { |name| element("class=\"#{name}\"") }
       nodes << element('id="comments"') << element("")

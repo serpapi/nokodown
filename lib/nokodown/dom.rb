@@ -248,7 +248,9 @@ module Nokodown
     end
 
     # The cache is kept by class list, then by id, so a repeated element
-    # finds its signature without building the string it is made from.
+    # finds its signature without building the string it is made from. No
+    # rewrite of signature_of reaches across a space, so the class list is
+    # read once, and an id (most are unique) on its own.
     def signature(node)
       classes = node["class"]
       id = name_id(node)
@@ -258,7 +260,10 @@ module Nokodown
       return signature_of("#{classes} #{id}") unless signatures
 
       by_id = signatures[classes] ||= {}
-      by_id.fetch(id) { by_id[id] = signature_of("#{classes} #{id}").freeze }
+      by_id.fetch(id) do
+        classes_signature = by_id.fetch(:classes) { by_id[:classes] = signature_of(classes.to_s) }
+        by_id[id] = "#{classes_signature} #{id && signature_of(id)}".freeze
+      end
     end
 
     # Every stage reads the signatures of the same elements again, and a
