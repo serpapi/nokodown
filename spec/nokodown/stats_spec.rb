@@ -45,4 +45,35 @@ RSpec.describe Nokodown::Stats do
     stats.text_chars(paragraph).should == 11.0
     stats.link_density(paragraph).should == 0.5
   end
+
+  describe "#remove" do
+    def counts(stats)
+      stats.instance_variable_get(:@counts)
+    end
+
+    it "removes nodes and leaves the counts a new Stats would make" do
+      root = body('<div><p>Coffee <a href="/roast">roasted <b>dark</b> <i>x</i></a></p><nav>Menu items</nav>' \
+                  '<a href="#n"><span>Note</span> <em>skip</em></a></div><p>Tail</p>')
+      stats = described_class.new(root)
+      stats.remove([root.at_css("i"), root.at_css("nav"), root.at_css("em")]).should equal(stats)
+
+      fresh = counts(described_class.new(root))
+      counts(stats).values_at(*fresh.keys).should == fresh.values
+      [stats.chars(root), stats.link_chars(root)].should == [25.0, 11.0 + 4 * 0.3]
+    end
+
+    it "measures the whole root again when copies of an element share a key" do
+      root = body('<a href="/cart"><span>Offer</span><footer><div>Sale</div><p>Gone</p></a></footer><p>Coffee</p>')
+      stats = described_class.new(root)
+      stats.remove([root.css("p").first])
+
+      fresh = counts(described_class.new(root))
+      counts(stats).should == fresh
+    end
+  end
+
+  it "is made once for the page when Boilerplate removes no member panel" do
+    described_class.should_receive(:new).once.and_call_original
+    Nokodown.to_markdown("<body><nav><a href='/'>Home</a></nav><article><p>#{'Coffee is brewed from roasted beans. ' * 20}</p></article></body>")
+  end
 end

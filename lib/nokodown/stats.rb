@@ -14,9 +14,28 @@ module Nokodown
     ELEMENT_NODE = Nokolexbor::Node::ELEMENT_NODE
 
     def initialize(root)
-      # [chars, link_chars] by key, so a lookup reads one entry.
-      @counts = {}
-      measure(root, 0.0)
+      @root = root
+      measure_all
+    end
+
+    # Removes the nodes from the tree, leaving the counts a new Stats of the
+    # root would make for every element still in it. Only the elements
+    # around the nodes are counted again, each from its children in order,
+    # so every sum adds the same numbers in the same order. The counts of
+    # the removed elements stay, but no element in the tree has their keys.
+    def remove(nodes)
+      nodes.each do |node|
+        ancestor = node.parent
+        while ancestor
+          @counts.delete(Dom.key(ancestor)) if ancestor.type == ELEMENT_NODE
+          ancestor = ancestor.parent
+        end
+        node.remove
+      end
+      # Copies of a misnested formatting element share a key, and the copy
+      # measured last decides its counts; those are all measured again.
+      @shared_keys ? measure_all : recount(@root, 0.0)
+      self
     end
 
     def chars(node)
@@ -47,6 +66,15 @@ module Nokodown
       end
     end
 
+    def measure_all
+      # [chars, link_chars] by key, so a lookup reads one entry.
+      @counts = {}
+      @stored = 0
+      measure(@root, 0.0)
+      @shared_keys = @stored != @counts.size
+      self
+    end
+
     def measure(node, link_weight)
       chars = 0.0
       link_chars = 0.0
@@ -67,11 +95,36 @@ module Nokodown
       store(node, chars, link_chars)
     end
 
+    # As measure counts node, reading the counts it still has.
+    def recount(node, link_weight)
+      chars = 0.0
+      link_chars = 0.0
+      child = node.child
+      while child
+        type = child.type
+        if type == TEXT_NODE || type == CDATA_NODE
+          count = Dom.char_count(child.content)
+          chars += count
+          link_chars += count * link_weight
+        elsif type == ELEMENT_NODE
+          key = Dom.key(child)
+          child_chars, child_link_chars = (key && @counts[key]) || recount(child, link_weight_for(child, link_weight))
+          chars += child_chars
+          link_chars += child_link_chars
+        end
+        child = child.next_sibling
+      end
+      store(node, chars, link_chars)
+    end
+
     def store(node, chars, link_chars)
       counts = [chars, link_chars]
       key = Dom.key(node)
+      return counts unless key
+
       # A frozen key is stored as is; Hash would copy it.
-      @counts[key.freeze] = counts if key
+      @counts[key.freeze] = counts
+      @stored += 1
       counts
     end
 

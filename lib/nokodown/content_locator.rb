@@ -31,13 +31,15 @@ module Nokodown
     THREAD_SHARE = 0.25
     THREAD_RUN_SHARE = 0.5
 
-    def initialize(body, page_type: nil)
+    # stats: the counts of body as it is, if already made.
+    def initialize(body, page_type: nil, stats: nil)
       @body = body
       @page_type = page_type
+      @stats = stats
     end
 
     def call
-      stats = Stats.new(@body)
+      stats = @stats || Stats.new(@body)
       root = main_region(stats) || @body
       mark_thread(root, stats) if @page_type == :forum
       result = Scorer.new(root, stats).call

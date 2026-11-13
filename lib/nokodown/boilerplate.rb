@@ -28,6 +28,10 @@ module Nokodown
     DISCLAIMER_WORD = /[-_]*#{Patterns::DISCLAIMER.source}[-_]*/.freeze
     SIGNATURE_WORD = /[-_]*#{Patterns::SIGNATURE.source}[-_]*/.freeze
 
+    # The counts of the page left, or nil when member panels were replaced
+    # with new elements.
+    attr_reader :stats
+
     def initialize(body)
       @body = body
     end
@@ -54,9 +58,16 @@ module Nokodown
       removals = []
       walk(@body, removals)
       removals.delete(content_guess(removals)) if almost_empty_without?(removals)
+      if removals.none? { |_, kind| kind == :panel }
+        @stats.remove(removals.map(&:first))
+        return self
+      end
+
       removals.each { |node, kind| kind == :panel ? MemberPanel.reduce(node) : node.remove }
       # The lines panels leave are new elements, and later passes measure by key.
-      Dom.assign_keys(@body) if removals.any? { |_, kind| kind == :panel }
+      Dom.assign_keys(@body)
+      @stats = nil
+      self
     end
 
     private

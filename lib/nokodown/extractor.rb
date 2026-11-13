@@ -95,9 +95,14 @@ module Nokodown
       return [[body], :full] unless @main_content
 
       attribution = PostAttribution.new(body).call if ContentLocator::DISCUSSIONS.include?(page_type)
-      Boilerplate.new(body).call
-      ProductReviews.new(body).call if product_page
-      selection = ContentLocator.new(body, page_type: page_type).call
+      # ContentLocator reuses the counts Boilerplate kept, unless the page
+      # changed after it.
+      stats = Boilerplate.new(body).call.stats
+      if product_page
+        ProductReviews.new(body).call
+        stats = nil
+      end
+      selection = ContentLocator.new(body, page_type: page_type, stats: stats).call
       attribution&.write(selection.nodes)
       if selection.mode == :article
         lead = @title ? title_lead(selection.nodes) : []
