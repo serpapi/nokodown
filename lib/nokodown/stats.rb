@@ -8,6 +8,10 @@ module Nokodown
     FRAGMENT_LINK_WEIGHT = 0.3
     # What an element without a key reads as.
     UNKNOWN = [nil, nil].freeze
+    # Node types, compared as integers in the hot walk.
+    TEXT_NODE = Nokolexbor::Node::TEXT_NODE
+    CDATA_NODE = Nokolexbor::Node::CDATA_SECTION_NODE
+    ELEMENT_NODE = Nokolexbor::Node::ELEMENT_NODE
 
     def initialize(root)
       # [chars, link_chars] by key, so a lookup reads one entry.
@@ -48,11 +52,12 @@ module Nokodown
       link_chars = 0.0
       child = node.child
       while child
-        if child.text? || child.cdata?
+        type = child.type
+        if type == TEXT_NODE || type == CDATA_NODE
           count = Dom.char_count(child.content)
           chars += count
           link_chars += count * link_weight
-        elsif child.element?
+        elsif type == ELEMENT_NODE
           child_chars, child_link_chars = measure(child, link_weight_for(child, link_weight))
           chars += child_chars
           link_chars += child_link_chars
@@ -71,8 +76,8 @@ module Nokodown
     end
 
     def link_weight_for(node, inherited)
-      href = node.name == "a" && node["href"]
-      return inherited unless href
+      href = node["href"]
+      return inherited unless href && node.name == "a"
 
       href.start_with?("#") ? FRAGMENT_LINK_WEIGHT : 1.0
     end

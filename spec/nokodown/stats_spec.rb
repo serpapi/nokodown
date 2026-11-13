@@ -28,6 +28,14 @@ RSpec.describe Nokodown::Stats do
     stats.link_density(page.at_css("div")).should == 0.0
   end
 
+  it "tells text from elements by node type, without the predicates" do
+    root = body('<div>Coffee <b>beans</b><!-- note --><a href="/roast">dark</a></div>')
+    %i[text? cdata? element?].each { |name| Nokolexbor::Node.any_instance.should_not_receive(name) }
+
+    stats = described_class.new(root)
+    [stats.chars(root), stats.link_chars(root)].should == [15.0, 4.0]
+  end
+
   it "reads an element's counts with one key lookup" do
     root = body('<p>Coffee beans <a href="/roast">roasted dark</a></p>')
     stats = described_class.new(root)
