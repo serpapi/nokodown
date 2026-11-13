@@ -84,6 +84,14 @@ end
     end
   end
 
+  it "answers copyright? as COPYRIGHT_TEXT does" do
+    parts = ["copyright", "COPYRIGHT ", "Copyright\t", "©", "(c)", "(C)", "&copy;", "&COPY;", "all", "ALL ", " ", "rights",
+             "Rights ", "reserved", "RESERVED", "2024 ", "x", "(", "c)", "&copy"]
+    texts = parts.product(parts, parts).map(&:join) + ["Site © 2024", "All rights reserved.", "(c) 2024", "Copyright © Acme"]
+    texts.select { |text| described_class.copyright?(text) }.should == texts.grep(described_class::COPYRIGHT_TEXT)
+    texts.count { |text| described_class.copyright?(text) }.should > 1000
+  end
+
   it "weighs hid as a class name of its own only" do
     ["hid", "a hid", "hid b", "a hid b", "a\nhid", "hid\tb"].each { |value| value.should match(described_class::NEGATIVE) }
     ["ahid", "hidx", "a-hid", "hid_b"].each { |value| value.should_not match(described_class::NEGATIVE) }

@@ -217,6 +217,16 @@ module Nokodown
 
     COPYRIGHT_TEXT = /\A(?:copyright\s*)?(?:©|\(c\)|&copy;)|all\srights\sreserved/i.freeze
 
+    # COPYRIGHT_TEXT in two parts. In one pattern Onigmo retries the anchored
+    # part at every position of a text that does not match; apart, it is
+    # tried once.
+    COPYRIGHT_START = /\A(?:copyright\s*(?:©|\(c\)|&copy;)|©|\(c\)|&copy;)/i.freeze
+    RIGHTS_RESERVED = /all\srights\sreserved/i.freeze
+
+    def self.copyright?(text)
+      text.match?(COPYRIGHT_START) || text.match?(RIGHTS_RESERVED)
+    end
+
     NOISE_HEADING = /
       \A(?:related(?:\s\w+)?|share(?:\sthis)?(?:\s\w+)?|comments?|leave\sa\s(?:comment|reply)|
       advertisement|newsletter|follow\sus|subscribe(?:\s\w+)?|popular(?:\s\w+)?|trending(?:\s\w+)?|

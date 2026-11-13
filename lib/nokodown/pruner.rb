@@ -251,7 +251,7 @@ module Nokodown
         next if text.empty? || text.length > 200
 
         boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
-        copyright = text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
+        copyright = Patterns.copyright?(text) && node.at_css("img").nil?
         remove(node) if boilerplate || copyright
       end
     end
