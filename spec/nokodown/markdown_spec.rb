@@ -47,6 +47,15 @@ RSpec.describe "Markdown conversion" do
       Nokodown::Markdown::Text.escape_line_starts("a ``` b").should == "a ``` b"
     end
 
+    it "tidies spaces and tabs around line breaks, and leaves clean lines alone" do
+      text = Nokodown::Markdown::Text
+      text.tidy(" a \t\n\t b  c \n \n d\t \n").should == "a\nb c\n\nd"
+      text.tidy("a\t\tb\n\nc").should == "a\t\tb\n\nc"
+      clean = +"a\nb"
+      clean.should_not_receive(:gsub)
+      text.tidy(clean).should == "a\nb"
+    end
+
     it "drops decorative separator lines" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
       convert("<p>above</p><p> ***** </p><p>below \t<br> \tnext</p>").should == "above\n\nbelow\nnext"

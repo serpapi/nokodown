@@ -80,9 +80,14 @@ module Nokodown
 
       # Tidy an inline run: no spaces around line breaks, no doubled spaces.
       def tidy(string)
-        string = string.gsub(/[ \t]*\n[ \t]*/, "\n") if string.include?("\n")
-        string = string.gsub(/ {2,}/, " ") if string.include?("  ")
+        string = string.gsub(/\n[ \t]+/, "\n").gsub(/[ \t]+\n/, "\n") if blank_by_newline?(string)
+        string = string.squeeze(" ") if string.include?("  ")
         string.strip
+      end
+
+      def blank_by_newline?(string)
+        string.include?("\n") &&
+          (string.include?(" \n") || string.include?("\n ") || string.include?("\t\n") || string.include?("\n\t"))
       end
 
       def single_line(string)
