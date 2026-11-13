@@ -205,6 +205,17 @@ RSpec.describe Nokodown::Dom do
       Thread.current[described_class::SIGNATURES].should be_nil
     end
 
+    it "finds a cached signature without building the string it is made from" do
+      node = element('class="adContainer siteNav" id="mainHeader"')
+      described_class.caching_signatures do
+        described_class.signature(node)
+        before = GC.stat(:total_allocated_objects)
+        10.times { described_class.signature(node) }
+        # Reading the class and the id are the only allocations left.
+        (GC.stat(:total_allocated_objects) - before).should <= 20
+      end
+    end
+
     it "answers secondary? from the cache as the pattern does, and drops the cache after" do
       nodes = ["comments", "comments", "post-body", "most-read", "most-read x", "related"].map { |name| element("class=\"#{name}\"") }
       nodes << element('id="comments"') << element("")

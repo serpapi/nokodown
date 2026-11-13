@@ -257,16 +257,18 @@ module Nokodown
       bytes.force_encoding(Encoding::UTF_8)
     end
 
+    # The cache is kept by class list, then by id, so a repeated element
+    # finds its signature without building the string it is made from.
     def signature(node)
       classes = node["class"]
       id = name_id(node)
       return "" if classes.nil? && id.nil?
 
-      value = "#{classes} #{id}"
       signatures = Thread.current[SIGNATURES]
-      return signature_of(value) unless signatures
+      return signature_of("#{classes} #{id}") unless signatures
 
-      signatures[value] ||= signature_of(value).freeze
+      by_id = signatures[classes] ||= {}
+      by_id.fetch(id) { by_id[id] = signature_of("#{classes} #{id}").freeze }
     end
 
     # Every stage reads the signatures of the same elements again, and a
