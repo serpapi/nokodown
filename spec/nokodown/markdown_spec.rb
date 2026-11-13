@@ -376,6 +376,15 @@ RSpec.describe "Markdown conversion" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
     end
 
+    it "takes a scheme, www. and mailto: off a URL it compares only when the URL starts with one" do
+      inline = Nokodown::Markdown::Inline.new(Nokodown::UrlResolver.new("https://example.org/"), images: true, links: true)
+      plain = +"example.org/a/"
+      plain.should_not_receive(:sub)
+      inline.send(:bare, plain).should == "example.org/a"
+      urls = ["HTTPS://www.Example.org/", "http:/x", "WWW.a.b/", "MailTo:x@y.z", "www.http://a", "//www.a/"]
+      urls.map { |url| inline.send(:bare, url) }.should == ["Example.org", "http:/x", "a.b", "x@y.z", "http://a", "//www.a"]
+    end
+
     it "writes a link whose URL holds Markdown as a link, even when its text is the URL" do
       html = '<p><a data-href="mailto:[Run](javascript:alert(1))">[Run](javascript:alert(1))</a> ' \
              '<a href="https://example.org/a`b">https://example.org/a`b</a></p>'

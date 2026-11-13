@@ -12,6 +12,7 @@ module Nokodown
       # What could start a link, an autolink, HTML or code where a URL is
       # written as text.
       MARKUP_IN_URL = /[\[\]<>`\\]/.freeze
+      BARE_PREFIX = /\A(?:https?:|www\.|mailto:)/i.freeze
       WEB_URL = %r{\A(?:https?|ftp)://}i.freeze
       BACKSLASH = "\\".ord
       LESS_THAN = "<".ord
@@ -269,7 +270,11 @@ module Nokodown
         bare(text.delete("\\")) == bare(url)
       end
 
+      # Most link texts start with none of the prefixes, and one search
+      # for all of them spares the three substitutions.
       def bare(url)
+        return url.chomp("/") unless url.match?(BARE_PREFIX)
+
         url.sub(%r{\Ahttps?://}i, "").sub(/\Awww\./i, "").sub(/\Amailto:/i, "").chomp("/")
       end
 
