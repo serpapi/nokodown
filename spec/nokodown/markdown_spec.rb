@@ -2,6 +2,13 @@
 
 RSpec.describe "Markdown conversion" do
   describe "text" do
+    it "tells text from elements by node type, without the predicates" do
+      %i[text? cdata? element?].each { |name| Nokolexbor::Node.any_instance.should_not_receive(name) }
+
+      convert("<div><ul><li>Coffee <b>beans</b><!-- note --> and <a href=\"/roast\">dark</a> roasts</li></ul></div>").should ==
+        "- Coffee **beans** and [dark](https://example.com/roast) roasts"
+    end
+
     it "collapses whitespace like a browser" do
       convert("<p>  one\n   two  three  </p>").should == "one two three"
     end

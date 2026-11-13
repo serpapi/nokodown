@@ -112,7 +112,7 @@ module Nokodown
       end
 
       def block_level?(node)
-        return false unless node.element?
+        return false unless node.type == Stats::ELEMENT_NODE
         return true if Dom::BLOCK.include?(node.name) || MEDIA.include?(node.name)
         return CodeBlock.standalone?(node) if node.name == "code"
 
@@ -199,7 +199,7 @@ module Nokodown
       # A nested list belongs to the item before it, also when a site wraps
       # it in an item of its own (<li>Parent</li><li><ul>…</ul></li>).
       def sublist?(node, blocks)
-        return false unless node.element? && blocks.size == 1 && blocks.first.kind == :list
+        return false unless node.type == Stats::ELEMENT_NODE && blocks.size == 1 && blocks.first.kind == :list
         return true if %w[ul ol].include?(node.name)
 
         node.name == "li" && node.element_children.all? { |child| %w[ul ol].include?(child.name) }
@@ -214,7 +214,7 @@ module Nokodown
       end
 
       def list_item(node)
-        return paragraphs([node]) unless node.element?
+        return paragraphs([node]) unless node.type == Stats::ELEMENT_NODE
         return children_blocks(node) if node.name == "li"
 
         block_level?(node) ? block(node) : paragraphs([node])
@@ -223,7 +223,7 @@ module Nokodown
       # Wrappers between a list and its items (<ul><div><li>) are transparent.
       def list_children(node)
         Dom.children(node).flat_map do |child|
-          wrapper = child.element? && !%w[li ul ol].include?(child.name) && Dom.element_children(child).any? { |c| c.name == "li" }
+          wrapper = child.type == Stats::ELEMENT_NODE && !%w[li ul ol].include?(child.name) && Dom.element_children(child).any? { |c| c.name == "li" }
           wrapper ? list_children(child) : [child]
         end
       end

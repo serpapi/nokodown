@@ -173,9 +173,10 @@ module Nokodown
       # if any, so the note of the last #render or #code_span in it holds.
       def node_text(node)
         @backslash_fence = false
-        if node.text? || node.cdata?
+        type = node.type
+        if type == Stats::TEXT_NODE || type == Stats::CDATA_NODE
           Text.escape(Text.collapse(node.content))
-        elsif node.element?
+        elsif type == Stats::ELEMENT_NODE
           element_text(node)
         else
           ""
