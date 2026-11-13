@@ -99,11 +99,12 @@ module Nokodown
       remove(holder)
     end
 
-    # "READ MORE: <headline>", or a paragraph made of several headlines.
+    # "READ MORE: <headline>", or a paragraph made of several headlines. A
+    # paragraph with no element in it holds no link, so it is not searched.
     def related_box?(node, text)
       return link_density(node) >= 0.5 if text.match?(Patterns::RELATED_LABEL)
 
-      node.name == "p" && node.css("a[href]").size >= 2 && link_density(node) >= 0.8
+      node.name == "p" && !node.first_element_child.nil? && node.css("a[href]").size >= 2 && link_density(node) >= 0.8
     end
 
     # Datelines and "follow us" lines.

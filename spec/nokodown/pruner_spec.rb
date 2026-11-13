@@ -70,6 +70,25 @@ RSpec.describe Nokodown::Pruner do
     end
   end
 
+  describe "related links" do
+    it "removes a paragraph of headlines, and searches only paragraphs with an element for links" do
+      root = content("#{story}<p><a href='/a'>First story</a> | <a href='/b'>Second story</a></p>" \
+                     "<p>Plain text with no element in it at all.</p>")
+      searched = []
+      Nokolexbor::Node.any_instance.stub(:css).and_wrap_original do |original, selector|
+        searched << Nokodown::Dom.text(original.receiver) if selector == "a[href]"
+        original.call(selector)
+      end
+      described_class.new([root], :article, conditional: false).send(:remove_related_links, root)
+      searched.uniq.should == ["First story | Second story"]
+      text = Nokodown::Dom.text(root)
+
+      text.should_not include("First story")
+      text.should include("Plain text with no element")
+      text.should include("Crews replaced six bearings")
+    end
+  end
+
   describe "calls to action" do
     it "removes buttons of each holder tag, nested ones too, finding them with one XPath query" do
       root = content("#{story}<div class='btn-primary'><a class='button' href='/buy'>Buy now</a></div>" \
