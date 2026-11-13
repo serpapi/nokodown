@@ -155,7 +155,7 @@ module Nokodown
       return paragraph_keys_bottom_up(root) if shared_keys?(root)
 
       broken = Set.new
-      root.xpath(PARAGRAPH_BREAKER_XPATH).each do |breaker|
+      root.xpath(PARAGRAPH_BREAKER_XPATH).to_a.each do |breaker|
         ancestor = breaker.parent
         ancestor = ancestor.parent while ancestor&.element? && broken.add?(key(ancestor))
       end
@@ -182,7 +182,7 @@ module Nokodown
     # XPath, because Lexbor's CSS engine takes several times longer to
     # match a list of tag names.
     def shared_keys?(root)
-      keys = root.xpath(FORMATTING_XPATH).map { |node| key(node) }
+      keys = root.xpath(FORMATTING_XPATH).to_a.map { |node| key(node) }
       keys << key(root) if FORMATTING.include?(root.name)
       keys.uniq.size != keys.size
     end

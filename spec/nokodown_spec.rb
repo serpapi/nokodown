@@ -90,6 +90,27 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "large result sets" do
+    # NodeSet#each wraps its nodes one at a time from Ruby; to_a wraps them
+    # all in C, which takes about two thirds of the time.
+    it "are read as Arrays by the passes that walk most of the page" do
+      walkers = []
+      Nokolexbor::NodeSet.any_instance.stub(:each).and_wrap_original do |original, *args, &block|
+        frame = caller_locations.find { |location| location.path.include?("/lib/nokodown/") }
+        walkers << "#{File.basename(frame.path, '.rb')}##{frame.label.sub('block in ', '')}" if frame
+        original.call(*args, &block)
+      end
+      %w[article.html docs.html forum.html listing.html].each do |name|
+        [true, false].each { |main_content| Nokodown.to_markdown(fixture(name), url: "https://example.com/", main_content: main_content) }
+      end
+
+      hot = %w[preprocessor#call preprocessor#remove_hidden dom#paragraph_keys dom#shared_keys? heading_anchors#mark
+               metadata#meta_values pruner#remove_related_links pruner#remove_stray_lines pruner#link_text_length
+               pruner#remove_suspicious_containers pruner#remove_boilerplate_text pruner#remove_calls_to_action]
+      (walkers.uniq & hot).should == []
+    end
+  end
+
   describe "cleanup of the main content" do
     def extract(html)
       Nokodown.to_markdown(html, url: "https://example.com/page", title: false)

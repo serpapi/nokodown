@@ -73,7 +73,7 @@ module Nokodown
     # Boxes of links to other stories placed inside the body: "READ MORE:
     # <link>", a "More:" label over a list of headlines, a paragraph of links.
     def remove_related_links(root)
-      root.css("p, li, h2, h3, h4, h5, h6, strong, b").each do |node|
+      root.css("p, li, h2, h3, h4, h5, h6, strong, b").to_a.each do |node|
         text = Dom.text(node)
         if related_label?(text)
           remove_with_link_box(node)
@@ -109,7 +109,7 @@ module Nokodown
 
     # Datelines and "follow us" lines.
     def remove_stray_lines(root)
-      root.css("p, div, span, li, small, time").each do |node|
+      root.css("p, div, span, li, small, time").to_a.each do |node|
         content = node.content
         next if Dom.min_text_length(content) > 120
 
@@ -128,7 +128,7 @@ module Nokodown
     end
 
     def link_text_length(node)
-      node.css("a[href]").sum { |link| Dom.text(link).length }
+      node.css("a[href]").to_a.sum { |link| Dom.text(link).length }
     end
 
     # Readability drops footers, asides and share widgets inside the article;
@@ -162,7 +162,7 @@ module Nokodown
       paragraph_keys = Dom.paragraph_keys(root)
       memo = { root: root }
       ["form, fieldset", "table", "ul", "div"].each do |selector|
-        root.css(selector).reverse_each do |node|
+        root.css(selector).to_a.reverse_each do |node|
           next if paragraph_keys.include?(Dom.key(node)) || !ContainerCheck.new(node, content_length, paragraph_keys, memo).remove?
 
           ContainerCheck.forget(memo, node)
@@ -244,7 +244,7 @@ module Nokodown
     end
 
     def remove_boilerplate_text(root)
-      root.css(TEXT_BLOCKS).each do |node|
+      root.css(TEXT_BLOCKS).to_a.each do |node|
         content = node.content
         next if Dom.min_text_length(content) > 200
 
@@ -263,7 +263,7 @@ module Nokodown
     # does not matter.
     def remove_calls_to_action(root)
       @running_text = {}
-      root.xpath(CALL_TO_ACTION_HOLDERS).select { |node| call_to_action?(node) }.each { |node| remove(node) }
+      root.xpath(CALL_TO_ACTION_HOLDERS).to_a.select { |node| call_to_action?(node) }.each { |node| remove(node) }
     end
 
     def destination(link)

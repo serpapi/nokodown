@@ -24,7 +24,7 @@ module Nokodown
     # Only a heading, an element in one or the section one opens has a
     # label, so only the elements around headings are read.
     def mark(root)
-      root.xpath(HEADINGS).each do |heading|
+      root.xpath(HEADINGS).to_a.each do |heading|
         [heading, heading.parent, *heading.element_children].each do |node|
           node[Dom::ANCHOR] = "1" if node != root && node.key?("id") && anchor?(node)
         end

@@ -137,7 +137,7 @@ module Nokodown
     end
 
     def meta_values
-      @doc.css("meta").each_with_object({}) do |meta, values|
+      @doc.css("meta").to_a.each_with_object({}) do |meta, values|
         content = meta["content"].to_s.strip
         next if content.empty?
 
