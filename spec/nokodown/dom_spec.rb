@@ -76,12 +76,15 @@ RSpec.describe Nokodown::Dom do
       body.css("*").map { |node| described_class.key(node) }.should == %w[1 2 3 4 5]
     end
 
-    it "keys elements while walking, without listing them first" do
-      body = Nokolexbor::HTML("<body><ul><li>a<b>b</b></li><li>c</li></ul><p><i>d</i></p></body>").at_css("body")
-      described_class.should_not_receive(:elements)
+    # XPath's ".//*" is evaluated as a stream that stops 10,000 levels down.
+    it "lists and keys elements more than 10,000 levels down" do
+      depth = 10_050
+      body = Nokolexbor::HTML("<body>#{'<div>' * depth}<p>deep</p>#{'</div>' * depth}<p>top</p></body>").at_css("body")
       described_class.assign_keys(body)
 
-      body.css("*").map { |node| described_class.key(node) }.should == %w[1 2 3 4 5 6]
+      described_class.elements(body).size.should == depth + 2
+      described_class.key(body.css("p").first).should == (depth + 1).to_s
+      described_class.key(body.css("p").last).should == (depth + 2).to_s
     end
   end
 

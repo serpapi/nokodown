@@ -58,31 +58,17 @@ module Nokodown
     # survives the copy that article cleaning works on.
     THREAD = "data-nokodown-thread"
 
+    ELEMENTS_XPATH = "descendant::*"
+
     # Set by HeadingAnchors on elements whose id is made from their heading.
     ANCHOR = "data-nokodown-anchor"
 
     module_function
 
-    # Numbers the elements in the order elements(root) lists them, while
-    # walking, so no list of every element is built first.
+    # Numbers the elements in the order elements(root) lists them.
     def assign_keys(root)
       root[KEY] = "0"
-      index = 0
-      stack = []
-      child = root.last_element_child
-      while child
-        stack << child
-        child = child.previous_element
-      end
-      while (node = stack.pop)
-        index += 1
-        node[KEY] = index.to_s
-        child = node.last_element_child
-        while child
-          stack << child
-          child = child.previous_element
-        end
-      end
+      elements(root).each_with_index { |node, index| node[KEY] = (index + 1).to_s }
     end
 
     def key(node)
@@ -90,26 +76,11 @@ module Nokodown
     end
 
     # The elements under root in document order, as css("*") lists them.
-    # Lexbor's selector engine took several times longer to list them
-    # than walking the tree from Ruby.
+    # Lexbor's selector engine takes several times longer, and a walk from
+    # Ruby twice as long. The axis is spelled out: ".//*" is evaluated as a
+    # stream that stops 10,000 levels down.
     def elements(root)
-      found = []
-      stack = []
-      child = root.last_element_child
-      while child
-        stack << child
-        child = child.previous_element
-      end
-      until stack.empty?
-        node = stack.pop
-        found << node
-        child = node.last_element_child
-        while child
-          stack << child
-          child = child.previous_element
-        end
-      end
-      found
+      root.xpath(ELEMENTS_XPATH).to_a
     end
 
     # A node's children, text included, as an Array. Nokolexbor builds a
