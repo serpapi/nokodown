@@ -12,6 +12,9 @@ module Nokodown
       ENTITY = /&(?=(?:[A-Za-z][A-Za-z0-9]{1,31}|#\d{1,7}|#[xX]\h{1,6});)/.freeze
       SCHEME = /\A[A-Za-z][A-Za-z0-9+.-]*:/.freeze
       DESTINATION_UNSAFE = /[\x00-\x20\x7F<>\\\[\]`]/.freeze
+      # What destination changes, or needs to see: an unsafe character, an
+      # entity, a parenthesis, an IPv6 host's brackets.
+      DESTINATION_CHANGES = /[\x00-\x20\x7F<>\\\[\]`&()]/.freeze
       # An IPv6 host keeps its brackets: scheme, user info, host.
       IPV6_HOST = %r{\A([A-Za-z][A-Za-z0-9+.-]*://)([^/?#\[\]]*@)?(\[[\h:.]+\])(?=[:/?#]|\z)}.freeze
       # How deep CommonMark (cmark, markdown-it) nests parentheses in a
@@ -241,6 +244,9 @@ module Nokodown
       # (a backslash or a backtick before it), the URL is read as text, and
       # must not hold a link or a code span of its own.
       def destination(url)
+        # Most URLs hold none of the characters below and are written as they are.
+        return url unless url.match?(DESTINATION_CHANGES)
+
         url = encode_unsafe(url)
         url = encode_scheme_entities(url) if url.include?("&") && !url.match?(SCHEME)
         url = url.gsub("(", "%28").gsub(")", "%29") unless paired_parentheses?(url)

@@ -273,6 +273,13 @@ RSpec.describe "Markdown conversion" do
                               "[IPv6](http://[2001:db8::1]/a%5Bb%5D) [Filter](https://example.com/search?f%5B0%5D=a)"
     end
 
+    it "writes a URL with nothing to encode as it is, without searching it again" do
+      text = Nokodown::Markdown::Text
+      text.should_not_receive(:encode_unsafe)
+      text.should_not_receive(:paired_parentheses?)
+      ["https://example.org/a/b?c=d;e=f#g", "/caf\u00E9/%41", "mailto:a@b.c"].each { |url| text.destination(url).should equal(url) }
+    end
+
     it "keeps only the brackets of an IPv6 host as they are, and encodes its user info" do
       html = '<p><a href="http://&lt;img src=x&gt;@[::1]/">Tag</a> <a href="http://a b@[::1]:8080/x y">Space</a> ' \
              '<a href="http://[2001:db8::1]/a[b]">Path</a></p>'
