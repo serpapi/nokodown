@@ -111,7 +111,7 @@ module Nokodown
     def scoring_parent(node)
       parent = node.parent
       return parent unless node.name == "p" && parent&.name == "div" && parent.element_children.size == 1
-      return parent unless parent.children.all? { |child| child.element? || child.content.strip.empty? }
+      return parent unless Dom.children(parent).all? { |child| child.element? || child.content.strip.empty? }
 
       parent.parent
     end
@@ -119,7 +119,7 @@ module Nokodown
     # Text sitting directly in a div between block children counts as paragraphs.
     def phrasing_runs(div)
       runs = [+""]
-      div.children.each do |child|
+      Dom.children(div).each do |child|
         if child.element? && (Dom::PARAGRAPH_BREAKERS.include?(child.name) || Dom.block?(child))
           runs << +""
         else

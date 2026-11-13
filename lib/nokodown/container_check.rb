@@ -216,7 +216,7 @@ module Nokodown
 
     # Readability wraps a container's loose text in <p>, which then counts as text.
     def own_text_length
-      loose = @node.children.reject { |child| child.element? && Dom::PARAGRAPH_BREAKERS.include?(child.name) }
+      loose = Dom.children(@node).reject { |child| child.element? && Dom::PARAGRAPH_BREAKERS.include?(child.name) }
       Dom.squish(loose.map(&:content).join).length
     end
   end

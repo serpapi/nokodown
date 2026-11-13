@@ -106,7 +106,8 @@ RSpec.describe Nokodown do
 
       hot = %w[preprocessor#call preprocessor#remove_hidden dom#paragraph_keys dom#shared_keys? heading_anchors#mark
                metadata#meta_values pruner#remove_related_links pruner#remove_stray_lines pruner#link_text_length
-               pruner#remove_suspicious_containers pruner#remove_boilerplate_text pruner#remove_calls_to_action]
+               pruner#remove_suspicious_containers pruner#remove_boilerplate_text pruner#remove_calls_to_action
+               scorer#phrasing_runs scorer#scoring_parent container_check#own_text_length]
       (walkers.uniq & hot).should == []
     end
   end
