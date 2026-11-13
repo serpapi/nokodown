@@ -75,6 +75,14 @@ RSpec.describe Nokodown::Dom do
 
       body.css("*").map { |node| described_class.key(node) }.should == %w[1 2 3 4 5]
     end
+
+    it "keys elements while walking, without listing them first" do
+      body = Nokolexbor::HTML("<body><ul><li>a<b>b</b></li><li>c</li></ul><p><i>d</i></p></body>").at_css("body")
+      described_class.should_not_receive(:elements)
+      described_class.assign_keys(body)
+
+      body.css("*").map { |node| described_class.key(node) }.should == %w[1 2 3 4 5 6]
+    end
   end
 
   describe ".children" do

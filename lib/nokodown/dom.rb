@@ -63,9 +63,26 @@ module Nokodown
 
     module_function
 
+    # Numbers the elements in the order elements(root) lists them, while
+    # walking, so no list of every element is built first.
     def assign_keys(root)
       root[KEY] = "0"
-      elements(root).each_with_index { |node, index| node[KEY] = (index + 1).to_s }
+      index = 0
+      stack = []
+      child = root.last_element_child
+      while child
+        stack << child
+        child = child.previous_element
+      end
+      while (node = stack.pop)
+        index += 1
+        node[KEY] = index.to_s
+        child = node.last_element_child
+        while child
+          stack << child
+          child = child.previous_element
+        end
+      end
     end
 
     def key(node)
