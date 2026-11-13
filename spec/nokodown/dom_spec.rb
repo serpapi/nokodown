@@ -105,6 +105,26 @@ RSpec.describe Nokodown::Dom do
     end
   end
 
+  describe ".spaces_to_blanks" do
+    it "turns every Unicode space into a blank, as tr over the characters does" do
+      characters = (0..0x10FFFF).reject { |code| code.between?(0xD800, 0xDFFF) }.map { |code| code.chr(Encoding::UTF_8) }
+      [characters.join, characters.join("é"), "a\u00A0b\u3000c\u2028\u0085", "plain\ttext\n"].each do |string|
+        blanked = described_class.spaces_to_blanks(string)
+        blanked.should == string.tr(described_class::UNICODE_SPACES, " ")
+        blanked.encoding.should == Encoding::UTF_8
+      end
+    end
+
+    it "leaves invalid bytes and other encodings to tr, which raises" do
+      invalid = "a\u00A0b\xFF\tc".dup.force_encoding(Encoding::UTF_8)
+      latin = "a\u00A0b\tc".encode(Encoding::ISO_8859_1)
+      [[invalid, ArgumentError], [latin, Encoding::CompatibilityError]].each do |string, error|
+        -> { string.tr(described_class::UNICODE_SPACES, " ") }.should raise_error(error)
+        -> { described_class.spaces_to_blanks(string) }.should raise_error(error)
+      end
+    end
+  end
+
   describe ".min_text_length" do
     it "never exceeds the length of the squished text" do
       strings = ["", " ", "a", " a  b ", "a\0", "\0a\0 ", "a\v\fb\r\n", "a\u00A0\u00A0b", "\u3000\u2003x\u2028y\u0085",
