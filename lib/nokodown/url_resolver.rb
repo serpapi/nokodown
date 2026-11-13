@@ -69,6 +69,11 @@ module Nokodown
     # A browser ignores spaces and control characters around a URL, and tabs
     # and line breaks anywhere in it ("java&#9;script:" is "javascript:").
     VISIBLE = /[^\x00-\x20]/.freeze
+    # Path segments with nothing to encode, no dot segment to resolve, and
+    # no query or fragment to clean.
+    PLAIN_SEGMENTS = %r{(?:/(?!\.)(?:[A-Za-z0-9\-._~!$&'()*+,;=:@]|%\h\h)*+)*+}.freeze
+    PLAIN_URL = %r{\Ahttps?://([A-Za-z0-9\-.]++)#{PLAIN_SEGMENTS}\z}.freeze
+    PLAIN_PATH = %r{\A(?=/)(?!//)#{PLAIN_SEGMENTS}\z}.freeze
 
     # The URL a browser would read from an attribute value. Trimmed by index:
     # on Ruby 2.7 a regex for trailing controls rescans a run of spaces
@@ -102,7 +107,7 @@ module Nokodown
     end
 
     def resolve(href)
-      @links.fetch(href) { @links[href.dup.freeze] = absolute(href) { |uri| clean_link(uri) }.freeze }
+      @links.fetch(href) { @links[href.dup.freeze] = link(href).freeze }
     end
 
     def resolve_image(src)
@@ -114,6 +119,31 @@ module Nokodown
     end
 
     private
+
+    def link(href)
+      href = UrlResolver.normalize(href)
+      plain_link(href) || absolute(href) { |uri| clean_link(uri) }
+    end
+
+    # Most links are a plain web URL or a plain path from the site's root.
+    # Parsing and cleaning give those back as they are, the path after the
+    # page's origin, so they skip URI. Amazon's links are cleaned by path,
+    # and a base that is not a web page is left to URI.
+    def plain_link(href)
+      return unless @base.nil? || web?(@base)
+
+      if (match = PLAIN_URL.match(href))
+        href unless match[1].match?(AMAZON)
+      elsif href.match?(PLAIN_PATH)
+        "#{origin}#{href}" if origin
+      end
+    end
+
+    def origin
+      return @origin if defined?(@origin)
+
+      @origin = (@base.merge("/").to_s.chomp("/") if @base && !@base.host.match?(AMAZON))
+    end
 
     # Only a URL with a fragment can be an anchor.
     def page_anchor?(url)

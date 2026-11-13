@@ -35,6 +35,32 @@ RSpec.describe Nokodown::UrlResolver do
     -> { described_class.normalize("/a\xFF".dup.force_encoding("UTF-8")) }.should raise_error(ArgumentError)
   end
 
+  it "gives a plain link back as it is, or after the page's origin, without parsing it" do
+    urls.resolve("/first").should == "https://example.com/first"
+    URI::Generic.any_instance.should_not_receive(:merge)
+
+    urls.resolve("https://Example.org/a/b-c_d~e%41").should == "https://Example.org/a/b-c_d~e%41"
+    urls.resolve(" /a/b:c@d,e;f=g\n").should == "https://example.com/a/b:c@d,e;f=g"
+    urls.resolve("/").should == "https://example.com/"
+  end
+
+  it "parses and cleans a link that is not plain" do
+    {
+      "/a/./b" => "https://example.com/a/b",
+      "/a/../b" => "https://example.com/b",
+      "//cdn.example.net/x" => "https://cdn.example.net/x",
+      "HTTPS://example.org/x" => "https://example.org/x",
+      "https://example.org:443/x" => "https://example.org/x",
+      "/a b" => "https://example.com/a%20b",
+      "/a?utm_source=x" => "https://example.com/a",
+      "https://www.amazon.com/Kettle/dp/B000000000/ref=sr_1" => "https://www.amazon.com/Kettle/dp/B000000000"
+    }.each { |href, url| urls.resolve(href).should == url }
+
+    shop = described_class.new("https://www.amazon.com/s?k=kettle")
+    shop.resolve("/Kettle/dp/B000000000/ref=sr_1").should == "https://www.amazon.com/Kettle/dp/B000000000"
+    described_class.new(nil).resolve("/a").should == "/a"
+  end
+
   it "is not changed by changes to a string it was given or returned" do
     href = +"/a"
     first = urls.resolve(href)
