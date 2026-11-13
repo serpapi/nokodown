@@ -36,6 +36,20 @@ RSpec.describe Nokodown::Boilerplate do
       remaining('<table class="mdx-table_root__adKqa"><tr><td>Provisioner type</td></tr></table>').should == "Provisioner type"
     end
 
+    it "removes blocks with ad attributes, and asks no element for them on a page without any" do
+      asked = []
+      Nokolexbor::Node.any_instance.stub(:key?).and_wrap_original do |original, name|
+        asked << name if name == "data-ad-slot"
+        original.call(name)
+      end
+
+      remaining('<p>Heat pumps move heat.</p><div><span data-ad-slot="x">Boiler sale</span></div>').should == "Heat pumps move heat."
+      asked.should_not be_empty
+      asked.clear
+      remaining("<p>Heat pumps move heat.</p><div><span>Boiler sale</span></div>").should include("Boiler sale")
+      asked.should be_empty
+    end
+
     it "removes ad slots, including sized ones" do
       html = <<~HTML
         <p>Heat pumps move heat instead of making it.</p>

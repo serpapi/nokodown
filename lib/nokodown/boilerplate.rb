@@ -13,6 +13,7 @@ module Nokodown
     SECTIONING = %w[article aside main nav section].freeze
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
+    AD_ATTRIBUTE_SELECTOR = AD_ATTRIBUTES.map { |name| "[#{name}]" }.join(", ").freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     # Terms WordPress (tag-*, category-*) and WooCommerce (product_cat-*,
     # product_tag-*, product_brand-*) put on a post or product.
@@ -35,6 +36,9 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
+      # Few pages carry ad attributes; one query over the page (it also reads
+      # templates, which the walk skips) spares asking every element for each.
+      @ad_attributes = !@body.at_css(AD_ATTRIBUTE_SELECTOR).nil?
       # Card grids repeat the same class list hundreds of times, and class
       # names repeat across lists. No furniture pattern spans a space, so a
       # list is furniture when one of its names is.
@@ -147,7 +151,7 @@ module Nokodown
       return true if node.name == "ins" && node["class"].to_s.include?("adsbygoogle")
       return true if node["id"].to_s.start_with?("div-gpt-ad", "google_ads")
 
-      AD_ATTRIBUTES.any? { |name| node.key?(name) }
+      @ad_attributes && AD_ATTRIBUTES.any? { |name| node.key?(name) }
     end
 
     def chrome_label?(node)
