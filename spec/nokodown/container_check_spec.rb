@@ -21,6 +21,24 @@ RSpec.describe Nokodown::ContainerCheck do
     remove?("<p>#{'Crews replaced six bearings. ' * 4}</p>").should be(false)
   end
 
+  it "asks the root once whether it holds inputs, players, embeds, images or list items" do
+    root = Nokolexbor::HTML("<body><div class='story'>#{"<div><p>Crews replaced six bearings and resurfaced both ramps.</p><a href='/x'>more</a></div>" * 3}</div></body>").at_css("div.story")
+    Nokodown::Dom.assign_keys(root)
+    asked = Hash.new(0)
+    Nokolexbor::Node.any_instance.stub(:css).and_wrap_original { |original, selector| asked[selector] += 1; original.call(selector) }
+    Nokolexbor::Node.any_instance.stub(:at_css).and_wrap_original { |original, selector| asked[selector] += 1; original.call(selector) }
+    memo = { root: root }
+    root.css("div").to_a.each { |div| described_class.new(div, 1000, Set.new, memo).remove?.should be(false) }
+    %w[input img li].each { |name| asked[name].should == 1 }
+    asked["video, audio"].should == 1
+  end
+
+  it "still counts inputs in a root that has them" do
+    root = Nokolexbor::HTML("<body><div class='story'><div><p>Crews replaced six bearings.</p><input type='text'></div><p>#{'Crews resurfaced both ramps. ' * 9}</p></div></body>").at_css("div.story")
+    Nokodown::Dom.assign_keys(root)
+    described_class.new(root.first_element_child, 1000, Set.new, root: root).remove?.should be(true)
+  end
+
   describe "a container without text containers" do
     it "is removed when nothing in it holds text" do
       remove?("<span></span><em> </em><div><b></b></div>").should be(true)

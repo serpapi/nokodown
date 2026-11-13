@@ -12,6 +12,8 @@ module Nokodown
     LOADING_WORDS = /\A(?:(?:loading|正在加载|Загрузка|chargement|cargando)(?:…|\.\.\.)?)\z/i.freeze
     POST_BODY_SHARE = 0.8
     PLAYER_CLASS = /media/.freeze
+    PLAYERS = "video, audio"
+    EMBEDS = "object, embed, iframe"
 
     def initialize(node, content_length, paragraph_keys, memo = {})
       @node = node
@@ -91,7 +93,18 @@ module Nokodown
     def player?
       return @player if defined?(@player)
 
-      @player = !@node.at_css("video, audio").nil?
+      @player = !none_in_root?(PLAYERS) && !@node.at_css(PLAYERS).nil?
+    end
+
+    # Most roots hold no player, embed, input, image or list item. Asking the
+    # root once spares asking each container in it; removing containers
+    # never adds any. A check without a root asks its own node.
+    def none_in_root?(selector)
+      root = @memo[:root]
+      return false unless root
+
+      absent = (@memo[:absent] ||= {})
+      absent.fetch(selector) { absent[selector] = root.at_css(selector).nil? }
     end
 
     def video_embed?
@@ -116,6 +129,8 @@ module Nokodown
     end
 
     def too_many_inputs?
+      return false if none_in_root?("input")
+
       inputs = @node.css("input").size
       inputs.positive? && inputs > paragraphs / 3
     end
@@ -160,15 +175,15 @@ module Nokodown
     end
 
     def embeds
-      @embeds ||= @node.css("object, embed, iframe")
+      @embeds ||= none_in_root?(EMBEDS) ? [] : @node.css(EMBEDS)
     end
 
     def list_items
-      @list_items ||= @node.css("li").size
+      @list_items ||= none_in_root?("li") ? 0 : @node.css("li").size
     end
 
     def images
-      @images ||= @node.css("img").size
+      @images ||= none_in_root?("img") ? 0 : @node.css("img").size
     end
 
     def list?
