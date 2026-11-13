@@ -25,4 +25,14 @@ RSpec.describe Nokodown::Preprocessor do
     found.should == body.css(described_class::HIDDEN_SELECTORS.join(", ")).map(&:to_html)
     found.size.should == 7
   end
+
+  it "restores link targets on the links XPath finds, whatever their case or nesting" do
+    html = "<body><a data-href='/x'>x</a><A DATA-HREF='/u'>u</A><p><b><a href='/k' data-href='/no'>k</a></b></p>" \
+           "<table><tr><td><a href='' data-url='/t'>t</a></td></tr></table></body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    body.stub(:css).and_call_original
+    body.should_not_receive(:css).with("a")
+    described_class.new(body, full: true).call
+    body.xpath(".//a").map { |link| link["href"] }.should == ["/x", "/u", "/k", "/t"]
+  end
 end
