@@ -155,4 +155,14 @@ RSpec.describe Nokodown::HeadingAnchors do
     steps.should < 80
     body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.should == %w[a-short-title]
   end
+
+  it "steps over the text a section opens with once telling which sections headings open" do
+    unit = "<h2>Section</h2><div><h3>Part</h3></div>#{'<br>' * 14}"
+    html = "<body><article id='post'>#{'a<script></script>' * 40_000}#{unit * 4000}</article></body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    body.css("script").each(&:remove)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    described_class.mark(body)
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 0.5
+  end
 end

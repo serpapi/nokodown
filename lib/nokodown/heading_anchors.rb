@@ -111,21 +111,26 @@ module Nokodown
 
     # Whether only empty elements come before the heading, as #label reads a
     # section. Stepping back from the heading reads each element once over
-    # all headings. Stepping on from the first element, as far as elements
+    # all headings. Stepping on from the first child, over text and elements
     # without any content, stops as soon as one is a heading or holds an
     # element, so a section that does not open with the heading is told at
-    # once. Each step is taken from +left+: nil when they run out.
+    # once. It steps over text one node at a time, as stepping to the next
+    # element would pass all of it again for every heading. Each step is
+    # taken from +left+: nil when they run out.
     def opening?(heading, parent, left = [Float::INFINITY])
       back = heading.previous_element
-      ahead = parent.first_element_child
+      ahead = parent.child
       loop do
         return nil if (left[0] -= 1).negative?
 
         if ahead
           return true if ahead == heading
-          return false if Dom.heading?(ahead) || ahead.first_element_child
+          return false if Dom.heading?(ahead)
 
-          ahead = ahead.child ? nil : ahead.next_element
+          inner = ahead.element? ? ahead.child : nil
+          return false if inner && (inner.element? || inner.next&.element?)
+
+          ahead = inner ? nil : ahead.next
         end
         return true if back.nil?
         return false if Dom.heading?(back) || !empty?(back)
