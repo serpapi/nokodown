@@ -646,6 +646,18 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "attributes named like Nokodown's own" do
+    it "ignores a page's element keys outside the body" do
+      html = '<html data-nokodown-key="1"><body><div class="post">Y</div><div class="signature">API signature</div></body></html>'
+      described_class.to_markdown(html).should == "Y\n\nAPI signature"
+    end
+
+    it "ignores a page's root key on a named html element" do
+      html = '<html class="post" data-nokodown-key="0"><body><div class="signature">X</div><p>Y</p></body></html>'
+      described_class.extract(html).to_h.values_at(:markdown, :excerpt).should == ["Y", "Y"]
+    end
+  end
+
   describe "encodings" do
     it "transcodes binary input using the declared charset" do
       html = "<html><head><meta charset=\"windows-1252\"></head><body><p>caf\xE9</p></body></html>".b

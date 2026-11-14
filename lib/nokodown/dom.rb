@@ -55,7 +55,6 @@ module Nokodown
     SIGNATURES = :nokodown_signatures
     SECONDARY = :nokodown_secondary
     WEIGHTS = :nokodown_weights
-    KEYED = :nokodown_keyed_signatures
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
@@ -73,8 +72,6 @@ module Nokodown
     def assign_keys(root)
       root[KEY] = "0"
       elements(root).each_with_index { |node, index| node[KEY] = (index + 1).to_s }
-      # The keys may name other elements now, and before this they were the page's.
-      Thread.current[KEYED] = {} if Thread.current[SIGNATURES]
     end
 
     def key(node)
@@ -257,22 +254,11 @@ module Nokodown
       bytes.force_encoding(Encoding::UTF_8)
     end
 
-    # Once the extraction has numbered the elements, each one's signature is
-    # kept by its key: one attribute to read instead of three. Until then the
-    # keys are whatever the page wrote, and numbering again forgets them all.
-    def signature(node)
-      keyed = Thread.current[KEYED]
-      key = keyed && node[KEY]
-      return named_signature(node) unless key
-
-      keyed.fetch(key) { keyed[key.freeze] = named_signature(node) }
-    end
-
     # The cache is kept by class list, then by id, so a repeated element
     # finds its signature without building the string it is made from. No
     # rewrite of signature_of reaches across a space, so the class list is
     # read once, and an id (most are unique) on its own.
-    def named_signature(node)
+    def signature(node)
       classes = node["class"]
       id = name_id(node)
       return "" if classes.nil? && id.nil?
@@ -294,17 +280,14 @@ module Nokodown
       outer = Thread.current[SIGNATURES]
       outer_secondary = Thread.current[SECONDARY]
       outer_weights = Thread.current[WEIGHTS]
-      outer_keyed = Thread.current[KEYED]
       Thread.current[SIGNATURES] = outer || {}
       Thread.current[SECONDARY] = outer_secondary || {}
       Thread.current[WEIGHTS] = outer_weights || {}
-      Thread.current[KEYED] = nil
       yield
     ensure
       Thread.current[SIGNATURES] = outer
       Thread.current[SECONDARY] = outer_secondary
       Thread.current[WEIGHTS] = outer_weights
-      Thread.current[KEYED] = outer_keyed
     end
 
     # Whether the element is named like a secondary region. The stages ask

@@ -268,25 +268,6 @@ RSpec.describe Nokodown::Dom do
       cached.should == uncached
     end
 
-    it "keeps a numbered element's signature by its key until the elements are numbered again" do
-      root = Nokolexbor::HTML('<body><div class="adContainer"><p id="mainHeader">x</p></div></body>').at_css("body")
-      first = described_class.caching_signatures do
-        described_class.assign_keys(root)
-        div = root.at_css("div")
-        described_class.signature(div)
-        div.stub(:[]).and_call_original
-        div.should_not_receive(:[]).with("class")
-        signature = described_class.signature(div)
-        root.at_css("p").replace(Nokolexbor::HTML('<p class="siteNav">y</p>').at_css("p"))
-        root.at_css("div").add_previous_sibling(Nokolexbor::HTML('<span class="cookieBar">z</span>').at_css("span"))
-        described_class.assign_keys(root)
-        [signature] + root.css("span, div, p").map { |node| described_class.signature(node) }
-      end
-
-      first.should == ["ad-container ", "cookie-bar ", "ad-container ", "site-nav "]
-      Thread.current[described_class::KEYED].should be_nil
-    end
-
     it "answers secondary? from the cache as the pattern does, and drops the cache after" do
       nodes = ["comments", "comments", "post-body", "most-read", "most-read x", "related"].map { |name| element("class=\"#{name}\"") }
       nodes << element('id="comments"') << element("")
