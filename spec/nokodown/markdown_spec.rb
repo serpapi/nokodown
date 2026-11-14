@@ -9,6 +9,12 @@ RSpec.describe "Markdown conversion" do
         "- Coffee **beans** and [dark](https://example.com/roast) roasts"
     end
 
+    it "looks for blocks inside inline elements through the element pointers" do
+      Nokodown::Dom.should_not_receive(:element_children)
+      convert("<p>a <span>b <em>c</em></span> <a href=\"/x\"><span>d</span></a></p><div>e <span><p>f</p></span></div>").should ==
+        "a b *c* [d](https://example.com/x)\n\ne\n\nf"
+    end
+
     it "collapses whitespace like a browser" do
       convert("<p>  one\n   two  three  </p>").should == "one two three"
     end

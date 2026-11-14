@@ -121,10 +121,16 @@ module Nokodown
 
       def contains_block?(node)
         key = Dom.key(node)
-        return @contains_block[key] if key && @contains_block.key?(key)
+        # The memo holds only true and false.
+        found = key && @contains_block[key]
+        return found unless found.nil?
 
-        found = Dom.element_children(node).any? do |child|
-          Dom::BLOCK.include?(child.name) || MEDIA.include?(child.name) || contains_block?(child)
+        found = false
+        child = node.first_element_child
+        while child
+          break found = true if Dom::BLOCK.include?(child.name) || MEDIA.include?(child.name) || contains_block?(child)
+
+          child = child.next_element
         end
         @contains_block[key] = found if key
         found
