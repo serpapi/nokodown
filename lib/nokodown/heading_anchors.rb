@@ -22,13 +22,27 @@ module Nokodown
     module_function
 
     # Only a heading, an element in one or the section one opens has a
-    # label, so only the elements around headings are read.
+    # label, so only the elements around headings are read, each of them
+    # once: a label can be the text of a whole section, and a section can
+    # hold thousands of headings.
     def mark(root)
       root.xpath(HEADINGS).to_a.each do |heading|
-        [heading, heading.parent, *heading.element_children].each do |node|
-          node[Dom::ANCHOR] = "1" if node != root && node.key?("id") && anchor?(node)
-        end
+        nodes = [heading, *Dom.element_children(heading).reject { |child| Dom.heading?(child) }]
+        nodes << heading.parent if reads_parent?(heading, root)
+        nodes.each { |node| node[Dom::ANCHOR] = "1" if node != root && node.key?("id") && anchor?(node) }
       end
+    end
+
+    # A parent is read from the first heading in it, unless it is read as a
+    # heading or as a heading's child already.
+    def reads_parent?(heading, root)
+      parent = heading.parent
+      holder = parent.parent
+      return false if Dom.heading?(parent) || (holder && holder != root && Dom.heading?(holder))
+
+      before = heading.previous_element
+      before = before.previous_element while before && !Dom.heading?(before)
+      before.nil?
     end
 
     def anchor?(node)

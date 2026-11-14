@@ -51,4 +51,17 @@ RSpec.describe Nokodown::HeadingAnchors do
     body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.sort.should == %w[Setup intro s-setup]
     body.key?(Nokodown::Dom::ANCHOR).should == false
   end
+
+  it "reads each element once, however many headings it holds" do
+    html = '<body><h1>Title<h1><div id="content"><h2 id="a">A</h2><p>a</p><h2 id="b">B</h2><p>b</p>' \
+           '<h2>C</h2></div><section id="c"><h3>C</h3><h4 id="d"><span id="e">D</span><h5>E</h5></h4></section></body>'
+    body = Nokolexbor::HTML(html).at_css("body")
+    ids = []
+    described_class.stub(:anchor?).and_wrap_original do |original, node|
+      ids << node["id"]
+      original.call(node)
+    end
+    described_class.mark(body)
+    ids.sort.should == %w[a b c content d e]
+  end
 end
