@@ -41,7 +41,9 @@ module Nokodown
     DENSE_MIN = 16
     # What squish can drop: spaces, and a NUL that strip takes off the end.
     ASCII_BLANKS = "#{ASCII_SPACES} \0"
-    UNICODE_BLANKS = "#{UNICODE_SPACES} \0"
+    # Bytes that start no more characters than there are blanks among them:
+    # the ASCII blanks, and every first byte of a non-ASCII space.
+    BLANK_BYTES = [*ASCII_BLANKS.chars, *SPACE_LEADS].map { |byte| byte.b.freeze }.freeze
     # What squish changes in ASCII text: a space other than a blank, two
     # blanks in a row, or a blank or NUL at either end.
     UNSQUISHED = /[\t\n\v\f\r]|  |\A[ \0]|[ \0]\z/.freeze
@@ -239,8 +241,10 @@ module Nokodown
     # every character other than a blank, so a start of the string with
     # more than limit of those is enough. Reading no further than
     # SAMPLE_LIMITS times the limit bounds what the check costs on long text
-    # that is mostly blanks, which then has to be squished anyway. Text
-    # squish would raise on is left to it.
+    # that is mostly blanks, which then has to be squished anyway. In other
+    # UTF-8 a character counts as a blank when its first byte can start one,
+    # which overcounts blanks but counts bytes, not characters. Text squish
+    # would raise on is left to it.
     def squishes_longer?(string, limit)
       return false if string.bytesize <= limit
 
@@ -249,7 +253,8 @@ module Nokodown
         head.bytesize - head.count(ASCII_BLANKS) > limit
       elsif string.encoding == Encoding::UTF_8 && string.valid_encoding?
         head = string[0, SAMPLE_LIMITS * limit]
-        head.length - head.count(UNICODE_BLANKS) > limit
+        bytes = head.b
+        head.length - BLANK_BYTES.sum { |byte| bytes.count(byte) } > limit
       else
         false
       end

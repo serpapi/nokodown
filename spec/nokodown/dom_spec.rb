@@ -189,6 +189,15 @@ RSpec.describe Nokodown::Dom do
       described_class.squishes_longer?("#{"x" * 121}#{"\u00A0" * 2000}", 120).should == true
     end
 
+    # Counting characters means decoding them; bytes are read four times faster.
+    it "counts the bytes of other UTF-8, not its characters" do
+      counted = []
+      String.any_instance.stub(:count).and_wrap_original { |original, *sets| counted << original.receiver.encoding; original.call(*sets) }
+      described_class.squishes_longer?("日本語の文章です。#{"\u3000" * 3}" * 100, 120).should == true
+      described_class.squishes_longer?("\u2001" * 10_000, 120).should == false
+      counted.uniq.should == [Encoding::BINARY]
+    end
+
     it "leaves text squish raises on to squish" do
       invalid = "a\u00A0b\xFF\tc".dup.force_encoding(Encoding::UTF_8)
       latin = "a\u00A0b\tc#{"x" * 20}".encode(Encoding::ISO_8859_1)
