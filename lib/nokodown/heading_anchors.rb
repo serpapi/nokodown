@@ -36,45 +36,45 @@ module Nokodown
       if headings.size * DENSE_HEADINGS > elements.size
         elements.each { |node| mark_anchor(node) if node.key?("id") }
       else
-        parents = {}
-        headings.to_a.each { |heading| mark_around(heading, root, parents) }
+        mark_around_headings(headings.to_a, root)
       end
     end
 
-    def mark_around(heading, root, parents)
+    # A heading's parent is read from the first heading in it, unless it is
+    # read as a heading or as a heading's child already. Headings in one
+    # section mostly follow each other, and one that shares the last one's
+    # parent is not its first; any other steps back to the heading before
+    # it, so siblings are stepped over once at most.
+    def mark_around_headings(headings, root)
+      last = root
+      headings.each do |heading|
+        mark_around(heading)
+        parent = heading.parent
+        next if parent == last
+
+        last = parent
+        next if parent == root || !parent.key?("id") || !labelled_apart?(parent, root) || !first_heading?(heading)
+
+        mark_anchor(parent)
+      end
+    end
+
+    def mark_around(heading)
       mark_anchor(heading) if heading.key?("id")
       child = heading.first_element_child
       while child
         mark_anchor(child) if child.key?("id") && !Dom.heading?(child)
         child = child.next_element
       end
-      parent = heading.parent
-      mark_anchor(parent) if parent != root && parent.key?("id") && first_read?(parent, heading, root, parents)
     end
 
     def mark_anchor(node)
       node[Dom::ANCHOR] = "1" if anchor?(node)
     end
 
-    # Past this many elements sharing an id, a parent is read from the first
-    # heading in it, which is found by stepping back over its other children.
-    SAME_IDS = 8
-
-    # A parent is read once, from the first heading met in it, unless it is
-    # read as a heading or as a heading's child already. Parents read are
-    # listed by id, since elements are not keyed yet.
-    def first_read?(parent, heading, root, parents)
-      read = (parents[parent["id"]] ||= [])
-      return false if read.any? { |node| node == parent }
-      return first_heading?(heading) && labelled_apart?(parent, root) if read.size >= SAME_IDS
-
-      read << parent
-      labelled_apart?(parent, root)
-    end
-
-    def labelled_apart?(parent, root)
-      holder = parent.parent
-      !Dom.heading?(parent) && !(holder != root && Dom.heading?(holder))
+    def labelled_apart?(section, root)
+      holder = section.parent
+      !Dom.heading?(section) && !(holder != root && Dom.heading?(holder))
     end
 
     def first_heading?(heading)

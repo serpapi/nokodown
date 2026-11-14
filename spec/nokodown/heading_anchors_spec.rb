@@ -70,16 +70,18 @@ RSpec.describe Nokodown::HeadingAnchors do
     ids.sort.should == %w[a b c content d e]
   end
 
-  it "reads a parent once without stepping back over its children for every heading" do
+  it "steps back over a parent's children from its first heading only" do
     html = "<body><article id='post'><h1>A short title</h1>#{('<h2>Section</h2>' + '<span></span>' * 8) * 20}</article>" + filler + "</body>"
     body = Nokolexbor::HTML(html).at_css("body")
-    Nokolexbor::Node.any_instance.should_not_receive(:previous_element)
+    steps = 0
+    Nokolexbor::Node.any_instance.stub(:previous_element).and_wrap_original { |original| steps += 1; original.call }
     described_class.should_receive(:anchor?).once.and_call_original
     described_class.mark(body)
+    steps.should == 1
   end
 
   it "reads each parent once when many share an id" do
-    html = "<body>#{"<section id='intro'><h2>Intro</h2><p>Text</p><h2>More</h2></section>" * 12}" + filler * 3 + "</body>"
+    html = "<body>#{"<section id='intro'><h2>Intro</h2><div><h3>Text</h3></div><h2>More</h2></section>" * 12}" + filler * 3 + "</body>"
     body = Nokolexbor::HTML(html).at_css("body")
     described_class.should_receive(:mark_around).at_least(:once).and_call_original
     described_class.should_receive(:anchor?).exactly(12).times.and_call_original
@@ -87,11 +89,36 @@ RSpec.describe Nokodown::HeadingAnchors do
     body.css("section[#{Nokodown::Dom::ANCHOR}]").size.should == 12
   end
 
+  it "reads a parent once, however many parents before it share its id" do
+    html = "<body>#{"<section id='post'><h2>Intro</h2></section>" * 8}<article id='post'><h1>A short title</h1>" \
+           "#{('<h2>Section</h2>' + '<span></span>' * 8) * 20}</article>" + filler + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    steps = 0
+    Nokolexbor::Node.any_instance.stub(:previous_element).and_wrap_original { |original| steps += 1; original.call }
+    described_class.should_receive(:mark_around).at_least(:once).and_call_original
+    described_class.should_receive(:anchor?).exactly(9).times.and_call_original
+    described_class.mark(body)
+    steps.should == 9
+  end
+
+  it "reads a parent's id once, however many headings it holds" do
+    html = "<body><article id='#{'post' * 100}'><h1>A short title</h1>#{'<h2>Section</h2><p>Text</p>' * 20}</article>" + filler * 3 + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    ids = 0
+    Nokolexbor::Node.any_instance.stub(:[]).and_wrap_original do |original, name|
+      ids += 1 if name == "id"
+      original.call(name)
+    end
+    described_class.should_receive(:mark_around).at_least(:once).and_call_original
+    described_class.mark(body)
+    ids.should == 1
+  end
+
   it "reads every element with an id where headings are most of the page" do
     html = "<body><article id='post'><h1>A short title</h1>#{'<h2>Section</h2>' * 100}<h2 id='notes'>Notes</h2>" \
            "<p id='filler'>Filler</p></article></body>"
     body = Nokolexbor::HTML(html).at_css("body")
-    described_class.should_not_receive(:reads_parent?)
+    described_class.should_not_receive(:mark_around_headings)
     described_class.mark(body)
     body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.should == %w[notes]
   end
