@@ -85,6 +85,33 @@ RSpec.describe Nokodown::Pruner do
       reads.should == { root: 1, links: 1 }
       root.css("a").size.should == 0
     end
+
+    it "keeps no node objects for the links of each card it has read" do
+      button = "<a class='btn' href='/buy'>Buy now</a>"
+      groups = (1..5).map { |g| "<div>#{button}" * 20 + (1..100).map { |i| "<a href='/g#{g}/#{i}'>l#{i}</a> " }.join + "</div>" * 20 }
+      root = content("#{story}#{groups.join}")
+      pruner = described_class.new([root], :article, conditional: false)
+      GC.start
+      before = ObjectSpace.each_object(Nokolexbor::Node).count
+      pruner.send(:remove_calls_to_action, root)
+      GC.start
+      (ObjectSpace.each_object(Nokolexbor::Node).count - before).should < 1000
+      root.css("a.btn").size.should == 5
+    end
+
+    it "tells that a button is not a card's only link from the first few links that lead elsewhere" do
+      contents = (1..100).map { |i| "<a href='#part#{i}'>Part #{i}</a> " }.join
+      buttons = (1..50).map { |i| "<p>Useful prose of a section, with details.</p><a class='btn' href='/buy#{i}'>Buy now</a>" }.join
+      root = content("#{story}<div>#{contents}#{buttons}</div>")
+      pruner = described_class.new([root], :article, conditional: false)
+      reads = 0
+      pruner.stub(:destination).and_wrap_original { |original, link| reads += 1; original.call(link) }
+      pruner.send(:remove_calls_to_action, root)
+      reads.should < 500
+      root.css("a.btn").size.should == 50
+      root.css("a[href^='#']").size.should == 100
+    end
+
     it "reads no text in a table when looking for stray lines" do
       root = content("#{story}<table><tr><td><span><span>Updated 4 March 2024</span></span></td></tr></table><div>Published on March 3, 2024</div>")
       read = []

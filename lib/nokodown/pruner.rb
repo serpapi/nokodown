@@ -25,6 +25,7 @@ module Nokodown
     # Tables not inside another table. Listing what is under every table
     # takes time that grows with the square of the number of tables.
     OUTER_TABLES = "descendant::table[not(ancestor::table)]"
+    CARD_KEYS = 8
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
@@ -296,11 +297,31 @@ module Nokodown
       own = links_of(node).map { |link| Dom.key(link) }
       return false if own.empty? || card.nil?
 
-      card_links(card).none? { |link| destination(link) && !own.include?(Dom.key(link)) }
+      keys, links = card_links(card)
+      return false unless keys.all? { |key| own.include?(key) }
+      return true if keys.size <= CARD_KEYS
+
+      links.none? { |link| destination(link) && !own.include?(Dom.key(link)) }
     end
 
+    # The card's links, kept as the node set the query returns so nested
+    # cards hold no node objects, and the first CARD_KEYS + 1 distinct keys of
+    # those that lead elsewhere (all of them when there are fewer). A control
+    # that lacks one of these keys is not the card's only link; the links are
+    # read again only for a control that holds them all.
     def card_links(card)
-      known(@card_links, card) { card.css("a[href]").to_a }
+      known(@card_links, card) do
+        links = card.css("a[href]")
+        keys = []
+        links.each do |link|
+          next unless destination(link)
+
+          key = Dom.key(link)
+          keys << key unless keys.include?(key)
+          break if keys.size > CARD_KEYS
+        end
+        [keys, links]
+      end
     end
 
     def call_to_action?(node)
