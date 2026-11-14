@@ -68,6 +68,16 @@ RSpec.describe Nokodown::Pruner do
       text.should include("Updated 4 March 2024")
       text.should include("Crews replaced six bearings")
     end
+    it "reads no text in a table when looking for stray lines" do
+      root = content("#{story}<table><tr><td><span><span>Updated 4 March 2024</span></span></td></tr></table><div>Published on March 3, 2024</div>")
+      read = []
+      Nokodown::Dom.stub(:squishes_longer?).and_wrap_original { |original, text, limit| read << text; original.call(text, limit) }
+      described_class.new([root], :article, conditional: false).send(:remove_stray_lines, root)
+
+      read.grep(/Updated/).should be_empty
+      Nokodown::Dom.text(root).should include("Updated 4 March 2024")
+      Nokodown::Dom.text(root).should_not include("Published on")
+    end
   end
 
   describe "related links" do

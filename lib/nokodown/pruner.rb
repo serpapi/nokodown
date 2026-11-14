@@ -22,6 +22,7 @@ module Nokodown
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
     # XPath finds a list of tags faster than CSS.
     CALL_TO_ACTION_HOLDERS = ".//a|.//span|.//div|.//p"
+    TABLE_DESCENDANTS = "descendant::table/descendant::*"
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
@@ -107,16 +108,24 @@ module Nokodown
       node.name == "p" && !node.first_element_child.nil? && node.css("a[href]").size >= 2 && link_density(node) >= 0.8
     end
 
-    # Datelines and "follow us" lines.
+    # Datelines and "follow us" lines; lines in a table stay. A block's text
+    # is read only once it is known to be outside a table, or nested blocks
+    # in a table would each read the same long text. Asking every block for
+    # its table takes longer, so only blocks whose key is found in a table
+    # are asked: misnested formatting copies a key elsewhere.
     def remove_stray_lines(root)
-      root.css("p, div, span, li, small, time").to_a.each do |node|
+      nodes = root.css("p, div, span, li, small, time").to_a
+      return if root.name == "table" || Dom.ancestors_named(root, "table").any?
+
+      tabled = root.xpath(TABLE_DESCENDANTS).to_a.map { |node| Dom.key(node) }.to_set
+      nodes.each do |node|
+        next if tabled.include?(Dom.key(node)) && Dom.ancestors_named(node, "table").any?
+
         content = node.content
         next if Dom.squishes_longer?(content, 120)
 
         text = Dom.squish(content)
-        next unless text.length <= 120 && text.match?(Patterns::STRAY_LINE)
-
-        remove(node) if Dom.ancestors_named(node, "table").none?
+        remove(node) if text.length <= 120 && text.match?(Patterns::STRAY_LINE)
       end
     end
 
