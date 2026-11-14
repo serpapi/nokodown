@@ -114,6 +114,27 @@ RSpec.describe Nokodown::HeadingAnchors do
     ids.should == 1
   end
 
+  it "tells at once that a heading does not open its parent's section" do
+    unit = "<h2>Section</h2>#{'<span></span>' * 8}<div><h3>Part</h3></div>#{'<span></span>' * 8}"
+    html = "<body><article id='post'><h1>A short title</h1>#{unit * 20}</article>" + filler + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    steps = 0
+    Nokolexbor::Node.any_instance.stub(:previous_element).and_wrap_original { |original| steps += 1; original.call }
+    described_class.should_receive(:mark_around).at_least(:once).and_call_original
+    described_class.should_receive(:anchor?).once.and_call_original
+    described_class.mark(body)
+    steps.should == 20
+  end
+
+  it "reads a section that opens with empty elements before its heading" do
+    html = "<body><section id='setup'>#{'<span></span>' * 5}<a> </a><h2>Setup</h2><p>Text</p></section>" \
+           "<section id='usage'><span></span><p>Intro</p><h2>Usage</h2></section>" + filler + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    described_class.should_receive(:mark_around).at_least(:once).and_call_original
+    described_class.mark(body)
+    body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.should == %w[setup]
+  end
+
   it "reads every element with an id where headings are most of the page" do
     html = "<body><article id='post'><h1>A short title</h1>#{'<h2>Section</h2>' * 100}<h2 id='notes'>Notes</h2>" \
            "<p id='filler'>Filler</p></article></body>"

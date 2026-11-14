@@ -40,11 +40,10 @@ module Nokodown
       end
     end
 
-    # A heading's parent is read from the first heading in it, unless it is
-    # read as a heading or as a heading's child already. Headings in one
-    # section mostly follow each other, and one that shares the last one's
-    # parent is not its first; any other steps back to the heading before
-    # it, so siblings are stepped over once at most.
+    # A heading's parent has a label only when the heading opens its section,
+    # so it is read from that heading alone, unless it is read as a heading
+    # or as a heading's child already. Headings in one section mostly follow
+    # each other, and one that shares the last one's parent does not open it.
     def mark_around_headings(headings, root)
       last = root
       headings.each do |heading|
@@ -53,9 +52,9 @@ module Nokodown
         next if parent == last
 
         last = parent
-        next if parent == root || !parent.key?("id") || !labelled_apart?(parent, root) || !first_heading?(heading)
+        next if parent == root || !parent.key?("id") || !labelled_apart?(parent, root)
 
-        mark_anchor(parent)
+        mark_anchor(parent) if opening?(heading, parent)
       end
     end
 
@@ -77,10 +76,27 @@ module Nokodown
       !Dom.heading?(section) && !(holder != root && Dom.heading?(holder))
     end
 
-    def first_heading?(heading)
-      before = heading.previous_element
-      before = before.previous_element while before && !Dom.heading?(before)
-      before.nil?
+    # Whether only empty elements come before the heading, as #label reads a
+    # section. Stepping back from the heading reads each element once over
+    # all headings. Stepping on from the first element, as far as elements
+    # without any content, stops as soon as one is a heading or holds an
+    # element, so a section that does not open with the heading is told at
+    # once.
+    def opening?(heading, parent)
+      back = heading.previous_element
+      ahead = parent.first_element_child
+      loop do
+        if ahead
+          return true if ahead == heading
+          return false if Dom.heading?(ahead) || ahead.first_element_child
+
+          ahead = ahead.child ? nil : ahead.next_element
+        end
+        return true if back.nil?
+        return false if Dom.heading?(back) || !empty?(back)
+
+        back = back.previous_element
+      end
     end
 
     def anchor?(node)
