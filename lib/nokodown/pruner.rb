@@ -274,6 +274,8 @@ module Nokodown
     # does not matter.
     def remove_calls_to_action(root)
       @running_text = {}
+      @text_lengths = {}
+      @card_links = {}
       root.xpath(CALL_TO_ACTION_HOLDERS).to_a.select { |node| call_to_action?(node) }.each { |node| remove(node) }
     end
 
@@ -294,7 +296,11 @@ module Nokodown
       own = links_of(node).map { |link| Dom.key(link) }
       return false if own.empty? || card.nil?
 
-      card.css("a[href]").none? { |link| destination(link) && !own.include?(Dom.key(link)) }
+      card_links(card).none? { |link| destination(link) && !own.include?(Dom.key(link)) }
+    end
+
+    def card_links(card)
+      known(@card_links, card) { card.css("a[href]").to_a }
     end
 
     def call_to_action?(node)
@@ -327,11 +333,29 @@ module Nokodown
     def wrappers(node, text)
       chain = [node]
       parent = node.parent
-      while parent&.element? && Dom.text(parent) == text
+      while parent&.element? && text_length(parent) == text.length && Dom.text(parent) == text
         chain << parent
         parent = parent.parent
       end
       chain
+    end
+
+    def text_length(node)
+      known(@text_lengths, node) { Dom.text(node).length }
+    end
+
+    # Buttons are judged before any is removed, so what is read about the
+    # elements around them holds for all of them: a page can put thousands
+    # of buttons in one element. Kept by key and checked by node, as copies
+    # of a misnested element share a key.
+    def known(store, node)
+      key = Dom.key(node)
+      return yield unless key
+
+      entry = store[key]
+      return entry[1] if entry && entry[0] == node
+
+      yield.tap { |value| store[key] = [node, value] }
     end
 
     def toggle?(node)

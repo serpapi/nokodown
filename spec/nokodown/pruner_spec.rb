@@ -68,6 +68,23 @@ RSpec.describe Nokodown::Pruner do
       text.should include("Updated 4 March 2024")
       text.should include("Crews replaced six bearings")
     end
+
+    it "reads the text and links of an element holding many buttons once" do
+      buttons = "<p>Useful prose of a section, with details.</p><a class='btn' href='/buy'>Buy now</a>" * 50
+      root = content("#{story}#{buttons}")
+      reads = Hash.new(0)
+      Nokodown::Dom.stub(:text).and_wrap_original do |original, node|
+        reads[:root] += 1 if node == root
+        original.call(node)
+      end
+      Nokolexbor::Node.any_instance.stub(:css).and_wrap_original do |original, *args|
+        reads[:links] += 1 if original.receiver == root && args == ["a[href]"]
+        original.call(*args)
+      end
+      described_class.new([root], :article, conditional: false).send(:remove_calls_to_action, root)
+      reads.should == { root: 1, links: 1 }
+      root.css("a").size.should == 0
+    end
     it "reads no text in a table when looking for stray lines" do
       root = content("#{story}<table><tr><td><span><span>Updated 4 March 2024</span></span></td></tr></table><div>Published on March 3, 2024</div>")
       read = []
