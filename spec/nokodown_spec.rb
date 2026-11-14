@@ -658,6 +658,18 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "selector order on the article copy" do
+    # Lexbor sorts a CSS selector list's results by numbers it writes on the
+    # document's nodes, and a copy keeps them, so the queries that run on
+    # the page before the article is copied decide later orders.
+    it "drops an intro line beside a boilerplate notice" do
+      prose = "Useful prose, with details. " * 10
+      html = "<section>Intro<p>All rights reserved</p><div></div></section><p>#{prose}</p>"
+      described_class.to_markdown(html).should == prose.strip
+      described_class.to_markdown(html, max_length: 5).should == "Usefu"
+    end
+  end
+
   describe "Ruby globals" do
     it "drops separator lines as String#lines finds them under another $/" do
       saved = $/

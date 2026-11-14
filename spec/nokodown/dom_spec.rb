@@ -27,15 +27,6 @@ RSpec.describe Nokodown::Dom do
       paragraphs(body, body.at_css("#text")).should == %w[text]
     end
 
-    it "finds the breakers and candidates with XPath" do
-      body = keyed('<div id="outer"><section><p id="sp">x</p><div id="sd">y<ol><li>z</li></ol></div></section>' \
-                   '<figure><div id="cap">Caption</div><img src="a.jpg"></figure><blockquote><div id="q">Q</div></blockquote></div>')
-      root = body.at_css("#outer")
-      root.should_not_receive(:css)
-
-      paragraphs(body, root).should == %w[sp cap q]
-    end
-
     # Lexbor copies a link that is cut by a block into several elements that
     # share one attribute list, so the copies share a key too. The copy
     # visited last in a bottom-up pass decides, as it always has.

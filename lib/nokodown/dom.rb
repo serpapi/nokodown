@@ -14,7 +14,7 @@ module Nokodown
 
     # Elements that stop Readability from treating a div as a paragraph.
     PARAGRAPH_BREAKERS = Set.new(%w[blockquote dl div img ol p pre table ul]).freeze
-    PARAGRAPH_BREAKER_XPATH = PARAGRAPH_BREAKERS.map { |name| ".//#{name}" }.join("|").freeze
+    PARAGRAPH_BREAKER_SELECTOR = PARAGRAPH_BREAKERS.to_a.join(", ").freeze
 
     # The elements the HTML parser reopens after a block cuts them.
     FORMATTING = Set.new(%w[a b big code em font i nobr s small strike strong tt u]).freeze
@@ -157,19 +157,21 @@ module Nokodown
     # (<a><div>…</a>) into elements sharing one attribute list, and so one
     # key, and then which copy holds the block decides. A root with such
     # copies keeps the bottom-up pass, which content selection and cleaning
-    # were tuned with: there the copy visited last decides. Both lists are
-    # only collected into sets, so XPath, faster than CSS at a list of tag
-    # names, finds them in whatever order it returns.
+    # were tuned with: there the copy visited last decides. The lists are
+    # found with CSS rather than a faster XPath union: a CSS selector list
+    # numbers the document's nodes to sort its results, copies inherit those
+    # numbers, and later selector lists on a copy of the article return their
+    # results in the order those numbers give.
     def paragraph_keys(root)
       return paragraph_keys_bottom_up(root) if shared_keys?(root)
 
       broken = Set.new
-      root.xpath(PARAGRAPH_BREAKER_XPATH).to_a.each do |breaker|
+      root.css(PARAGRAPH_BREAKER_SELECTOR).to_a.each do |breaker|
         ancestor = breaker.parent
         ancestor = ancestor.parent while ancestor&.element? && broken.add?(key(ancestor))
       end
 
-      candidates = root.xpath(".//p|.//div").to_a
+      candidates = root.css("p, div").to_a
       candidates << root if root.name == "p" || root.name == "div"
       candidates.each_with_object(Set.new) do |node, keys|
         key = key(node)
