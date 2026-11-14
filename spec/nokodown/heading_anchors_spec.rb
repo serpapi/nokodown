@@ -42,10 +42,13 @@ RSpec.describe Nokodown::HeadingAnchors do
     anchor?(%(<h2 class="anchor" id="related-posts">Related posts<a class="hash-link" href="#related-posts">\u200B</a></h2>)).should == false
   end
 
+  # Enough other elements that only those around the headings are read.
+  let(:filler) { "<p id='filler'>Filler</p>" * 100 }
+
   it "marks the anchors around every heading, and nothing else" do
     html = '<body id="intro-2"><h2 id="intro">Intro</h2><div><section id="s-setup"><span id="setup"></span>' \
            '<h3><span class="mw-headline" id="Setup">Setup</span></h3><p id="setup-2">Setup</p></section>' \
-           '<div id="usage"><div><h4 id="x">Usage</h4></div></div></div></body>'
+           '<div id="usage"><div><h4 id="x">Usage</h4></div></div></div>#{filler}</body>'
     body = Nokolexbor::HTML(html).at_css("body")
     described_class.mark(body)
     body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.sort.should == %w[Setup intro s-setup]
@@ -54,7 +57,7 @@ RSpec.describe Nokodown::HeadingAnchors do
 
   it "reads each element once, however many headings it holds" do
     html = '<body><h1>Title<h1><div id="content"><h2 id="a">A</h2><p>a</p><h2 id="b">B</h2><p>b</p>' \
-           '<h2>C</h2></div><section id="c"><h3>C</h3><h4 id="d"><span id="e">D</span><h5>E</h5></h4></section></body>'
+           '<h2>C</h2></div><section id="c"><h3>C</h3><h4 id="d"><span id="e">D</span><h5>E</h5></h4></section>#{filler}</body>'
     body = Nokolexbor::HTML(html).at_css("body")
     ids = []
     described_class.stub(:anchor?).and_wrap_original do |original, node|
@@ -63,5 +66,14 @@ RSpec.describe Nokodown::HeadingAnchors do
     end
     described_class.mark(body)
     ids.sort.should == %w[a b c content d e]
+  end
+
+  it "reads every element with an id where headings are most of the page" do
+    html = "<body><article id='post'><h1>A short title</h1>#{'<h2>Section</h2>' * 100}<h2 id='notes'>Notes</h2>" \
+           "<p id='filler'>Filler</p></article></body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    described_class.should_not_receive(:reads_parent?)
+    described_class.mark(body)
+    body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.should == %w[notes]
   end
 end

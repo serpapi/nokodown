@@ -79,9 +79,9 @@ module Nokodown
     module_function
 
     # Numbers the elements in the order elements(root) lists them.
-    def assign_keys(root)
+    def assign_keys(root, elements = elements(root))
       root[KEY] = "0"
-      elements(root).each_with_index { |node, index| node[KEY] = (index + 1).to_s }
+      elements.each_with_index { |node, index| node[KEY] = (index + 1).to_s }
     end
 
     def key(node)

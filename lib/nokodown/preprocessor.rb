@@ -118,8 +118,9 @@ module Nokodown
       remove_hidden
       remove_form_controls
       flatten_deep_elements
-      HeadingAnchors.mark(@body)
-      Dom.assign_keys(@body)
+      elements = Dom.elements(@body)
+      HeadingAnchors.mark(@body, elements)
+      Dom.assign_keys(@body, elements)
     end
 
     private

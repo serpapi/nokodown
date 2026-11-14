@@ -21,16 +21,38 @@ module Nokodown
 
     module_function
 
+    # Reading the elements around a heading costs about as much as checking
+    # eight elements for an id, so a page this dense in headings has its
+    # elements checked instead.
+    DENSE_HEADINGS = 8
+
     # Only a heading, an element in one or the section one opens has a
     # label, so only the elements around headings are read, each of them
     # once: a label can be the text of a whole section, and a section can
-    # hold thousands of headings.
-    def mark(root)
-      root.xpath(HEADINGS).to_a.each do |heading|
-        nodes = [heading, *Dom.element_children(heading).reject { |child| Dom.heading?(child) }]
-        nodes << heading.parent if reads_parent?(heading, root)
-        nodes.each { |node| node[Dom::ANCHOR] = "1" if node != root && node.key?("id") && anchor?(node) }
+    # hold thousands of headings. Where headings are most of the page, every
+    # element with an id is read instead, which marks the same elements.
+    def mark(root, elements = Dom.elements(root))
+      headings = root.xpath(HEADINGS)
+      if headings.size * DENSE_HEADINGS > elements.size
+        elements.each { |node| mark_anchor(node) if node.key?("id") }
+      else
+        headings.to_a.each { |heading| mark_around(heading, root) }
       end
+    end
+
+    def mark_around(heading, root)
+      mark_anchor(heading) if heading.key?("id")
+      child = heading.first_element_child
+      while child
+        mark_anchor(child) if child.key?("id") && !Dom.heading?(child)
+        child = child.next_element
+      end
+      parent = heading.parent
+      mark_anchor(parent) if parent != root && parent.key?("id") && reads_parent?(heading, root)
+    end
+
+    def mark_anchor(node)
+      node[Dom::ANCHOR] = "1" if anchor?(node)
     end
 
     # A parent is read from the first heading in it, unless it is read as a
