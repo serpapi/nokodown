@@ -36,6 +36,9 @@ module Nokodown
     # What squish can drop: spaces, and a NUL that strip takes off the end.
     ASCII_BLANKS = "#{ASCII_SPACES} \0"
     UNICODE_BLANKS = "#{UNICODE_SPACES} \0"
+    # What squish changes in ASCII text: a space other than a blank, two
+    # blanks in a row, or a blank or NUL at either end.
+    UNSQUISHED = /[\t\n\v\f\r]|  |\A[ \0]|[ \0]\z/.freeze
 
     # Nokolexbor returns a new Ruby object every time a node is read, so nodes
     # cannot be hash keys. Elements get a numbered attribute to key on instead.
@@ -232,7 +235,11 @@ module Nokodown
       string.length - string.count(string.ascii_only? ? ASCII_BLANKS : UNICODE_BLANKS)
     end
 
+    # Most texts an extraction reads are words with single spaces between
+    # them, which squishing gives back unchanged; one search finds those.
     def squish(string)
+      return string if string.ascii_only? && !string.frozen? && !string.match?(UNSQUISHED)
+
       spaces_to_blanks(string).squeeze(" ").strip
     end
 

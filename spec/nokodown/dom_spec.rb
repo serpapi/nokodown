@@ -136,6 +136,24 @@ RSpec.describe Nokodown::Dom do
     end
   end
 
+  describe ".squish" do
+    it "gives text with single blanks between words back as it is" do
+      text = +"one two, three."
+      described_class.squish(text).should equal(text)
+      described_class.squish("one two").should == "one two"
+    end
+
+    it "squishes as it does with no shortcut" do
+      slow = ->(string) { described_class.spaces_to_blanks(string).squeeze(" ").strip }
+      pieces = ["a", "b", " ", "  ", "\t", "\n", "\v", "\f", "\r", "\0", "\u00A0", "\u3000", "\u0085", "é"]
+      rng = Random.new(7)
+      2000.times do
+        string = Array.new(rng.rand(7)) { pieces[rng.rand(pieces.size)] }.join
+        described_class.squish(string.dup).should == slow.call(string)
+      end
+    end
+  end
+
   describe ".min_text_length" do
     it "never exceeds the length of the squished text" do
       strings = ["", " ", "a", " a  b ", "a\0", "\0a\0 ", "a\v\fb\r\n", "a\u00A0\u00A0b", "\u3000\u2003x\u2028y\u0085",
