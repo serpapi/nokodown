@@ -33,11 +33,12 @@ module Nokodown
     NON_ASCII_SPACE_BYTES = Regexp.new(
       "\xC2[\x85\xA0]|\xE1\x9A\x80|\xE2\x80[\x80-\x8A\xA8\xA9\xAF]|\xE2\x81\x9F|\xE3\x80\x80".b, Regexp::NOENCODING
     )
-    # The first bytes of those sequences, and the share of a text's bytes
-    # past which they are replaced faster as characters.
+    # The first bytes of those sequences, the share of a text's bytes past
+    # which they are replaced faster as characters, and the length below
+    # which counting them costs more than it saves.
     SPACE_LEADS = ["\xC2".b, "\xE1".b, "\xE2".b, "\xE3".b].map(&:freeze).freeze
     DENSE_LEADS = 20
-    DENSE_MIN = 512
+    DENSE_MIN = 16
     # What squish can drop: spaces, and a NUL that strip takes off the end.
     ASCII_BLANKS = "#{ASCII_SPACES} \0"
     UNICODE_BLANKS = "#{UNICODE_SPACES} \0"
@@ -253,9 +254,9 @@ module Nokodown
     # UTF-8 is changed in its bytes, which takes a third of the time tr
     # takes to read it as characters. No byte of these sequences, nor an
     # ASCII space, occurs inside another character's encoding. The search
-    # stops at every byte that starts one, so long text full of those bytes
+    # stops at every byte that starts one, so text full of those bytes
     # (Japanese, or a space in every other word) goes through tr. Counting
-    # them costs more than it saves in short text.
+    # them costs more than it saves only in the shortest text.
     def spaces_to_blanks(string)
       return string.tr(ASCII_SPACES, " ") if string.ascii_only?
       return string.tr(UNICODE_SPACES, " ") unless string.encoding == Encoding::UTF_8 && string.valid_encoding?

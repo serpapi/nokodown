@@ -118,13 +118,14 @@ RSpec.describe Nokodown::Dom do
     end
 
     it "replaces the spaces of text full of their first bytes as characters" do
-      ["コーヒー　豆" * 50, "a\u00A0b\u2003" * 200, "a\u00A0" * 200].each do |string|
+      ["コーヒー　豆" * 50, "a\u00A0b\u2003" * 200, "a\u00A0" * 200, "a\u00A0" * 6, +"word#{"\u00A0" * 250}word"].each do |string|
         string.should_receive(:tr).with(described_class::UNICODE_SPACES, " ").and_call_original
         described_class.spaces_to_blanks(string).should == string.dup.tr(described_class::UNICODE_SPACES, " ")
       end
-      sparse = "one two three four five six seven\u00A0" * 20
-      sparse.should_not_receive(:tr)
-      described_class.spaces_to_blanks(sparse).should == ("one two three four five six seven " * 20)
+      ["one two three four five six seven\u00A0" * 20, +"one two three\u00A0", "\u00A0" * 8].each do |sparse|
+        sparse.should_not_receive(:tr)
+        described_class.spaces_to_blanks(sparse).should == sparse.dup.tr(described_class::UNICODE_SPACES, " ")
+      end
     end
 
     it "leaves invalid bytes and other encodings to tr, which raises" do
