@@ -112,6 +112,17 @@ RSpec.describe Nokodown::Pruner do
       root.css("a[href^='#']").size.should == 100
     end
 
+    it "stops reading a card's links at the first one that leads elsewhere than the button" do
+      fragments = "<a href='#s#{'x' * 1000}'></a>" * 10
+      root = content("#{story}<div><a href='/other'>Other</a>#{fragments}<a class='btn' href='/buy'>Buy now</a></div>")
+      pruner = described_class.new([root], :article, conditional: false)
+      long = 0
+      pruner.stub(:destination).and_wrap_original { |original, link| long += 1 if link["href"].size > 1000; original.call(link) }
+      pruner.send(:remove_calls_to_action, root)
+      long.should == 0
+      root.css("a.btn").size.should == 0
+    end
+
     it "reads no text in a table when looking for stray lines" do
       root = content("#{story}<table><tr><td><span><span>Updated 4 March 2024</span></span></td></tr></table><div>Published on March 3, 2024</div>")
       read = []

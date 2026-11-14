@@ -26,6 +26,7 @@ module Nokodown
     # takes time that grows with the square of the number of tables.
     OUTER_TABLES = "descendant::table[not(ancestor::table)]"
     CARD_KEYS = 8
+    CardLinks = Struct.new(:links, :keys, :read)
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
@@ -297,31 +298,34 @@ module Nokodown
       own = links_of(node).map { |link| Dom.key(link) }
       return false if own.empty? || card.nil?
 
-      keys, links = card_links(card)
-      return false unless keys.all? { |key| own.include?(key) }
-      return true if keys.size <= CARD_KEYS
+      card = card_links(card)
+      return false unless card.keys.all? { |key| own.include?(key) }
 
-      links.none? { |link| destination(link) && !own.include?(Dom.key(link)) }
+      links = card.links
+      while card.read < links.size && card.keys.size <= CARD_KEYS
+        link = links[card.read]
+        card.read += 1
+        next unless destination(link)
+
+        key = Dom.key(link)
+        next if card.keys.include?(key)
+
+        card.keys << key
+        return false unless own.include?(key)
+      end
+      return true if card.keys.size <= CARD_KEYS
+
+      (card.read...links.size).none? { |index| destination(links[index]) && !own.include?(Dom.key(links[index])) }
     end
 
-    # The card's links, kept as the node set the query returns so nested
-    # cards hold no node objects, and the first CARD_KEYS + 1 distinct keys of
-    # those that lead elsewhere (all of them when there are fewer). A control
-    # that lacks one of these keys is not the card's only link; the links are
-    # read again only for a control that holds them all.
+    # A card's links, kept as the node set the query returns so nested cards
+    # hold no node objects, and the distinct keys of those that lead
+    # elsewhere, read in order only as far as some control has needed and no
+    # further than CARD_KEYS + 1 keys. A control lacking one of these keys is
+    # not the card's only link; one holding them all goes on from where the
+    # reading stopped, as a direct scan would, without reading a link twice.
     def card_links(card)
-      known(@card_links, card) do
-        links = card.css("a[href]")
-        keys = []
-        links.each do |link|
-          next unless destination(link)
-
-          key = Dom.key(link)
-          keys << key unless keys.include?(key)
-          break if keys.size > CARD_KEYS
-        end
-        [keys, links]
-      end
+      known(@card_links, card) { CardLinks.new(card.css("a[href]"), [], 0) }
     end
 
     def call_to_action?(node)
