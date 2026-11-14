@@ -162,14 +162,38 @@ RSpec.describe Nokodown::Dom do
     end
   end
 
-  describe ".min_text_length" do
-    it "never exceeds the length of the squished text" do
-      strings = ["", " ", "a", " a  b ", "a\0", "\0a\0 ", "a\v\fb\r\n", "a\u00A0\u00A0b", "\u3000\u2003x\u2028y\u0085",
-                 "é \u00A0 ü\0", "tab\tand\nline", "\u200Bzero width\u200B", "a\u2000-\u200Ab"]
+  describe ".squishes_longer?" do
+    it "is true only when the squished text is longer than the limit" do
+      units = [" ", "\u00A0", "\u3000", "\t", "\0", "a", "é", "コ", "😀", "\u200B"]
+      rng = Random.new(7)
+      strings = Array.new(3000) { Array.new(rng.rand(0..60)) { units.sample(random: rng) }.join }
+      strings += ["", " one two ", "a\v\fb\r\n", "\0a\0 ", "x" * 200, "x " * 200, "\u2000" * 300 + "x" * 30]
       strings.each do |string|
-        described_class.min_text_length(string).should <= described_class.squish(string).length
+        [0, 1, 3, 10, 25].each do |limit|
+          next unless described_class.squishes_longer?(string, limit)
+
+          described_class.squish(string).length.should > limit
+        end
       end
-      described_class.min_text_length(" one two ").should == 6
+      described_class.squishes_longer?("one two three", 10).should == true
+      described_class.squishes_longer?("o n e t w o", 10).should == false
+    end
+
+    # Text that is mostly blanks has to be squished anyway, so counting all
+    # of it first would only add to that.
+    it "reads only the start of long text" do
+      [+"a#{"\u2000" * 10_000}z", +"a#{" " * 10_000}z"].each do |string|
+        string.should_not_receive(:count)
+        described_class.squishes_longer?(string, 120).should == false
+      end
+      described_class.squishes_longer?("#{"x" * 121}#{"\u00A0" * 2000}", 120).should == true
+    end
+
+    it "leaves text squish raises on to squish" do
+      invalid = "a\u00A0b\xFF\tc".dup.force_encoding(Encoding::UTF_8)
+      latin = "a\u00A0b\tc#{"x" * 20}".encode(Encoding::ISO_8859_1)
+      described_class.squishes_longer?(invalid, 2).should == false
+      described_class.squishes_longer?(latin, 2).should == false
     end
   end
 

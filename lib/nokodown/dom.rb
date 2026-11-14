@@ -46,6 +46,7 @@ module Nokodown
     # blanks in a row, or a blank or NUL at either end.
     UNSQUISHED = /[\t\n\v\f\r]|  |\A[ \0]|[ \0]\z/.freeze
     SHORT_TEXT = 96
+    SAMPLE_LIMITS = 8
 
     # Nokolexbor returns a new Ruby object every time a node is read, so nodes
     # cannot be hash keys. Elements get a numbered attribute to key on instead.
@@ -234,11 +235,24 @@ module Nokodown
       squish(node.content)
     end
 
-    # The length squish(string) has at least, since squishing keeps every
-    # other character. Comparing it with a limit first skips squishing a
-    # long subtree only to find it too long.
-    def min_text_length(string)
-      string.length - string.count(string.ascii_only? ? ASCII_BLANKS : UNICODE_BLANKS)
+    # Whether squish(string) is surely longer than limit. Squishing keeps
+    # every character other than a blank, so a start of the string with
+    # more than limit of those is enough. Reading no further than
+    # SAMPLE_LIMITS times the limit bounds what the check costs on long text
+    # that is mostly blanks, which then has to be squished anyway. Text
+    # squish would raise on is left to it.
+    def squishes_longer?(string, limit)
+      return false if string.bytesize <= limit
+
+      if string.ascii_only?
+        head = string.byteslice(0, SAMPLE_LIMITS * limit)
+        head.bytesize - head.count(ASCII_BLANKS) > limit
+      elsif string.encoding == Encoding::UTF_8 && string.valid_encoding?
+        head = string[0, SAMPLE_LIMITS * limit]
+        head.length - head.count(UNICODE_BLANKS) > limit
+      else
+        false
+      end
     end
 
     # Most texts an extraction reads are a few words with single spaces

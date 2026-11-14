@@ -111,7 +111,7 @@ module Nokodown
     def remove_stray_lines(root)
       root.css("p, div, span, li, small, time").to_a.each do |node|
         content = node.content
-        next if Dom.min_text_length(content) > 120
+        next if Dom.squishes_longer?(content, 120)
 
         text = Dom.squish(content)
         next unless text.length <= 120 && text.match?(Patterns::STRAY_LINE)
@@ -246,7 +246,7 @@ module Nokodown
     def remove_boilerplate_text(root)
       root.css(TEXT_BLOCKS).to_a.each do |node|
         content = node.content
-        next if Dom.min_text_length(content) > 200
+        next if Dom.squishes_longer?(content, 200)
 
         text = Dom.squish(content)
         next if text.empty? || text.length > 200
