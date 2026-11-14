@@ -64,10 +64,13 @@ module Nokodown
         @cut
       end
 
+      # The children are read one at a time through the sibling pointers, so
+      # a budget that runs out early leaves the rest of them unread.
       def children_blocks(node)
         blocks = []
         run = []
-        Dom.children(node).each do |child|
+        child = node.child
+        while child
           break @cut = true if @spent && @whole.zero?
 
           if block_level?(child)
@@ -77,6 +80,7 @@ module Nokodown
           else
             run << child
           end
+          child = child.next_sibling
         end
         blocks.concat(paragraphs(run))
       end

@@ -617,6 +617,17 @@ RSpec.describe Nokodown do
       renderers.first.should be_cut
     end
 
+    it "reads no more of a long element's children than the budget needs" do
+      html = "<article><div>#{Array.new(2000) { |index| "#{prose(index)}<span></span>" }.join}</div></article>"
+      longest = 0
+      Nokodown::Dom.stub(:children).and_wrap_original do |original, node|
+        original.call(node).tap { |children| longest = [longest, children.size].max }
+      end
+
+      Nokodown.to_markdown(html, main_content: false, max_length: 500).length.should == 500
+      longest.should < 100
+    end
+
     it "changes nothing when nil" do
       html = "<title>Flood night</title><article>#{Array.new(40) { |index| prose(index) }.join}</article>"
 
