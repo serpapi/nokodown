@@ -21,7 +21,7 @@ RSpec.describe Nokodown::ContainerCheck do
     remove?("<p>#{'Crews replaced six bearings. ' * 4}</p>").should be(false)
   end
 
-  it "asks the root once whether it holds inputs, players, embeds, images or list items" do
+  it "asks the root once for each tag of inputs, players, embeds, images and list items" do
     root = Nokolexbor::HTML("<body><div class='story'>#{"<div><p>Crews replaced six bearings and resurfaced both ramps.</p><a href='/x'>more</a></div>" * 3}</div></body>").at_css("div.story")
     Nokodown::Dom.assign_keys(root)
     asked = Hash.new(0)
@@ -29,8 +29,9 @@ RSpec.describe Nokodown::ContainerCheck do
     Nokolexbor::Node.any_instance.stub(:at_css).and_wrap_original { |original, selector| asked[selector] += 1; original.call(selector) }
     memo = { root: root }
     root.css("div").to_a.each { |div| described_class.new(div, 1000, Set.new, memo).remove?.should be(false) }
-    %w[input img li].each { |name| asked[name].should == 1 }
-    asked["video, audio"].should == 1
+    %w[input img li video audio object embed iframe].each { |name| asked[name].should == 1 }
+    asked["video, audio"].should == 0
+    asked["object, embed, iframe"].should == 0
   end
 
   it "still counts inputs in a root that has them" do

@@ -98,13 +98,15 @@ module Nokodown
 
     # Most roots hold no player, embed, input, image or list item. Asking the
     # root once spares asking each container in it; removing containers
-    # never adds any. A check without a root asks its own node.
+    # never adds any. A check without a root asks its own node. Each tag is
+    # asked on its own: a selector list numbers the page's nodes, and later
+    # lists sort their results by those numbers.
     def none_in_root?(selector)
       root = @memo[:root]
       return false unless root
 
       absent = (@memo[:absent] ||= {})
-      absent.fetch(selector) { absent[selector] = root.at_css(selector).nil? }
+      absent.fetch(selector) { absent[selector] = selector.split(", ").all? { |name| root.at_css(name).nil? } }
     end
 
     def video_embed?
