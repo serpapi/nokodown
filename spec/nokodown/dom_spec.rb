@@ -143,6 +143,12 @@ RSpec.describe Nokodown::Dom do
       described_class.squish("one two").should == "one two"
     end
 
+    it "squishes long text without searching it first" do
+      text = +("one two three " * 20).strip
+      text.should_not_receive(:match?)
+      described_class.squish(text).should == text
+    end
+
     it "squishes as it does with no shortcut" do
       slow = ->(string) { described_class.spaces_to_blanks(string).squeeze(" ").strip }
       pieces = ["a", "b", " ", "  ", "\t", "\n", "\v", "\f", "\r", "\0", "\u00A0", "\u3000", "\u0085", "é"]

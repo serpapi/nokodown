@@ -39,6 +39,7 @@ module Nokodown
     # What squish changes in ASCII text: a space other than a blank, two
     # blanks in a row, or a blank or NUL at either end.
     UNSQUISHED = /[\t\n\v\f\r]|  |\A[ \0]|[ \0]\z/.freeze
+    SHORT_TEXT = 96
 
     # Nokolexbor returns a new Ruby object every time a node is read, so nodes
     # cannot be hash keys. Elements get a numbered attribute to key on instead.
@@ -232,10 +233,11 @@ module Nokodown
       string.length - string.count(string.ascii_only? ? ASCII_BLANKS : UNICODE_BLANKS)
     end
 
-    # Most texts an extraction reads are words with single spaces between
-    # them, which squishing gives back unchanged; one search finds those.
+    # Most texts an extraction reads are a few words with single spaces
+    # between them, which squishing gives back unchanged; one search finds
+    # those. Past SHORT_TEXT bytes the search takes longer than squishing.
     def squish(string)
-      return string if string.ascii_only? && !string.frozen? && !string.match?(UNSQUISHED)
+      return string if string.bytesize <= SHORT_TEXT && string.ascii_only? && !string.frozen? && !string.match?(UNSQUISHED)
 
       spaces_to_blanks(string).squeeze(" ").strip
     end
