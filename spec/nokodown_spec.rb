@@ -658,6 +658,19 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "Ruby globals" do
+    it "drops separator lines as String#lines finds them under another $/" do
+      saved = $/
+      begin
+        $/ = " "
+        result = described_class.extract("<p>alpha --- omega</p>", main_content: false, title: false)
+      ensure
+        $/ = saved
+      end
+      result.to_h.values_at(:markdown, :excerpt).should == ["alpha omega", "alpha omega"]
+    end
+  end
+
   describe "encodings" do
     it "transcodes binary input using the declared charset" do
       html = "<html><head><meta charset=\"windows-1252\"></head><body><p>caf\xE9</p></body></html>".b

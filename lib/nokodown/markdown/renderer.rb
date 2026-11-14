@@ -97,8 +97,9 @@ module Nokodown
       end
 
       # Most chunks are one line, which needs no splitting into lines.
+      # String#lines splits at $/, so another separator takes the long way.
       def without_separator_lines(chunk)
-        return chunk.match?(SEPARATOR_LINE) ? "" : chunk unless chunk.include?("\n")
+        return chunk.match?(SEPARATOR_LINE) ? "" : chunk if $/ == "\n" && !chunk.include?("\n")
 
         chunk.lines.reject { |line| line.match?(SEPARATOR_LINE) }.join.strip
       end
