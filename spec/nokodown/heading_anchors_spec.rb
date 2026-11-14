@@ -123,7 +123,21 @@ RSpec.describe Nokodown::HeadingAnchors do
     described_class.should_receive(:mark_around).at_least(:once).and_call_original
     described_class.should_receive(:anchor?).once.and_call_original
     described_class.mark(body)
-    steps.should == 20
+    steps.should == 40
+  end
+
+  it "looks up a parent's id once, however often its headings take turns with another parent's" do
+    unit = "<h2>Section</h2><div><h3>Part</h3></div>"
+    html = "<body><article class='post'><h1>A short title</h1>#{unit * 20}</article>" + filler * 3 + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    ids = 0
+    Nokolexbor::Node.any_instance.stub(:key?).and_wrap_original do |original, name|
+      ids += 1 if name == "id" && original.receiver.name == "article"
+      original.call(name)
+    end
+    described_class.should_receive(:mark_around).at_least(:once).and_call_original
+    described_class.mark(body)
+    ids.should == 1
   end
 
   it "reads a section that opens with empty elements before its heading" do

@@ -51,9 +51,10 @@ module Nokodown
     # so it is read from that heading alone, unless it is read as a heading
     # or as a heading's child already. Headings in one section mostly follow
     # each other, and one that shares the last one's parent does not open it.
-    # These parents are listed first, with the index of their heading and
-    # whether it opens them, so nothing is read when the steps in +left+ run
-    # out: nil then.
+    # The sections headings open are listed first, with the index of their
+    # heading, so nothing is read when the steps in +left+ run out: nil then.
+    # Their ids are not looked at here: a parent that headings take turns
+    # with another would have its id looked up once per turn.
     def sections(headings, root, left)
       sections = []
       last = root
@@ -64,17 +65,17 @@ module Nokodown
         last = parent
         next if parent == root || !labelled_apart?(parent, root)
 
-        opening = parent.key?("id") ? opening?(heading, parent, left) : :later
+        opening = opening?(heading, parent, left)
         return if opening.nil?
 
-        sections << [index, parent, opening]
+        sections << [index, parent] if opening
       end
       sections
     end
 
     # Marks in the order of the headings, each section after its heading:
     # a misnested element's copies share their attributes, so the id is
-    # looked at again when the section is read.
+    # looked at only when the section is read.
     def mark_around_headings(headings, sections)
       sections << [headings.size]
       at = 0
@@ -82,12 +83,9 @@ module Nokodown
         mark_around(heading)
         next unless sections[at][0] == index
 
-        _, parent, opening = sections[at]
+        parent = sections[at][1]
         at += 1
-        next unless parent.key?("id")
-
-        opening = opening?(heading, parent) if opening == :later
-        mark_anchor(parent) if opening
+        mark_anchor(parent) if parent.key?("id")
       end
     end
 
