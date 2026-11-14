@@ -70,6 +70,17 @@ RSpec.describe Nokodown::Stats do
       fresh = counts(described_class.new(root))
       counts(stats).should == fresh
     end
+
+    it "stops a walk up from a removed node at an ancestor already cleared" do
+      root = body("#{"<div>" * 30}<p>Text</p>#{"<nav>Menu</nav>" * 200}#{"</div>" * 30}")
+      stats = described_class.new(root)
+      asked = 0
+      Nokodown::Dom.stub(:key).and_wrap_original { |original, node| asked += 1; original.call(node) }
+      stats.remove(root.css("nav").to_a)
+
+      asked.should < 400
+      [stats.chars(root), stats.link_chars(root)].should == [4.0, 0.0]
+    end
   end
 
   it "is made once for the page when Boilerplate removes no member panel" do

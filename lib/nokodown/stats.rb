@@ -23,11 +23,21 @@ module Nokodown
     # around the nodes are counted again, each from its children in order,
     # so every sum adds the same numbers in the same order. The counts of
     # the removed elements stay, but no element in the tree has their keys.
+    # A walk up from a removed node stops at an ancestor an earlier walk
+    # cleared, as everything above it was cleared then too. The ancestor is
+    # matched by node, not by key: a page can give <html> any key.
     def remove(nodes)
+      cleared = {}
       nodes.each do |node|
         ancestor = node.parent
         while ancestor
-          @counts.delete(Dom.key(ancestor)) if ancestor.type == ELEMENT_NODE
+          if ancestor.type == ELEMENT_NODE
+            key = Dom.key(ancestor)
+            break if key && cleared[key] == ancestor
+
+            @counts.delete(key)
+            cleared[key] = ancestor if key
+          end
           ancestor = ancestor.parent
         end
         node.remove
