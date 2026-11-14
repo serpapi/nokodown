@@ -25,36 +25,69 @@ module Nokodown
     # eight elements for an id, so a page this dense in headings has its
     # elements checked instead.
     DENSE_HEADINGS = 8
+    # Telling whether a heading opens its parent's section takes a step or
+    # more. Past one step per heading and this share of the page's elements,
+    # headings are taking turns between sections that open with many empty
+    # elements, and every element with an id is checked instead.
+    STEP_SHARE = 16
 
     # Only a heading, an element in one or the section one opens has a
     # label, so only the elements around headings are read, each of them
     # once: a label can be the text of a whole section, and a section can
-    # hold thousands of headings. Where headings are most of the page, every
-    # element with an id is read instead, which marks the same elements.
+    # hold thousands of headings. Where headings are most of the page, or
+    # telling which sections they open takes long, every element with an id
+    # is read instead, which marks the same elements.
     def mark(root, elements = Dom.elements(root))
       headings = root.xpath(HEADINGS)
-      if headings.size * DENSE_HEADINGS > elements.size
-        elements.each { |node| mark_anchor(node) if node.key?("id") }
-      else
-        mark_around_headings(headings.to_a, root)
+      if headings.size * DENSE_HEADINGS <= elements.size
+        headings = headings.to_a
+        sections = sections(headings, root, [headings.size + elements.size / STEP_SHARE])
+        return mark_around_headings(headings, sections) if sections
       end
+      elements.each { |node| mark_anchor(node) if node.key?("id") }
     end
 
     # A heading's parent has a label only when the heading opens its section,
     # so it is read from that heading alone, unless it is read as a heading
     # or as a heading's child already. Headings in one section mostly follow
     # each other, and one that shares the last one's parent does not open it.
-    def mark_around_headings(headings, root)
+    # These parents are listed first, with the index of their heading and
+    # whether it opens them, so nothing is read when the steps in +left+ run
+    # out: nil then.
+    def sections(headings, root, left)
+      sections = []
       last = root
-      headings.each do |heading|
-        mark_around(heading)
+      headings.each_with_index do |heading, index|
         parent = heading.parent
         next if parent == last
 
         last = parent
-        next if parent == root || !parent.key?("id") || !labelled_apart?(parent, root)
+        next if parent == root || !labelled_apart?(parent, root)
 
-        mark_anchor(parent) if opening?(heading, parent)
+        opening = parent.key?("id") ? opening?(heading, parent, left) : :later
+        return if opening.nil?
+
+        sections << [index, parent, opening]
+      end
+      sections
+    end
+
+    # Marks in the order of the headings, each section after its heading:
+    # a misnested element's copies share their attributes, so the id is
+    # looked at again when the section is read.
+    def mark_around_headings(headings, sections)
+      sections << [headings.size]
+      at = 0
+      headings.each_with_index do |heading, index|
+        mark_around(heading)
+        next unless sections[at][0] == index
+
+        _, parent, opening = sections[at]
+        at += 1
+        next unless parent.key?("id")
+
+        opening = opening?(heading, parent) if opening == :later
+        mark_anchor(parent) if opening
       end
     end
 
@@ -81,11 +114,13 @@ module Nokodown
     # all headings. Stepping on from the first element, as far as elements
     # without any content, stops as soon as one is a heading or holds an
     # element, so a section that does not open with the heading is told at
-    # once.
-    def opening?(heading, parent)
+    # once. Each step is taken from +left+: nil when they run out.
+    def opening?(heading, parent, left = [Float::INFINITY])
       back = heading.previous_element
       ahead = parent.first_element_child
       loop do
+        return nil if (left[0] -= 1).negative?
+
         if ahead
           return true if ahead == heading
           return false if Dom.heading?(ahead) || ahead.first_element_child

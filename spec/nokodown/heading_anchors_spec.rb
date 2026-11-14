@@ -143,4 +143,16 @@ RSpec.describe Nokodown::HeadingAnchors do
     described_class.mark(body)
     body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.should == %w[notes]
   end
+  it "reads every element with an id once telling which sections headings open takes long" do
+    unit = "<h2>Section</h2>#{'<span></span>' * 8}<div><h3>Part</h3></div>#{'<span></span>' * 8}"
+    html = "<body><article id='a-short-title'>#{'<span></span>' * 16}<h1>A short title</h1><p>Text</p>#{unit * 20}</article>" +
+           filler + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    steps = 0
+    Nokolexbor::Node.any_instance.stub(:previous_element).and_wrap_original { |original| steps += 1; original.call }
+    described_class.should_receive(:anchor?).exactly(101).times.and_call_original
+    described_class.mark(body)
+    steps.should < 80
+    body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.should == %w[a-short-title]
+  end
 end
