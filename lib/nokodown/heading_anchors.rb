@@ -36,11 +36,12 @@ module Nokodown
       if headings.size * DENSE_HEADINGS > elements.size
         elements.each { |node| mark_anchor(node) if node.key?("id") }
       else
-        headings.to_a.each { |heading| mark_around(heading, root) }
+        parents = {}
+        headings.to_a.each { |heading| mark_around(heading, root, parents) }
       end
     end
 
-    def mark_around(heading, root)
+    def mark_around(heading, root, parents)
       mark_anchor(heading) if heading.key?("id")
       child = heading.first_element_child
       while child
@@ -48,20 +49,35 @@ module Nokodown
         child = child.next_element
       end
       parent = heading.parent
-      mark_anchor(parent) if parent != root && parent.key?("id") && reads_parent?(heading, root)
+      mark_anchor(parent) if parent != root && parent.key?("id") && first_read?(parent, heading, root, parents)
     end
 
     def mark_anchor(node)
       node[Dom::ANCHOR] = "1" if anchor?(node)
     end
 
-    # A parent is read from the first heading in it, unless it is read as a
-    # heading or as a heading's child already.
-    def reads_parent?(heading, root)
-      parent = heading.parent
-      holder = parent.parent
-      return false if Dom.heading?(parent) || (holder && holder != root && Dom.heading?(holder))
+    # Past this many elements sharing an id, a parent is read from the first
+    # heading in it, which is found by stepping back over its other children.
+    SAME_IDS = 8
 
+    # A parent is read once, from the first heading met in it, unless it is
+    # read as a heading or as a heading's child already. Parents read are
+    # listed by id, since elements are not keyed yet.
+    def first_read?(parent, heading, root, parents)
+      read = (parents[parent["id"]] ||= [])
+      return false if read.any? { |node| node == parent }
+      return first_heading?(heading) && labelled_apart?(parent, root) if read.size >= SAME_IDS
+
+      read << parent
+      labelled_apart?(parent, root)
+    end
+
+    def labelled_apart?(parent, root)
+      holder = parent.parent
+      !Dom.heading?(parent) && !(holder != root && Dom.heading?(holder))
+    end
+
+    def first_heading?(heading)
       before = heading.previous_element
       before = before.previous_element while before && !Dom.heading?(before)
       before.nil?
