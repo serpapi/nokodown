@@ -668,6 +668,15 @@ RSpec.describe Nokodown do
       described_class.to_markdown(html).should == prose.strip
       described_class.to_markdown(html, max_length: 5).should == "Usefu"
     end
+
+    it "keeps an intro line when the page has ad attributes and misnested formatting" do
+      prose = "Useful prose, with details. " * 10
+      html = "<i data-ad-slot></i><b><div>misnested <a href=\"/out\">link</b> after</div></a>" \
+             "<section>Intro<p>All rights reserved</p></section><p>#{prose}</p>"
+      described_class.to_markdown(html).should == "**misnested [link](/out)** [after](/out)\n\nIntro\n\n#{prose.strip}"
+      plain = "<ins data-ad-slot=\"1\"></ins><section>Intro<span>All rights reserved</span></section><section>#{prose}</section>"
+      described_class.to_markdown(plain).should == "Intro\n\n#{prose.strip}"
+    end
   end
 
   describe "Ruby globals" do
