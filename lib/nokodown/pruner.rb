@@ -22,7 +22,9 @@ module Nokodown
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
     # XPath finds a list of tags faster than CSS.
     CALL_TO_ACTION_HOLDERS = ".//a|.//span|.//div|.//p"
-    TABLE_DESCENDANTS = "descendant::table/descendant::*"
+    # Tables not inside another table. Listing what is under every table
+    # takes time that grows with the square of the number of tables.
+    OUTER_TABLES = "descendant::table[not(ancestor::table)]"
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
@@ -117,7 +119,7 @@ module Nokodown
       nodes = root.css("p, div, span, li, small, time").to_a
       return if root.name == "table" || Dom.ancestors_named(root, "table").any?
 
-      tabled = root.xpath(TABLE_DESCENDANTS).to_a.map { |node| Dom.key(node) }.to_set
+      tabled = root.xpath(OUTER_TABLES).to_a.flat_map { |table| Dom.elements(table).map { |node| Dom.key(node) } }.to_set
       nodes.each do |node|
         next if tabled.include?(Dom.key(node)) && Dom.ancestors_named(node, "table").any?
 

@@ -78,6 +78,15 @@ RSpec.describe Nokodown::Pruner do
       Nokodown::Dom.text(root).should include("Updated 4 March 2024")
       Nokodown::Dom.text(root).should_not include("Published on")
     end
+    it "finds the blocks in thousands of tables in linear time" do
+      rows = "<tr><td><span>cell</span></td><td>Updated 4 March 2024</td></tr>" * 10
+      root = content("#{story}#{"<table>#{rows}</table>" * 2000}")
+      pruner = described_class.new([root], :article, conditional: false)
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      pruner.send(:remove_stray_lines, root)
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      root.css("table").size.should == 2000
+    end
   end
 
   describe "related links" do
