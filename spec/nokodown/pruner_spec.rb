@@ -7,6 +7,27 @@ RSpec.describe Nokodown::Pruner do
     root
   end
 
+  # The node objects an object holds, counted without the garbage
+  # collector, which keeps short-lived ones for longer on some Rubies.
+  def held_nodes(object)
+    require "objspace"
+    seen = {}.compare_by_identity
+    stack = [object]
+    nodes = 0
+    until stack.empty?
+      held = stack.pop
+      next if seen[held] || held.is_a?(Module)
+
+      seen[held] = true
+      next nodes += 1 if held.is_a?(Nokolexbor::Node)
+
+      ObjectSpace.reachable_objects_from(held).each do |child|
+        stack << child unless child.is_a?(ObjectSpace::InternalObjectWrapper)
+      end
+    end
+    nodes
+  end
+
   let(:story) do
     "<p>The harbor bridge reopened to traffic on Tuesday, three weeks after inspectors found cracked bearings.</p>" \
       "<p>Crews replaced six bearings and resurfaced both ramps, finishing four days early in the dry weather.</p>"
@@ -91,11 +112,9 @@ RSpec.describe Nokodown::Pruner do
       groups = (1..5).map { |g| "<div>#{button}" * 20 + (1..100).map { |i| "<a href='/g#{g}/#{i}'>l#{i}</a> " }.join + "</div>" * 20 }
       root = content("#{story}#{groups.join}")
       pruner = described_class.new([root], :article, conditional: false)
-      GC.start
-      before = ObjectSpace.each_object(Nokolexbor::Node).count
+      before = held_nodes(pruner)
       pruner.send(:remove_calls_to_action, root)
-      GC.start
-      (ObjectSpace.each_object(Nokolexbor::Node).count - before).should < 1000
+      (held_nodes(pruner) - before).should < 1000
       root.css("a.btn").size.should == 5
     end
 
