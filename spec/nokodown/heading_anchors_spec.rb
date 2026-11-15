@@ -140,6 +140,15 @@ RSpec.describe Nokodown::HeadingAnchors do
     ids.should == 1
   end
 
+  it "reads no text of a section without an id" do
+    html = "<body><h1>A short title</h1><article>#{"<section><span>#{' ' * 1000}</span><h2>Setup</h2><br></section>" * 20}</article>" +
+           filler + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    described_class.should_receive(:mark_around).at_least(:once).and_call_original
+    described_class.should_not_receive(:empty?)
+    described_class.mark(body)
+  end
+
   it "reads a section that opens with empty elements before its heading" do
     html = "<body><section id='setup'>#{'<span></span>' * 5}<a> </a><h2>Setup</h2><p>Text</p></section>" \
            "<section id='usage'><span></span><p>Intro</p><h2>Usage</h2></section>" + filler + "</body>"
