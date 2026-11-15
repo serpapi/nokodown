@@ -6,8 +6,6 @@ module Nokodown
   # in the source do not skew them.
   class Stats
     FRAGMENT_LINK_WEIGHT = 0.3
-    # What an element without a key reads as.
-    UNKNOWN = [nil, nil].freeze
     # Node types, compared as integers in the hot walk.
     TEXT_NODE = Nokolexbor::Node::TEXT_NODE
     CDATA_NODE = Nokolexbor::Node::CDATA_SECTION_NODE
@@ -68,12 +66,15 @@ module Nokodown
 
     private
 
+    # Copies of a misnested formatting element share one attribute list,
+    # and an attribute written through one copy can drop another's key. An
+    # element without a key is counted each time it is asked about, and
+    # nothing is stored for it or its descendants.
     def counts(node)
       key = Dom.key(node)
-      @counts.fetch(key) do
-        measure(node, inherited_link_weight(node))
-        @counts.fetch(key, UNKNOWN)
-      end
+      return unstored(node, inherited_link_weight(node)) unless key
+
+      @counts.fetch(key) { measure(node, inherited_link_weight(node)) }
     end
 
     def measure_all
@@ -103,6 +104,27 @@ module Nokodown
         child = child.next_sibling
       end
       store(node, chars, link_chars)
+    end
+
+    # As measure counts node, storing nothing.
+    def unstored(node, link_weight)
+      chars = 0.0
+      link_chars = 0.0
+      child = node.child
+      while child
+        type = child.type
+        if type == TEXT_NODE || type == CDATA_NODE
+          count = Dom.char_count(child.content)
+          chars += count
+          link_chars += count * link_weight
+        elsif type == ELEMENT_NODE
+          child_chars, child_link_chars = unstored(child, link_weight_for(child, link_weight))
+          chars += child_chars
+          link_chars += child_link_chars
+        end
+        child = child.next_sibling
+      end
+      [chars, link_chars]
     end
 
     # As measure counts node, reading the counts it still has.
@@ -146,8 +168,13 @@ module Nokodown
     end
 
     def inherited_link_weight(node)
-      anchor = node.ancestors.find { |ancestor| ancestor.element? && ancestor.name == "a" && ancestor["href"] }
-      anchor ? link_weight_for(anchor, 0.0) : 0.0
+      ancestor = node.parent
+      while ancestor
+        return link_weight_for(ancestor, 0.0) if ancestor.type == ELEMENT_NODE && ancestor.name == "a" && ancestor["href"]
+
+        ancestor = ancestor.parent
+      end
+      0.0
     end
   end
 end

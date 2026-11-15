@@ -690,6 +690,38 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "misnested formatting on forum pages" do
+    # The copies a misnested <b> leaves share one attribute list, and
+    # marking one copy of it as a thread or a replaced panel can drop the
+    # key of another.
+    let(:reply) { "A burr grinder gives a much more even grind than a blade grinder." }
+
+    it "scores a question whose bold runs into the reply" do
+      html = '<html><head><title>Coffee</title><script type="application/ld+json">' \
+             '{"@type":"DiscussionForumPosting","headline":"Coffee"}</script></head><body>' \
+             "<p>Which grinder do you use for espresso at home? <b class=\"comment-body\">Thanks.</p><p>#{reply}</p></body></html>"
+      described_class.to_markdown(html).should ==
+        "# Coffee\n\nWhich grinder do you use for espresso at home? **Thanks.**\n\n**#{reply}**"
+    end
+
+    it "weighs a reply list whose items share a bold" do
+      html = '<meta name="generator" content="vBulletin 5">' \
+             "<ul><li><b class=\"box\"></li><li id=\"respond\">Reply<p>#{reply}</p></li></ul>"
+      described_class.to_markdown(html).should == "- Reply\n\n  #{reply}"
+    end
+
+    it "keeps posts whose member panels share a bold" do
+      post = lambda do |i|
+        %(<div class="post"><div class="header"><span class="username">user#{i}</span> ) +
+          %(<time datetime="2024-03-0#{i}">March #{i}, 2024</time></div>) +
+          %(<p><b class="postprofile">Member</p><p>Posts: 12</b></p><div class="message"><p>Reply #{i}: #{reply}</p></div></div>)
+      end
+      html = %(<meta name="generator" content="vBulletin 5">#{post.call(1)}#{post.call(2)})
+      described_class.to_markdown(html).should == "**user1** · March 1, 2024\n\nReply 1: #{reply}\n\n" \
+                                                  "**user2** · March 2, 2024\n\nReply 2: #{reply}"
+    end
+  end
+
   describe "selector order on the article copy" do
     # Lexbor sorts a CSS selector list's results by numbers it writes on the
     # document's nodes, and a copy keeps them, so the queries that run on

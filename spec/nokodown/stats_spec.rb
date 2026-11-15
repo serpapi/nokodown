@@ -46,6 +46,19 @@ RSpec.describe Nokodown::Stats do
     stats.link_density(paragraph).should == 0.5
   end
 
+  it "counts an element without a key each time it is asked, and stores nothing for it" do
+    root = body('<div><p>Coffee <a href="/roast">roasted <b>dark</b></a></p></div>')
+    stats = described_class.new(root)
+    bold = root.at_css("b")
+    bold.remove_attribute(Nokodown::Dom::KEY)
+    stored = stats.instance_variable_get(:@counts).dup
+
+    [stats.chars(bold), stats.link_chars(bold), stats.text_chars(bold), stats.link_density(bold)].should == [4.0, 4.0, 0.0, 1.0]
+    bold.add_child("er")
+    stats.chars(bold).should == 6.0
+    stats.instance_variable_get(:@counts).should == stored
+  end
+
   describe "#remove" do
     def counts(stats)
       stats.instance_variable_get(:@counts)
