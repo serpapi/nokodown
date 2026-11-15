@@ -158,6 +158,16 @@ RSpec.describe Nokodown::HeadingAnchors do
     body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.should == %w[setup]
   end
 
+  it "reads each element with an id once where copies of one element share an id" do
+    html = "<body><article>#{"<section><h2><b id='setup'>Setup</b></h2><p>Text</p></section>" * 20}</article>" +
+           filler * 2 + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    described_class.should_receive(:mark_around_headings).and_call_original
+    described_class.should_receive(:anchor?).exactly(body.css("[id]").size).times.and_call_original
+    described_class.mark(body)
+    body.css("[#{Nokodown::Dom::ANCHOR}]").map(&:name).should == %w[b] * 20
+  end
+
   it "reads every element with an id where headings are most of the page" do
     html = "<body><article id='post'><h1>A short title</h1>#{'<h2>Section</h2>' * 100}<h2 id='notes'>Notes</h2>" \
            "<p id='filler'>Filler</p></article></body>"

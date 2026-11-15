@@ -76,13 +76,13 @@ module Nokodown
       sections
     end
 
-    # Marks in the order of the headings, each section after its heading:
-    # a misnested element's copies share their attributes, so the id is
-    # looked at only when the section is read. Nothing is marked until all
-    # are found: a mark added through a copy that is not the first of its
-    # element is lost when the first one gains an attribute, so two copies
-    # are marked in document order. False then, and every element with an
-    # id is read instead.
+    # Lists the elements with an id around the headings, each section after
+    # its heading, then marks those that are anchors. A misnested element's
+    # copies share their attributes, and a mark added through a copy that is
+    # not the first of its element is lost when the first one gains an
+    # attribute, so two copies have to be marked in document order. Where
+    # two listed elements the parser repeats share an id, nothing is read and
+    # false is returned, so every element with an id is read instead.
     def mark_around_headings(headings, sections)
       sections << [headings.size]
       at = 0
@@ -93,20 +93,20 @@ module Nokodown
 
         parent = sections[at][1]
         at += 1
-        found << parent if parent.key?("id") && anchor?(parent)
+        found << parent if parent.key?("id")
       end
       ids = found.select { |node| COPIED.include?(node.name) }.map { |node| node["id"] }
       return false if ids.uniq.size < ids.size
 
-      found.each { |node| node[Dom::ANCHOR] = "1" }
+      found.each { |node| mark_anchor(node) }
       true
     end
 
     def mark_around(heading, found)
-      found << heading if heading.key?("id") && anchor?(heading)
+      found << heading if heading.key?("id")
       child = heading.first_element_child
       while child
-        found << child if child.key?("id") && !Dom.heading?(child) && anchor?(child)
+        found << child if child.key?("id") && !Dom.heading?(child)
         child = child.next_element
       end
     end
