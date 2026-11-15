@@ -142,7 +142,7 @@ RSpec.describe Nokodown::HeadingAnchors do
 
   it "reads no text of a section without an id" do
     html = "<body><h1>A short title</h1><article>#{"<section><span>#{' ' * 1000}</span><h2>Setup</h2><br></section>" * 20}</article>" +
-           filler + "</body>"
+           filler * 4 + "</body>"
     body = Nokolexbor::HTML(html).at_css("body")
     described_class.should_receive(:mark_around).at_least(:once).and_call_original
     described_class.should_not_receive(:empty?)
@@ -151,7 +151,7 @@ RSpec.describe Nokodown::HeadingAnchors do
 
   it "reads a section that opens with empty elements before its heading" do
     html = "<body><section id='setup'>#{'<span></span>' * 5}<a> </a><h2>Setup</h2><p>Text</p></section>" \
-           "<section id='usage'><span></span><p>Intro</p><h2>Usage</h2></section>" + filler + "</body>"
+           "<section id='usage'><span></span><p>Intro</p><h2>Usage</h2></section>" + filler * 2 + "</body>"
     body = Nokolexbor::HTML(html).at_css("body")
     described_class.should_receive(:mark_around).at_least(:once).and_call_original
     described_class.mark(body)
@@ -177,6 +177,16 @@ RSpec.describe Nokodown::HeadingAnchors do
     described_class.mark(body)
     steps.should < 80
     body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.should == %w[a-short-title]
+  end
+
+  it "takes steps back from the budget telling which sections headings open" do
+    unit = "<section><span> </span>#{'<br>' * 6}<h2>Setup</h2></section>"
+    html = "<body><h1>Title</h1><p>Text</p><article>#{unit * 200}</article></body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    steps = 0
+    Nokolexbor::Node.any_instance.stub(:previous_element).and_wrap_original { |original| steps += 1; original.call }
+    described_class.mark(body)
+    steps.should < 600
   end
 
   it "steps over the text a section opens with once telling which sections headings open" do

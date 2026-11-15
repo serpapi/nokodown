@@ -128,15 +128,15 @@ module Nokodown
     # without any content, stops as soon as one is a heading or holds an
     # element, so a section that does not open with the heading is told at
     # once. It steps over text one node at a time, as stepping to the next
-    # element would pass all of it again for every heading. Each step on is
-    # taken from +left+, nil when they run out; stepping back needs none, as
-    # it stops at the heading before.
+    # element would pass all of it again for every heading. Each step is
+    # taken from +left+: nil when they run out.
     def opening?(heading, parent, left)
       back = heading.previous_element
       ahead = parent.child
       loop do
+        return nil if (left[0] -= 1).negative?
+
         if ahead
-          return nil if (left[0] -= 1).negative?
           return true if ahead == heading
           return false if Dom.heading?(ahead)
 
