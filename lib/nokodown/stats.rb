@@ -6,6 +6,7 @@ module Nokodown
   # in the source do not skew them.
   class Stats
     FRAGMENT_LINK_WEIGHT = 0.3
+    HELD_PER_POSITION = 16
     # Node types, compared as integers in the hot walk.
     TEXT_NODE = Nokolexbor::Node::TEXT_NODE
     CDATA_NODE = Nokolexbor::Node::CDATA_SECTION_NODE
@@ -89,13 +90,22 @@ module Nokodown
     # held until #remove or #forget_keyless, so asking about it again, or
     # about an element around it, does not count it again. They are found
     # by node among those from the same source position, as nothing else
-    # tells copies apart. link_weight is the element's own, when known.
+    # tells copies apart. Positions restart in every fragment the page
+    # parses (each <noscript>), so only the HELD_PER_POSITION most recently
+    # used are kept there: a lookup compares at most that many nodes, and
+    # an element asked about once per child stays held. link_weight is the
+    # element's own, when known.
     def keyless(node, link_weight = nil)
       held = (@keyless ||= {})[node.source_location] ||= []
-      found = held.find { |other, _| other == node }
-      return found[1] if found
+      index = held.rindex { |other, _| other == node }
+      if index
+        entry = held.delete_at(index)
+        held << entry
+        return entry[1]
+      end
 
       counts = unstored(node, link_weight || link_weight_for(node, inherited_link_weight(node)))
+      held.shift if held.size >= HELD_PER_POSITION
       held << [node, counts]
       counts
     end

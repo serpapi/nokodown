@@ -87,6 +87,22 @@ RSpec.describe Nokodown::Stats do
     [stats.chars(italic), stats.chars(bold), stats.chars(italic)].should == [5.0, 13.0, 5.0]
   end
 
+  it "finds an element without a key among a bounded few from its source position" do
+    # Positions restart in every fragment the page parses, as for each <noscript>.
+    root = body("<div></div>")
+    80.times { |i| root.at_css("div").add_child(root.document.fragment("<p>Thanks <b>reply #{i}</b></p>")) }
+    Nokodown::Dom.assign_keys(root)
+    bolds = root.css("b").to_a
+    bolds.map(&:source_location).uniq.size.should == 1
+    bolds.each { |bold| bold.remove_attribute(Nokodown::Dom::KEY) }
+    stats = described_class.new(root)
+    compared = 0
+    bolds.each { |bold| bold.define_singleton_method(:==) { |other| compared += 1; super(other) } }
+
+    2.times { bolds.map { |bold| stats.chars(bold) }.should == [6.0] * 10 + [7.0] * 70 }
+    compared.should <= 2 * bolds.size * described_class::HELD_PER_POSITION
+  end
+
   it "weighs a link without a key by its own href, as the walk from the root does" do
     root = body('<p><a href="/roast">Dark</a> <a href="#notes">Notes</a></p>')
     stats = described_class.new(root)
