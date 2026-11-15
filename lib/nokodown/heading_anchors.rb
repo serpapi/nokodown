@@ -30,9 +30,6 @@ module Nokodown
     # headings are taking turns between sections that open with many empty
     # elements, and every element with an id is checked instead.
     STEP_SHARE = 16
-    # The elements the parser repeats where one is left open or closed out
-    # of order. The copies share one list of attributes.
-    COPIED = %w[a b big code em font i nobr s small strike strong tt u].freeze
 
     # Only a heading, an element in one or the section one opens has a
     # label, so only the elements around headings are read, each of them
@@ -77,12 +74,13 @@ module Nokodown
     end
 
     # Lists the elements with an id around the headings, each section after
-    # its heading, then marks those that are anchors. A misnested element's
-    # copies share their attributes, and a mark added through a copy that is
-    # not the first of its element is lost when the first one gains an
-    # attribute, so two copies have to be marked in document order. Where
-    # two listed elements the parser repeats share an id, nothing is read and
-    # false is returned, so every element with an id is read instead.
+    # its heading, then marks those that are anchors. The parser repeats an
+    # element left open or closed out of order, and its copies share the
+    # first one's attributes: a mark added through a later copy is lost when
+    # the first one gains an attribute, so copies have to be marked in
+    # document order. Where a listed element is such a later copy, which
+    # takes no reading of its id, nothing is read and false is returned, so
+    # every element with an id is read instead.
     def mark_around_headings(headings, sections)
       sections << [headings.size]
       at = 0
@@ -95,8 +93,7 @@ module Nokodown
         at += 1
         found << parent if parent.key?("id")
       end
-      ids = found.select { |node| COPIED.include?(node.name) }.map { |node| node["id"] }
-      return false if ids.uniq.size < ids.size
+      return false if found.any? { |node| node.attribute("id").parent != node }
 
       found.each { |node| mark_anchor(node) }
       true

@@ -158,14 +158,35 @@ RSpec.describe Nokodown::HeadingAnchors do
     body.css("[#{Nokodown::Dom::ANCHOR}]").map { |node| node["id"] }.should == %w[setup]
   end
 
-  it "reads each element with an id once where copies of one element share an id" do
-    html = "<body><article>#{"<section><h2><b id='setup'>Setup</b></h2><p>Text</p></section>" * 20}</article>" +
+  it "reads each element with an id once where copies of one element sit around headings" do
+    html = "<body><article><h2><b id='setup'>Setup</h2><p>Text</p>#{'<h2>Setup</h2><p>Text</p>' * 19}</article>" +
            filler * 2 + "</body>"
     body = Nokolexbor::HTML(html).at_css("body")
     described_class.should_receive(:mark_around_headings).and_call_original
     described_class.should_receive(:anchor?).exactly(body.css("[id]").size).times.and_call_original
     described_class.mark(body)
+    body.css("[#{Nokodown::Dom::ANCHOR}]").should == body.css("b")
+  end
+
+  it "reads only the elements around headings where elements apart share an id" do
+    html = "<body><article>#{"<section><h2><b id='setup'>Setup</b></h2><p>Text</p></section>" * 20}</article>" +
+           filler * 2 + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    described_class.should_receive(:anchor?).exactly(20).times.and_call_original
+    described_class.mark(body)
     body.css("[#{Nokodown::Dom::ANCHOR}]").map(&:name).should == %w[b] * 20
+  end
+
+  it "reads no id that no label could match, where elements the parser repeats sit around headings" do
+    html = "<body><article>#{"<section><h2><b id='feedback'>Feedback</b></h2><p>Text</p></section>" * 20}</article>" +
+           filler * 2 + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    ids = 0
+    Nokolexbor::Node.any_instance.stub(:[]).and_wrap_original { |original, name| ids += 1 if name == "id"; original.call(name) }
+    described_class.should_receive(:mark_around_headings).and_call_original
+    described_class.mark(body)
+    ids.should == 0
+    body.css("[#{Nokodown::Dom::ANCHOR}]").size.should == 0
   end
 
   it "reads every element with an id where headings are most of the page" do
