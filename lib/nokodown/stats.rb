@@ -42,7 +42,16 @@ module Nokodown
       end
       # Copies of a misnested formatting element share a key, and the copy
       # measured last decides its counts; those are all measured again.
+      @keyless = nil
       @shared_keys ? measure_all : recount(@root, 0.0)
+      self
+    end
+
+    # Writing an attribute through a copy of a misnested formatting element
+    # can drop a link target as well as a key, so the elements without a key
+    # are counted again when next asked.
+    def forget_keyless
+      @keyless = nil
       self
     end
 
@@ -66,16 +75,29 @@ module Nokodown
 
     private
 
-    # Copies of a misnested formatting element share one attribute list,
-    # and an attribute written through one copy can drop another's key. An
-    # element without a key is counted each time it is asked about, as the
-    # walk from the root counts it, link and all, and nothing is stored for
-    # it or its descendants.
     def counts(node)
       key = Dom.key(node)
-      return unstored(node, link_weight_for(node, inherited_link_weight(node))) unless key
+      return keyless(node) unless key
 
       @counts.fetch(key) { measure(node, inherited_link_weight(node)) }
+    end
+
+    # Copies of a misnested formatting element share one attribute list,
+    # and an attribute written through one copy can drop another's key. An
+    # element without a key is counted as the walk from the root counts it,
+    # link and all, and nothing is stored under a key for it. Its counts are
+    # held until #remove or #forget_keyless, so asking about it again, or
+    # about an element around it, does not count it again. They are found
+    # by node among those from the same source position, as nothing else
+    # tells copies apart. link_weight is the element's own, when known.
+    def keyless(node, link_weight = nil)
+      held = (@keyless ||= {})[node.source_location] ||= []
+      found = held.find { |other, _| other == node }
+      return found[1] if found
+
+      counts = unstored(node, link_weight || link_weight_for(node, inherited_link_weight(node)))
+      held << [node, counts]
+      counts
     end
 
     def measure_all
@@ -107,7 +129,7 @@ module Nokodown
       store(node, chars, link_chars)
     end
 
-    # As measure counts node, storing nothing.
+    # As measure counts node, storing nothing under a key.
     def unstored(node, link_weight)
       chars = 0.0
       link_chars = 0.0
@@ -119,7 +141,8 @@ module Nokodown
           chars += count
           link_chars += count * link_weight
         elsif type == ELEMENT_NODE
-          child_chars, child_link_chars = unstored(child, link_weight_for(child, link_weight))
+          child_weight = link_weight_for(child, link_weight)
+          child_chars, child_link_chars = Dom.key(child) ? unstored(child, child_weight) : keyless(child, child_weight)
           chars += child_chars
           link_chars += child_link_chars
         end

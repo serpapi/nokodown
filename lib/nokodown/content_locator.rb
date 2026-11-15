@@ -114,6 +114,7 @@ module Nokodown
              regions.group_by { |node| "#{node.name} #{Dom.key(node.parent)}" }.values
       runs.each { |run| thread.concat(run) if run.sum { |node| stats.text_chars(node) } >= total * THREAD_RUN_SHARE }
       thread.each { |node| Dom.mark_as_thread(node) }
+      stats.forget_keyless unless thread.empty?
     end
 
     def outermost_secondary(root)

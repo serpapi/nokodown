@@ -726,6 +726,21 @@ RSpec.describe Nokodown do
       described_class.to_markdown(html).should == "**user1** · March 1, 2024\n\nReply 1: #{reply}\n\n" \
                                                   "**user2** · March 2, 2024\n\nReply 2: #{reply}"
     end
+
+    it "counts a bold that lost its key once, however many tags it holds" do
+      post = lambda do |i|
+        %(<div class="post"><div class="header"><span class="username">user#{i}</span> ) +
+          %(<time datetime="2024-03-0#{i}">March #{i}, 2024</time></div>Reply #{i}: #{reply}</div>)
+      end
+      tags = (1..200).map { |i| %(<span data-ad-slot="#{i}">s#{i}</span>) }.join(" ")
+      html = '<script type="application/ld+json">{"@type":"DiscussionForumPosting"}</script>' +
+             %(<p>Which grinder? <b class="x">Thanks.</p>#{post.call(1)}#{post.call(2)}<div class="tags">#{tags}</div>)
+      counted = 0
+      Nokodown::Dom.stub(:char_count).and_wrap_original { |original, text| counted += 1; original.call(text) }
+
+      described_class.to_markdown(html).should start_with("Which grinder? **Thanks.**\n\n**Reply 1: #{reply}**")
+      counted.should < 2000
+    end
   end
 
   describe "selector order on the article copy" do

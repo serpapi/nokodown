@@ -46,7 +46,7 @@ RSpec.describe Nokodown::Stats do
     stats.link_density(paragraph).should == 0.5
   end
 
-  it "counts an element without a key each time it is asked, and stores nothing for it" do
+  it "counts an element without a key when asked, and stores nothing under a key for it" do
     root = body('<div><p>Coffee <a href="/roast">roasted <b>dark</b></a></p></div>')
     stats = described_class.new(root)
     bold = root.at_css("b")
@@ -54,9 +54,37 @@ RSpec.describe Nokodown::Stats do
     stored = stats.instance_variable_get(:@counts).dup
 
     [stats.chars(bold), stats.link_chars(bold), stats.text_chars(bold), stats.link_density(bold)].should == [4.0, 4.0, 0.0, 1.0]
-    bold.add_child("er")
-    stats.chars(bold).should == 6.0
     stats.instance_variable_get(:@counts).should == stored
+    bold.add_child("er")
+    stats.forget_keyless.should equal(stats)
+    stats.chars(bold).should == 6.0
+  end
+
+  it "counts an element without a key once, however often it or an element around it is asked about" do
+    root = body("<p>Intro <b><span>s1</span> <span>s2</span> <span>s3</span> <span>s4</span> <span>s5</span> <span>s6</span> <span>s7</span> <span>s8</span> <span>s9</span> <span>s10</span> <span>s11</span> <span>s12</span> <span>s13</span> <span>s14</span> <span>s15</span> <span>s16</span> <span>s17</span> <span>s18</span> <span>s19</span> <span>s20</span> <span>s21</span> <span>s22</span> <span>s23</span> <span>s24</span> <span>s25</span> <span>s26</span> <span>s27</span> <span>s28</span> <span>s29</span> <span>s30</span> <span>s31</span> <span>s32</span> <span>s33</span> <span>s34</span> <span>s35</span> <span>s36</span> <span>s37</span> <span>s38</span> <span>s39</span> <span>s40</span> <span>s41</span> <span>s42</span> <span>s43</span> <span>s44</span> <span>s45</span> <span>s46</span> <span>s47</span> <span>s48</span> <span>s49</span> <span>s50</span></b></p>")
+    stats = described_class.new(root)
+    bold = root.at_css("b")
+    paragraph = root.at_css("p")
+    [bold, paragraph].each { |node| node.remove_attribute(Nokodown::Dom::KEY) }
+    counted = 0
+    Nokodown::Dom.stub(:char_count).and_wrap_original { |original, text| counted += 1; original.call(text) }
+
+    root.css("span").each { |span| stats.chars(span.parent) }
+    3.times { stats.text_chars(paragraph) }
+
+    counted.should < 120
+    [stats.chars(paragraph), stats.chars(bold)].should == [5.0 + 141.0, 141.0]
+  end
+
+  it "tells apart elements without a key that the parser made at the same point" do
+    # The parser reopens <b> and <i> together at the second <p>.
+    root = body('<p>One <b class="x"><i class="y">two</p><p>three</i> four four</p>')
+    stats = described_class.new(root)
+    bold, italic = root.css("p")[1].css("b, i").to_a
+    bold.source_location.should == italic.source_location
+    [bold, italic].each { |node| node.remove_attribute(Nokodown::Dom::KEY) }
+
+    [stats.chars(italic), stats.chars(bold), stats.chars(italic)].should == [5.0, 13.0, 5.0]
   end
 
   it "weighs a link without a key by its own href, as the walk from the root does" do
