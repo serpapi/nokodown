@@ -168,6 +168,16 @@ RSpec.describe Nokodown::HeadingAnchors do
     body.css("[#{Nokodown::Dom::ANCHOR}]").should == body.css("b")
   end
 
+  it "reads every element with an id where copies around headings were asked for their id out of order" do
+    html = "<body><article><h2><b id='setup'>Setup</h2><p>Text</p>#{'<h2>Setup</h2><p>Text</p>' * 19}</article>" +
+           filler * 2 + "</body>"
+    body = Nokolexbor::HTML(html).at_css("body")
+    body.css("b").reverse_each { |node| node.attribute("id") }
+    described_class.should_receive(:mark_around_headings).and_wrap_original { |original, *args| original.call(*args).tap { |sparse| sparse.should == false } }
+    described_class.mark(body)
+    body.css("[#{Nokodown::Dom::ANCHOR}]").should == body.css("b")
+  end
+
   it "reads only the elements around headings where elements apart share an id" do
     html = "<body><article>#{"<section><h2><b id='setup'>Setup</b></h2><p>Text</p></section>" * 20}</article>" +
            filler * 2 + "</body>"

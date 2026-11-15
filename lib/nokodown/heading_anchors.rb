@@ -75,12 +75,14 @@ module Nokodown
 
     # Lists the elements with an id around the headings, each section after
     # its heading, then marks those that are anchors. The parser repeats an
-    # element left open or closed out of order, and its copies share the
-    # first one's attributes: a mark added through a later copy is lost when
-    # the first one gains an attribute, so copies have to be marked in
-    # document order. Where a listed element is such a later copy, which
-    # takes no reading of its id, nothing is read and false is returned, so
-    # every element with an id is read instead.
+    # element left open or closed out of order, and its copies share one
+    # list of attributes: a mark added through one copy can be lost when
+    # another gains an attribute, so copies have to be marked in document
+    # order. An attribute names as its element the first copy it is asked
+    # for through, so two listed copies cannot both be named by their id.
+    # Where a listed element is not, which takes no reading of the id,
+    # nothing is read and false is returned, so every element with an id is
+    # read instead. A copy listed alone is marked as in document order.
     def mark_around_headings(headings, sections)
       sections << [headings.size]
       at = 0
