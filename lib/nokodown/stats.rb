@@ -68,11 +68,12 @@ module Nokodown
 
     # Copies of a misnested formatting element share one attribute list,
     # and an attribute written through one copy can drop another's key. An
-    # element without a key is counted each time it is asked about, and
-    # nothing is stored for it or its descendants.
+    # element without a key is counted each time it is asked about, as the
+    # walk from the root counts it, link and all, and nothing is stored for
+    # it or its descendants.
     def counts(node)
       key = Dom.key(node)
-      return unstored(node, inherited_link_weight(node)) unless key
+      return unstored(node, link_weight_for(node, inherited_link_weight(node))) unless key
 
       @counts.fetch(key) { measure(node, inherited_link_weight(node)) }
     end

@@ -59,6 +59,17 @@ RSpec.describe Nokodown::Stats do
     stats.instance_variable_get(:@counts).should == stored
   end
 
+  it "weighs a link without a key by its own href, as the walk from the root does" do
+    root = body('<p><a href="/roast">Dark</a> <a href="#notes">Notes</a></p>')
+    stats = described_class.new(root)
+    roast, notes = root.css("a").to_a
+    before = [roast, notes].map { |link| [stats.chars(link), stats.link_chars(link)] }
+    [roast, notes].each { |link| link.remove_attribute(Nokodown::Dom::KEY) }
+
+    [roast, notes].map { |link| [stats.chars(link), stats.link_chars(link)] }.should == before
+    before.should == [[4.0, 4.0], [5.0, 5 * 0.3]]
+  end
+
   describe "#remove" do
     def counts(stats)
       stats.instance_variable_get(:@counts)

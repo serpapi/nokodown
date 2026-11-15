@@ -710,6 +710,12 @@ RSpec.describe Nokodown do
       described_class.to_markdown(html).should == "- Reply\n\n  #{reply}"
     end
 
+    it "weighs a reply link that runs into the reply as a link" do
+      html = '<meta name="generator" content="vBulletin 5">' \
+             "<p>Question? <a class=\"respond\" href=\"#note\"></p>\n<p>#{"Reply. " * 42}"
+      described_class.to_markdown(html, title: false).should start_with("Question?\n\nReply. Reply.")
+    end
+
     it "keeps posts whose member panels share a bold" do
       post = lambda do |i|
         %(<div class="post"><div class="header"><span class="username">user#{i}</span> ) +
