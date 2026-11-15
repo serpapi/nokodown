@@ -30,6 +30,9 @@ module Nokodown
     # headings are taking turns between sections that open with many empty
     # elements, and every element with an id is checked instead.
     STEP_SHARE = 16
+    # The elements the parser repeats where one is left open or closed out
+    # of order. The copies share one list of attributes.
+    COPIED = %w[a b big code em font i nobr s small strike strong tt u].freeze
 
     # Only a heading, an element in one or the section one opens has a
     # label, so only the elements around headings are read, each of them
@@ -42,7 +45,7 @@ module Nokodown
       if headings.size * DENSE_HEADINGS <= elements.size
         headings = headings.to_a
         sections = sections(headings, root, [headings.size + elements.size / STEP_SHARE])
-        return mark_around_headings(headings, sections) if sections
+        return if sections && mark_around_headings(headings, sections)
       end
       elements.each { |node| mark_anchor(node) if node.key?("id") }
     end
@@ -75,25 +78,35 @@ module Nokodown
 
     # Marks in the order of the headings, each section after its heading:
     # a misnested element's copies share their attributes, so the id is
-    # looked at only when the section is read.
+    # looked at only when the section is read. Nothing is marked until all
+    # are found: a mark added through a copy that is not the first of its
+    # element is lost when the first one gains an attribute, so two copies
+    # are marked in document order. False then, and every element with an
+    # id is read instead.
     def mark_around_headings(headings, sections)
       sections << [headings.size]
       at = 0
+      found = []
       headings.each_with_index do |heading, index|
-        mark_around(heading)
+        mark_around(heading, found)
         next unless sections[at][0] == index
 
         parent = sections[at][1]
         at += 1
-        mark_anchor(parent) if parent.key?("id")
+        found << parent if parent.key?("id") && anchor?(parent)
       end
+      ids = found.select { |node| COPIED.include?(node.name) }.map { |node| node["id"] }
+      return false if ids.uniq.size < ids.size
+
+      found.each { |node| node[Dom::ANCHOR] = "1" }
+      true
     end
 
-    def mark_around(heading)
-      mark_anchor(heading) if heading.key?("id")
+    def mark_around(heading, found)
+      found << heading if heading.key?("id") && anchor?(heading)
       child = heading.first_element_child
       while child
-        mark_anchor(child) if child.key?("id") && !Dom.heading?(child)
+        found << child if child.key?("id") && !Dom.heading?(child) && anchor?(child)
         child = child.next_element
       end
     end

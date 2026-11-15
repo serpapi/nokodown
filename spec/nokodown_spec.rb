@@ -451,6 +451,27 @@ RSpec.describe Nokodown do
       markdown.should include("## Media coverage of tidal lagoons")
     end
 
+    describe "a heading anchor on an element the parser repeats" do
+      def guide(article)
+        paragraphs = (1..12).map { |i| "<p>Paragraph #{i} of the story has enough words in it to be read as running text by any extractor, and then some more.</p>" }
+        Nokodown.to_markdown("<html><head><title>Guide</title></head><body><article>#{article}#{paragraphs.join}</article></body></html>")
+      end
+
+      it "keeps the article when the anchor is left open in a heading inside a heading" do
+        markdown = guide('<h1><div><h2><b id="social-media">Social media</h2></div>Social media</h1>')
+
+        markdown.should include("Paragraph 1 of the story")
+        markdown.should include("Paragraph 12 of the story")
+      end
+
+      it "keeps the article when the anchor is left open around a streamed segment holding the heading" do
+        markdown = guide('<div><b id="social-media"><template id="B:1"></template></div><div hidden id="S:1"><h2>Social media</h2></div>')
+
+        markdown.should include("## Social media\n\nParagraph 1 of the story")
+        markdown.should include("Paragraph 12 of the story")
+      end
+    end
+
     it "still drops comments whose heading carries a permalink" do
       markdown = story('<section id="comments"><h2>Comments<a href="#comments">¶</a></h2><p>Jane wrote: the turbine part was the clearest.</p></section>')
 
