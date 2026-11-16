@@ -6,7 +6,7 @@ module Nokodown
   # in the source do not skew them.
   class Stats
     FRAGMENT_LINK_WEIGHT = 0.3
-    HELD_PER_POSITION = 16
+    HELD = 16
     # Node types, compared as integers in the hot walk.
     TEXT_NODE = Nokolexbor::Node::TEXT_NODE
     CDATA_NODE = Nokolexbor::Node::CDATA_SECTION_NODE
@@ -43,7 +43,7 @@ module Nokodown
       end
       # Copies of a misnested formatting element share a key, and the copy
       # measured last decides its counts; those are all measured again.
-      @keyless = nil
+      @recent = @places = nil
       @shared_keys ? measure_all : recount(@root, 0.0)
       self
     end
@@ -52,7 +52,7 @@ module Nokodown
     # can drop a link target as well as a key, so the elements without a key
     # are counted again when next asked.
     def forget_keyless
-      @keyless = nil
+      @recent = @places = nil
       self
     end
 
@@ -88,26 +88,65 @@ module Nokodown
     # element without a key is counted as the walk from the root counts it,
     # link and all, and nothing is stored under a key for it. Its counts are
     # held until #remove or #forget_keyless, so asking about it again, or
-    # about an element around it, does not count it again. They are found
-    # by node among those from the same source position, as nothing else
-    # tells copies apart. Positions restart in every fragment the page
-    # parses (each <noscript>), so only the HELD_PER_POSITION most recently
-    # used are kept there: a lookup compares at most that many nodes, and
-    # an element asked about once per child stays held. link_weight is the
-    # element's own, when known.
-    def keyless(node, link_weight = nil)
-      held = (@keyless ||= {})[node.source_location] ||= []
-      index = held.rindex { |other, _| other == node }
-      if index
-        entry = held.delete_at(index)
-        held << entry
-        return entry[1]
-      end
+    # about an element around it, does not count it again.
+    #
+    # Nodes cannot be hashed, so counts are held in short lists and found by
+    # node. Each list keeps only its HELD most recently used, so a search
+    # stays short however many elements share it. An element asked about
+    # again soon is found in the list for its source position. Positions
+    # restart in every fragment the page parses (each <noscript>), so
+    # elements elsewhere can push it out of that list. It is then found in
+    # the list for its place: the key of its nearest ancestor with one, how
+    # many elements without a key lie between, and its position. Nothing
+    # inside an element shares its place, so asking about its children,
+    # however many, cannot push it out there. link_weight is the element's
+    # own, and key and depth its place, when known.
+    def keyless(node, link_weight = nil, key = nil, depth = nil)
+      position = node.source_location
+      recent = (@recent ||= {})[position] ||= []
+      entry = held(recent, node)
+      return entry[1] if entry
 
-      counts = unstored(node, link_weight || link_weight_for(node, inherited_link_weight(node)))
-      held.shift if held.size >= HELD_PER_POSITION
-      held << [node, counts]
-      counts
+      key, depth = keyless_above(node) unless depth
+      # Two places sharing a number would only share a list.
+      place = ((@places ||= {})[key] ||= {})[(position << 32) | depth] ||= []
+      entry = held(place, node)
+      unless entry
+        entry = [node, unstored(node, link_weight || link_weight_for(node, inherited_link_weight(node)), key, depth + 1)]
+        hold(place, entry)
+      end
+      hold(recent, entry)
+      entry[1]
+    end
+
+    # The entry for node, moved to the end as the most recently used.
+    def held(list, node)
+      index = list.rindex { |other, _| other == node }
+      return unless index
+
+      entry = list.delete_at(index)
+      list << entry
+      entry
+    end
+
+    def hold(list, entry)
+      list.shift if list.size >= HELD
+      list << entry
+    end
+
+    # The key of the nearest ancestor with one, and how many elements
+    # without a key lie between.
+    def keyless_above(node)
+      depth = 0
+      ancestor = node.parent
+      while ancestor && ancestor.type == ELEMENT_NODE
+        key = Dom.key(ancestor)
+        return [key, depth] if key
+
+        depth += 1
+        ancestor = ancestor.parent
+      end
+      [nil, depth]
     end
 
     def measure_all
@@ -139,8 +178,9 @@ module Nokodown
       store(node, chars, link_chars)
     end
 
-    # As measure counts node, storing nothing under a key.
-    def unstored(node, link_weight)
+    # As measure counts node, storing nothing under a key. key and depth are
+    # the place of a child without a key, when node has none either.
+    def unstored(node, link_weight, key = nil, depth = nil)
       chars = 0.0
       link_chars = 0.0
       child = node.child
@@ -152,7 +192,14 @@ module Nokodown
           link_chars += count * link_weight
         elsif type == ELEMENT_NODE
           child_weight = link_weight_for(child, link_weight)
-          child_chars, child_link_chars = Dom.key(child) ? unstored(child, child_weight) : keyless(child, child_weight)
+          child_chars, child_link_chars =
+            if Dom.key(child)
+              unstored(child, child_weight)
+            elsif depth
+              keyless(child, child_weight, key, depth)
+            else
+              keyless(child, child_weight, Dom.key(node), 0)
+            end
           chars += child_chars
           link_chars += child_link_chars
         end

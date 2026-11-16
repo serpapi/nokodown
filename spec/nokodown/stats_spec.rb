@@ -87,10 +87,11 @@ RSpec.describe Nokodown::Stats do
     [stats.chars(italic), stats.chars(bold), stats.chars(italic)].should == [5.0, 13.0, 5.0]
   end
 
-  it "finds an element without a key among a bounded few from its source position" do
-    # Positions restart in every fragment the page parses, as for each <noscript>.
+  it "finds an element without a key among a bounded few that share its place" do
+    # Positions restart in every fragment the page parses, as for each
+    # <noscript>, so these share a parent and a position.
     root = body("<div></div>")
-    80.times { |i| root.at_css("div").add_child(root.document.fragment("<p>Thanks <b>reply #{i}</b></p>")) }
+    160.times { |i| root.at_css("div").add_child(root.document.fragment("<b>reply #{i}</b>")) }
     Nokodown::Dom.assign_keys(root)
     bolds = root.css("b").to_a
     bolds.map(&:source_location).uniq.size.should == 1
@@ -99,8 +100,32 @@ RSpec.describe Nokodown::Stats do
     compared = 0
     bolds.each { |bold| bold.define_singleton_method(:==) { |other| compared += 1; super(other) } }
 
-    2.times { bolds.map { |bold| stats.chars(bold) }.should == [6.0] * 10 + [7.0] * 70 }
-    compared.should <= 2 * bolds.size * described_class::HELD_PER_POSITION
+    2.times { bolds.map { |bold| stats.chars(bold) }.should == [6.0] * 10 + [7.0] * 90 + [8.0] * 60 }
+    # Each lookup searches at most two lists of HELD.
+    compared.should <= 2 * bolds.size * 2 * described_class::HELD
+  end
+
+  it "keeps an element without a key held while elements from other places at its position are asked about" do
+    # Elements from parsed fragments can share its source position, as below.
+    root = body("<p>Q <b>bold</b></p>")
+    bold = root.at_css("b")
+    spans = Array.new(20) do
+      span = bold.add_child("<span></span>").first
+      17.times { span.add_child(root.document.fragment("#{" " * (bold.source_location - 1)}<b>x</b>")) }
+      span
+    end
+    Nokodown::Dom.assign_keys(root)
+    others = root.css("span b").to_a
+    others.map(&:source_location).uniq.should == [bold.source_location]
+    [bold, *others].each { |node| node.remove_attribute(Nokodown::Dom::KEY) }
+    stats = described_class.new(root)
+    counted = 0
+    Nokodown::Dom.stub(:char_count).and_wrap_original { |original, text| counted += 1; original.call(text) }
+
+    spans.each { |span| [stats.chars(bold), *span.css("b").map { |other| stats.chars(other) }].should == [344.0] + [1.0] * 17 }
+    # The bold holds 681 text nodes; counting it again for every span would
+    # take 20 times that.
+    counted.should < 1_300
   end
 
   it "weighs a link without a key by its own href, as the walk from the root does" do
