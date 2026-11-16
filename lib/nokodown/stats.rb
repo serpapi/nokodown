@@ -91,16 +91,19 @@ module Nokodown
     # about an element around it, does not count it again.
     #
     # Nodes cannot be hashed, so counts are held in short lists and found by
-    # node. Each list keeps only its HELD most recently used, so a search
-    # stays short however many elements share it. An element asked about
-    # again soon is found in the list for its source position. Positions
+    # node, and a search compares at most HELD nodes in each list it reads.
+    # An element asked about again soon is found in the list for its source
+    # position, which keeps only its HELD most recently used. Positions
     # restart in every fragment the page parses (each <noscript>), so
-    # elements elsewhere can push it out of that list. It is then found in
-    # the list for its place: the key of its nearest ancestor with one, how
-    # many elements without a key lie between, and its position. Nothing
-    # inside an element shares its place, so asking about its children,
-    # however many, cannot push it out there. link_weight is the element's
-    # own, and key and depth its place, when known.
+    # elements elsewhere can push it out of that list. It is then found at
+    # its place: the key of its nearest ancestor with one, how many elements
+    # without a key lie between, and its position. Sibling fragments, and
+    # copies of a misnested ancestor, which share its key, can put any
+    # number of elements at one place. A place lists its first HELD; once
+    # more share it, each is held by its path, which no other element in
+    # the tree has. So nothing in the tree is pushed out of its place, and
+    # it is counted once. link_weight is the element's own, and key and
+    # depth its place, when known.
     def keyless(node, link_weight = nil, key = nil, depth = nil)
       position = node.source_location
       recent = (@recent ||= {})[position] ||= []
@@ -108,15 +111,32 @@ module Nokodown
       return entry[1] if entry
 
       key, depth = keyless_above(node) unless depth
-      # Two places sharing a number would only share a list.
-      place = ((@places ||= {})[key] ||= {})[(position << 32) | depth] ||= []
-      entry = held(place, node)
+      list, entry = at_place(node, key, depth, position)
       unless entry
         entry = [node, unstored(node, link_weight || link_weight_for(node, inherited_link_weight(node)), key, depth + 1)]
-        hold(place, entry)
+        hold(list, entry)
       end
       hold(recent, entry)
       entry[1]
+    end
+
+    # The list for node at its place, and node's entry in it if held.
+    def at_place(node, key, depth, position)
+      places = (@places ||= {})[key] ||= {}
+      # Two places sharing a number would only share a list.
+      slot = (position << 32) | depth
+      list = places[slot] ||= []
+      if list.is_a?(Array)
+        entry = held(list, node)
+        return [list, entry] if entry || list.size < HELD
+
+        by_path = {}
+        list.each { |other| (by_path[other[0].path] ||= []) << other }
+        list = places[slot] = by_path
+      end
+      # Nodes in two trees can share a path, so this list too is searched.
+      list = list[node.path] ||= []
+      [list, held(list, node)]
     end
 
     # The entry for node, moved to the end as the most recently used.

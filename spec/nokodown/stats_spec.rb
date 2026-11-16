@@ -128,6 +128,25 @@ RSpec.describe Nokodown::Stats do
     counted.should < 1_300
   end
 
+  it "counts once each of more elements without a key than a place lists, asked about in turn" do
+    # Sibling fragments put these at one place: the div's key, nothing
+    # between, and one position.
+    root = body("<div></div>")
+    spans = (1..30).map { |i| "<span>w#{i}</span>" }.join
+    20.times { root.at_css("div").add_child(root.document.fragment("<b>#{spans}</b>")) }
+    Nokodown::Dom.assign_keys(root)
+    bolds = root.css("b").to_a
+    bolds.map(&:source_location).uniq.size.should == 1
+    bolds.each { |bold| bold.remove_attribute(Nokodown::Dom::KEY) }
+    stats = described_class.new(root)
+    counted = 0
+    Nokodown::Dom.stub(:char_count).and_wrap_original { |original, text| counted += 1; original.call(text) }
+
+    3.times { bolds.map { |bold| stats.chars(bold) }.should == [81.0] * 20 }
+    # Counting every bold again in each round would take 1,800.
+    counted.should < 900
+  end
+
   it "weighs a link without a key by its own href, as the walk from the root does" do
     root = body('<p><a href="/roast">Dark</a> <a href="#notes">Notes</a></p>')
     stats = described_class.new(root)
