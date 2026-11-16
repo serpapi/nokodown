@@ -7,10 +7,13 @@ module Nokodown
   class ContainerCheck
     HEADINGS = "h1, h2, h3, h4, h5, h6"
     TEXTISH = "span, li, td, blockquote, dl, div, img, ol, p, pre, table, ul"
+    TEXTISH_NAMES = Set.new(TEXTISH.split(", ")).freeze
     AD_WORDS = /\A(?:ad(?:vertising|vertisement)?|pub(?:licité)?|werb(?:ung)?|广告|Реклама|Anuncio)\z/i.freeze
     LOADING_WORDS = /\A(?:(?:loading|正在加载|Загрузка|chargement|cargando)(?:…|\.\.\.)?)\z/i.freeze
     POST_BODY_SHARE = 0.8
     PLAYER_CLASS = /media/.freeze
+    PLAYERS = "video, audio"
+    EMBEDS = "object, embed, iframe"
 
     def initialize(node, content_length, paragraph_keys, memo = {})
       @node = node
@@ -90,13 +93,26 @@ module Nokodown
     def player?
       return @player if defined?(@player)
 
-      @player = !@node.at_css("video, audio").nil?
+      @player = !none_in_root?(PLAYERS) && !@node.at_css(PLAYERS).nil?
+    end
+
+    # Most roots hold no player, embed, input, image or list item. Asking the
+    # root once spares asking each container in it; removing containers
+    # never adds any. A check without a root asks its own node. Each tag is
+    # asked on its own: a selector list numbers the page's nodes, and later
+    # lists sort their results by those numbers.
+    def none_in_root?(selector)
+      root = @memo[:root]
+      return false unless root
+
+      absent = (@memo[:absent] ||= {})
+      absent.fetch(selector) { absent[selector] = selector.split(", ").all? { |name| root.at_css(name).nil? } }
     end
 
     def video_embed?
       return true if player?
 
-      @node.css("object, embed, iframe").any? do |embed|
+      embeds.any? do |embed|
         embed.attribute_nodes.any? { |attribute| Preprocessor.video_embed?(attribute.value) }
       end
     end
@@ -111,15 +127,18 @@ module Nokodown
     end
 
     def too_many_list_items?
-      !list? && @node.css("li").size - 100 > paragraphs
+      list_items > 100 && !list? && list_items - 100 > paragraphs
     end
 
     def too_many_inputs?
-      @node.css("input").size > paragraphs / 3
+      return false if none_in_root?("input")
+
+      inputs = @node.css("input").size
+      inputs.positive? && inputs > paragraphs / 3
     end
 
     def short_with_links?
-      !list? && !figure_child? && density(HEADINGS) < 0.9 && @text.length < 25 &&
+      @text.length < 25 && !list? && !figure_child? && density(HEADINGS) < 0.9 &&
         (images.zero? || images > 2) && link_density.positive?
     end
 
@@ -128,25 +147,45 @@ module Nokodown
     end
 
     def suspicious_embeds?
-      embeds = @node.css("object, embed, iframe").size
-      (embeds == 1 && @text.length < 75) || embeds > 1
+      count = embeds.size
+      (count == 1 && @text.length < 75) || count > 1
     end
 
+    # No text in the container's own runs or in any text container. A child
+    # holding text answers before the subtree is searched.
     def no_text_containers?
-      images.zero? && density(TEXTISH, own_text_length).zero?
+      return false unless images.zero?
+      return true if @text.empty?
+      return false unless own_text_length.zero?
+
+      child = @node.first_element_child
+      while child
+        return false if TEXTISH_NAMES.include?(child.name) && !Dom.text(child).empty?
+
+        child = child.next_element
+      end
+      @node.css(TEXTISH).all? { |container| Dom.text(container).empty? }
     end
 
     # Galleries survive as long as every list item is a single image.
     def image_gallery?
-      list? && @node.element_children.none? { |item| item.element_children.size > 1 } && images == @node.css("li").size
+      list? && @node.element_children.none? { |item| item.element_children.size > 1 } && images == list_items
     end
 
     def paragraphs
       @paragraphs ||= @node.css("p").size + @node.css("div").count { |div| @paragraph_keys.include?(Dom.key(div)) }
     end
 
+    def embeds
+      @embeds ||= none_in_root?(EMBEDS) ? [] : @node.css(EMBEDS)
+    end
+
+    def list_items
+      @list_items ||= none_in_root?("li") ? 0 : @node.css("li").size
+    end
+
     def images
-      @images ||= @node.css("img").size
+      @images ||= none_in_root?("img") ? 0 : @node.css("img").size
     end
 
     def list?
@@ -179,7 +218,7 @@ module Nokodown
 
     # Readability wraps a container's loose text in <p>, which then counts as text.
     def own_text_length
-      loose = @node.children.reject { |child| child.element? && Dom::PARAGRAPH_BREAKERS.include?(child.name) }
+      loose = Dom.children(@node).reject { |child| child.element? && Dom::PARAGRAPH_BREAKERS.include?(child.name) }
       Dom.squish(loose.map(&:content).join).length
     end
   end

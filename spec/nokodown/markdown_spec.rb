@@ -2,6 +2,19 @@
 
 RSpec.describe "Markdown conversion" do
   describe "text" do
+    it "tells text from elements by node type, without the predicates" do
+      %i[text? cdata? element?].each { |name| Nokolexbor::Node.any_instance.should_not_receive(name) }
+
+      convert("<div><ul><li>Coffee <b>beans</b><!-- note --> and <a href=\"/roast\">dark</a> roasts</li></ul></div>").should ==
+        "- Coffee **beans** and [dark](https://example.com/roast) roasts"
+    end
+
+    it "looks for blocks inside inline elements through the element pointers" do
+      Nokodown::Dom.should_not_receive(:element_children)
+      convert("<p>a <span>b <em>c</em></span> <a href=\"/x\"><span>d</span></a></p><div>e <span><p>f</p></span></div>").should ==
+        "a b *c* [d](https://example.com/x)\n\ne\n\nf"
+    end
+
     it "collapses whitespace like a browser" do
       convert("<p>  one\n   two  three  </p>").should == "one two three"
     end
@@ -33,8 +46,26 @@ RSpec.describe "Markdown conversion" do
       convert("<p># not a heading</p><p>&gt; not a quote</p>").should == "\\# not a heading\n\n\\> not a quote"
     end
 
+    it "escapes fences and quote markers at the start of any line, and only there" do
+      convert("<p>~~~ tilde</p><p>a<br>&gt; quote<br>~~~ end</p><p>a &gt; b, c#d ~~~e</p>").should ==
+        "\\~~~ tilde\n\na\n\\> quote\n\\~~~ end\n\na > b, c#d ~~~e"
+      Nokodown::Markdown::Text.escape_line_starts("a\n```` b").should == "a\n\\`\\`\\`\\` b"
+      Nokodown::Markdown::Text.escape_line_starts("a ``` b").should == "a ``` b"
+    end
+
+    it "tidies spaces and tabs around line breaks, and leaves clean lines alone" do
+      text = Nokodown::Markdown::Text
+      text.tidy(" a \t\n\t b  c \n \n d\t \n").should == "a\nb c\n\nd"
+      text.tidy("a\t\tb\n\nc").should == "a\t\tb\n\nc"
+      clean = +"a\nb"
+      clean.should_not_receive(:gsub)
+      text.tidy(clean).should == "a\nb"
+    end
+
     it "drops decorative separator lines" do
       convert("<p>above<br>-----<br>below</p>").should == "above\nbelow"
+      convert("<p>above</p><p> ***** </p><p>below \t<br> \tnext</p>").should == "above\n\nbelow\nnext"
+      convert("<blockquote><p>-----</p><p>quoted</p></blockquote><ul><li>a</li><li>=====</li></ul>").should == "> quoted\n\n- a"
     end
 
     it "writes raised and lowered digits as Unicode characters and drops the tag from footnote markers" do
@@ -248,6 +279,13 @@ RSpec.describe "Markdown conversion" do
                               "[IPv6](http://[2001:db8::1]/a%5Bb%5D) [Filter](https://example.com/search?f%5B0%5D=a)"
     end
 
+    it "writes a URL with nothing to encode as it is, without searching it again" do
+      text = Nokodown::Markdown::Text
+      text.should_not_receive(:encode_unsafe)
+      text.should_not_receive(:paired_parentheses?)
+      ["https://example.org/a/b?c=d;e=f#g", "/caf\u00E9/%41", "mailto:a@b.c"].each { |url| text.destination(url).should equal(url) }
+    end
+
     it "keeps only the brackets of an IPv6 host as they are, and encodes its user info" do
       html = '<p><a href="http://&lt;img src=x&gt;@[::1]/">Tag</a> <a href="http://a b@[::1]:8080/x y">Space</a> ' \
              '<a href="http://[2001:db8::1]/a[b]">Path</a></p>'
@@ -349,6 +387,15 @@ RSpec.describe "Markdown conversion" do
 
     it "writes a link whose text is its URL as a bare URL" do
       convert('<p><a href="https://example.org/">example.org</a></p>').should == "https://example.org/"
+    end
+
+    it "takes a scheme, www. and mailto: off a URL it compares only when the URL starts with one" do
+      inline = Nokodown::Markdown::Inline.new(Nokodown::UrlResolver.new("https://example.org/"), images: true, links: true)
+      plain = +"example.org/a/"
+      plain.should_not_receive(:sub)
+      inline.send(:bare, plain).should == "example.org/a"
+      urls = ["HTTPS://www.Example.org/", "http:/x", "WWW.a.b/", "MailTo:x@y.z", "www.http://a", "//www.a/"]
+      urls.map { |url| inline.send(:bare, url) }.should == ["Example.org", "http:/x", "a.b", "x@y.z", "http://a", "//www.a"]
     end
 
     it "writes a link whose URL holds Markdown as a link, even when its text is the URL" do
@@ -631,6 +678,20 @@ RSpec.describe "Markdown conversion" do
                                 "- [![Boots on a mountain trail](https://example.com/lookbook-small.jpg)](https://example.com/lookbook.jpg)"
       end
 
+      it "searches only links with an element inside for thumbnails" do
+        html = '<main><h1>Boots</h1><p><a href="/p/1">Trail boot</a> and <a href="/p/2"><b>Ridge</b> runner</a></p>' \
+               '<p><a href="/p/2"><img src="/2.jpg" alt="Ridge"></a> <a href="/p/3">Fell boot</a></p></main>'
+        searched = []
+        trace = TracePoint.new(:call) do |point|
+          searched << point.self["href"] if point.method_id == :css && point.self.name == "a"
+        end
+        markdown = trace.enable { extract(html) }
+
+        markdown.should == "# Boots\n\n[Trail boot](https://example.com/p/1) and [**Ridge** runner](https://example.com/p/2)\n\n" \
+                           "[Fell boot](https://example.com/p/3)"
+        searched.should == ["/p/2", "/p/2"]
+      end
+
       it "moves a card's list marker past a nested list of thumbnails" do
         html = "<main><h1>Hiking boots</h1><ul>" \
                '<li><ul><li><a href="/p/1"><img src="/1a.jpg" alt="Trail boot, front"></a></li>' \
@@ -794,6 +855,8 @@ RSpec.describe "Markdown conversion" do
 
     it "keeps typed numbers that are not the item's own" do
       convert("<ol><li>1.5 kg flour</li><li>3. Salt</li></ol>").should == "1. 1.5 kg flour\n2. 3. Salt"
+      convert('<ol start="9"><li>9) Nine</li><li>1. One</li><li>11. Eleven</li></ol>').should == "9. Nine\n10. 1. One\n11. Eleven"
+      convert('<ol start="-1"><li>-1. Minus</li><li>0) Zero</li></ol>').should == "-1. Minus\n0. Zero"
     end
 
     it "moves up a bulleted list that opens an item instead of printing an empty marker" do

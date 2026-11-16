@@ -12,6 +12,7 @@ module Nokodown
       # What could start a link, an autolink, HTML or code where a URL is
       # written as text.
       MARKUP_IN_URL = /[\[\]<>`\\]/.freeze
+      BARE_PREFIX = /\A(?:https?:|www\.|mailto:)/i.freeze
       WEB_URL = %r{\A(?:https?|ftp)://}i.freeze
       BACKSLASH = "\\".ord
       LESS_THAN = "<".ord
@@ -115,7 +116,7 @@ module Nokodown
         elsif joins_markup?(out, piece) && unescaped?(out, out.bytesize - 1)
           escape_from(out, out.bytesize - 1)
         end
-        escape_email_opener(out) if piece.match?(Text::EMAIL_END)
+        escape_email_opener(out) if piece.include?("@") && piece.match?(Text::EMAIL_END)
         out << piece
       end
 
@@ -173,9 +174,10 @@ module Nokodown
       # if any, so the note of the last #render or #code_span in it holds.
       def node_text(node)
         @backslash_fence = false
-        if node.text? || node.cdata?
+        type = node.type
+        if type == Stats::TEXT_NODE || type == Stats::CDATA_NODE
           Text.escape(Text.collapse(node.content))
-        elsif node.element?
+        elsif type == Stats::ELEMENT_NODE
           element_text(node)
         else
           ""
@@ -193,22 +195,22 @@ module Nokodown
         when "a" then link(node)
         when "img" then image(node)
         when "video", "audio" then media(node)
-        when "q" then "\"#{render(node.children)}\""
+        when "q" then "\"#{render(Dom.children(node))}\""
         when "math" then math(node)
         when "sup", "sub" then script(node)
         when "input" then node.key?("checked") ? "[x] " : "[ ] "
         else
-          text = render(node.children)
+          text = render(Dom.children(node))
           Dom::BLOCK.include?(name) ? " #{text} " : text
         end
       end
 
       # Headings are bold already; nested emphasis of the same kind is dropped.
       def emphasis(node, marker)
-        return render(node.children) if @emphasis[marker].positive? || (@in_heading && marker == "**")
+        return render(Dom.children(node)) if @emphasis[marker].positive? || (@in_heading && marker == "**")
 
         @emphasis[marker] += 1
-        content = render(node.children)
+        content = render(Dom.children(node))
         @emphasis[marker] -= 1
         core = content.strip
         return content if core.empty? || core.match?(/\A[^\p{L}\p{N}]*\z/)
@@ -234,7 +236,7 @@ module Nokodown
         outer_link = @in_link
         @link_images = []
         @in_link = true
-        content = render(node.children)
+        content = render(Dom.children(node))
         images = @link_images
         @link_images = outer_images
         @in_link = outer_link
@@ -268,7 +270,11 @@ module Nokodown
         bare(text.delete("\\")) == bare(url)
       end
 
+      # Most link texts start with none of the prefixes, and one search
+      # for all of them spares the three substitutions.
       def bare(url)
+        return url.chomp("/") unless url.match?(BARE_PREFIX)
+
         url.sub(%r{\Ahttps?://}i, "").sub(/\Awww\./i, "").sub(/\Amailto:/i, "").chomp("/")
       end
 
@@ -323,7 +329,7 @@ module Nokodown
       # symbols such as ® and small print read fine as plain text. The plain
       # text decides, so 2<sup><i>p</i></sup> is 2^p like 2<sup>p</sup>.
       def script(node)
-        text = render(node.children)
+        text = render(Dom.children(node))
         core = Text.collapse(node.content).strip
         return text if core.empty? || core.match?(FOOTNOTE_MARKER) || node.at_css("a, img, math")
 

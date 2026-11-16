@@ -36,6 +36,20 @@ RSpec.describe Nokodown::Boilerplate do
       remaining('<table class="mdx-table_root__adKqa"><tr><td>Provisioner type</td></tr></table>').should == "Provisioner type"
     end
 
+    it "removes blocks with ad attributes, and asks no element for them on a page without any" do
+      asked = []
+      Nokolexbor::Node.any_instance.stub(:key?).and_wrap_original do |original, name|
+        asked << name if name == "data-ad-slot"
+        original.call(name)
+      end
+
+      remaining('<p>Heat pumps move heat.</p><div><span data-ad-slot="x">Boiler sale</span></div>').should == "Heat pumps move heat."
+      asked.should_not be_empty
+      asked.clear
+      remaining("<p>Heat pumps move heat.</p><div><span>Boiler sale</span></div>").should include("Boiler sale")
+      asked.should be_empty
+    end
+
     it "removes ad slots, including sized ones" do
       html = <<~HTML
         <p>Heat pumps move heat instead of making it.</p>
@@ -390,5 +404,18 @@ RSpec.describe Nokodown::Boilerplate do
 
       remaining(html).should == "Heat pumps"
     end
+  end
+
+  it "judges a repeated furniture name as noise once" do
+    html = "#{prose('Heat pumps', 3)}#{'<div class="share-bar tag-heat"><a href="/s">Share</a></div>' * 20}"
+    calls = 0
+    trace = TracePoint.new(:c_call) { |point| calls += 1 if point.method_id == :gsub }
+
+    body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
+    Nokodown::Preprocessor.new(body).call
+    trace.enable { Nokodown::Boilerplate.new(body).call }
+
+    body.css(".share-bar").should be_empty
+    calls.should < 5
   end
 end

@@ -13,6 +13,7 @@ module Nokodown
     SECTIONING = %w[article aside main nav section].freeze
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
+    AD_ATTRIBUTE_SELECTORS = AD_ATTRIBUTES.map { |name| "[#{name}]" }.freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     # Terms WordPress (tag-*, category-*) and WooCommerce (product_cat-*,
     # product_tag-*, product_brand-*) put on a post or product.
@@ -27,6 +28,10 @@ module Nokodown
     DISCLAIMER_WORD = /[-_]*#{Patterns::DISCLAIMER.source}[-_]*/.freeze
     SIGNATURE_WORD = /[-_]*#{Patterns::SIGNATURE.source}[-_]*/.freeze
 
+    # The counts of the page left, or nil when member panels were replaced
+    # with new elements.
+    attr_reader :stats
+
     def initialize(body)
       @body = body
     end
@@ -35,6 +40,11 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
+      # Few pages carry ad attributes; asking the page once per name (it also
+      # reads templates, which the walk skips) spares asking every element for
+      # each. A selector list would number the page's nodes for sorting, and
+      # copies made later would then list nodes in another order.
+      @ad_attributes = AD_ATTRIBUTE_SELECTORS.any? { |selector| !@body.at_css(selector).nil? }
       # Card grids repeat the same class list hundreds of times, and class
       # names repeat across lists. No furniture pattern spans a space, so a
       # list is furniture when one of its names is.
@@ -42,6 +52,7 @@ module Nokodown
       @furniture = Hash.new { |cache, signature| cache[signature] = signature.split.any? { |token| @furniture_tokens[token] } }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
       @signature_only = Hash.new { |cache, signature| cache[signature] = signature_only?(signature) }
+      @noise = Hash.new { |cache, signature| cache[signature] = signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE) }
       @notes = Set.new
       @prose_blocks = Set.new
       @card_classes = card_classes
@@ -49,9 +60,16 @@ module Nokodown
       removals = []
       walk(@body, removals)
       removals.delete(content_guess(removals)) if almost_empty_without?(removals)
+      if removals.none? { |_, kind| kind == :panel }
+        @stats.remove(removals.map(&:first))
+        return self
+      end
+
       removals.each { |node, kind| kind == :panel ? MemberPanel.reduce(node) : node.remove }
       # The lines panels leave are new elements, and later passes measure by key.
-      Dom.assign_keys(@body) if removals.any? { |_, kind| kind == :panel }
+      Dom.assign_keys(@body)
+      @stats = nil
+      self
     end
 
     private
@@ -64,12 +82,15 @@ module Nokodown
     end
 
     # Code is never furniture, whatever classes its highlighter gives tokens.
+    # Nothing is removed during the walk, so the element pointers stay valid.
     def walk(node, removals)
-      node.element_children.each do |child|
-        next if Dom::CODE.include?(child.name)
-
-        kind = removal(child)
-        kind ? removals << [child, kind] : walk(child, removals)
+      child = node.first_element_child
+      while child
+        unless Dom::CODE.include?(child.name)
+          kind = removal(child)
+          kind ? removals << [child, kind] : walk(child, removals)
+        end
+        child = child.next_element
       end
     end
 
@@ -143,7 +164,7 @@ module Nokodown
       return true if node.name == "ins" && node["class"].to_s.include?("adsbygoogle")
       return true if node["id"].to_s.start_with?("div-gpt-ad", "google_ads")
 
-      AD_ATTRIBUTES.any? { |name| node.key?(name) }
+      @ad_attributes && AD_ATTRIBUTES.any? { |name| node.key?(name) }
     end
 
     def chrome_label?(node)
@@ -224,12 +245,12 @@ module Nokodown
       return false if signature.empty?
 
       chrome = @furniture[signature]
-      return site_header?(node) if !chrome && signature.match?(Patterns::HEADER)
-      return @stats.link_density(node) > 0.5 if !chrome && signature.match?(Patterns::MENU)
+      return site_header?(node) if !chrome && Patterns.site_header?(signature)
+      return @stats.link_density(node) > 0.5 if !chrome && Patterns.menu?(signature)
       return false unless chrome
       return false if @signature_only[signature] && !forum_signature?(node, signature)
       return false if prose_section?(node, signature)
-      return true if signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE)
+      return true if @noise[signature]
 
       !(signature.match?(Patterns::POSITIVE) && @stats.text_chars(node) >= 200)
     end
@@ -272,7 +293,7 @@ module Nokodown
 
     def furniture_name?(classes)
       signature = Dom.signature_of("#{classes} ")
-      @furniture[signature] || signature.match?(Patterns::HEADER) || signature.match?(Patterns::MENU)
+      @furniture[signature] || Patterns.site_header?(signature) || Patterns.menu?(signature)
     end
 
     # Menus repeat their items too, so a run named after a place is never

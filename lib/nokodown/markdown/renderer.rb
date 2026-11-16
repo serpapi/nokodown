@@ -64,10 +64,13 @@ module Nokodown
         @cut
       end
 
+      # The children are read one at a time through the sibling pointers, so
+      # a budget that runs out early leaves the rest of them unread.
       def children_blocks(node)
         blocks = []
         run = []
-        node.children.each do |child|
+        child = node.child
+        while child
           break @cut = true if @spent && @whole.zero?
 
           if block_level?(child)
@@ -77,6 +80,7 @@ module Nokodown
           else
             run << child
           end
+          child = child.next_sibling
         end
         blocks.concat(paragraphs(run))
       end
@@ -89,10 +93,19 @@ module Nokodown
 
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
-        text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          chunk = Text.tidy(chunk).lines.reject { |line| line.match?(SEPARATOR_LINE) }.join.strip
+        chunks = text.include?("\n") ? text.split(/[ \t]*\n[ \t]*\n\s*/) : [text]
+        chunks.filter_map do |chunk|
+          chunk = without_separator_lines(Text.tidy(chunk))
           Block.new(:paragraph, Text.escape_line_starts(chunk)) unless chunk.empty?
         end
+      end
+
+      # Most chunks are one line, which needs no splitting into lines.
+      # String#lines splits at $/, so another separator takes the long way.
+      def without_separator_lines(chunk)
+        return chunk.match?(SEPARATOR_LINE) ? "" : chunk if $/ == "\n" && !chunk.include?("\n")
+
+        chunk.lines.reject { |line| line.match?(SEPARATOR_LINE) }.join.strip
       end
 
       def inline(nodes)
@@ -104,7 +117,7 @@ module Nokodown
       end
 
       def block_level?(node)
-        return false unless node.element?
+        return false unless node.type == Stats::ELEMENT_NODE
         return true if Dom::BLOCK.include?(node.name) || MEDIA.include?(node.name)
         return CodeBlock.standalone?(node) if node.name == "code"
 
@@ -113,10 +126,16 @@ module Nokodown
 
       def contains_block?(node)
         key = Dom.key(node)
-        return @contains_block[key] if key && @contains_block.key?(key)
+        # The memo holds only true and false.
+        found = key && @contains_block[key]
+        return found unless found.nil?
 
-        found = node.element_children.any? do |child|
-          Dom::BLOCK.include?(child.name) || MEDIA.include?(child.name) || contains_block?(child)
+        found = false
+        child = node.first_element_child
+        while child
+          break found = true if Dom::BLOCK.include?(child.name) || MEDIA.include?(child.name) || contains_block?(child)
+
+          child = child.next_element
         end
         @contains_block[key] = found if key
         found
@@ -168,8 +187,8 @@ module Nokodown
       # heading made only of images, such as a linked title graphic, keeps
       # them as a paragraph.
       def heading(node)
-        text = Text.single_line(@inline.render(node.children, heading: true))
-        return paragraphs(node.children) if text.empty?
+        text = Text.single_line(@inline.render(Dom.children(node), heading: true))
+        return paragraphs(Dom.children(node)) if text.empty?
         return [Block.new(:paragraph, text)] if text.length > 300
 
         level = node.name[1].to_i
@@ -191,7 +210,7 @@ module Nokodown
       # A nested list belongs to the item before it, also when a site wraps
       # it in an item of its own (<li>Parent</li><li><ul>…</ul></li>).
       def sublist?(node, blocks)
-        return false unless node.element? && blocks.size == 1 && blocks.first.kind == :list
+        return false unless node.type == Stats::ELEMENT_NODE && blocks.size == 1 && blocks.first.kind == :list
         return true if %w[ul ol].include?(node.name)
 
         node.name == "li" && node.element_children.all? { |child| %w[ul ol].include?(child.name) }
@@ -206,7 +225,7 @@ module Nokodown
       end
 
       def list_item(node)
-        return paragraphs([node]) unless node.element?
+        return paragraphs([node]) unless node.type == Stats::ELEMENT_NODE
         return children_blocks(node) if node.name == "li"
 
         block_level?(node) ? block(node) : paragraphs([node])
@@ -214,8 +233,8 @@ module Nokodown
 
       # Wrappers between a list and its items (<ul><div><li>) are transparent.
       def list_children(node)
-        node.children.flat_map do |child|
-          wrapper = child.element? && !%w[li ul ol].include?(child.name) && child.element_children.any? { |c| c.name == "li" }
+        Dom.children(node).flat_map do |child|
+          wrapper = child.type == Stats::ELEMENT_NODE && !%w[li ul ol].include?(child.name) && Dom.element_children(child).any? { |c| c.name == "li" }
           wrapper ? list_children(child) : [child]
         end
       end
@@ -256,7 +275,9 @@ module Nokodown
         return blocks unless first.kind == :paragraph
 
         text = typed_bullet ? first.text.sub(BULLET_GLYPH, "") : first.text
-        text = text.sub(/\A#{number}[.)](?!\d)\s*/, "") if number
+        # Each number makes a new pattern, so most items, which do not
+        # start with their number, skip building it.
+        text = text.sub(/\A#{number}[.)](?!\d)\s*/, "") if number && text.start_with?(number.to_s)
         return blocks if text == first.text
 
         rest = blocks.drop(1)
@@ -371,7 +392,7 @@ module Nokodown
       end
 
       def summary(node)
-        text = Text.single_line(@inline.render(node.children))
+        text = Text.single_line(@inline.render(Dom.children(node)))
         text.empty? ? [] : [Block.new(:paragraph, "**#{text}**")]
       end
 

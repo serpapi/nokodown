@@ -60,9 +60,10 @@ module Nokodown
 
       # A link with its own text, or another link to the same page with text,
       # names the destination already. A link to an image file is a zoom, not
-      # a card.
+      # a card. Most links hold only text, and have no image to search for.
       def thumbnails(anchor, labels)
         return [] if labels.nil? || image_link?(anchor)
+        return [] if anchor.first_element_child.nil?
         return [] if @mode != :page && Dom.ancestors_named(anchor, "figure").any?
 
         anchor.css("img").select { |img| adds_nothing?(Dom.squish(img["alt"].to_s), labels) }

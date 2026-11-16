@@ -31,13 +31,15 @@ module Nokodown
     THREAD_SHARE = 0.25
     THREAD_RUN_SHARE = 0.5
 
-    def initialize(body, page_type: nil)
+    # stats: the counts of body as it is, if already made.
+    def initialize(body, page_type: nil, stats: nil)
       @body = body
       @page_type = page_type
+      @stats = stats
     end
 
     def call
-      stats = Stats.new(@body)
+      stats = @stats || Stats.new(@body)
       root = main_region(stats) || @body
       mark_thread(root, stats) if @page_type == :forum
       result = Scorer.new(root, stats).call
@@ -86,16 +88,16 @@ module Nokodown
       article_keys = article_nodes.map { |node| Dom.key(node) }
       article_ancestor_keys = article_nodes.flat_map { |node| node.ancestors.map { |ancestor| Dom.key(ancestor) } }
       total = 0.0
-      stack = root.element_children.to_a
+      stack = Dom.element_children(root)
       until stack.empty?
         node = stack.pop
         key = Dom.key(node)
         next if article_keys.include?(key) || Dom.thread?(node)
 
-        if Patterns.secondary?(Dom.signature(node)) && !article_ancestor_keys.include?(key)
+        if Dom.secondary?(node) && !article_ancestor_keys.include?(key)
           total += stats.text_chars(node)
         else
-          stack.concat(node.element_children.to_a)
+          stack.concat(Dom.element_children(node))
         end
       end
       total
@@ -112,17 +114,18 @@ module Nokodown
              regions.group_by { |node| "#{node.name} #{Dom.key(node.parent)}" }.values
       runs.each { |run| thread.concat(run) if run.sum { |node| stats.text_chars(node) } >= total * THREAD_RUN_SHARE }
       thread.each { |node| Dom.mark_as_thread(node) }
+      stats.forget_keyless unless thread.empty?
     end
 
     def outermost_secondary(root)
       found = []
-      stack = root.element_children.to_a
+      stack = Dom.element_children(root)
       until stack.empty?
         node = stack.pop
-        if Patterns.secondary?(Dom.signature(node))
+        if Dom.secondary?(node)
           found << node
         else
-          stack.concat(node.element_children.to_a)
+          stack.concat(Dom.element_children(node))
         end
       end
       found

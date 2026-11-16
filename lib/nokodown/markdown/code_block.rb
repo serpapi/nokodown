@@ -23,13 +23,13 @@ module Nokodown
         return false if parent.nil? || parent.name == "pre"
         return false unless node.content.strip.include?("\n")
 
-        parent.children.all? { |child| child == node || (child.text? && child.content.strip.empty?) }
+        Dom.children(parent).all? { |child| child == node || (child.text? && child.content.strip.empty?) }
       end
 
       # Highlighters often put each line in its own block element instead of
       # separating lines with "\n".
       def preformatted(node)
-        node.children.each_with_object(+"") do |child, out|
+        Dom.children(node).each_with_object(+"") do |child, out|
           if child.text? || child.cdata?
             out << child.content
           elsif child.name == "br"

@@ -11,6 +11,14 @@ module Nokodown
       script style noscript template link meta base object embed applet param canvas map area svg
       source track select option optgroup datalist progress meter keygen frame frameset portal slot
     ].join(",").freeze
+    # The same set in one :is(), which Lexbor finds in less than half the
+    # time. A ".//tag" XPath union is faster still, but its streaming
+    # evaluation stops 10,000 levels down, and these run before deep
+    # elements are flattened.
+    JUNK_SELECTOR = ":is(#{JUNK})".freeze
+    # XPath lists the same links in the same order as css("a"), in half the
+    # time. The axis is spelled out because ".//a" stops 10,000 levels down.
+    LINKS_XPATH = "descendant::a"
     # Visible text that is not content, but is when a whole page, or a
     # selection of it, is converted; a closed dialog is never visible.
     CONTROLS = "dialog, textarea, output"
@@ -23,8 +31,11 @@ module Nokodown
     ]).freeze
 
     # Found by Lexbor's selector engine, so the checks below only run on
-    # elements that could be hidden.
-    HIDDEN_CANDIDATES = (["[hidden]", "[aria-hidden=true]", "[style]"] + HIDDEN_CLASSES.map { |name| ".#{name}" }).join(", ").freeze
+    # elements that could be hidden. Lexbor walks the tree once for each
+    # selector of a list, but once for :is() of them; the results and their
+    # document order are the same.
+    HIDDEN_SELECTORS = (%w[[hidden] [aria-hidden=true] [style]] + HIDDEN_CLASSES.map { |name| ".#{name}" }).freeze
+    HIDDEN_CANDIDATES = ":is(#{HIDDEN_SELECTORS.join(", ")})".freeze
 
     # Utility classes that make a "hidden" element visible again at some breakpoint.
     RESPONSIVE_SHOW = /\A(?:(?:sm|md|lg|xl|2xl):(?:block|flex|grid|inline|inline-block|inline-flex|table|contents)|d-(?:sm|md|lg|xl|xxl)-(?:block|flex|grid|inline|inline-block|inline-flex|table))\z/.freeze
@@ -94,21 +105,22 @@ module Nokodown
 
     def call
       place_streamed_segments
-      @body.xpath(".//comment()").each(&:remove)
+      @body.xpath(".//comment()").to_a.each(&:remove)
       unwrap_noscript
-      @body.css("img").each { |img| restore_lazy_image(img) }
+      @body.css("img").to_a.each { |img| restore_lazy_image(img) }
       restore_picture_sources
-      @body.css("a").each { |link| restore_link_target(link) if UrlResolver.normalize(link["href"]).empty? }
-      @body.css("video, audio").each { |media| keep_playable(media) }
-      @body.css(JUNK).each(&:remove)
-      @body.css(@full ? FULL_CONTROLS : CONTROLS).each(&:remove)
-      @body.css("iframe").each { |iframe| iframe.remove unless Preprocessor.video_embed?(iframe["src"]) }
-      @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
+      @body.xpath(LINKS_XPATH).to_a.each { |link| restore_link_target(link) if UrlResolver.normalize(link["href"]).empty? }
+      @body.css("video, audio").to_a.each { |media| keep_playable(media) }
+      @body.css(JUNK_SELECTOR).to_a.each(&:remove)
+      @body.css(@full ? FULL_CONTROLS : CONTROLS).to_a.each(&:remove)
+      @body.css("iframe").to_a.each { |iframe| iframe.remove unless Preprocessor.video_embed?(iframe["src"]) }
+      @body.css("pre [class], table[class] td[class]").to_a.each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
       remove_form_controls
       flatten_deep_elements
-      HeadingAnchors.mark(@body)
-      Dom.assign_keys(@body)
+      elements = Dom.elements(@body)
+      HeadingAnchors.mark(@body, elements)
+      Dom.assign_keys(@body, elements)
     end
 
     private
@@ -366,8 +378,8 @@ module Nokodown
 
     def remove_hidden
       total = Dom.char_count(@body.content)
-      @panel_ids = @body.css("[aria-controls]").flat_map { |control| control["aria-controls"].split }.to_set
-      @body.css(HIDDEN_CANDIDATES).each do |node|
+      @panel_ids = @body.css("[aria-controls]").to_a.flat_map { |control| control["aria-controls"].split }.to_set
+      @body.css(HIDDEN_CANDIDATES).to_a.each do |node|
         next unless hidden?(node)
         # A hidden wrapper around most of the page is an anti-flicker snippet
         # or an open modal in the snapshot, not something readers cannot see.

@@ -12,6 +12,9 @@ module Nokodown
       ENTITY = /&(?=(?:[A-Za-z][A-Za-z0-9]{1,31}|#\d{1,7}|#[xX]\h{1,6});)/.freeze
       SCHEME = /\A[A-Za-z][A-Za-z0-9+.-]*:/.freeze
       DESTINATION_UNSAFE = /[\x00-\x20\x7F<>\\\[\]`]/.freeze
+      # What destination changes, or needs to see: an unsafe character, an
+      # entity, a parenthesis, an IPv6 host's brackets.
+      DESTINATION_CHANGES = /[\x00-\x20\x7F<>\\\[\]`&()]/.freeze
       # An IPv6 host keeps its brackets: scheme, user info, host.
       IPV6_HOST = %r{\A([A-Za-z][A-Za-z0-9+.-]*://)([^/?#\[\]]*@)?(\[[\h:.]+\])(?=[:/?#]|\z)}.freeze
       # How deep CommonMark (cmark, markdown-it) nests parentheses in a
@@ -32,6 +35,8 @@ module Nokodown
       AUTOLINK_AFTER = /\A(?:#{AUTOLINK_START.source})/.freeze
       EMAIL_PART = /\A[#{EMAIL_LOCAL}]+\z/.freeze
       EMAIL_END = /\A[#{EMAIL_LOCAL}]*@/.freeze
+      # What any rule of escape_line_starts needs somewhere in the text.
+      LINE_START_SYNTAX = /[#>]|~~~|```/.freeze
       # Markdown syntax in raw TeX, after the backslashes that do not escape
       # it (an even run).
       TEX_SYNTAX = /(?<!\\)((?:\\\\)*+)(`|<(?=#{AUTOLINK_START.source})|\](?=[(\[]))/.freeze
@@ -69,6 +74,8 @@ module Nokodown
       # line; then each is escaped, so none is left to pair with a run on a
       # later line. Otherwise they open a code span and stay.
       def escape_line_starts(string)
+        return string unless string.match?(LINE_START_SYNTAX)
+
         string.gsub(/^(#{'#'}{1,6})(?=\s|$)/) { "\\#{Regexp.last_match(1)}" }
               .gsub(/^(>|~~~)/) { "\\#{Regexp.last_match(1)}" }
               .gsub(/^`{3,}(?=[^`\n]*$)/) { |run| "\\`" * run.length }
@@ -76,7 +83,14 @@ module Nokodown
 
       # Tidy an inline run: no spaces around line breaks, no doubled spaces.
       def tidy(string)
-        string.gsub(/[ \t]*\n[ \t]*/, "\n").gsub(/ {2,}/, " ").strip
+        string = string.gsub(/\n[ \t]+/, "\n").gsub(/[ \t]+\n/, "\n") if blank_by_newline?(string)
+        string = string.squeeze(" ") if string.include?("  ")
+        string.strip
+      end
+
+      def blank_by_newline?(string)
+        string.include?("\n") &&
+          (string.include?(" \n") || string.include?("\n ") || string.include?("\t\n") || string.include?("\n\t"))
       end
 
       def single_line(string)
@@ -230,6 +244,9 @@ module Nokodown
       # (a backslash or a backtick before it), the URL is read as text, and
       # must not hold a link or a code span of its own.
       def destination(url)
+        # Most URLs hold none of the characters below and are written as they are.
+        return url unless url.match?(DESTINATION_CHANGES)
+
         url = encode_unsafe(url)
         url = encode_scheme_entities(url) if url.include?("&") && !url.match?(SCHEME)
         url = url.gsub("(", "%28").gsub(")", "%29") unless paired_parentheses?(url)

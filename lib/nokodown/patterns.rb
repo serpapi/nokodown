@@ -113,6 +113,16 @@ module Nokodown
     # The same for SECONDARY.
     SECONDARY_HINT = word_hint(%w[comment disqus respond repl popular trending most author rss tag])
 
+    # HEADER and MENU only match a name holding one of these words, which
+    # most names do not, so checking for the word first skips the pattern.
+    def self.site_header?(value)
+      (value.include?("header") || value.include?("masthead")) && value.match?(HEADER)
+    end
+
+    def self.menu?(value)
+      value.include?("menu") && value.match?(MENU)
+    end
+
     def self.furniture?(value)
       value.match?(FURNITURE_HINT) && value.match?(PAGE_FURNITURE)
     end
@@ -206,6 +216,16 @@ module Nokodown
     /xi.freeze
 
     COPYRIGHT_TEXT = /\A(?:copyright\s*)?(?:©|\(c\)|&copy;)|all\srights\sreserved/i.freeze
+
+    # COPYRIGHT_TEXT in two parts. In one pattern Onigmo retries the anchored
+    # part at every position of a text that does not match; apart, it is
+    # tried once.
+    COPYRIGHT_START = /\A(?:copyright\s*(?:©|\(c\)|&copy;)|©|\(c\)|&copy;)/i.freeze
+    RIGHTS_RESERVED = /all\srights\sreserved/i.freeze
+
+    def self.copyright?(text)
+      text.match?(COPYRIGHT_START) || text.match?(RIGHTS_RESERVED)
+    end
 
     NOISE_HEADING = /
       \A(?:related(?:\s\w+)?|share(?:\sthis)?(?:\s\w+)?|comments?|leave\sa\s(?:comment|reply)|

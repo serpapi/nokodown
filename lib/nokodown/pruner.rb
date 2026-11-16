@@ -16,8 +16,17 @@ module Nokodown
       (?:\A|[-_])(?:btn|btns|button|buttons|cta|ctas)\d*
       (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|sm|md|lg))?\z
     /x.freeze
-    BUTTON_WORD = /btn|button|cta/.freeze
+    # Matched case-insensitively against the class and the id; no Unicode
+    # letter folds to these, so it answers as downcasing first would.
+    BUTTON_WORD = /btn|button|cta/i.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
+    # XPath finds a list of tags faster than CSS.
+    CALL_TO_ACTION_HOLDERS = ".//a|.//span|.//div|.//p"
+    # Tables not inside another table. Listing what is under every table
+    # takes time that grows with the square of the number of tables.
+    OUTER_TABLES = "descendant::table[not(ancestor::table)]"
+    CARD_KEYS = 8
+    CardLinks = Struct.new(:links, :keys, :read)
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
@@ -69,7 +78,7 @@ module Nokodown
     # Boxes of links to other stories placed inside the body: "READ MORE:
     # <link>", a "More:" label over a list of headlines, a paragraph of links.
     def remove_related_links(root)
-      root.css("p, li, h2, h3, h4, h5, h6, strong, b").each do |node|
+      root.css("p, li, h2, h3, h4, h5, h6, strong, b").to_a.each do |node|
         text = Dom.text(node)
         if related_label?(text)
           remove_with_link_box(node)
@@ -95,19 +104,31 @@ module Nokodown
       remove(holder)
     end
 
-    # "READ MORE: <headline>", or a paragraph made of several headlines.
+    # "READ MORE: <headline>", or a paragraph made of several headlines. A
+    # paragraph with no element in it holds no link, so it is not searched.
     def related_box?(node, text)
       return link_density(node) >= 0.5 if text.match?(Patterns::RELATED_LABEL)
 
-      node.name == "p" && node.css("a[href]").size >= 2 && link_density(node) >= 0.8
+      node.name == "p" && !node.first_element_child.nil? && node.css("a[href]").size >= 2 && link_density(node) >= 0.8
     end
 
-    # Datelines and "follow us" lines.
+    # Datelines and "follow us" lines; lines in a table stay. A block's text
+    # is read only once it is known to be outside a table, or nested blocks
+    # in a table would each read the same long text. Asking every block for
+    # its table takes longer, so only blocks whose key is found in a table
+    # are asked: misnested formatting copies a key elsewhere.
     def remove_stray_lines(root)
-      root.css("p, div, span, li, small, time").each do |node|
-        next if Dom.ancestors_named(node, "table").any?
+      nodes = root.css("p, div, span, li, small, time").to_a
+      return if root.name == "table" || Dom.ancestors_named(root, "table").any?
 
-        text = Dom.text(node)
+      tabled = root.xpath(OUTER_TABLES).to_a.flat_map { |table| Dom.elements(table).map { |node| Dom.key(node) } }.to_set
+      nodes.each do |node|
+        next if tabled.include?(Dom.key(node)) && Dom.ancestors_named(node, "table").any?
+
+        content = node.content
+        next if Dom.squishes_longer?(content, 120)
+
+        text = Dom.squish(content)
         remove(node) if text.length <= 120 && text.match?(Patterns::STRAY_LINE)
       end
     end
@@ -120,7 +141,7 @@ module Nokodown
     end
 
     def link_text_length(node)
-      node.css("a[href]").sum { |link| Dom.text(link).length }
+      node.css("a[href]").to_a.sum { |link| Dom.text(link).length }
     end
 
     # Readability drops footers, asides and share widgets inside the article;
@@ -154,7 +175,7 @@ module Nokodown
       paragraph_keys = Dom.paragraph_keys(root)
       memo = { root: root }
       ["form, fieldset", "table", "ul", "div"].each do |selector|
-        root.css(selector).reverse_each do |node|
+        root.css(selector).to_a.reverse_each do |node|
           next if paragraph_keys.include?(Dom.key(node)) || !ContainerCheck.new(node, content_length, paragraph_keys, memo).remove?
 
           ContainerCheck.forget(memo, node)
@@ -164,15 +185,20 @@ module Nokodown
     end
 
     # A forum's thread is content.
+    # Removing a node leaves its siblings in place, so the walk reads the next
+    # one first.
     def remove_secondary(root, total)
-      root.element_children.each do |node|
-        next if Dom.thread?(node)
-
-        if Patterns.secondary?(Dom.signature(node)) && Dom.text(node).length <= total * 0.5
-          remove(node)
-        else
-          remove_secondary(node, total)
+      node = root.first_element_child
+      while node
+        following = node.next_element
+        unless Dom.thread?(node)
+          if Dom.secondary?(node) && Dom.text(node).length <= total * 0.5
+            remove(node)
+          else
+            remove_secondary(node, total)
+          end
         end
+        node = following
       end
     end
 
@@ -231,22 +257,28 @@ module Nokodown
     end
 
     def remove_boilerplate_text(root)
-      root.css(TEXT_BLOCKS).each do |node|
-        text = Dom.text(node)
+      root.css(TEXT_BLOCKS).to_a.each do |node|
+        content = node.content
+        next if Dom.squishes_longer?(content, 200)
+
+        text = Dom.squish(content)
         next if text.empty? || text.length > 200
 
         boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
-        copyright = text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
+        copyright = Patterns.copyright?(text) && node.at_css("img").nil?
         remove(node) if boilerplate || copyright
       end
     end
 
     # Links and boxes styled as buttons ("Add to cart", "Book a demo") are
     # controls, not content. Cards (an image, a heading, a list) are content.
-    # All are judged before any is removed, so document order does not matter.
+    # All are judged before any is removed, so the order XPath returns them in
+    # does not matter.
     def remove_calls_to_action(root)
       @running_text = {}
-      root.css("a, span, div, p").select { |node| call_to_action?(node) }.each { |node| remove(node) }
+      @text_lengths = {}
+      @card_links = {}
+      root.xpath(CALL_TO_ACTION_HOLDERS).to_a.select { |node| call_to_action?(node) }.each { |node| remove(node) }
     end
 
     def destination(link)
@@ -266,7 +298,34 @@ module Nokodown
       own = links_of(node).map { |link| Dom.key(link) }
       return false if own.empty? || card.nil?
 
-      card.css("a[href]").none? { |link| destination(link) && !own.include?(Dom.key(link)) }
+      card = card_links(card)
+      return false unless card.keys.all? { |key| own.include?(key) }
+
+      links = card.links
+      while card.read < links.size && card.keys.size <= CARD_KEYS
+        link = links[card.read]
+        card.read += 1
+        next unless destination(link)
+
+        key = Dom.key(link)
+        next if card.keys.include?(key)
+
+        card.keys << key
+        return false unless own.include?(key)
+      end
+      return true if card.keys.size <= CARD_KEYS
+
+      (card.read...links.size).none? { |index| destination(links[index]) && !own.include?(Dom.key(links[index])) }
+    end
+
+    # A card's links, kept as the node set the query returns so nested cards
+    # hold no node objects, and the distinct keys of those that lead
+    # elsewhere, read in order only as far as some control has needed and no
+    # further than CARD_KEYS + 1 keys. A control lacking one of these keys is
+    # not the card's only link; one holding them all goes on from where the
+    # reading stopped, as a direct scan would, without reading a link twice.
+    def card_links(card)
+      known(@card_links, card) { CardLinks.new(card.css("a[href]"), [], 0) }
     end
 
     def call_to_action?(node)
@@ -288,7 +347,7 @@ module Nokodown
 
     def button?(node)
       return true if node["role"] == "button"
-      return false unless "#{node["class"]} #{node["id"]}".downcase.match?(BUTTON_WORD)
+      return false unless node["class"]&.match?(BUTTON_WORD) || node["id"]&.match?(BUTTON_WORD)
 
       tokens = Dom.signature(node).split
       tokens.any? { |token| token.match?(BUTTON_CLASS) } && tokens.none? { |token| token.match?(LINK_STYLED_BUTTON) }
@@ -299,11 +358,29 @@ module Nokodown
     def wrappers(node, text)
       chain = [node]
       parent = node.parent
-      while parent&.element? && Dom.text(parent) == text
+      while parent&.element? && text_length(parent) == text.length && Dom.text(parent) == text
         chain << parent
         parent = parent.parent
       end
       chain
+    end
+
+    def text_length(node)
+      known(@text_lengths, node) { Dom.text(node).length }
+    end
+
+    # Buttons are judged before any is removed, so what is read about the
+    # elements around them holds for all of them: a page can put thousands
+    # of buttons in one element. Kept by key and checked by node, as copies
+    # of a misnested element share a key.
+    def known(store, node)
+      key = Dom.key(node)
+      return yield unless key
+
+      entry = store[key]
+      return entry[1] if entry && entry[0] == node
+
+      yield.tap { |value| store[key] = [node, value] }
     end
 
     def toggle?(node)

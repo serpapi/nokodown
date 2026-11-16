@@ -90,6 +90,28 @@ RSpec.describe Nokodown do
     end
   end
 
+  describe "large result sets" do
+    # NodeSet#each wraps its nodes one at a time from Ruby; to_a wraps them
+    # all in C, which takes about two thirds of the time.
+    it "are read as Arrays by the passes that walk most of the page" do
+      walkers = []
+      Nokolexbor::NodeSet.any_instance.stub(:each).and_wrap_original do |original, *args, &block|
+        frame = caller_locations.find { |location| location.path.include?("/lib/nokodown/") }
+        walkers << "#{File.basename(frame.path, '.rb')}##{frame.label.sub('block in ', '')}" if frame
+        original.call(*args, &block)
+      end
+      %w[article.html docs.html forum.html listing.html].each do |name|
+        [true, false].each { |main_content| Nokodown.to_markdown(fixture(name), url: "https://example.com/", main_content: main_content) }
+      end
+
+      hot = %w[preprocessor#call preprocessor#remove_hidden dom#paragraph_keys dom#shared_keys? heading_anchors#mark
+               metadata#meta_values pruner#remove_related_links pruner#remove_stray_lines pruner#link_text_length
+               pruner#remove_suspicious_containers pruner#remove_boilerplate_text pruner#remove_calls_to_action
+               scorer#phrasing_runs scorer#scoring_parent container_check#own_text_length]
+      (walkers.uniq & hot).should == []
+    end
+  end
+
   describe "cleanup of the main content" do
     def extract(html)
       Nokodown.to_markdown(html, url: "https://example.com/page", title: false)
@@ -429,6 +451,27 @@ RSpec.describe Nokodown do
       markdown.should include("## Media coverage of tidal lagoons")
     end
 
+    describe "a heading anchor on an element the parser repeats" do
+      def guide(article)
+        paragraphs = (1..12).map { |i| "<p>Paragraph #{i} of the story has enough words in it to be read as running text by any extractor, and then some more.</p>" }
+        Nokodown.to_markdown("<html><head><title>Guide</title></head><body><article>#{article}#{paragraphs.join}</article></body></html>")
+      end
+
+      it "keeps the article when the anchor is left open in a heading inside a heading" do
+        markdown = guide('<h1><div><h2><b id="social-media">Social media</h2></div>Social media</h1>')
+
+        markdown.should include("Paragraph 1 of the story")
+        markdown.should include("Paragraph 12 of the story")
+      end
+
+      it "keeps the article when the anchor is left open around a streamed segment holding the heading" do
+        markdown = guide('<div><b id="social-media"><template id="B:1"></template></div><div hidden id="S:1"><h2>Social media</h2></div>')
+
+        markdown.should include("## Social media\n\nParagraph 1 of the story")
+        markdown.should include("Paragraph 12 of the story")
+      end
+    end
+
     it "still drops comments whose heading carries a permalink" do
       markdown = story('<section id="comments"><h2>Comments<a href="#comments">¶</a></h2><p>Jane wrote: the turbine part was the clearest.</p></section>')
 
@@ -595,6 +638,17 @@ RSpec.describe Nokodown do
       renderers.first.should be_cut
     end
 
+    it "reads no more of a long element's children than the budget needs" do
+      html = "<article><div>#{Array.new(2000) { |index| "#{prose(index)}<span></span>" }.join}</div></article>"
+      longest = 0
+      Nokodown::Dom.stub(:children).and_wrap_original do |original, node|
+        original.call(node).tap { |children| longest = [longest, children.size].max }
+      end
+
+      Nokodown.to_markdown(html, main_content: false, max_length: 500).length.should == 500
+      longest.should < 100
+    end
+
     it "changes nothing when nil" do
       html = "<title>Flood night</title><article>#{Array.new(40) { |index| prose(index) }.join}</article>"
 
@@ -621,6 +675,105 @@ RSpec.describe Nokodown do
           [path, main_content, prefix_mismatches(html, [0, 1000, 5000, 50_000], main_content: main_content)].should == [path, main_content, []]
         end
       end
+    end
+  end
+
+  describe "attributes named like Nokodown's own" do
+    it "ignores a page's element keys outside the body" do
+      html = '<html data-nokodown-key="1"><body><div class="post">Y</div><div class="signature">API signature</div></body></html>'
+      described_class.to_markdown(html).should == "Y\n\nAPI signature"
+    end
+
+    it "ignores a page's root key on a named html element" do
+      html = '<html class="post" data-nokodown-key="0"><body><div class="signature">X</div><p>Y</p></body></html>'
+      described_class.extract(html).to_h.values_at(:markdown, :excerpt).should == ["Y", "Y"]
+    end
+  end
+
+  describe "misnested formatting on forum pages" do
+    # The copies a misnested <b> leaves share one attribute list, and
+    # marking one copy of it as a thread or a replaced panel can drop the
+    # key of another.
+    let(:reply) { "A burr grinder gives a much more even grind than a blade grinder." }
+
+    it "scores a question whose bold runs into the reply" do
+      html = '<html><head><title>Coffee</title><script type="application/ld+json">' \
+             '{"@type":"DiscussionForumPosting","headline":"Coffee"}</script></head><body>' \
+             "<p>Which grinder do you use for espresso at home? <b class=\"comment-body\">Thanks.</p><p>#{reply}</p></body></html>"
+      described_class.to_markdown(html).should ==
+        "# Coffee\n\nWhich grinder do you use for espresso at home? **Thanks.**\n\n**#{reply}**"
+    end
+
+    it "weighs a reply list whose items share a bold" do
+      html = '<meta name="generator" content="vBulletin 5">' \
+             "<ul><li><b class=\"box\"></li><li id=\"respond\">Reply<p>#{reply}</p></li></ul>"
+      described_class.to_markdown(html).should == "- Reply\n\n  #{reply}"
+    end
+
+    it "weighs a reply link that runs into the reply as a link" do
+      html = '<meta name="generator" content="vBulletin 5">' \
+             "<p>Question? <a class=\"respond\" href=\"#note\"></p>\n<p>#{"Reply. " * 42}"
+      described_class.to_markdown(html, title: false).should start_with("Question?\n\nReply. Reply.")
+    end
+
+    it "keeps posts whose member panels share a bold" do
+      post = lambda do |i|
+        %(<div class="post"><div class="header"><span class="username">user#{i}</span> ) +
+          %(<time datetime="2024-03-0#{i}">March #{i}, 2024</time></div>) +
+          %(<p><b class="postprofile">Member</p><p>Posts: 12</b></p><div class="message"><p>Reply #{i}: #{reply}</p></div></div>)
+      end
+      html = %(<meta name="generator" content="vBulletin 5">#{post.call(1)}#{post.call(2)})
+      described_class.to_markdown(html).should == "**user1** · March 1, 2024\n\nReply 1: #{reply}\n\n" \
+                                                  "**user2** · March 2, 2024\n\nReply 2: #{reply}"
+    end
+
+    it "counts a bold that lost its key once, however many tags it holds" do
+      post = lambda do |i|
+        %(<div class="post"><div class="header"><span class="username">user#{i}</span> ) +
+          %(<time datetime="2024-03-0#{i}">March #{i}, 2024</time></div>Reply #{i}: #{reply}</div>)
+      end
+      tags = (1..200).map { |i| %(<span data-ad-slot="#{i}">s#{i}</span>) }.join(" ")
+      html = '<script type="application/ld+json">{"@type":"DiscussionForumPosting"}</script>' +
+             %(<p>Which grinder? <b class="x">Thanks.</p>#{post.call(1)}#{post.call(2)}<div class="tags">#{tags}</div>)
+      counted = 0
+      Nokodown::Dom.stub(:char_count).and_wrap_original { |original, text| counted += 1; original.call(text) }
+
+      described_class.to_markdown(html).should start_with("Which grinder? **Thanks.**\n\n**Reply 1: #{reply}**")
+      counted.should < 2000
+    end
+  end
+
+  describe "selector order on the article copy" do
+    # Lexbor sorts a CSS selector list's results by numbers it writes on the
+    # document's nodes, and a copy keeps them, so the queries that run on
+    # the page before the article is copied decide later orders.
+    it "drops an intro line beside a boilerplate notice" do
+      prose = "Useful prose, with details. " * 10
+      html = "<section>Intro<p>All rights reserved</p><div></div></section><p>#{prose}</p>"
+      described_class.to_markdown(html).should == prose.strip
+      described_class.to_markdown(html, max_length: 5).should == "Usefu"
+    end
+
+    it "keeps an intro line when the page has ad attributes and misnested formatting" do
+      prose = "Useful prose, with details. " * 10
+      html = "<i data-ad-slot></i><b><div>misnested <a href=\"/out\">link</b> after</div></a>" \
+             "<section>Intro<p>All rights reserved</p></section><p>#{prose}</p>"
+      described_class.to_markdown(html).should == "**misnested [link](/out)** [after](/out)\n\nIntro\n\n#{prose.strip}"
+      plain = "<ins data-ad-slot=\"1\"></ins><section>Intro<span>All rights reserved</span></section><section>#{prose}</section>"
+      described_class.to_markdown(plain).should == "Intro\n\n#{prose.strip}"
+    end
+  end
+
+  describe "Ruby globals" do
+    it "drops separator lines as String#lines finds them under another $/" do
+      saved = $/
+      begin
+        $/ = " "
+        result = described_class.extract("<p>alpha --- omega</p>", main_content: false, title: false)
+      ensure
+        $/ = saved
+      end
+      result.to_h.values_at(:markdown, :excerpt).should == ["alpha omega", "alpha omega"]
     end
   end
 

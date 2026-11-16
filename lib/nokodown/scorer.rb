@@ -38,12 +38,21 @@ module Nokodown
       token.rpartition(":").last.match?(Patterns::UTILITY_CLASS)
     end
 
+    # Pages repeat their class lists, so an extraction weighs each one once,
+    # in a cache kept and dropped with the signatures.
     def self.words_weight(value)
       return 0 if value.empty?
 
+      weights = Thread.current[Dom::WEIGHTS]
+      return weigh(value) unless weights
+
+      weights.fetch(value) { weights[value] = weigh(value) }
+    end
+
+    def self.weigh(value)
       (value.match?(Patterns::POSITIVE) ? 25 : 0) - (value.match?(Patterns::NEGATIVE) ? 25 : 0)
     end
-    private_class_method :utility_class?, :words_weight
+    private_class_method :utility_class?, :words_weight, :weigh
 
     def initialize(root, stats)
       @root = root
@@ -93,7 +102,7 @@ module Nokodown
     def secondary_keys
       limit = @stats.text_chars(@root) * 0.5
       regions = Dom.elements(@root).select do |node|
-        Patterns.secondary?(Dom.signature(node)) && @stats.text_chars(node) < limit
+        Dom.secondary?(node) && @stats.text_chars(node) < limit
       end
       regions.flat_map { |region| [region] + Dom.elements(region) }.map { |node| Dom.key(node) }.to_set
     end
@@ -102,7 +111,7 @@ module Nokodown
     def scoring_parent(node)
       parent = node.parent
       return parent unless node.name == "p" && parent&.name == "div" && parent.element_children.size == 1
-      return parent unless parent.children.all? { |child| child.element? || child.content.strip.empty? }
+      return parent unless Dom.children(parent).all? { |child| child.element? || child.content.strip.empty? }
 
       parent.parent
     end
@@ -110,7 +119,7 @@ module Nokodown
     # Text sitting directly in a div between block children counts as paragraphs.
     def phrasing_runs(div)
       runs = [+""]
-      div.children.each do |child|
+      Dom.children(div).each do |child|
         if child.element? && (Dom::PARAGRAPH_BREAKERS.include?(child.name) || Dom.block?(child))
           runs << +""
         else

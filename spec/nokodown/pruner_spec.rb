@@ -7,6 +7,27 @@ RSpec.describe Nokodown::Pruner do
     root
   end
 
+  # The node objects an object holds, counted without the garbage
+  # collector, which keeps short-lived ones for longer on some Rubies.
+  def held_nodes(object)
+    require "objspace"
+    seen = {}.compare_by_identity
+    stack = [object]
+    nodes = 0
+    until stack.empty?
+      held = stack.pop
+      next if seen[held] || held.is_a?(Module)
+
+      seen[held] = true
+      next nodes += 1 if held.is_a?(Nokolexbor::Node)
+
+      ObjectSpace.reachable_objects_from(held).each do |child|
+        stack << child unless child.is_a?(ObjectSpace::InternalObjectWrapper)
+      end
+    end
+    nodes
+  end
+
   let(:story) do
     "<p>The harbor bridge reopened to traffic on Tuesday, three weeks after inspectors found cracked bearings.</p>" \
       "<p>Crews replaced six bearings and resurfaced both ramps, finishing four days early in the dry weather.</p>"
@@ -40,6 +61,154 @@ RSpec.describe Nokodown::Pruner do
 
       pruner.conditional_share.should == 1.0
       pruner.removed_link_share.should == 0.0
+    end
+  end
+
+  describe "secondary regions" do
+    it "removes adjacent ones and those nested in kept elements" do
+      root = content("#{story}<div class='comments'><p>First!</p></div><div class='tags'><a href='/t/bridges'>bridges</a></div>" \
+                     "<div class='wrap'><p>Crews worked nights to finish early.</p><div class='popular'><p>Most read today</p></div></div>")
+      described_class.new([root], :article, conditional: false).call
+      text = Nokodown::Dom.text(root)
+
+      ["First!", "bridges", "Most read today"].each { |noise| text.should_not include(noise) }
+      text.should include("Crews worked nights")
+    end
+  end
+
+  describe "stray lines and boilerplate text" do
+    it "measures them after squishing, so indentation does not hide them" do
+      pad = "\n#{' ' * 150}\t\n"
+      root = content("#{story}<div>#{pad}Published on March 3, 2024#{pad}</div><span>#{pad}Advertisement#{pad}</span>" \
+                     "<p>#{pad}Follow us on Twitter and Facebook for updates.#{pad}</p>" \
+                     "<table><tr><td><div>Updated 4 March 2024</div></td></tr></table>")
+      described_class.new([root], :article, conditional: false).call
+      text = Nokodown::Dom.text(root)
+
+      ["Published on", "Advertisement", "Follow us"].each { |noise| text.should_not include(noise) }
+      text.should include("Updated 4 March 2024")
+      text.should include("Crews replaced six bearings")
+    end
+
+    it "reads the text and links of an element holding many buttons once" do
+      buttons = "<p>Useful prose of a section, with details.</p><a class='btn' href='/buy'>Buy now</a>" * 50
+      root = content("#{story}#{buttons}")
+      reads = Hash.new(0)
+      Nokodown::Dom.stub(:text).and_wrap_original do |original, node|
+        reads[:root] += 1 if node == root
+        original.call(node)
+      end
+      Nokolexbor::Node.any_instance.stub(:css).and_wrap_original do |original, *args|
+        reads[:links] += 1 if original.receiver == root && args == ["a[href]"]
+        original.call(*args)
+      end
+      described_class.new([root], :article, conditional: false).send(:remove_calls_to_action, root)
+      reads.should == { root: 1, links: 1 }
+      root.css("a").size.should == 0
+    end
+
+    it "keeps no node objects for the links of each card it has read" do
+      button = "<a class='btn' href='/buy'>Buy now</a>"
+      groups = (1..5).map { |g| "<div>#{button}" * 20 + (1..100).map { |i| "<a href='/g#{g}/#{i}'>l#{i}</a> " }.join + "</div>" * 20 }
+      root = content("#{story}#{groups.join}")
+      pruner = described_class.new([root], :article, conditional: false)
+      before = held_nodes(pruner)
+      pruner.send(:remove_calls_to_action, root)
+      (held_nodes(pruner) - before).should < 1000
+      root.css("a.btn").size.should == 5
+    end
+
+    it "tells that a button is not a card's only link from the first few links that lead elsewhere" do
+      contents = (1..100).map { |i| "<a href='#part#{i}'>Part #{i}</a> " }.join
+      buttons = (1..50).map { |i| "<p>Useful prose of a section, with details.</p><a class='btn' href='/buy#{i}'>Buy now</a>" }.join
+      root = content("#{story}<div>#{contents}#{buttons}</div>")
+      pruner = described_class.new([root], :article, conditional: false)
+      reads = 0
+      pruner.stub(:destination).and_wrap_original { |original, link| reads += 1; original.call(link) }
+      pruner.send(:remove_calls_to_action, root)
+      reads.should < 500
+      root.css("a.btn").size.should == 50
+      root.css("a[href^='#']").size.should == 100
+    end
+
+    it "stops reading a card's links at the first one that leads elsewhere than the button" do
+      fragments = "<a href='#s#{'x' * 1000}'></a>" * 10
+      root = content("#{story}<div><a href='/other'>Other</a>#{fragments}<a class='btn' href='/buy'>Buy now</a></div>")
+      pruner = described_class.new([root], :article, conditional: false)
+      long = 0
+      pruner.stub(:destination).and_wrap_original { |original, link| long += 1 if link["href"].size > 1000; original.call(link) }
+      pruner.send(:remove_calls_to_action, root)
+      long.should == 0
+      root.css("a.btn").size.should == 0
+    end
+
+    it "reads no text in a table when looking for stray lines" do
+      root = content("#{story}<table><tr><td><span><span>Updated 4 March 2024</span></span></td></tr></table><div>Published on March 3, 2024</div>")
+      read = []
+      Nokodown::Dom.stub(:squishes_longer?).and_wrap_original { |original, text, limit| read << text; original.call(text, limit) }
+      described_class.new([root], :article, conditional: false).send(:remove_stray_lines, root)
+
+      read.grep(/Updated/).should be_empty
+      Nokodown::Dom.text(root).should include("Updated 4 March 2024")
+      Nokodown::Dom.text(root).should_not include("Published on")
+    end
+    it "finds the blocks in thousands of tables in linear time" do
+      rows = "<tr><td><span>cell</span></td><td>Updated 4 March 2024</td></tr>" * 10
+      root = content("#{story}#{"<table>#{rows}</table>" * 2000}")
+      pruner = described_class.new([root], :article, conditional: false)
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      pruner.send(:remove_stray_lines, root)
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      root.css("table").size.should == 2000
+    end
+  end
+
+  describe "related links" do
+    it "removes a paragraph of headlines, and searches only paragraphs with an element for links" do
+      root = content("#{story}<p><a href='/a'>First story</a> | <a href='/b'>Second story</a></p>" \
+                     "<p>Plain text with no element in it at all.</p>")
+      searched = []
+      Nokolexbor::Node.any_instance.stub(:css).and_wrap_original do |original, selector|
+        searched << Nokodown::Dom.text(original.receiver) if selector == "a[href]"
+        original.call(selector)
+      end
+      described_class.new([root], :article, conditional: false).send(:remove_related_links, root)
+      searched.uniq.should == ["First story | Second story"]
+      text = Nokodown::Dom.text(root)
+
+      text.should_not include("First story")
+      text.should include("Plain text with no element")
+      text.should include("Crews replaced six bearings")
+    end
+  end
+
+  describe "calls to action" do
+    it "removes buttons of each holder tag, nested ones too, finding them with one XPath query" do
+      root = content("#{story}<div class='btn-primary'><a class='button' href='/buy'>Buy now</a></div>" \
+                     "<p><span class='cta'>Sign up</span></p><p class='btn'>Book a demo</p>" \
+                     "<p>Read the <a class='btn-link' href='/report'>full report</a> online.</p>")
+      root.should_not_receive(:css)
+      described_class.new([root], :article, conditional: false).send(:remove_calls_to_action, root)
+      text = Nokodown::Dom.text(root)
+
+      ["Buy now", "Sign up", "Book a demo"].each { |noise| text.should_not include(noise) }
+      text.should include("Read the full report online.")
+      text.should include("Crews replaced six bearings")
+    end
+  end
+
+  describe "#button?" do
+    it "reads the button words in the class or id in any case, without downcasing them" do
+      root = content("<a class='Hero BTN-Primary'>a</a><span id='mainCTA' class='Btn'>b</span><a class='lead'>c</a>" \
+                     "<span id='notes'>d</span><p class='bt' id='n'>e</p><a class='button-link'>f</a><b role='button'>g</b>")
+      pruner = described_class.new([root], :article, conditional: false)
+      downcased = 0
+      trace = TracePoint.new(:c_call) { |point| downcased += 1 if point.method_id == :downcase }
+      quiet = trace.enable { root.css("a.lead, span#notes, p.bt").map { |node| pruner.send(:button?, node) } }
+
+      quiet.should == [false, false, false]
+      downcased.should == 0
+      root.element_children.map { |node| pruner.send(:button?, node) }.should == [true, true, false, false, false, false, true]
     end
   end
 
