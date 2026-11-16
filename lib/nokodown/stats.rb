@@ -7,7 +7,6 @@ module Nokodown
   class Stats
     FRAGMENT_LINK_WEIGHT = 0.3
     HELD = 16
-    SPOT_STEPS = 64
     # Node types, compared as integers in the hot walk.
     TEXT_NODE = Nokolexbor::Node::TEXT_NODE
     CDATA_NODE = Nokolexbor::Node::CDATA_SECTION_NODE
@@ -44,7 +43,7 @@ module Nokodown
       end
       # Copies of a misnested formatting element share a key, and the copy
       # measured last decides its counts; those are all measured again.
-      @recent = @places = nil
+      @recent = @places = @listed = nil
       @shared_keys ? measure_all : recount(@root, 0.0)
       self
     end
@@ -53,7 +52,7 @@ module Nokodown
     # can drop a link target as well as a key, so the elements without a key
     # are counted again when next asked.
     def forget_keyless
-      @recent = @places = nil
+      @recent = @places = @listed = nil
       self
     end
 
@@ -91,20 +90,18 @@ module Nokodown
     # held until #remove or #forget_keyless, so asking about it again, or
     # about an element around it, does not count it again.
     #
-    # Nodes cannot be hashed, so counts are held in short lists and found by
-    # node, and a search compares at most HELD nodes in each list it reads.
-    # An element asked about again soon is found in the list for its source
-    # position, which keeps only its HELD most recently used. Positions
-    # restart in every fragment the page parses (each <noscript>), so
-    # elements elsewhere can push it out of that list. It is then found at
-    # its place: the key of its nearest ancestor with one, how many elements
-    # without a key lie between, and its position. Sibling fragments, and
-    # copies of a misnested ancestor, which share its key, can put any
-    # number of elements at one place. A place lists its first HELD and
-    # pushes none out. The others are listed by their #spot, and those
-    # sharing a full one by their path, which no other element in the tree
-    # has. So an element in the tree is counted once. link_weight is the
-    # element's own, and key and depth its place, when known.
+    # Nodes cannot be hashed, so counts are held in lists and found by
+    # node. An element asked about again soon is found in the list for its
+    # source position, which keeps only its HELD most recently used.
+    # Positions restart in every fragment the page parses (each <noscript>),
+    # so elements elsewhere can push it out of that list. It is then found
+    # at its place: the key of its nearest ancestor with one, how many
+    # elements without a key lie between, and its position. Sibling
+    # fragments, and copies of a misnested ancestor, which share its key,
+    # can put any number of elements at one place, so a place lists them
+    # all and pushes none out. So an element in the tree is counted once.
+    # link_weight is the element's own, and key and depth its place, when
+    # known.
     def keyless(node, link_weight = nil, key = nil, depth = nil)
       position = node.source_location
       recent = (@recent ||= {})[position] ||= []
@@ -112,54 +109,97 @@ module Nokodown
       return entry[1] if entry
 
       key, depth = keyless_above(node) unless depth
-      list, entry = at_place(node, key, depth, position)
+      places = (@places ||= {})[key] ||= {}
+      # Two places sharing a number would only share a list.
+      list = places[(position << 32) | depth] ||= []
+      entry = at_place(list, node)
       unless entry
         entry = [node, unstored(node, link_weight || link_weight_for(node, inherited_link_weight(node)), key, depth + 1)]
-        hold(list, entry)
+        list << entry
       end
       hold(recent, entry)
       entry[1]
     end
 
-    # The list node is held in at its place, and its entry there if held.
-    def at_place(node, key, depth, position)
-      places = (@places ||= {})[key] ||= {}
-      # Two places sharing a number would only share a list.
-      slot = (position << 32) | depth
-      list = places[slot] ||= []
-      entry = held(list, node)
-      return [list, entry] if entry || list.size < HELD
-
-      list = places[[slot, spot(node)]] ||= []
-      entry = held(list, node)
-      return [list, entry] if entry || list.size < HELD
-
-      # Elements in two trees can share a path, so this list is searched too.
-      list = places[[slot, node.path]] ||= []
-      [list, held(list, node)]
+    # The entry for node in the list of its place, if held. A place lists
+    # every element asked about there and pushes none out. A short list
+    # keeps the most recently used last; a longer one keeps its order and
+    # is searched by Listed.
+    def at_place(list, node)
+      if list.size <= Listed::FINE
+        held(list, node)
+      else
+        ((@listed ||= {}.compare_by_identity)[list] ||= Listed.new(list, node.document)).find(node)
+      end
     end
 
-    # The key of the nearest element before or above node that has one, and
-    # the steps from node to it: back to the previous element, or up when
-    # there is none. Walked the other way they lead to node alone, from
-    # each element with the key. Nil when it is more than SPOT_STEPS away.
-    def spot(node)
-      steps = 1
-      SPOT_STEPS.times do
-        previous = node.previous_element
-        if previous
-          node = previous
-          steps <<= 1
-        else
-          node = node.parent
-          return unless node && node.type == ELEMENT_NODE
+    # Finds an element in a long list of entries, which only grows. Elements
+    # are mostly asked about in document order, one way or the other, so one
+    # is first looked for beside the last one found. The entries are also
+    # put in NodeSets of a COARSE and of a FINE run of them, which compare
+    # nodes in C: they tell which run holds the element, and only that FINE
+    # run is compared in Ruby. So no search walks the tree. A search costs
+    # under a nanosecond per entry; an element not yet listed is looked for
+    # in every run, so listing n elements at one place costs about n * n / 2
+    # of those, a quarter of a second for 24,000.
+    class Listed
+      FINE = 32
+      COARSE = 1024
 
-          steps = (steps << 1) | 1
-        end
-        key = Dom.key(node)
-        return [key, steps] if key
+      def initialize(entries, document)
+        @entries = entries
+        @document = document
+        @fine = []
+        @coarse = []
+        @indexed = 0
+        @last = 0
       end
-      nil
+
+      def find(node)
+        last = @last
+        index =
+          if near?(last, node) then last
+          elsif near?(last + 1, node) then last + 1
+          elsif last.positive? && near?(last - 1, node) then last - 1
+          else search(node)
+          end
+        return unless index
+
+        @last = index
+        @entries[index]
+      end
+
+      private
+
+      def near?(index, node)
+        entry = @entries[index]
+        entry && entry[0] == node
+      end
+
+      def search(node)
+        index_entries
+        coarse = @coarse.index { |nodes| nodes.include?(node) }
+        return unless coarse
+
+        runs = COARSE / FINE
+        fine = coarse * runs + @fine[coarse * runs, runs].index { |nodes| nodes.include?(node) }
+        first = fine * FINE
+        first + @entries[first, FINE].index { |other, _| other == node }
+      end
+
+      # Puts the entries listed since the last search in NodeSets.
+      def index_entries
+        indexed = @indexed
+        while indexed < @entries.size
+          @coarse << Nokolexbor::NodeSet.new(@document) if (indexed % COARSE).zero?
+          @fine << Nokolexbor::NodeSet.new(@document) if (indexed % FINE).zero?
+          node = @entries[indexed][0]
+          @coarse.last << node
+          @fine.last << node
+          indexed += 1
+        end
+        @indexed = indexed
+      end
     end
 
     # The entry for node, moved to the end as the most recently used.
