@@ -7,6 +7,7 @@ module Nokodown
   class Stats
     FRAGMENT_LINK_WEIGHT = 0.3
     HELD = 16
+    SPOT_STEPS = 64
     # Node types, compared as integers in the hot walk.
     TEXT_NODE = Nokolexbor::Node::TEXT_NODE
     CDATA_NODE = Nokolexbor::Node::CDATA_SECTION_NODE
@@ -99,11 +100,11 @@ module Nokodown
     # its place: the key of its nearest ancestor with one, how many elements
     # without a key lie between, and its position. Sibling fragments, and
     # copies of a misnested ancestor, which share its key, can put any
-    # number of elements at one place. A place lists its first HELD; once
-    # more share it, each is held by its path, which no other element in
-    # the tree has. So nothing in the tree is pushed out of its place, and
-    # it is counted once. link_weight is the element's own, and key and
-    # depth its place, when known.
+    # number of elements at one place. A place lists its first HELD and
+    # pushes none out. The others are listed by their #spot, and those
+    # sharing a full one by their path, which no other element in the tree
+    # has. So an element in the tree is counted once. link_weight is the
+    # element's own, and key and depth its place, when known.
     def keyless(node, link_weight = nil, key = nil, depth = nil)
       position = node.source_location
       recent = (@recent ||= {})[position] ||= []
@@ -120,23 +121,45 @@ module Nokodown
       entry[1]
     end
 
-    # The list for node at its place, and node's entry in it if held.
+    # The list node is held in at its place, and its entry there if held.
     def at_place(node, key, depth, position)
       places = (@places ||= {})[key] ||= {}
       # Two places sharing a number would only share a list.
       slot = (position << 32) | depth
       list = places[slot] ||= []
-      if list.is_a?(Array)
-        entry = held(list, node)
-        return [list, entry] if entry || list.size < HELD
+      entry = held(list, node)
+      return [list, entry] if entry || list.size < HELD
 
-        by_path = {}
-        list.each { |other| (by_path[other[0].path] ||= []) << other }
-        list = places[slot] = by_path
-      end
-      # Nodes in two trees can share a path, so this list too is searched.
-      list = list[node.path] ||= []
+      list = places[[slot, spot(node)]] ||= []
+      entry = held(list, node)
+      return [list, entry] if entry || list.size < HELD
+
+      # Elements in two trees can share a path, so this list is searched too.
+      list = places[[slot, node.path]] ||= []
       [list, held(list, node)]
+    end
+
+    # The key of the nearest element before or above node that has one, and
+    # the steps from node to it: back to the previous element, or up when
+    # there is none. Walked the other way they lead to node alone, from
+    # each element with the key. Nil when it is more than SPOT_STEPS away.
+    def spot(node)
+      steps = 1
+      SPOT_STEPS.times do
+        previous = node.previous_element
+        if previous
+          node = previous
+          steps <<= 1
+        else
+          node = node.parent
+          return unless node && node.type == ELEMENT_NODE
+
+          steps = (steps << 1) | 1
+        end
+        key = Dom.key(node)
+        return [key, steps] if key
+      end
+      nil
     end
 
     # The entry for node, moved to the end as the most recently used.

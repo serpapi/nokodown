@@ -101,8 +101,8 @@ RSpec.describe Nokodown::Stats do
     bolds.each { |bold| bold.define_singleton_method(:==) { |other| compared += 1; super(other) } }
 
     2.times { bolds.map { |bold| stats.chars(bold) }.should == [6.0] * 10 + [7.0] * 90 + [8.0] * 60 }
-    # Each lookup searches at most two lists of HELD.
-    compared.should <= 2 * bolds.size * 2 * described_class::HELD
+    # Each lookup searches at most four lists of HELD.
+    compared.should <= 2 * bolds.size * 4 * described_class::HELD
   end
 
   it "keeps an element without a key held while elements from other places at its position are asked about" do
@@ -145,6 +145,26 @@ RSpec.describe Nokodown::Stats do
     3.times { bolds.map { |bold| stats.chars(bold) }.should == [81.0] * 20 }
     # Counting every bold again in each round would take 1,800.
     counted.should < 900
+  end
+
+  it "counts once each of more elements without a key than a place lists, with nothing keyed near them" do
+    # Sixty-four elements without a key before each bold leave nothing to
+    # tell the bolds apart by but their path.
+    root = body("<div></div>")
+    spans = (1..30).map { |i| "<span>w#{i}</span>" }.join
+    40.times { root.at_css("div").add_child(root.document.fragment("#{'<i></i>' * 64}<b>#{spans}</b>")) }
+    Nokodown::Dom.assign_keys(root)
+    bolds = root.css("b").to_a
+    bolds.map(&:source_location).uniq.size.should == 1
+    root.css("i, b").each { |node| node.remove_attribute(Nokodown::Dom::KEY) }
+    stats = described_class.new(root)
+    counted = 0
+    Nokodown::Dom.stub(:char_count).and_wrap_original { |original, text| counted += 1; original.call(text) }
+
+    3.times { bolds.map { |bold| stats.chars(bold) }.should == [81.0] * 40 }
+    # Counting again in each round the 24 bolds that the place and the spot
+    # do not list would take 2,640.
+    counted.should < 1_800
   end
 
   it "weighs a link without a key by its own href, as the walk from the root does" do
