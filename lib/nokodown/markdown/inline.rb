@@ -211,7 +211,7 @@ module Nokodown
         when "input" then checkbox(node)
         else
           text = render(node.children)
-          Dom::BLOCK.include?(name) ? " #{text} " : text
+          Dom::BLOCK.include?(name) && !Dom.inline_div?(node) ? " #{text} " : text
         end
       end
 

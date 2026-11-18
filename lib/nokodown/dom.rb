@@ -11,6 +11,7 @@ module Nokodown
     ]).freeze
 
     HEADINGS = Set.new(%w[h1 h2 h3 h4 h5 h6]).freeze
+    HEADING_SELECTOR = HEADINGS.to_a.join(", ").freeze
 
     # Elements that stop Readability from treating a div as a paragraph.
     PARAGRAPH_BREAKERS = Set.new(%w[blockquote dl div img ol p pre table ul]).freeze
@@ -19,6 +20,8 @@ module Nokodown
     # leaked markup.
     INLINE_CODE = %w[code kbd samp tt].freeze
     CODE = ["pre", *INLINE_CODE].freeze
+
+    INLINE_STYLE = /(?:\A|;)\s*display\s*:\s*inline\s*(?:!important\s*)?(?:;|\z)/i.freeze
 
     NBSP = "\u00A0"
     WHITESPACE = " \t\n\r\f\u00A0"
@@ -42,6 +45,9 @@ module Nokodown
 
     # Set by HeadingAnchors on elements whose id is made from their heading.
     ANCHOR = "data-nokodown-anchor"
+
+    # Set by Preprocessor on the wide-screen copy of a block laid out twice.
+    WIDE_COPY = "data-nokodown-wide-copy"
 
     # Broken pages nest thousands of unclosed elements, deeper than the
     # recursive walks after parsing can follow.
@@ -133,6 +139,12 @@ module Nokodown
 
     def block?(node)
       node.element? && BLOCK.include?(node.name)
+    end
+
+    # DITA and some page builders wrap every phrase in <div style="display:
+    # inline">, which flows with the text around it.
+    def inline_div?(node)
+      node.name == "div" && node["style"].to_s.match?(INLINE_STYLE)
     end
 
     def heading?(node)

@@ -30,7 +30,7 @@ module Nokodown
 
       product_page = @main_content && ProductReviews.product_page?(doc, metadata[:page_type])
       Preprocessor.new(body).call
-      nodes, mode = select_content(body, metadata[:page_type], product_page, urls)
+      nodes, mode = select_content(body, metadata, product_page, urls)
       blocks = render(nodes, mode, urls)
       blocks = with_title(blocks, metadata) if @title
       blocks = Markdown::Orphans.call(Markdown::Repeats.call(blocks))
@@ -53,13 +53,14 @@ module Nokodown
       Markdown::RedundantImages.new(nodes, mode, urls).call
     end
 
-    def select_content(body, page_type, product_page, urls)
+    def select_content(body, metadata, product_page, urls)
+      page_type = metadata[:page_type]
       return [[body], :full] unless @main_content
 
       attribution = PostAttribution.new(body).call if ContentLocator::DISCUSSIONS.include?(page_type)
       Boilerplate.new(body, url: @url).call
       ProductReviews.new(body).call if product_page
-      selection = ContentLocator.new(body, page_type: page_type).call
+      selection = ContentLocator.new(body, page_type: page_type, title: metadata[:title]).call
       # Writing the attributions numbers the elements anew.
       attribution&.write(selection.nodes)
       teasers = Teasers.new(body, @url, urls, page_type).call
@@ -75,6 +76,10 @@ module Nokodown
     # (React apps, card grids) trips it, and a short intro would otherwise pass
     # for the article. When almost nothing is left at all, the content is
     # pruned like a page. Cleaning runs on a copy so it can be undone.
+    #
+    # A listing's items are kept only once cleaning is known to stay: kept,
+    # they would count as text cleaning kept and hide that it removed most
+    # of the rest.
     def cleaned_article(nodes, page_type, urls)
       copies = nodes.map(&:dup)
       pruner = Pruner.new(copies, :article).call
@@ -82,10 +87,19 @@ module Nokodown
         Pruner.new(nodes, :page, urls: urls).call
         return nodes
       end
-      return copies if keep_conditional_cleaning?(pruner, page_type)
+      return listed_copies(nodes, page_type) || copies if keep_conditional_cleaning?(pruner, page_type)
 
       Pruner.new(nodes, :article, conditional: false, urls: urls).call
       nodes
+    end
+
+    def listed_copies(nodes, page_type)
+      keep = listed(nodes, page_type)
+      return if keep.empty?
+
+      copies = nodes.map(&:dup)
+      Pruner.new(copies, :article, keep: keep).call
+      copies
     end
 
     # When what conditional cleaning removed from a declared article is mostly
@@ -95,6 +109,13 @@ module Nokodown
       return true if pruner.conditional_share >= CONDITIONAL_SHARE
 
       page_type == :article && pruner.removed_link_share > REMOVED_LINK_SHARE
+    end
+
+    # Conditional cleaning judges a listing's items one by one, and drops
+    # those whose titles and prices make them linky. A thread's posts have
+    # rules of their own.
+    def listed(nodes, page_type)
+      ContentLocator::DISCUSSIONS.include?(page_type) ? Set.new : Listing.keys(nodes)
     end
 
     def almost_nothing_kept?(copies, nodes)

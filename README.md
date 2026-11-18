@@ -52,7 +52,7 @@ as unclosed tags on broken pages leave them, keep only their text.
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
 | `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
-| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section, or names a section that the page's URL, which names the title, does not mention. Away from the home page, a heading that only names the site gives way to the page title when it is an `<h1>`, opens the content, below nothing but images, or links to the site's root, whatever `images` and `links` are set to; a lower one below other content, such as a company's name above its address or an author's name that links to the author's page, stays. A title that only names the site does not head content that has a heading of its own. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
+| `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section, or names a section that the page's URL, which names the title, does not mention. Away from the home page, a heading that only names the site gives way to the page title when it is an `<h1>`, opens the content, below nothing but images, or links to the site's root, whatever `images` and `links` are set to; a lower one below other content, such as a company's name above its address or an author's name that links to the author's page, stays. A title that only names the site does not head content that has a heading of its own. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. With `false`, an `<h1>` the content holds, such as the article's own headline, still opens it. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |
 
@@ -112,7 +112,8 @@ with `main_content: false`, `:none` for a document without a body.
   script. Content that React streams into hidden containers at the end of the
   page is put back where the page shows it, unless it is mostly links, as
   carousels of recommended products are.
-- Sections rendered twice, such as a desktop and a mobile copy.
+- Sections rendered twice, such as a desktop and a mobile copy: the mobile
+  copy goes and the desktop one stays.
 - Repeated text and the labels of controls, in the major web languages:
   copies of the title (an H2 or bold line under the H1, a gallery label on
   every item), labels and tabs over the heading they repeat, lists made of
@@ -121,7 +122,8 @@ with `main_content: false`, `:none` for a document without a body.
   label the page uses once goes too), labels of controls ("Menu",
   "Loading...", "Back to top", "Quantity:", "prev / next"), counters
   without a label (view and comment counts, FAQ and step badges, slide
-  numbers, a player's "0:00"), and form labels left without their fields.
+  numbers, a player's "0:00"), form labels left without their fields, and
+  the marks at a slider's ends ("A A", "0 100").
   A read-more link that is the only way to its page, a number a label
   explains or that sits in a row of numbers, and a fact repeated on every
   card ("In stock") stay. A card whose only words are a shop button's
@@ -184,7 +186,10 @@ with `main_content: false`, `:none` for a document without a body.
   them.
 
 Every structural rule is guarded: an element that contains the `<main>`
-region, or most of the page's text, is never removed because of its class name.
+region, or most of the page's text, is never removed because of its class name,
+and neither is one named for what it has or allows (`has-sidebar`,
+`with-navigation`, `sidebar-enabled`). A `<footer>` or complementary pane that
+holds the page's only `<h1>` and a fair share of its text is the content.
 
 ## How it works
 
@@ -203,7 +208,13 @@ region, or most of the page's text, is never removed because of its class name.
    candidate holds most of the page's prose the content is narrowed to it
    (`:article`); otherwise the whole main region is kept (`:page`), because a
    listing or a product page spreads its content over many small blocks. The
-   share required depends on the page type its metadata declares. On forum
+   share required depends on the page type its metadata declares. A row of a
+   data table stands for the whole table. When a short stretch that is not a
+   list of links (a standfirst, key facts, a price) sits between the page's
+   `<h1>` and the article, the article reaches up to the headline, unless that
+   `<h1>` links to the home page, does not match the title, or a heading below
+   matches the title better (a blog's name, a journal's, a section
+   label). On forum
    threads (schema.org types or the forum software's generator tag) replies
    are content even in comment-named containers, and on forums and Q&A pages
    where no single post holds the page, the whole main region is cleaned as an
@@ -236,6 +247,11 @@ region, or most of the page's text, is never removed because of its class name.
    declared article was mostly links), it is undone and light cleaning,
    which treats link clusters and menus as page pruning does, is used
    instead; if it leaves almost nothing, the content is pruned as a page.
+   Once cleaning is known to stay, it leaves alone the items of a listing of
+   posts or products (alike blocks, each with a linked title, that hold most
+   of the text) and a featured post beside them, since it would judge each
+   item on its own. A teaser's linked title with its date and author links
+   is not a link cluster, however short.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data

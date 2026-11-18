@@ -100,6 +100,42 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "modifier class names" do
+    it "keeps wrappers named for what they have or allow, not for what they are" do
+      html = <<~HTML
+        <div class="content-container has-sidebar">#{prose('Grinding coffee', 1)}</div>
+        <div class="clearfix with-navigation">#{prose('Brewing', 1)}</div>
+        <div class="td-content-and-menu">#{prose('Storing beans', 1)}</div>
+        <div class="product-grid sidebar-enabled--true"><a href="/p/1">House blend</a> <a href="/p/2">Dark roast</a></div>
+        <div class="sidebar"><p>Archive of older posts</p></div>
+      HTML
+
+      text = remaining(html)
+      ["Grinding coffee", "Brewing", "Storing beans", "House blend"].each { |content| text.should include(content) }
+      text.should_not include("Archive")
+    end
+
+    it "still reads no-print as a name" do
+      remaining("#{prose('Grinding coffee', 3)}<div class='no-print'><a href='?print=1'>Print this page</a></div>").should_not include("Print this")
+    end
+  end
+
+  describe "chrome elements around the content" do
+    it "keeps a footer or reading pane that holds the page's only h1, not the site footer" do
+      ["footer", "div role='complementary'"].each do |tag|
+        html = <<~HTML
+          <header class="site-header"><a href="/">Auto Lexicon</a></header>
+          <#{tag} class="elementor-location-single"><h1>Lancia Musa</h1>#{prose('The Musa', 2)}</#{tag.split.first}>
+          <footer class="site-footer"><p>Imprint and privacy of the publisher of this site, who answers mail weekly.</p></footer>
+        HTML
+
+        text = remaining(html)
+        text.should include("Lancia MusaThe Musa is explained")
+        text.should_not include("Imprint")
+      end
+    end
+  end
+
   describe "noise names" do
     it "removes a related block even when its classes also name content" do
       html = "<article>#{prose('Sizing', 8)}</article><div class=\"related-posts entry-related\">#{prose('Another heat pump story', 2)}</div>"

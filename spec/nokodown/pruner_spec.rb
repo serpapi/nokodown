@@ -54,6 +54,29 @@ RSpec.describe Nokodown::Pruner do
       places.map { |place| "<a href='/places/#{place.downcase}'>#{place}</a><br>" }.join
     end
 
+    it "keeps a teaser's short linked title with its date and author links, not a menu of linked headings" do
+      teaser = "<header><h2><a href='/archives/42822'>ショップが新しくなりました</a></h2>" \
+               "<a href='/archives/42822'>2021年03月09日</a> <a href='/author/micasa'>micasa</a></header>"
+      menu = "<div><h3><a href='/men'>Men</a></h3><h3><a href='/women'>Women</a></h3><h3><a href='/sale'>Sale</a></h3></div>"
+      root = content(teaser + story + menu)
+      described_class.new([root], :page).call
+      text = Nokodown::Dom.text(root)
+
+      text.should include("ショップが新しくなりました2021年03月09日 micasa")
+      text.should_not include("Women")
+    end
+
+    it "drops a menu or a widget under a single linked heading" do
+      menu = "<div><h4><a href='/shop'>Shop</a></h4>" + %w[Men Women Kids Sale].map { |name| "<a href='/#{name}'>#{name}</a> " }.join + "</div>"
+      icons = "<div><h3><a href='/login'>Login</a></h3>" + %w[x fb ig].map { |name| "<a href='https://#{name}.example'><img src='/#{name}.svg'></a>" }.join + "</div>"
+      root = content(story + menu + icons)
+      described_class.new([root], :page).call
+      text = Nokodown::Dom.text(root)
+
+      text.should_not include("Women")
+      text.should_not include("Login")
+    end
+
     it "keeps a line of names that links to the page itself among names without links" do
       authors = "<p>By <a href='/page'>Ana Ruiz</a>, Ben Ode, <a href='/people/cole'>Cy Cole</a>, Dee Fox and " \
                 "<a href='/people/lin'>Eve Lin</a></p>"

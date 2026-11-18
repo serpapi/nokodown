@@ -205,6 +205,29 @@ RSpec.describe Nokodown do
       markdown.should include("- [Diving](https://example.com/topics/diving)")
     end
 
+    it "keeps the linked title of every post on a listing" do
+      titles = ["Spring planting for small gardens", "Pruning roses without losing blooms", "Composting in a city kitchen"]
+      posts = titles.each_with_index.map do |title, index|
+        "<div class='post-item'><div class='post-header'><h2><a href='/posts/#{index}'>#{title}</a></h2>" \
+          "<div class='post-date'>12 May 2026</div></div>" \
+          "<p>#{'Our gardeners explain the method step by step, with photos of each stage and the tools they use. ' * 2}</p></div>"
+      end
+
+      markdown = extract("<main><h1>Blog</h1><div class='posts'>#{posts.join}</div></main>")
+
+      titles.each_with_index { |title, index| markdown.should include("## [#{title}](https://example.com/posts/#{index})") }
+    end
+
+    it "still cleans what sits around a listing's posts" do
+      posts = Array.new(3) do |index|
+        "<div class='post-item'><h2><a href='/posts/#{index}'>Post #{index}</a></h2>" \
+          "<p>#{'Our gardeners explain the method step by step, with photos of each stage and the tools they use. ' * 2}</p></div>"
+      end
+      promo = "<div class='promo-box'><p>Join the club for weekly tips</p><a href='/join'>Join</a></div>"
+
+      extract("<main><h1>Blog</h1><div class='posts'>#{posts.join}</div>#{promo}</main>").should_not include("weekly tips")
+    end
+
     it "drops a menu that links to the page itself, even on an index page" do
       topics = %w[
         Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts
@@ -518,6 +541,35 @@ RSpec.describe Nokodown do
       Nokodown.extract(html, main_content: false, title: false).markdown.should == "Visible"
     end
 
+    it "drops a slider with the marks at its ends, but keeps the photos of a before and after slider" do
+      html = "<p>Kitchen</p><div><input type='range'><span>0</span> <span>100</span></div>" \
+             "<div><img src='/before.jpg' alt='Before'><img src='/after.jpg' alt='After'><input type='range'></div>"
+
+      convert(html).should == "Kitchen\n\n![Before](https://example.com/before.jpg)![After](https://example.com/after.jpg)"
+    end
+
+    it "keeps a caption beside a slider when its parts together are longer than the marks" do
+      html = "<div><input type='range'><span><b>Water</b> level</span> <span>by decade</span></div>"
+
+      convert(html).should == "**Water** level by decade"
+    end
+
+    it "keeps the download link beside a player's seek bar, but drops a slider's marks that link nowhere" do
+      html = "<p>Episode 12</p><div><audio src='/ep12.mp3'></audio><input type='range'><a href='/ep12.mp3' download>Download</a></div>" \
+             "<div><a href='#'>A</a><input type='range'><a href='javascript:void(0)'>A</a></div>"
+
+      convert(html).should == "Episode 12\n\n[Download](https://example.com/ep12.mp3)"
+    end
+
+    it "keeps the photos beside many sliders in time linear in the sliders" do
+      html = "<p>Kitchen</p><div><img src='/before.jpg' alt='Before'><img src='/after.jpg' alt='After'>#{"<input type='range'>" * 5000}</div>"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert(html)
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      markdown.should == "Kitchen\n\n![Before](https://example.com/before.jpg)![After](https://example.com/after.jpg)"
+    end
+
     it "reports :full mode" do
       Nokodown.extract("<p>x</p>", main_content: false).mode.should == :full
     end
@@ -594,6 +646,13 @@ RSpec.describe Nokodown do
       convert('<p>Open daily.</p><div class="w-condition-invisible"><p>Closed for the holidays.</p></div>').should == "Open daily."
     end
 
+    it "drops the messages Webflow shows only once a form is sent" do
+      form = '<div class="w-form"><form><input name="email"></form><div class="w-form-done"><div>Thank you! Check your inbox.</div></div>' \
+             '<div class="w-form-fail"><div>There was an issue with the form.</div></div></div>'
+
+      convert("<p>Open daily.</p>#{form}").should == "Open daily."
+    end
+
     it "drops link spam placed far off screen or in a strip one pixel high" do
       html = '<p>Open daily.</p><div style="position: absolute; left: -7786px;"><a href="https://spam.example">casino bonus</a></div>' \
              '<div style="position:fixed;top:-9000px"><a href="https://spam.example">live casino</a></div>' \
@@ -646,9 +705,14 @@ RSpec.describe Nokodown do
 
   describe "title: false" do
     it "does not prepend the metadata title" do
-      markdown = Nokodown.to_markdown(fixture("article.html"), title: false)
+      paragraph = "<p>Tidal lagoons hold water behind a wall at high tide, then release it through turbines.</p>"
+      markdown = Nokodown.to_markdown("<title>Tides</title><body><article>#{paragraph * 4}</article></body>", title: false)
 
       markdown.should start_with("Tidal lagoons hold water")
+    end
+
+    it "keeps the article's own headline" do
+      Nokodown.to_markdown(fixture("article.html"), title: false).should start_with("# How Tidal Power Plants Store Energy\n\nTidal lagoons")
     end
   end
 
@@ -686,6 +750,24 @@ RSpec.describe Nokodown do
       end
     end
 
+    it "decides whether to keep it before it protects a listing's items" do
+      papers = ["Lagoon walls under storm surge", "Sediment behind barrages", "Fish passage through turbines", "Grid timing of output",
+                "Costs of the La Rance overhaul", "Pumping at high tide", "Bird life on lagoon walls", "Tidal range and siting"]
+      items = papers.each_with_index.map do |title, index|
+        "<div class='entry'><h3><a href='/papers/#{index}'>#{title}</a></h3><p>#{'A study of the wall and the water behind it. ' * 3}</p>" \
+          "<div class='meta'><a href='/authors/a#{index}'>Ana Lima</a>, <a href='/authors/b#{index}'>Rui Costa</a></div></div>"
+      end
+      protected_runs = []
+      Nokodown::Pruner.stub(:new).and_wrap_original do |original, nodes, mode, **options|
+        protected_runs << !options[:keep].to_a.empty? if mode == :article && options.fetch(:conditional, true)
+        original.call(nodes, mode, **options)
+      end
+
+      story("<h2>Papers</h2><div class='list'>#{items.join}</div>")
+
+      protected_runs.should == [false, true]
+    end
+
     it "keeps a heading whose anchor holds a negative class word" do
       markdown = story('<h2 id="h-media-coverage-of-tidal-lagoons">Media coverage of tidal lagoons</h2><p>Newspapers mostly covered the cost.</p>')
 
@@ -699,11 +781,14 @@ RSpec.describe Nokodown do
       markdown.should_not include("Jane wrote")
     end
 
-    it "still drops copies shown only at some screen sizes" do
-      markdown = story('<div class="hidden sm:block"><p>Wide screen copy of the intro.</p></div><div class="md:hidden"><p>Narrow screen copy of the intro.</p></div>')
+    it "keeps the wide-screen copy of a block laid out twice, but not a block shown only on wide screens" do
+      pair = '<div><div class="hidden sm:block"><p>Wide screen copy of the steps.</p></div><div class="md:hidden"><p>Narrow screen copy of the steps.</p></div></div>'
+      markdown = story("#{pair}<div class='hidden lg:block'><p>A rail of brand stories.</p></div>")
 
       markdown.should include("modest maintenance costs.")
-      markdown.should_not include("copy of the intro")
+      markdown.should include("Wide screen copy of the steps.")
+      markdown.should_not include("Narrow screen copy")
+      markdown.should_not include("brand stories")
     end
   end
 
@@ -756,6 +841,126 @@ RSpec.describe Nokodown do
       html = "<title>Index funds</title><body><article><h1>Index funds</h1>#{paragraphs.join}#{disclaimer}</article></body>"
 
       Nokodown.to_markdown(html).should_not include("subject to change")
+    end
+
+    it "keeps the key facts between the headline and the body, and nothing after the body" do
+      facts = { "Price" => "525,000 €", "Rooms" => "2", "Floor area" => "72 m²" }.map do |label, value|
+        "<div class='fact'><div>#{label}</div><div>#{value}</div></div>"
+      end
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      html = "<main><div class='listing'><div class='crumbs-text'>Homes for sale</div>" \
+             "<div class='intro'><h1>Flat for sale in the Eixample</h1><div class='facts'>#{facts.join}</div></div>" \
+             "<div class='description'>#{prose}</div><div class='agent'><p>Call Ana on weekdays.</p></div></div></main>"
+
+      markdown = Nokodown.to_markdown(html)
+      markdown.should start_with("# Flat for sale in the Eixample\n\nPrice\n\n525,000 €")
+      markdown.should include("original tiles")
+      markdown.should_not include("Call Ana")
+    end
+
+    context "with an H1 above the body that does not name the page" do
+      let(:prose) { "<p>The tour opened in Ohio with a set of songs the band had not played in thirty years, to a full hall.</p>" * 4 }
+
+      def blog(title, logo)
+        "<title>#{title}</title><body><div class='header-outer'><div class='titlewrapper'><h1 class='title'>#{logo}</h1></div>" \
+          "<div class='descriptionwrapper'><p class='description'>Thoughts from a small allotment in the north.</p></div></div>" \
+          "<div class='main-outer'><div class='date-outer'><h2 class='date-header'>Wednesday, April 25, 2026</h2>" \
+          "<div class='post hentry'><h3 class='post-title'>Pruning roses in spring</h3><div class='post-body entry-content'>#{prose}</div>" \
+          "<div class='post-footer'>Posted by Ann at 10:02</div></div></div></div></body>"
+      end
+
+      it "leaves out a blog's name linked to its home page" do
+        html = blog("Garden Notes", "<a href='https://garden.example.com/'>Garden Notes</a>")
+
+        Nokodown.to_markdown(html, url: "https://garden.example.com/2026/04/roses.html").should start_with("# Garden Notes\n\nThe tour opened")
+      end
+
+      it "leaves out a section label when a heading below names the post better" do
+        Nokodown.to_markdown(blog("Pruning roses in spring", "Roses")).should start_with("# Pruning roses in spring\n\nThe tour opened")
+      end
+
+      it "leaves out a journal's name above a paper titled in the metadata" do
+        html = "<title>Effects of propolis mouthwash on Candida albicans</title><body><main><div class='issue-wrap'>" \
+               "<div class='journal-info'><h1>Journal of Advanced Biomedical Sciences</h1><div class='issue'>Volume 11, Issue 4</div></div>" \
+               "<div class='abstract'>#{prose}</div><div class='cite'><p>Cite as JABS 11(4).</p></div></div></main></body>"
+
+        Nokodown.to_markdown(html).should start_with("# Effects of propolis mouthwash on Candida albicans\n\nThe tour opened")
+      end
+    end
+
+    it "keeps a body that sits in a list below the headline" do
+      abstract = "<p>Digital puppetry is a form of computer animation in which performers control a model in real time.</p>" * 3
+      html = "<title>Evolving performance control systems</title><body><h1>Evolving performance control systems</h1>" \
+             "<p>Created by <a href='/langdon'>W. Langdon</a></p><dl><dt>@PhdThesis{Gildfind:thesis,</dt>" \
+             "<ul><li>author = \"Andrew Gildfind\",</li><li>abstract = \"#{abstract}\"</li></ul></dl></body>"
+
+      Nokodown.to_markdown(html).should include("Digital puppetry is a form")
+    end
+
+    it "leaves out bare text after the body when it reaches up to the headline" do
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      html = "<main><div class='listing'><div class='intro'><h1>Flat for sale in the Eixample</h1><div class='price'>525,000 €</div></div>" \
+             "<div class='description'>#{prose}</div>Posted by Ana | 3 comments</div></main>"
+
+      Nokodown.to_markdown(html).should_not include("Posted by Ana")
+    end
+
+    it "does not reach up to a headline over a long stretch of other content" do
+      features = Array.new(20) { |index| "<li>Feature #{index + 1} of this flat: a quiet detail of the place</li>" }
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 30
+      html = "<main><div class='listing'><div class='intro'><h1>Flat for sale</h1><ul>#{features.join}</ul></div>" \
+             "<div class='description'>#{prose}</div><div class='agent'><p>Call Ana on weekdays.</p></div></div></main>"
+
+      Nokodown.to_markdown(html).should_not include("Feature 1 of this flat")
+    end
+
+    it "leaves out lines of links between the headline and the body, but not a linked date" do
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      head = "<h1>Flat for sale in the Eixample</h1><div class='cats'><a href='/homes'>Homes</a> <a href='/barcelona'>Barcelona</a></div>" \
+             "<div class='price'>525,000 €, two rooms, 72 m² of floor area</div><div class='date'><a href='/flat'>3 May 2026</a></div><div class='cta'><a href='/demo'>Book a visit</a></div>"
+      html = "<main><div class='listing'><div class='intro'>#{head}</div><div class='description'>#{prose}</div></div></main>"
+
+      markdown = Nokodown.to_markdown(html)
+      markdown.should include("525,000 €")
+      markdown.should include("3 May 2026")
+      %w[Homes Barcelona Book].each { |label| markdown.should_not include(label) }
+    end
+
+    it "leaves out the marks at a font size slider's ends between the headline and the body" do
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      slider = "<div class='font-size'><input type='range' min='10' max='18'><span>A</span> <span>A</span><span class='bar'></span></div>"
+      html = "<main><div class='listing'><div class='intro'><h1>Flat for sale in the Eixample</h1></div>#{slider}" \
+             "<div class='description'>#{prose}</div></div></main>"
+
+      Nokodown.to_markdown(html).should start_with("# Flat for sale in the Eixample\n\nThe flat sits")
+    end
+
+    it "keeps a one-letter value between the headline and the body" do
+      prose = "<p>The flat sits on a quiet street of the Eixample, with tall windows, original tiles and a balcony.</p>" * 4
+      head = "<h1>Flat for sale in the Eixample</h1><div class='facts'><div>Energy rating</div><div>E</div></div>"
+      html = "<main><article><header>#{head}</header><div class='description'>#{prose}</div></article></main>"
+
+      Nokodown.to_markdown(html).should start_with("# Flat for sale in the Eixample\n\nEnergy rating\n\nE\n\nThe flat sits")
+    end
+
+    it "keeps a byline in Devanagari between the headline and the body" do
+      prose = "<p>पटना में आज सुबह से भारी बारिश हो रही है और कई इलाकों में पानी भर गया है। नगर निगम ने राहत दल तैनात किए हैं।</p>" * 4
+      head = "<h1>पटना में भारी बारिश से जलभराव</h1><div><span>सुधा राव</span></div><div>बिहार</div>"
+      html = "<main><article><header>#{head}</header><div class='description'>#{prose}</div></article></main>"
+
+      Nokodown.to_markdown(html).should start_with("# पटना में भारी बारिश से जलभराव\n\nसुधा राव\n\nबिहार\n\nपटना में आज")
+    end
+
+    it "keeps the whole table of results when one row outscores the others" do
+      authors = Array.new(60) { |index| "Moretti#{index}, A." }.join("; ")
+      rows = [["Predicting kidney failure", authors], ["Preeclampsia before a biopsy", "Cabiddu, G."], ["Dialysis in older patients", "Rossi, M."]]
+      body = rows.map { |title, names| "<tr><td>#{title}</td><td>2022</td><td>#{names}</td></tr>" }.join
+      html = "<main><h1>Browse by journal</h1><table><thead><tr><th>Title</th><th>Date</th><th>Authors</th></tr></thead>" \
+             "<tbody>#{body}</tbody></table></main>"
+
+      markdown = Nokodown.to_markdown(html, title: false)
+      markdown.should include("| Title | Date | Authors |")
+      markdown.should include("| Preeclampsia before a biopsy | 2022 | Cabiddu, G. |")
     end
   end
 
@@ -838,6 +1043,17 @@ RSpec.describe Nokodown do
              "<p>Rooms with a view of the lake. {Christmas}</p>"
 
       convert(body).should == "Rooms with a view of the lake. {Christmas}"
+    end
+
+    it "drops counters a script never filled in" do
+      convert("<p>The stove boils a litre in three minutes.</p><div class='like-icon'><a href=''>{{options.likeCount}}</a> " \
+              "<span>{{ options.likeCount }}</span></div>").should == "The stove boils a litre in three minutes."
+    end
+
+    it "keeps template syntax in a code block" do
+      block = "<div class='language-liquid highlighter-rouge'><div class='highlight'><pre><code>{{ page.title }}</code></pre></div></div>"
+
+      convert("#{block}<p><code>{{ site.url }}</code></p>").should == "```liquid\n{{ page.title }}\n```\n\n`{{ site.url }}`"
     end
 
     it "keeps template placeholders written as code" do

@@ -15,9 +15,18 @@ module Nokodown
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
+    # What a wrapper has, lacks or allows does not name it: "has-sidebar",
+    # "with-navigation", "content-and-menu", "sidebar-enabled--true". The
+    # head of a compound names the wrapper, so "menu-and-content" stays a
+    # menu. "no-print" names what is left out of print, so it stays too.
+    MODIFIER = /
+      (?:(?<![\w-])(?:has|with|without|no(?!-?print))|-(?:and|with|without))-[\w-]+|
+      (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])
+    /x.freeze
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
+    TITLE_HOLDER_SHARE = 0.25
     # A note continues the prose only after a sentence or more of it, not after a line of links.
     NOTE_PROSE = 80
     FOOTNOTE_MARK = /\A[*†‡§]+/.freeze
@@ -33,11 +42,13 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
+      @single_h1 = @body.css("h1").size == 1
       @trails = Breadcrumbs.trails(@body).group_by { |trail| Dom.key(trail) }
       @taxonomy = Taxonomy.blocks(@body, @url).group_by { |block| Dom.key(block) }
       @last_h1 = @body.css("h1").map { |h1| Dom.key(h1).to_i }.max.to_i
       # Card grids repeat the same class list hundreds of times.
-      @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
+      @names = Hash.new { |cache, signature| cache[signature] = signature.gsub(MODIFIER, " ") }
+      @furniture = Hash.new { |cache, signature| cache[signature] = @names[signature].match?(Patterns::PAGE_FURNITURE) }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
       @notes = Set.new
       @prose_blocks = Set.new
@@ -88,13 +99,22 @@ module Nokodown
       return if @shielded.include?(Dom.key(node))
       # Side notes inside an article are content whatever their class says.
       return if node.name == "aside" && !aside_noise?(node)
-      return :chrome if chrome_element?(node) || chrome_role?(node)
+      return :chrome if (chrome_element?(node) || chrome_role?(node)) && !title_holder?(node)
       return if dominant?(node) && !header_above_title?(node)
       return :guess if trail?(node) || found?(@taxonomy, node)
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
       MemberPanel.panel?(node) ? :panel : :guess
+    end
+
+    # Themes render the post in a <footer> or in a complementary reading
+    # pane. One that holds the page's only h1 and a fair share of its text is
+    # the content.
+    def title_holder?(node)
+      return false unless node.name == "footer" || node.name == "aside" || node["role"] == "complementary"
+
+      @single_h1 && !node.at_css("h1").nil? && @stats.text_chars(node) >= @total * TITLE_HOLDER_SHARE
     end
 
     # A trail stands apart from the text around it; one that words lead into
@@ -231,8 +251,8 @@ module Nokodown
       return false if signature.empty?
 
       chrome = @furniture[signature]
-      return site_header?(node) if !chrome && signature.match?(Patterns::HEADER)
-      return @stats.link_density(node) > 0.5 if !chrome && signature.match?(Patterns::MENU)
+      return site_header?(node) if !chrome && @names[signature].match?(Patterns::HEADER)
+      return @stats.link_density(node) > 0.5 if !chrome && @names[signature].match?(Patterns::MENU)
       return false unless chrome
       return false if prose_section?(node, signature)
       return true if signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE)
@@ -278,7 +298,7 @@ module Nokodown
 
     def furniture_name?(classes)
       signature = Dom.signature_of("#{classes} ")
-      @furniture[signature] || signature.match?(Patterns::HEADER) || signature.match?(Patterns::MENU)
+      @furniture[signature] || @names[signature].match?(Patterns::HEADER) || @names[signature].match?(Patterns::MENU)
     end
 
     # Menus repeat their items too, so a run named after a place is never

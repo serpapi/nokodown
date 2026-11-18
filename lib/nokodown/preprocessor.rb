@@ -14,7 +14,7 @@ module Nokodown
     HIDDEN_CLASSES = Set.new(%w[
       hidden hide d-none is-hidden u-hidden visually-hidden visuallyhidden sr-only screen-reader-text
       screen-reader-only screenreader-only a11y-hidden offscreen invisible element-invisible
-      print-only visible-print d-print-block show-for-sr w-condition-invisible
+      print-only visible-print d-print-block show-for-sr w-condition-invisible w-form-done w-form-fail
     ]).freeze
 
     # Found by Lexbor's selector engine, so the checks below only run on
@@ -24,7 +24,14 @@ module Nokodown
     # Utility classes that make a "hidden" element visible again at some breakpoint.
     RESPONSIVE_SHOW = /\A(?:(?:sm|md|lg|xl|2xl):(?:block|flex|grid|inline|inline-block|inline-flex|table|contents)|d-(?:sm|md|lg|xl|xxl)-(?:block|flex|grid|inline|inline-block|inline-flex|table))\z/.freeze
 
+    NARROW_COPY = /\A(?:sm|md|lg|xl|2xl):hidden\z/.freeze
+
     STREAMED_LINK_SHARE = 0.5
+
+    # Enough for the marks at a slider's ends: "A" and "A", "0" and "100",
+    # "Small" and "Large".
+    SLIDER_MARKS = 12
+    PLACEHOLDER_HREF = /\A(?:#|javascript:|\z)/i.freeze
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
@@ -82,6 +89,7 @@ module Nokodown
       InPageLinks.mark_listed(@body)
       HeadingAnchors.mark(@body)
       Dom.assign_keys(@body)
+      mark_wide_copies
     end
 
     private
@@ -228,6 +236,21 @@ module Nokodown
       node.css("h1").size == @body.css("h1").size
     end
 
+    # Page builders lay a block out twice, "hidden md:grid" for wide screens
+    # beside "md:hidden" for narrow ones. The wide copy is marked so that
+    # conditional cleaning, which weighs "hidden" against both, keeps one.
+    def mark_wide_copies
+      narrow = @body.css("[class*=':hidden']").select { |node| narrow_copy?(node) }
+      return if narrow.empty?
+
+      parents = narrow.map { |node| Dom.key(node.parent) }.to_set
+      @body.css(".hidden").each { |node| node[Dom::WIDE_COPY] = "" if parents.include?(Dom.key(node.parent)) }
+    end
+
+    def narrow_copy?(node)
+      node["class"].split.any? { |token| token.match?(NARROW_COPY) }
+    end
+
     def hidden?(node)
       return !disclosure?(node) if node.key?("hidden") && node["hidden"] != "until-found"
       return !node["class"].to_s.include?("fallback-image") && !closed_panel?(node) if node["aria-hidden"] == "true"
@@ -292,7 +315,7 @@ module Nokodown
 
     def remove_form_controls
       @body.css("form").each { |form| form.remove if utility_form?(form) }
-      @body.css("input").each { |input| input.remove unless task_checkbox?(input) }
+      @body.css("input").each { |input| remove_input(input) unless task_checkbox?(input) }
       @body.css("button").each { |button| disclosure_button?(button) ? button.replace(button.children) : button.remove }
       @body.css("label").each { |label| label.remove if label["for"] || Dom.ancestors_named(label, "form").any? }
       @body.css("form").each { |form| form.remove if leftover_form?(form) }
@@ -306,6 +329,52 @@ module Nokodown
 
     def task_checkbox?(input)
       input["type"].to_s.casecmp?("checkbox") && input.parent&.name == "li"
+    end
+
+    # Without the slider, the marks at its ends would be left as a line of
+    # their own, such as "A A" between a headline and the article.
+    def remove_input(input)
+      wrapper = input.parent
+      slider_marks?(input, wrapper) ? wrapper.children.each(&:remove) : input.remove
+    end
+
+    def slider_marks?(input, wrapper)
+      input["type"].to_s.casecmp?("range") && wrapper&.element? && marks_only?(wrapper)
+    end
+
+    # A before-and-after photo slider holds its two photos, and a player's
+    # seek bar can share its wrapper with the download link. Removing a
+    # slider changes none of these, nor the wrapper's text, so the sliders
+    # of one wrapper share its verdict instead of each reading the wrapper.
+    def marks_only?(wrapper)
+      unless wrapper == @slider_wrapper
+        @slider_wrapper = wrapper
+        @marks_only = few_marks?(wrapper) && wrapper.at_css("img, iframe").nil? && !linked?(wrapper)
+      end
+      @marks_only
+    end
+
+    # The marks at a font size slider's ends can be links that lead nowhere.
+    def linked?(wrapper)
+      wrapper.css("a[href]").any? { |link| !link["href"].strip.match?(PLACEHOLDER_HREF) }
+    end
+
+    # Stops at the limit: inputs set straight in a page's column would each
+    # read the whole column.
+    def few_marks?(wrapper)
+      chars = 0
+      stack = [wrapper.child]
+      until stack.empty?
+        node = stack.pop
+        next if node.nil?
+
+        stack << node.next_sibling
+        chars += Dom.char_count(node.content) if node.text? || node.cdata?
+        return false if chars > SLIDER_MARKS
+
+        stack << node.child if node.element?
+      end
+      true
     end
 
     # Search boxes, sign-ups and logins. Forms that wrap real content (ASP.NET
