@@ -58,7 +58,7 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops icon-font glyphs and ligatures" do
-      convert('<p>&#xE001; Next <i class="material-icons">arrow_forward</i></p>').should == "Next"
+      convert('<p>&#xE001; Opening hours <i class="material-icons">arrow_forward</i></p>').should == "Opening hours"
     end
 
     it "keeps the text of an element named after an icon font" do
@@ -72,6 +72,10 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Type: Condo\n\nBuilt: 1988\n\n27 Nov\n\n- Time: 17:00 - 19:00\n\nIngredients:\n\n" \
                               "Mix the flour and the eggs, then let the dough rest for an hour before baking.\n\n" \
                               "Check all that apply:\n\nFurniture\n\nJunk\n\nTyres"
+    end
+
+    it "does not take a label or a sentence for a number's unit" do
+      convert("<h3>Rooms</h3><p>3</p><p>Baths:</p><p>2</p><p>Pick a page.</p>").should == "### Rooms\n\n3\n\nBaths: 2\n\nPick a page."
     end
 
     it "joins a label only to a value its sibling element holds" do
@@ -421,7 +425,7 @@ RSpec.describe "Markdown conversion" do
     it "finds repeated links on a long line of non-ASCII text in linear time" do
       line = (1..3000).map { |i| "[新闻标题第#{i}条](https://example.com/p/#{i}) [详情](https://example.com/p/#{i})" }.join(" ")
       started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-      text = Nokodown::Markdown::RepeatedLinks.new([Nokodown::Markdown::Block.new(:paragraph, line)]).call.first.text
+      text = Nokodown::Markdown::CardLinks.new([Nokodown::Markdown::Block.new(:paragraph, line)]).call.first.text
       (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 3
       text.should_not include("[详情]")
     end
@@ -482,6 +486,13 @@ RSpec.describe "Markdown conversion" do
 
     it "links the headline of a card wrapped in one link" do
       convert('<a href="/post"><h3>Headline</h3><p>Summary text</p></a>').should == "### [Headline](https://example.com/post)\n\nSummary text"
+    end
+
+    it "measures a card's title by its text, without its heading marks or emphasis" do
+      title = "#{'The ferry runs late on Sunday. ' * 9}Bridge works end at"
+      html = "<a href='/n/1'><h3>#{title}</h3><p>Summary</p></a><a href='/n/2'><p>#{title.sub('Sunday', '<b>Sunday</b>')}</p></a>"
+      convert(html).should == "### [#{title}](https://example.com/n/1)\n\nSummary\n\n" \
+                              "[#{title.sub('Sunday', '**Sunday**')}](https://example.com/n/2)"
     end
 
     it "encodes spaces and unbalanced parentheses in URLs" do
@@ -808,9 +819,9 @@ RSpec.describe "Markdown conversion" do
 
       it "drops the icons of a layout table's text-free cells" do
         text = "Our shop sells leads, collars, beds and toys for dogs of every size, made by hand in our own workshop."
-        html = "<main><h1>Shop</h1><p>#{text}</p><table><tr><td>Sam wrote:</td>" \
+        html = "<main><h1>Shop</h1><p>#{text}</p><table><tr><td>Sam replied</td>" \
                '<td><img src="/icon_quote.gif" alt="Reply with quote"></td></tr></table></main>'
-        extract(html).should == "# Shop\n\n#{text}\n\nSam wrote:"
+        extract(html).should == "# Shop\n\n#{text}\n\nSam replied"
       end
 
       it "drops icons, logos and avatars" do
@@ -1260,6 +1271,28 @@ RSpec.describe "Markdown conversion" do
 
     it "drops a trailing heading left without content" do
       convert("<h2>Intro</h2><p>Text</p><h2>Related</h2>").should == "## Intro\n\nText"
+    end
+
+    it "keeps question headings at the end when the comment line under them is dropped, but not a reviews heading" do
+      html = "<p>12/7/2016</p><h2>Which two skills does a lidded pot use?</h2><h2>How many days does the clay dry?</h2>" \
+             "<p>Comments are closed.</p>"
+      convert(html).should == "12/7/2016\n\n## Which two skills does a lidded pot use?\n\n## How many days does the clay dry?"
+      convert("<p>$24.00</p><h2>Reviews</h2><p>There are no reviews yet.</p>").should == "$24.00"
+      convert("<p>$24.00</p><h2>Any questions?</h2><p>Comments are closed.</p>").should == "$24.00"
+      convert("<h2>Intro</h2><p>Text</p><h2>Can you leave us your phone number?</h2>").should == "## Intro\n\nText"
+    end
+
+    it "keeps a trailing price heading, and the title over it, when the label after it is dropped" do
+      html = "<p>#SKU: HW73826</p><h1>Coffee set x12</h1><h3 class='price'>$ 24.284,10</h3><div><span>Cantidad</span></div>"
+      convert(html).should == "#SKU: HW73826\n\n# Coffee set x12\n\n### $ 24.284,10"
+      convert("<h2>Intro</h2><p>Text</p><h2>Top 10 picks</h2>").should == "## Intro\n\nText"
+    end
+
+    it "keeps the last card's linked title when the control after it is removed" do
+      html = '<p>2026.08.21</p><h2><a href="/news/42">Café night</a></h2><p>2026.07.19</p><h2><a href="/news/40">Survey results</a></h2>' \
+             "<p>Ver más</p><h2>Related</h2>"
+      convert(html).should == "2026.08.21\n\n## [Café night](https://example.com/news/42)\n\n2026.07.19\n\n" \
+                              "## [Survey results](https://example.com/news/40)"
     end
 
     it "keeps a trailing list of linked titles" do

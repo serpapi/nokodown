@@ -11,6 +11,7 @@ module Nokodown
     # paragraphs; block elements are rendered by tag.
     class Renderer
       MAX_DEPTH = 400
+      MAX_LINK_TARGET = 300
       GLYPHS = "•·▪◦‣►▶▸➤→■●○"
       # A run of glyphs (●●●○○) is a rating, not a bullet.
       BULLET_GLYPH = /\A(?:[#{GLYPHS}](?![#{GLYPHS}])|[-–—](?=\s))\s*/.freeze
@@ -506,9 +507,13 @@ module Nokodown
         blocks
       end
 
+      # A card's link goes on its title. A first line longer than
+      # MAX_LINK_TARGET is a passage, not a title, and is written without it.
+      # Its text is measured without heading marks, emphasis or escapes, as
+      # ReadMoreLinks measures it on the page.
       def link_target(blocks)
         target = blocks.find { |b| b.kind == :heading } || blocks.find { |b| b.kind == :paragraph && !b.text.start_with?("![") }
-        target if target && target.text.length <= 300 && !target.text.include?("](")
+        target if target && Text.plain(target.text.sub(/\A#+ /, "")).length <= MAX_LINK_TARGET && !target.text.include?("](")
       end
     end
   end

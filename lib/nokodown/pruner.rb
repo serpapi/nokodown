@@ -5,17 +5,26 @@ module Nokodown
   class Pruner
     CLUSTER_CONTAINERS = "ul, ol, menu, dl, div, section, p, td, li, span, table, header, footer"
     TEXT_BLOCKS = "p, div, span, li, h1, h2, h3, h4, h5, h6, small, section, aside, figcaption, b, strong, em, i"
+    CARD_MEDIA = "img, picture, video"
+    # A card's own buttons, which can be all the words it has left.
+    CART_LABEL = /
+      \A(?:#{Patterns::SHOP_CONTROL_TEXT}|add\sto\s(?:cart|bag|basket)|quick\s(?:shop|view|add)|(?:choose|select|view)\soptions)
+      [\s.:!…»›→>]*\z
+    /xi.freeze
     BYLINE = /byline|author|dateline|writtenby|p-author/.freeze
     SHARE = /(?<![a-z])(?:share|sharedaddy)(?![a-z])/.freeze
     # A class names a button when that is its last word, before a modifier,
-    # a size or a rank: "btn", "c-button", "hero-cta", "btn--ghost",
-    # "btn_medium", "button-primary". "button-text" and
+    # a size, a rank or a color: "btn", "c-button", "hero-cta", "btn--ghost",
+    # "btn_medium", "button-primary", "btn-outline-dark". "button-text" and
     # "btn-view-author-options" name something else, and Bootstrap's
     # "btn-link" is a button that looks like a link.
     BUTTON_CLASS = /
       (?:\A|[-_])(?:btn|btns|button|buttons|cta|ctas)\d*
-      (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|sm|md|lg))?\z
+      (?:--[\w-]+|[-_](?:primary|secondary|tertiary|default|small|medium|large|xs|sm|md|lg|xl|
+      light|dark|white|black|success|danger|warning|info|ghost|solid|block|outline(?:-[a-z]+)?))?\z
     /x.freeze
+    # Component libraries (shadcn/ui and others) name the part an element plays.
+    BUTTON_PART = %w[data-slot data-component data-part].freeze
     BUTTON_WORD = /btn|button|cta/.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
@@ -38,6 +47,7 @@ module Nokodown
         @mode == :article ? prune_article(root) : remove_link_clusters(root)
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
+        ReadMoreLinks.new(root).call
       end
       self
     end
@@ -233,10 +243,28 @@ module Nokodown
         text = Dom.text(node)
         next if text.empty? || text.length > 200
 
-        boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT)
+        boilerplate = text.length <= 80 && text.match?(Patterns::BOILERPLATE_TEXT) && !label_beside_picture?(node, text)
         copyright = text.match?(Patterns::COPYRIGHT_TEXT) && node.at_css("img").nil?
         remove(node) if boilerplate || copyright
       end
+    end
+
+    # A card whose only words left are its button ("Add to cart", "В
+    # корзину") keeps its picture: the block that holds the label alone is
+    # removed on its own. An icon in the label's own element goes with it,
+    # and so does the banner an "Advertisement" box links.
+    def label_beside_picture?(node, text)
+      return false unless text.match?(CART_LABEL)
+      return false if node.css(CARD_MEDIA).none? { |media| card_picture?(media) }
+
+      node.css(TEXT_BLOCKS).any? { |child| Dom.text(child) == text && child.at_css(CARD_MEDIA).nil? }
+    end
+
+    # A card's picture links to the card's page; a logo links home.
+    def card_picture?(media)
+      link = Dom.ancestors_named(media, "a").first
+      href = link && destination(link)
+      !href.nil? && !Metadata.home_link?(href)
     end
 
     # Links and boxes styled as buttons ("Add to cart", "Book a demo") are
@@ -285,7 +313,7 @@ module Nokodown
     end
 
     def button?(node)
-      return true if node["role"] == "button"
+      return true if node["role"] == "button" || BUTTON_PART.any? { |name| node[name] == "button" }
       return false unless "#{node["class"]} #{node["id"]}".downcase.match?(BUTTON_WORD)
 
       tokens = Dom.signature(node).split

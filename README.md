@@ -83,10 +83,28 @@ with `main_content: false`, `:none` for a document without a body.
   containers at the end of the page is put back where the page shows it,
   unless it is mostly links, as carousels of recommended products are.
 - Sections rendered twice, such as a desktop and a mobile copy.
+- Repeated text and the labels of controls, in the major web languages:
+  copies of the title (an H2 or bold line under the H1, a gallery label on
+  every item), labels and tabs over the heading they repeat, lists made of
+  the page's own headings, a "Read more", "Leer más" or "Comprar" link
+  after a title that links to the same page (judged card by card, so a
+  label the page uses once goes too), labels of controls ("Menu",
+  "Loading...", "Back to top", "Quantity:", "prev / next"), counters
+  without a label (view and comment counts, FAQ and step badges, slide
+  numbers, a player's "0:00"), and form labels left without their fields.
+  A read-more link that is the only way to its page, a number a label
+  explains or that sits in a row of numbers, and a fact repeated on every
+  card ("In stock") stay. A card whose only words are a shop button's
+  label ("Add to cart", "В корзину") keeps its linked picture when the
+  label goes.
 - Tracking pixels, spacers, icons, placeholders and loading spinners
   (`no-image.png`, `img_load.gif`), README badges, click-tracking URL
-  parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors, "Read more"
-  links, code line numbers, and repeated responsive copies of the same image.
+  parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors, English
+  "Read more" and "Continue reading" links wherever they are, code line
+  numbers, and repeated responsive copies of the same image.
+- Headings left at the end of the content with nothing under them, once
+  what they headed is removed, unless one states a figure (a price, a
+  score, a year).
 - Markdown that costs tokens without meaning: horizontal rules, blank lines
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators
@@ -95,7 +113,8 @@ with `main_content: false`, `:none` for a document without a body.
   change the rendering. A card's repeated links to its own page keep their
   text without the URL (its title keeps the link), and a button such as
   "Read more", a text the page uses once for each of several pages, goes when
-  it ends its line; texts that take turns from card to card ("Sold",
+  it ends its line (judged across all cards, in any language); texts that
+  take turns from card to card ("Sold",
   "Available") are values and stay.
   Lines of one paragraph that each open with a link are a list written
   without its markup, and every item keeps its link, even where several
@@ -120,7 +139,8 @@ with `main_content: false`, `:none` for a document without a body.
   "Shop now" link goes too; in an `:article`, only one outside a figure whose
   alt is a word or two, or is mostly the link text.
 - Later copies of an image that stands alone on its line: always for an
-  image without alt text, and for one with alt text only when nothing but
+  image whose alt names nothing (none, a file or camera name, "photo"), as in
+  a gallery's thumbnail strip, and for one with alt text only when nothing but
   images came since the last copy, as in a logo strip shown twice. A line
   with several copies of one image, such as a row of rating stars, keeps
   them all.

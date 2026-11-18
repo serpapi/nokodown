@@ -129,6 +129,13 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should start_with("# Fucili d'assalto\n\nThe assault rifles")
     end
 
+    it "keeps a first line named like the title that runs on into the next" do
+      poem = "<p>Ode to the sea</p><p>#{'that rolls over the stones of the harbour and back again to the deep. ' * 3}</p>"
+      html = "<title>Ode to the sea</title><body><article>#{poem}</article></body>"
+
+      Nokodown.to_markdown(html).should start_with("# Ode to the sea\n\nOde to the sea\n\nthat rolls")
+    end
+
     it "keeps the site's name heading the content on its home page" do
       body = "<p>#{'Arcade game with a bouncing ball, cosmic levels and endless runs to beat. ' * 3}</p>"
       html = "<title>Chickenin Route - Arcade Game</title><body><article><h1>Chickenin Route</h1>#{body}</article></body>"
@@ -576,9 +583,9 @@ RSpec.describe Nokodown do
     end
 
     it "drops Liquid errors" do
-      html = "<p>Filter <span>Liquid error (snippets/facets line 538): Could not find asset snippets/icon-close.liquid</span></p>"
+      html = "<p>Coffee <span>Liquid error (snippets/facets line 538): Could not find asset snippets/icon-close.liquid</span></p>"
 
-      convert(html).should == "Filter"
+      convert(html).should == "Coffee"
     end
 
     it "keeps the template's text after a Liquid error's message" do
