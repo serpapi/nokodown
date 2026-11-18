@@ -47,7 +47,7 @@ module Nokodown
       module_function
 
       # images: the Renderer's rendered_images.
-      def call(blocks, images = {})
+      def call(blocks, images = {}, links: true)
         asked = asked_questions(blocks)
         blocks = CodeBlock.without_labels(blocks.reject { |block| noise?(block) })
         blocks = Lists.call(blocks)
@@ -57,7 +57,7 @@ module Nokodown
         # Labels joins a counter to its label and CardLinks unlinks a card's
         # repeated "Read more", so both make noise the first pass missed.
         blocks = drop_empty_sections(CardLinks.new(blocks).call.reject { |block| noise?(block) }, asked)
-        images.empty? ? blocks : ImageCleanup.new(images, unnamed: !image_page?(blocks, images)).call(blocks)
+        images.empty? ? blocks : ImageCleanup.new(images, unnamed: !image_page?(blocks, images), links: links).call(blocks)
       end
 
       def image_page?(blocks, images)

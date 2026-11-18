@@ -35,6 +35,7 @@ module Nokodown
       blocks = with_title(blocks, metadata) if @title
       blocks = Markdown::Orphans.call(Markdown::Repeats.call(blocks))
       blocks = Markdown::Lists.single_items(Markdown::Headings.paragraphs(blocks))
+      blocks = Markdown::LinkAddresses.call(blocks) if @links
       result(blocks, metadata, mode)
     end
 
@@ -44,7 +45,7 @@ module Nokodown
       redundant = redundant_images(nodes, mode, urls)
       renderer = Markdown::Renderer.new(urls, images: @images, links: @links, redundant_images: redundant,
                                                main_content: mode != :full)
-      Markdown::Cleanup.call(renderer.render(nodes), renderer.rendered_images)
+      Markdown::Cleanup.call(renderer.render(nodes), renderer.rendered_images, links: @links)
     end
 
     # Converting the whole page keeps every visible image.

@@ -12,6 +12,8 @@ module Nokodown
       # A squashed label that is only a date: "Oct 1, 2026", "1 October".
       DATE = /\A(?:\d+(?:#{MONTHS})\d*|(?:#{MONTHS})\d+)\z/.freeze
       LABEL_SHARE = 0.3
+      # A page a thumbnail opens, and the words of each text link to it.
+      Target = Struct.new(:page, :labels)
 
       # Where a link destination points, ignoring the fragment and a trailing
       # slash. ImageCleanup reads the links left in the Markdown this way.
@@ -19,21 +21,27 @@ module Nokodown
         destination.sub(/#.*\z/m, "").chomp("/")
       end
 
+      def self.words(text)
+        text.downcase.scan(/[\p{L}\p{N}]+/)
+      end
+
       def initialize(nodes, mode, urls)
         @nodes = nodes
         @mode = mode
         @urls = urls
         @text_free = {}
+        @words = {}
       end
 
-      # Dom keys of the images to drop. A thumbnail maps to the page whose
+      # Dom keys of the images to drop. A thumbnail maps to the Target whose
       # text link names it, a decorative image to nil.
       def call
         links = elements("a").map { |anchor| [anchor, target(anchor)] }.select { |_, page| page }
         labels = link_labels(links)
+        targets = Hash.new { |all, page| all[page] = Target.new(page, @words[page]) }
         redundant = {}
         links.each do |anchor, page|
-          thumbnails(anchor, labels[page]).each { |img| redundant[Dom.key(img)] = page }
+          thumbnails(anchor, labels[page]).each { |img| redundant[Dom.key(img)] = targets[page] }
         end
         elements("img").each { |img| redundant[Dom.key(img)] = nil if decorative?(img) }
         redundant.reject { |key, _| key.nil? }
@@ -53,7 +61,10 @@ module Nokodown
           next if text.match?(Patterns::LINK_NOISE_TEXT) || text.match?(Patterns::BOILERPLATE_TEXT)
 
           label = squash(text)
-          (labels[page] ||= []) << label unless label.empty?
+          next if label.empty?
+
+          (labels[page] ||= []) << label
+          (@words[page] ||= []) << RedundantImages.words(text)
         end
       end
 

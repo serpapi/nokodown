@@ -403,13 +403,14 @@ RSpec.describe "Markdown conversion" do
                                                      "[Beta](https://example.com/t/b)\n\nTags, Tags and more"
     end
 
-    it "keeps a text the page links again and again to a few pages" do
+    it "keeps a text the page links again and again to a few pages, with the address at its first link" do
       stores = %w[a a a a b]
       products = stores.each_with_index.map do |store, index|
         %(<li><a href="/p/#{index}">Boiler #{index}</a><p><a href="/s/#{store}">Shop #{store}</a></p><p><a href="/s/#{store}">Henan/Zhoukou</a></p></li>)
       end
       expected = stores.each_with_index.map do |store, index|
-        "- [Boiler #{index}](https://example.com/p/#{index})\n  [Shop #{store}](https://example.com/s/#{store})\n  Henan/Zhoukou"
+        shop = stores.index(store) == index ? "[Shop #{store}](https://example.com/s/#{store})" : "Shop #{store}"
+        "- [Boiler #{index}](https://example.com/p/#{index})\n  #{shop}\n  Henan/Zhoukou"
       end
       convert("<ul>#{products.join}</ul>").should == expected.join("\n")
     end
@@ -435,11 +436,174 @@ RSpec.describe "Markdown conversion" do
                                       "#### [Cure b](https://example.com/b)\n\nBack pain is common."
     end
 
+    it "writes an address once for the links that repeat its text, whatever its case or emphasis" do
+      posts = %w[Tides Waves Storms].zip(["Ann Lee", "Ann Lee", "<b>ANN</b> LEE"]).map do |name, author|
+        %(<h2>#{name}</h2><p>A note on #{name.downcase} from the coast.</p><p><a href="/team/ann">#{author}</a></p>)
+      end
+      html = "<p><code>[Ann Lee](https://example.com/team/ann)</code></p>#{posts.join}<h2>Contact</h2><p>Write to <a href=\"/team/ann\">our editor</a>.</p>"
+      convert(html).should == "`[Ann Lee](https://example.com/team/ann)`\n\n" \
+                              "## Tides\n\nA note on tides from the coast.\n\n[Ann Lee](https://example.com/team/ann)\n\n" \
+                              "## Waves\n\nA note on waves from the coast.\n\nAnn Lee\n\n" \
+                              "## Storms\n\nA note on storms from the coast.\n\n**ANN** LEE\n\n" \
+                              "## Contact\n\nWrite to [our editor](https://example.com/team/ann)."
+    end
+
+    it "keeps the links of a label the page links to several addresses" do
+      tools = [%w[Cursor cursor.com], %w[Zed zed.dev], ["Cursor Agent", "cursor.com"]].map do |name, site|
+        %(<h2>#{name}</h2><p>An editor named #{name}.</p><p><a href="https://#{site}">Official site</a></p>)
+      end
+      convert(tools.join).should == "## Cursor\n\nAn editor named Cursor.\n\n[Official site](https://cursor.com)\n\n" \
+                                    "## Zed\n\nAn editor named Zed.\n\n[Official site](https://zed.dev)\n\n" \
+                                    "## Cursor Agent\n\nAn editor named Cursor Agent.\n\n[Official site](https://cursor.com)"
+    end
+
+    it "keeps neighbouring repeats apart once they lose their links, where a word alone does not" do
+      posts = [%w[1 Scaling], %w[2 Stores]].map do |id, name|
+        %(<h2><a href="/p/#{id}">#{name}</a></h2><p>A post about #{name.downcase}.</p>) +
+          '<p><a href="/t/ml">Machine Learning</a> | <a href="/t/ds">Data Science</a></p>' \
+          '<p>Pages: <a href="/t/ml/2">2</a> <a href="/t/ml/3">3</a> <a href="/t/ml/next">Next &gt;&gt;</a></p>'
+      end
+      convert(posts.join).should == "## [Scaling](https://example.com/p/1)\n\nA post about scaling.\n\n" \
+                                    "[Machine Learning](https://example.com/t/ml) [Data Science](https://example.com/t/ds)\n\n" \
+                                    "Pages: [2](https://example.com/t/ml/2) [3](https://example.com/t/ml/3) [Next >>](https://example.com/t/ml/next)\n\n" \
+                                    "## [Stores](https://example.com/p/2)\n\nA post about stores.\n\nMachine Learning · Data Science\n\n" \
+                                    "Pages: 2 3 Next >>"
+    end
+
+    it "keeps a menu's unlinked item apart from the repeats beside it" do
+      html = '<ul><li><a href="/a">Connector Sheaths</a></li><li><a href="/b">Composite Connectors</a></li></ul>' \
+             '<p>Words about connectors, which go on for a while here.</p>' \
+             '<p><a href="/a">Connector Sheaths</a> Fixed Clips <a href="/b">Composite Connectors</a> <a href="/c">Plugs</a></p>' \
+             '<p>Cables from <a href="/a">Connector Sheaths</a> Group <a href="/b">Composite Connectors</a> and more.</p>' \
+             '<p><a href="/c">Plugs</a> 1 hour ago by <a href="/b">Composite Connectors</a></p>'
+      convert(html).should end_with("Connector Sheaths · Fixed Clips · Composite Connectors [Plugs](https://example.com/c)\n\n" \
+                                    "Cables from Connector Sheaths Group Composite Connectors and more.\n\n" \
+                                    "Plugs 1 hour ago by Composite Connectors")
+    end
+
+    it "keeps a phrase linked in pieces whole once its links are repeats" do
+      line = '<p>Read the <a href="/ny">New York</a> <a href="/t">Times</a> today.</p>'
+      html = "<h2>C</h2><p>Words about c, which go on for a while here.</p>#{line}" \
+             "<h2>D</h2><p>Words about d, which go on for a while here.</p>#{line.sub('Read', 'Then read')}"
+      convert(html).should end_with("Then read the New York Times today.")
+    end
+
+    it "keeps a phrase linked in pieces whole where it ends or opens its sentence" do
+      html = %(<p>Printed by <a href="/oup">Oxford University</a> <a href="/press">Press</a> in May.</p><p>Then by <a href="/oup">Oxford University</a> ) +
+             %(<a href="/press">Press</a>.</p><p><a href="/oup">Oxford University</a> <a href="/press">Press</a> printed a third.</p>)
+      convert(html).should end_with("Then by Oxford University Press.\n\nOxford University Press printed a third.")
+    end
+
+    it "spaces repeats as the page set their words" do
+      line = '<a href="/l">L</a><a href="/l">ien</a> vers <a href="/f">Falle</a> (1983)<a href="/g">,</a> Robert'
+      html = "<h2>A</h2><p>First: #{line}</p><p>Words in between.</p><h2>B</h2><p>Again: #{line}</p>"
+      convert(html).should end_with("Again: Lien vers Falle (1983), Robert")
+    end
+
+    it "spaces a repeat after a closing bracket only where it would make a link" do
+      line = 'Hello[1]<a href="/w">World</a> and [2]<a href="/p">(page 4)</a> now'
+      html = "<h2>A</h2><p>First: #{line}</p><p>Words in between.</p><h2>B</h2><p>Again: #{line}</p>"
+      convert(html).should end_with("Again: Hello[1]World and [2] (page 4) now")
+    end
+
+    it "keeps the link of a repeat that only its brackets set apart from the words beside it" do
+      html = %(<h2>A</h2><p>By <a href="/u/p">PaulP</a>, <a href="/c">0</a> comments.</p><p>Words in between.</p>) +
+             %(<h2>B</h2><p><a href="/u/p">PaulP</a>January 28, 2021, <a href="/c">0</a>6 mins</p>)
+      convert(html).should end_with("[PaulP](https://example.com/u/p)January 28, 2021, [0](https://example.com/c)6 mins")
+    end
+
+    it "drops a line a repeat leaves with only symbols, and a block it leaves as noise" do
+      html = '<p>Some heading words<br><a href="/x">---</a></p><p>Again words<br><a href="/x">---</a></p>'
+      convert(html).should == "Some heading words\n[---](https://example.com/x)\n\nAgain words"
+      # A heading puts the two links in two cards, past CardLinks, so LinkAddresses takes the repeat.
+      convert("<h2>A</h2>#{html.sub('<p>Again', '<h2>B</h2><p>Again')}").should ==
+        "## A\n\nSome heading words\n[---](https://example.com/x)\n\n## B\n\nAgain words"
+      html = '<h2>A</h2><p>Words about the first thing here.</p><p><a href="/c">Advertisement</a></p>' \
+             '<h2>B</h2><p>Words about the second thing here.</p><p><a href="/c">Advertisement</a></p>'
+      convert(html).should end_with("## B\n\nWords about the second thing here.")
+    end
+
+    it "keeps a repeat that reads as a list marker" do
+      html = '<p>Archive <a href="/y">2020.</a> here</p><ul><li>Older</li><li><a href="/y">2020.</a></li></ul>'
+      convert(html).should == "Archive [2020.](https://example.com/y) here\n\n- Older\n- 2020."
+    end
+
+    it "escapes a repeat that opens its line once it loses its link" do
+      html = '<p>Replies are listed below, oldest first.</p><p><a href="/r/5">&gt;&gt;5</a><br>I agree.</p><p>Some text between.</p>' \
+             '<p><a href="/r/5">&gt;&gt;5</a><br>Me too.</p>'
+      convert(html).should == "Replies are listed below, oldest first.\n\n[>>5](https://example.com/r/5)\nI agree.\n\n" \
+                              "Some text between.\n\n\\>>5\nMe too."
+      convert(html.sub("<p>Some", "<h2>More</h2><p>Some")).should end_with("## More\n\nSome text between.\n\n\\>>5\nMe too.")
+    end
+
+    it "keeps the backslash before a bracket once its link is a repeat" do
+      line = '<a href="/m">\[x^2\]</a> and <a href="/n">a[b</a> here'
+      html = "<h2>A</h2><p>Words about a.</p><p>See #{line}</p><h2>B</h2><p>Words about b.</p><p>Again #{line}</p>"
+      convert(html).should end_with("Again \\\\[x^2\\\\] and a[b here")
+    end
+
+    it "writes a repeat's text as the page reads once its brackets are gone" do
+      {
+        '<a href="/s">*</a> starred' => "\\* starred",
+        'See <a href="/n">[1]</a>(page 4).' => "See [1\\](page 4).",
+        'Wow!<a href="/y">Yahoo</a> today' => "Wow!Yahoo today",
+        '<a href="/y">Yahoo</a><img src="/a.jpg" alt="Yahoo at dawn"> today' => "Yahoo ![Yahoo at dawn](https://example.com/a.jpg) today",
+        'Nice too<br><a href="/e">:)</a>' => "Nice too\n:)"
+      }.each do |line, repeat|
+        html = "<h2>A</h2><p>Words about a.</p><p>#{line}<br>First note.</p><h2>B</h2><p>Words about b.</p><p>#{line}<br>Second note.</p>"
+        convert(html).should end_with("Words about b.\n\n#{repeat}\nSecond note.")
+      end
+    end
+
+    it "keeps a \"!\" from making an image of the link after it" do
+      html = '<h2>A</h2><p>Words about a.</p><p>By <a href="/y">Yahoo!</a> today</p><h2>B</h2><p>Words about b.</p>' \
+             '<p>Via <a href="/y">Yahoo!</a><a href="/n">News</a> today</p><p>Big news!<a href="/sale">Spring sale</a> starts Monday.</p>'
+      convert(html).should == "## A\n\nWords about a.\n\nBy [Yahoo!](https://example.com/y) today\n\n## B\n\nWords about b.\n\n" \
+                              "Via Yahoo! [News](https://example.com/n) today\n\nBig news\\![Spring sale](https://example.com/sale) starts Monday."
+      convert('<p>C:\\!<a href="/r">a</a> more</p>').should == "C:\\\\\\![a](https://example.com/r) more"
+      # Trimming the "|" leaves the link's text a lone backslash that escapes the "!" already.
+      convert('<p>See <a href="#">C:\\ |</a>!<a href="/r">a</a> more</p>').should == "See C:\\![a](https://example.com/r) more"
+      convert("<p>Hello!<span>[1]</span> text</p>").should == "Hello![1] text"
+    end
+
+    it "keeps a bracket before a parenthesis from making a link" do
+      convert("<p>See <span>[1]</span>(page 4).</p>").should == "See [1\\](page 4)."
+    end
+
+    it "counts the backslashes before a \"!\" or \"]\" in time linear in them" do
+      run = "\\" * 790
+      html = "<p>#{"#{run}a!<span>[x]</span>#{run}a]<span>(x)</span>" * 40}</p>"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert(html)
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      markdown.should end_with("a![x]#{'\\' * 1579}a\\](x)")
+      convert("<p>C:#{'\\' * 1000}!<a href=\"/r\">a</a></p>").should == "C:#{'\\' * 2001}![a](https://example.com/r)"
+    end
+
+    it "writes links whose text ends in a backslash or nests brackets, and addresses that nest parentheses" do
+      html = '<p>Open <a href="/x">C:\\</a> or Longfeng\\<a href="/d">Daqing</a>, see <a href="/wiki/Foo_(bar_(baz))">Foo</a> ' \
+             'and <a href="/w/Main">[[Main Page]]</a>.</p>'
+      convert(html).should == "Open [C:\\\\](https://example.com/x) or Longfeng\\\\[Daqing](https://example.com/d), " \
+                              "see [Foo](https://example.com/wiki/Foo_%28bar_%28baz%29%29) and [\\[\\[Main Page\\]\\]](https://example.com/w/Main)."
+    end
+
+    it "writes one backslash before a letter in the next element or a repeated link's text" do
+      html = "<p>Open C:<span>\\</span><span>Windows</span>, 类型<span>\\</span>群体, " \
+             "a<span>\\</span><em>b</em> and x<span>\\</span><br>y</p>" \
+             '<p>Longfeng<span>\\</span><a href="/d">Daqing</a>, Ranghulu<span>\\</span><a href="/d">Daqing</a></p>'
+      convert(html).should == "Open C:\\Windows, 类型\\群体, a\\\\*b* and x\\\\\ny\n\n" \
+                              "Longfeng\\\\[Daqing](https://example.com/d), Ranghulu\\Daqing"
+      convert("<p>Type<span>\\</span><span>Market</span>, C:\\<b>bold</b> and <i>D:\\</i></p>", links: false).should ==
+        "Type\\Market, C:\\\\**bold** and *D:\\\\*"
+    end
+
     it "leaves links written in code alone" do
       html = "<ol><li><p>Call the handler:</p><pre><code>handlers[name](event);\nhandlers[type](event);</code></pre></li></ol>" \
              "<p><code>[text](https://example.com/docs)</code> or <code>[the docs](https://example.com/docs)</code></p>"
       convert(html).should == "1. Call the handler:\n   ```\n   handlers[name](event);\n   handlers[type](event);\n   ```\n\n" \
                               "`[text](https://example.com/docs)` or `[the docs](https://example.com/docs)`"
+      html = '<h2>A</h2><p>See <a href="/d">docs</a> first.</p><ol><li><p>Call:</p><pre><code>x = [docs](https://example.com/d)</code></pre></li></ol>'
+      convert(html).should end_with("1. Call:\n   ```\n   x = [docs](https://example.com/d)\n   ```")
     end
 
     it "drops the list marker a dropped button leaves" do
@@ -684,8 +848,8 @@ RSpec.describe "Markdown conversion" do
     end
 
     describe "in the main content" do
-      def extract(html)
-        Nokodown.to_markdown("<body>#{html}</body>", url: "https://example.com/dir/page", title: false)
+      def extract(html, **options)
+        Nokodown.to_markdown("<body>#{html}</body>", url: "https://example.com/dir/page", title: false, **options)
       end
 
       it "drops card thumbnails beside a text link to the same page" do
@@ -699,6 +863,10 @@ RSpec.describe "Markdown conversion" do
                                 "- [Trail boot](https://example.com/p/1)\n  Waterproof leather for long days on rocky ground.\n" \
                                 "- [Ridge runner](https://example.com/p/2)\n  A light mesh boot for fast summer hikes.\n" \
                                 "- ![Boots on a mountain trail](https://example.com/lookbook-small.jpg)"
+        extract(html, links: false).should == "# Hiking boots\n\n" \
+                                              "- Trail boot\n  Waterproof leather for long days on rocky ground.\n" \
+                                              "- Ridge runner\n  A light mesh boot for fast summer hikes.\n" \
+                                              "- ![Boots on a mountain trail](https://example.com/lookbook-small.jpg)"
       end
 
       it "moves a card's list marker past a nested list of thumbnails" do
@@ -725,6 +893,7 @@ RSpec.describe "Markdown conversion" do
                                 "![Canvas tote bag](https://example.com/2.jpg)\n\n[$40](https://example.com/c/2)\n\n" \
                                 "![Harbour wall at dawn](https://example.com/4.jpg)\n\n[Oct 1, 2026](https://example.com/c/4)\n\n" \
                                 "![Globex conveyor belts](https://example.com/3.jpg)"
+        extract(html, links: false).should end_with("Oct 1, 2026\n\n![Globex conveyor belts](https://example.com/3.jpg)")
       end
 
       it "keeps article images with alt text unless a short alt repeats a text link to the same page" do
