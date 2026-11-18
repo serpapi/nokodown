@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.1 (2026-11-18)
 
 - Elements nested more than 64 levels below `<body>` are converted as plain
   text, so deeply nested markup no longer raises `SystemStackError`, also
