@@ -5,7 +5,12 @@ module Nokodown
     # links_home marks a heading that links to the site's root, or sits in
     # such a link, read from the DOM so that links: false, which writes
     # links as text, still tells a logo heading.
-    Block = Struct.new(:kind, :text, :level, :links_home)
+    Block = Struct.new(:kind, :text, :level, :links_home) do
+      # The text without a heading's markers.
+      def content
+        kind == :heading ? text.sub(/\A#+ /, "") : text
+      end
+    end
 
     # Turns DOM nodes into Markdown blocks. Runs of inline content become
     # paragraphs; block elements are rendered by tag.
@@ -32,6 +37,7 @@ module Nokodown
         @links = links
         @depth = 0
         @contains_block = {}
+        @tables = {}
         @in_cell = false
         @keep_lists = false
         @kept_lists = {}
@@ -113,6 +119,18 @@ module Nokodown
 
       private
 
+      # A table that falls back to its layout renders its cells again, so
+      # without this a table nested n deep would be rendered 2^n times. A
+      # cell renders its content apart from the layout, and a list that
+      # stays a list renders its items again with their lists kept, so each
+      # table is rendered once in each.
+      def table(node)
+        key = Dom.key(node)
+        return Table.new(self, node).blocks unless key
+
+        (@tables[[key, @in_cell, @keep_lists]] ||= Table.new(self, node).blocks).map(&:dup)
+      end
+
       def block_element?(node)
         Dom::BLOCK.include?(node.name) && !Dom.inline_div?(node)
       end
@@ -136,7 +154,7 @@ module Nokodown
         when "blockquote" then quote(node)
         when "pre" then CodeBlock.prose?(node) ? children_blocks(node) : CodeBlock.render(node, CodeBlock.preformatted(node))
         when "code" then CodeBlock.render(node, node.content)
-        when "table" then Table.new(self, node).blocks
+        when "table" then table(node)
         when "dl" then definition_list(node)
         when "hr" then []
         when "iframe" then embed(node)
@@ -149,8 +167,8 @@ module Nokodown
       # Text that long is a paragraph some site wrapped in a heading tag.
       def heading(node)
         text = Emphasis.unwrap(Text.single_line(@inline.render(node.children, heading: true)))
-        text = Text.unescape_lone(text.gsub(PERMALINK, ""))
-        return [] if text.empty?
+        text = Headings.undecorated(Text.unescape_lone(text.gsub(PERMALINK, "")))
+        return [] unless Headings.content?(text)
         return [Block.new(:paragraph, text)] if text.length > 300
 
         level = node.name[1].to_i
@@ -211,7 +229,7 @@ module Nokodown
       # title, the date under a card's excerpt heads at most an icon, and
       # a contact list heads a phone number.
       def sections?(blocks)
-        names = blocks.each_cons(2).filter_map { |block, following| block.text.sub(/\A#+ /, "") if heads_text?(block, following) }
+        names = blocks.each_cons(2).filter_map { |block, following| block.content if heads_text?(block, following) }
         return false if names.uniq.size < 2
 
         blocks.drop_while { |block| block.kind != :heading }.any? { |block| section_text?(block) }
@@ -294,7 +312,7 @@ module Nokodown
       # reference's closing "Returns void", and is a line of its text.
       def sections(blocks)
         last = blocks.last
-        last.kind == :heading ? blocks[0...-1] << item_paragraph(last.text.sub(/\A#+ /, "")) : blocks
+        last.kind == :heading ? blocks[0...-1] << item_paragraph(last.content) : blocks
       end
 
       # A nested list belongs to the item before it, also when a site wraps
@@ -352,7 +370,7 @@ module Nokodown
 
         blocks.each_with_index.map do |block, index|
           if block.kind == :heading
-            item_paragraph(block.text.sub(/\A#+ /, ""))
+            item_paragraph(block.content)
           elsif index.zero? && blocks.size > 1 && bulleted_list?(block) && !block.text.include?("\n")
             item_paragraph(block.text.delete_prefix("- "))
           else

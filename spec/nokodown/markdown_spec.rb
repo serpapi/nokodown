@@ -66,10 +66,10 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "writes a label and its value, or a number and its unit, on one line" do
-      html = "<p>Type:</p><p>Condo</p><p>Built:</p><p>1988</p><p>27<br>Nov</p><ul><li><p>Time:</p><p>17:00 - 19:00</p></li></ul>" \
+      html = "<p>Type:</p><p>Condo</p><p>Built:</p><p>1988</p><p>27<br>Nov</p><ul><li><p>Time:</p><p>17:00 - 19:00</p></li><li>Free</li></ul>" \
              "<p>Ingredients:</p><p>Mix the flour and the eggs, then let the dough rest for an hour before baking.</p>" \
              "<p>Check all that apply:</p><p>Furniture</p><p>Junk</p><p>Tyres</p>"
-      convert(html).should == "Type: Condo\n\nBuilt: 1988\n\n27 Nov\n\n- Time: 17:00 - 19:00\n\nIngredients:\n\n" \
+      convert(html).should == "Type: Condo\n\nBuilt: 1988\n\n27 Nov\n\n- Time: 17:00 - 19:00\n- Free\n\nIngredients:\n\n" \
                               "Mix the flour and the eggs, then let the dough rest for an hour before baking.\n\n" \
                               "Check all that apply:\n\nFurniture\n\nJunk\n\nTyres"
     end
@@ -100,7 +100,7 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops lines of only punctuation and operators" do
-      convert("<p>a<br>|<br>~<br>- -&gt;<br>👍<br>b</p><ul><li>|</li><li>c</li></ul>").should == "a\n👍\nb\n\n- c"
+      convert("<p>a<br>|<br>~<br>- -&gt;<br>👍<br>b</p><ul><li>|</li><li>c</li><li>d</li></ul>").should == "a\n👍\nb\n\n- c\n- d"
     end
 
     it "keeps emoticons on lines of their own" do
@@ -206,10 +206,22 @@ RSpec.describe "Markdown conversion" do
     end
 
     it "drops emphasis around a whole list item, table cell, heading or link text" do
-      html = "<ul><li><b>Bold item</b></li></ul><table><tr><th><b>Key</b></th><th>Value</th></tr><tr><td><b>a</b></td><td><i>1</i></td></tr></table>" \
+      html = "<ul><li><b>Bold item</b></li><li><i>Italic item</i></li></ul><table><tr><th><b>Key</b></th><th>Value</th></tr><tr><td><b>a</b></td><td><i>1</i></td></tr></table>" \
              '<h2><i>Title</i></h2><p>See <b><a href="/a">this</a></b> and <a href="/b"><i>that</i></a>.</p>'
-      convert(html).should == "- Bold item\n\n| Key | Value |\n| --- | --- |\n| a | 1 |\n\n## Title\n\n" \
+      convert(html).should == "- Bold item\n- Italic item\n\n| Key | Value |\n| --- | --- |\n| a | 1 |\n\n## Title\n\n" \
                               "See [this](https://example.com/a) and [that](https://example.com/b)."
+    end
+
+    it "puts images that open an emphasis run before its marker, and drops a run that wraps all the text after them" do
+      html = '<p><strong><a href="/poster.png"><img src="/poster-s.png" alt="Fair poster"></a>Milano Food City</strong> is the food week.</p>' \
+             '<p><em><img src="/me.jpg" alt="Portrait"><strong>The whole paragraph is set in bold and italics.</strong></em></p>'
+      convert(html).should == "![Fair poster](https://example.com/poster-s.png) **Milano Food City** is the food week.\n\n" \
+                              "![Portrait](https://example.com/me.jpg) The whole paragraph is set in bold and italics."
+    end
+
+    it "drops emphasis around all of a cell's text after its images" do
+      html = '<table><tr><th>Country</th><th>Capital</th></tr><tr><td><img src="/it.png" alt="flag"><b>Italy</b></td><td>Rome</td></tr></table>'
+      convert(html).should == "| Country | Capital |\n| --- | --- |\n| ![flag](https://example.com/it.png) Italy | Rome |"
     end
 
     it "marks emphasis that spans paragraphs in each paragraph" do
@@ -321,8 +333,10 @@ RSpec.describe "Markdown conversion" do
         .should == "# Harbour\n\nPosted May 3."
     end
 
-    it "keeps only the text of in-page anchors, scripts and phone links" do
-      convert('<p><a href="#top">Top</a> <a href="javascript:void(0)">Open</a> <a href="tel:+1555">Call</a></p>').should == "Top Open Call"
+    it "keeps only the text of in-page anchors, scripts, phone links and links to the author's files" do
+      html = '<p><a href="#top">Top</a> <a href="javascript:void(0)">Open</a> <a href="tel:+1555">Call</a> ' \
+             '<a href="file:///C:/Users/Tony/Draft%20final.docx#_ftn1">[1]</a></p>'
+      convert(html).should == "Top Open Call [1]"
     end
 
     it "drops permalink symbols and read-more links" do
@@ -868,6 +882,93 @@ RSpec.describe "Markdown conversion" do
     end
   end
 
+  describe "headings" do
+    it "drops emoji, arrows and separators around the heading's text" do
+      html = "<h2>📱 Benefícios do Canal</h2><p>a</p><h3>☛ Такси</h3><p>b</p><h2>- Forum</h2><p>c</p><h2>***** Fest *****</h2><p>d</p>" \
+             "<h2>👍🏽 Tips</h2><p>e</p><h2>--- 1 Terzo Posto</h2><p>f</p><h3>—— 自粘土工布</h3><p>g</p>"
+      convert(html).should == "## Benefícios do Canal\n\na\n\n### Такси\n\nb\n\n## Forum\n\nc\n\n## Fest\n\nd\n\n## Tips\n\ne\n\n" \
+                              "## 1 Terzo Posto\n\nf\n\n### 自粘土工布\n\ng"
+    end
+
+    it "keeps signs that are part of the heading's text" do
+      convert("<h2>№ 5 Chanel</h2><p>a</p><h2>© Acme</h2><p>b</p><h2>« Ainsi » :</h2><p>c</p><h2>Contact :</h2><p>d</p><h2>㈱ アクメ</h2><p>e</p>").should ==
+        "## № 5 Chanel\n\na\n\n## © Acme\n\nb\n\n## « Ainsi » :\n\nc\n\n## Contact :\n\nd\n\n## ㈱ アクメ\n\ne"
+    end
+
+    it "keeps a closing guillemet that an opening one pairs with" do
+      convert("<h2>Le « Fétiche »</h2><p>a</p><h2>Lire la suite »</h2><p>b</p>").should == "## Le « Fétiche »\n\na\n\n## Lire la suite\n\nb"
+    end
+
+    it "keeps a dash that opens a quote, unless another closes the heading" do
+      convert("<h2>– Problemene med hurtiglading er løst</h2><p>a</p><h2>— Blog —</h2><p>b</p>").should ==
+        "## – Problemene med hurtiglading er løst\n\na\n\n## Blog\n\nb"
+    end
+
+    it "keeps a sign before a number, a lowercase word or a bracket" do
+      convert("<h2>+ de 300 modèles</h2><p>a</p><h3>- (subtraction)</h3><p>b</p><h3>+ 5 kg</h3><p>c</p><h3>+ How to embed</h3><p>d</p>").should ==
+        "## + de 300 modèles\n\na\n\n### - (subtraction)\n\nb\n\n### + 5 kg\n\nc\n\n### How to embed\n\nd"
+    end
+
+    it "drops a heading with neither letters nor digits nor a rating" do
+      convert("<h1>Title</h1><h2>-</h2><p>a</p><h3>✦ ♡ ★</h3><p>b</p>").should == "# Title\n\na\n\nb"
+    end
+
+    it "reads a heading of a long run of dashes or arrows in linear time" do
+      arrows = "#{'↖' * 60}Arrows#{'↗' * 60}"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      markdown = convert("<h1>Title</h1><h2>#{'-' * 100}</h2><p>a</p><h3>#{arrows}</h3><p>b</p>")
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      markdown.should == "# Title\n\na\n\n### #{arrows}\n\nb"
+    end
+
+    it "keeps a rating set as a heading or after its text" do
+      convert("<h3>★★★★☆</h3><p>Great</p><h2>Value for Money – 22/25 ⭐️⭐️⭐️</h2><p>b</p>").should ==
+        "★★★★☆\n\nGreat\n\n## Value for Money – 22/25 ⭐️⭐️⭐️\n\nb"
+    end
+
+    it "keeps a counter set as a heading over a section, unless it is a bare number" do
+      convert("<h2>01.</h2><h4>Trust</h4><p>a</p><h6>02</h6><h4>Care</h4><p>b</p>").should == "## 01.\n\n#### Trust\n\na\n\n02\n\n#### Care\n\nb"
+    end
+
+    it "writes a date, a price or a number set as a heading below the headline as a paragraph, but keeps a year" do
+      convert("<h1>2024</h1><h2>28/01/2023</h2><p>Text</p><h6>€ 7,95</h6><p>Add</p><h3>1987–1990</h3><p>Founded</p>").should ==
+        "# 2024\n\n28/01/2023\n\nText\n\n€ 7,95\n\nAdd\n\n### 1987–1990\n\nFounded"
+    end
+
+    it "keeps the headline whatever it holds" do
+      convert("<h1>Emergency response is available to you 24 hours a day, 7 days a week, all year round in every city.</h1><p>Call</p>").should ==
+        "# Emergency response is available to you 24 hours a day, 7 days a week, all year round in every city.\n\nCall"
+    end
+
+    it "drops a sentence set as a heading at the end of the page with the other empty sections" do
+      recipe = "Mix the flour and the eggs, then knead the dough for ten minutes and let it rest under a cloth " \
+               "for an hour before rolling it out."
+      html = "<h2>Recipe</h2><p>#{recipe}</p>" \
+             "<h6>All prices include VAT and are subject to change without notice at any time by the shop owner.</h6>"
+      convert(html).should == "## Recipe\n\n#{recipe}"
+    end
+
+    it "keeps a number under a date set as a heading" do
+      convert("<p>Intro</p><h3>28/01/2023</h3><p>12</p>").should == "Intro\n\n28/01/2023\n\n12"
+    end
+
+    it "writes a sentence set as a heading as a paragraph, but keeps a tagline, a question, an exclamation in Japanese and a card's title" do
+      html = "<h5>Legrand offers an array of products that provide power, data and charging connections where it is needed in offices.</h5>" \
+             "<p>Read on</p><h2>Emergency response available 24 hours a day, 7 days a week.</h2><p>Call</p>" \
+             "<h3>What is a salary loan and how does it work for you, and when should you take one out?</h3><p>Answer</p>" \
+             '<a href="/q/1"><h3>Can an employer move me to another job and to another schedule without my consent at all.</h3><p>Labour law</p></a>' \
+             "<h4>この会は以下のようなことを目的として毎月第三土曜日に開催しています。参加費は無料で、どなたでもお気軽にご参加いただけます。</h4><p>c</p>" \
+             "<h2>ドリーミンのサイトを確認して料金やサービスの内容と実際の評判を徹底的に調査してみましたので結果をご紹介します！</h2><p>d</p>"
+      convert(html).should == "Legrand offers an array of products that provide power, data and charging connections where it is needed in offices.\n\n" \
+                              "Read on\n\n## Emergency response available 24 hours a day, 7 days a week.\n\nCall\n\n" \
+                              "### What is a salary loan and how does it work for you, and when should you take one out?\n\nAnswer\n\n" \
+                              "### [Can an employer move me to another job and to another schedule without my consent at all.](https://example.com/q/1)\n\n" \
+                              "Labour law\n\n" \
+                              "この会は以下のようなことを目的として毎月第三土曜日に開催しています。参加費は無料で、どなたでもお気軽にご参加いただけます。\n\nc\n\n" \
+                              "## ドリーミンのサイトを確認して料金やサービスの内容と実際の評判を徹底的に調査してみましたので結果をご紹介します！\n\nd"
+    end
+  end
+
   describe "lists" do
     it "renders nested lists with indentation" do
       convert("<ul><li>One<ul><li>One A</li></ul></li><li>Two</li></ul>").should == "- One\n  - One A\n- Two"
@@ -951,6 +1052,15 @@ RSpec.describe "Markdown conversion" do
       convert("<ol><li><h2>Drills</h2>#{picks}</li><li><h2>Saws</h2>#{picks}</li></ol>").should start_with("## 1. Drills\n\n### Acme Drill\n\n")
     end
 
+    it "keeps a list of sections in a layout table inside an item of a numbered list that stays a list" do
+      review = "<p>Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.</p>" \
+               "<h3>Pros</h3><ul><li>Light</li><li>Quiet</li></ul>"
+      text = "Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.\n     Pros\n     - Light\n     - Quiet"
+      picks = "<table><tr><td><ul><li><h3>Acme Drill</h3>#{review}</li><li><h3>Bolt Driver</h3>#{review}</li></ul></td></tr></table>"
+      convert("<ol><li><p>Our picks</p>#{picks}</li><li>Other picks</li></ol>").should ==
+        "1. Our picks\n   - Acme Drill\n     #{text}\n   - Bolt Driver\n     #{text}\n2. Other picks"
+    end
+
     it "renders numbered lists of sections that stay lists, nested in each other, in linear time" do
       review = ("<p>Light enough to hold over your head for a whole afternoon, with a clutch that stops cleanly.</p>" \
                 "<h3>Pros</h3><ul><li>Light</li><li>Quiet</li></ul>") * 3
@@ -966,7 +1076,7 @@ RSpec.describe "Markdown conversion" do
     it "writes the heading that closes a list of sections as text" do
       lead = "Emits the event to every listener, in the order they were added, and returns the emitter."
       html = "<ul><li><h4>Parameters</h4><ul><li>event: string</li></ul><h4>Returns Emitter</h4><p>#{lead}</p></li><li><h4>Returns void</h4></li></ul>"
-      convert(html).should == "#### Parameters\n\n- event: string\n\n#### Returns Emitter\n\n#{lead}\n\nReturns void"
+      convert(html).should == "#### Parameters\n\nevent: string\n\n#### Returns Emitter\n\n#{lead}\n\nReturns void"
     end
 
     it "looks through wrappers between the list and its items" do
@@ -1045,9 +1155,73 @@ RSpec.describe "Markdown conversion" do
       convert("<p>\u2714\uFE0F Fast</p><p>\u2714\uFE0F Safe</p>").should == "- Fast\n- Safe"
     end
 
+    it "writes lines typed with a pictograph or an asterisk as a list, but not signs of a name or a dialogue's dashes" do
+      convert("<p>🔹 Age<br>🔹 Location</p><p>Then</p><p>* one<br>* two</p><p>Also</p><p>\u2013 Hi.<br>\u2013 Hello.</p><p>\u00A9 Acme<br>\u00A9 Bob</p>").should ==
+        "- Age\n- Location\n\nThen\n\n- one\n- two\n\nAlso\n\n\u2013 Hi.\n\u2013 Hello.\n\n\u00A9 Acme\n\u00A9 Bob"
+    end
+
+    it "writes items set right after a bullet, as Chinese and Japanese pages do, as a list" do
+      convert("<p>\u00B7\u7EAF\u6A61\u80F6\u5BC6\u5C01\u6761</p><p>\u00B7\u7845\u80F6\u5BC6\u5C01\u6761</p><p>\u203B\u8A73\u3057\u304F\u306F</p><p>\u203B\u3054\u5165\u529B</p><p>\u2605\u2605\u2605\u2605\u26054.4</p><p>\u2605\u2605\u2605\u2605\u26063.2</p>").should ==
+        "- \u7EAF\u6A61\u80F6\u5BC6\u5C01\u6761\n- \u7845\u80F6\u5BC6\u5C01\u6761\n\n\u203B\u8A73\u3057\u304F\u306F\n\n\u203B\u3054\u5165\u529B\n\n\u2605\u2605\u2605\u2605\u26054.4\n\n\u2605\u2605\u2605\u2605\u26063.2"
+    end
+
+    it "keeps lines marked with a cross as they are" do
+      convert("<p>✅ Wash cold<br>✅ Line dry</p><p>Never:</p><p>❌ Tumble dry<br>❌ Bleach</p>").should ==
+        "- Wash cold\n- Line dry\n\nNever:\n\n❌ Tumble dry\n❌ Bleach"
+    end
+
+    it "keeps the asterisk that ties a footnote's label to its mark" do
+      note = "Les frais de port sont calculés à la commande selon le poids du colis et la destination."
+      convert("<p>Prix : 99 €*</p><p>* Prix TTC hors frais de port:</p><p>#{note}</p>").should == "Prix : 99 €*\n\n\\* Prix TTC hors frais de port:\n\n#{note}"
+    end
+
+    it "skips an empty paragraph before paragraphs that count up" do
+      blocks = [Nokodown::Markdown::Block.new(:paragraph, ""), Nokodown::Markdown::Block.new(:paragraph, "1. a\n2. b")]
+      Nokodown::Markdown::Lists.call(blocks).map(&:text).should == ["", "1. a\n2. b"]
+    end
+
+    it "writes a label over a number alone on one line, and apart from numbers that count up" do
+      convert("<p>Datum:</p><p>10. Oktober 2023</p><p>Steps:</p><p>1. Mix</p><p>2. Bake</p>").should ==
+        "Datum: 10. Oktober 2023\n\nSteps:\n\n1. Mix\n2. Bake"
+    end
+
+    it "writes paragraphs that count up as a numbered list" do
+      convert("<p>Standards:</p><p>1、GB12002</p><p>2、GB320</p><p>Steps</p><p>1) Mix<br>2) Bake</p><p>Notes</p><p>3. Third</p><p>5. Fifth</p>").should ==
+        "Standards:\n\n1. GB12002\n2. GB320\n\nSteps\n\n1. Mix\n2. Bake\n\nNotes\n\n3. Third\n\n5. Fifth"
+    end
+
+    it "writes a list under a label marked with another glyph, without the label's glyph" do
+      convert("<p>■ Types:</p><p>·纯橡胶密封条</p><p>·硅胶密封条</p><p>■ Features:</p><p>· Light</p><p>· Durable</p>").should ==
+        "Types:\n\n- 纯橡胶密封条\n- 硅胶密封条\n\nFeatures:\n\n- Light\n- Durable"
+    end
+
+    it "keeps the line that introduces glyph lines in one paragraph apart from the list" do
+      convert("<p><b>Safety notes:</b><br>\u2022 Do not drop.<br>\u2022 Keep dry.</p><p>Targeting:<br>🔹 Age<br>🔹 Location</p>").should ==
+        "**Safety notes:**\n\n- Do not drop.\n- Keep dry.\n\nTargeting:\n\n- Age\n- Location"
+    end
+
+    it "keeps a line and the one glyph line below it together" do
+      convert("<p>Note:<br>• Keep dry.</p>").should == "Note:\n• Keep dry."
+    end
+
     it "joins numbered lists whose numbering runs on" do
-      convert('<ul><li>a</li></ul><ul><li>b</li></ul><ol><li>one</li></ol><ol start="2"><li>two</li></ol><ol><li>again</li></ol>').should ==
-        "- a\n\n- b\n\n1. one\n2. two\n\n1. again"
+      convert('<ul><li>a</li><li>b</li></ul><ul><li>c</li><li>d</li></ul><ol><li>one</li></ol><ol start="2"><li>two</li></ol><ol><li>again</li></ol>').should ==
+        "- a\n- b\n\n- c\n- d\n\n1. one\n2. two\n\n1. again"
+    end
+
+    it "keeps a one-item list whose text would open a list or a task as a line" do
+      html = '<ul><li>1. Read it aloud.</li></ul><p>Then</p><ul><li>- Breathe</li></ul><p>Done</p><ul><li><input type="checkbox" disabled checked> Ship</li></ul>'
+      convert(html).should == "- 1. Read it aloud.\n\nThen\n\n- - Breathe\n\nDone\n\n- [x] Ship"
+    end
+
+    it "joins one-item lists side by side into one list" do
+      convert("<ul><li>Ann Lee 12 Oak St</li></ul><ul><li>Bo Ray 4 Elm St</li></ul><ul><li>Cy Dunn 9 Ash Rd</li></ul>").should ==
+        "- Ann Lee 12 Oak St\n- Bo Ray 4 Elm St\n- Cy Dunn 9 Ash Rd"
+    end
+
+    it "writes a one-item list as a line unless a list is beside it" do
+      convert("<h3>Abigél</h3><ul><li>12-14</li></ul><p>Regény</p><ul><li>Categories</li></ul><ul><li>News</li><li>Sport</li></ul>").should ==
+        "### Abigél\n\n12-14\n\nRegény\n\n- Categories\n\n- News\n- Sport"
     end
 
     it "renders definition lists as term and definition pairs" do
@@ -1155,6 +1329,28 @@ RSpec.describe "Markdown conversion" do
       convert(html).should == "Specs\n\n| Key | Value |\n| --- | --- |\n| Weight | 3 kg |"
     end
 
+    it "writes rows across the end of a table below it, as the blocks they hold without a cell's markup" do
+      html = "<table><tr><th>Size</th><th>Height</th><th>Weight</th></tr><tr><td>S</td><td>10</td><td>1</td></tr>" \
+             '<tr><td>M</td><td>15</td><td>2</td></tr><tr><td colspan="3"><p>Other sizes on request:</p><ul><li>XL</li><li>XXL</li></ul></td></tr>' \
+             '<tr><td colspan="3"><h2>Status</h2><p><b>Open</b></p></td></tr></table>' \
+             '<table><tr><td colspan="4">Notice</td></tr><tr><th>Date</th><td>2021-09-01</td><th>Type</th><td>Info</td></tr>' \
+             '<tr><td colspan="4"><p>Hello.</p><p>Please update.</p></td></tr></table>'
+      convert(html).should == "| Size | Height | Weight |\n| --- | --- | --- |\n| S | 10 | 1 |\n| M | 15 | 2 |\n\nOther sizes on request:\n\n- XL\n- XXL\n\nStatus\n\nOpen\n\n" \
+                              "Notice\n\nDate 2021-09-01 Type Info\n\nHello.\n\nPlease update."
+    end
+
+    it "renders nested tables that fall back to their layout in linear time" do
+      shapes = { "<th>Value</th>" => " Value", "" => "" }
+      shapes.each do |column, value|
+        html = "Leaf"
+        20.times { |level| html = "<table><tr><th>Name #{level}</th>#{column}</tr><tr><td colspan=\"2\">#{html}</td></tr></table>" }
+        started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+        markdown = convert(html)
+        (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+        markdown.should == (0...20).map { |level| "Name #{19 - level}#{value}\n\n" }.join + "Leaf"
+      end
+    end
+
     it "keeps rows across a table of names and values in their place" do
       html = '<table><tr><td colspan="2">Acme Films</td></tr><tr><th>Website:</th><td>acme.org</td></tr>' \
              '<tr><td colspan="2">Film Festival</td></tr><tr><th>Website:</th><td>festival.org</td></tr></table>'
@@ -1176,6 +1372,12 @@ RSpec.describe "Markdown conversion" do
       rows = %w[Apple Pear].map { |fruit| %(<tr><td>#{fruit}</td><td><a href="/buy/#{fruit}">Buy</a></td></tr>) }.join
       convert("<table><tr><th>Item</th><th></th></tr>#{rows}</table>").should ==
         "| Item |  |\n| --- | --- |\n| Apple | [Buy](https://example.com/buy/Apple) |\n| Pear | [Buy](https://example.com/buy/Pear) |"
+    end
+
+    it "writes the headings in a table's cells as their text" do
+      html = '<table><tr><th>Forum</th><th>Topics</th></tr><tr><td><h3><a href="/f/1">General</a></h3>Talk</td><td>12</td></tr>' \
+             "<tr><td><h3>News</h3></td><td>3</td></tr></table>"
+      convert(html).should == "| Forum | Topics |\n| --- | --- |\n| [General](https://example.com/f/1) Talk | 12 |\n| News | 3 |"
     end
 
     it "keeps cell values written as a sign" do
@@ -1294,9 +1496,9 @@ RSpec.describe "Markdown conversion" do
       convert("<h2>Intro</h2><p>Text</p><h2>Can you leave us your phone number?</h2>").should == "## Intro\n\nText"
     end
 
-    it "keeps a trailing price heading, and the title over it, when the label after it is dropped" do
+    it "keeps a trailing price as a line, and the title over it, when the label after it is dropped" do
       html = "<p>#SKU: HW73826</p><h1>Coffee set x12</h1><h3 class='price'>$ 24.284,10</h3><div><span>Cantidad</span></div>"
-      convert(html).should == "#SKU: HW73826\n\n# Coffee set x12\n\n### $ 24.284,10"
+      convert(html).should == "#SKU: HW73826\n\n# Coffee set x12\n\n$ 24.284,10"
       convert("<h2>Intro</h2><p>Text</p><h2>Top 10 picks</h2>").should == "## Intro\n\nText"
     end
 

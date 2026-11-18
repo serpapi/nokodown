@@ -9,7 +9,7 @@ module Nokodown
     class Inline
       EMPHASIS = { "strong" => "**", "b" => "**", "em" => "*", "i" => "*", "del" => "~~", "s" => "~~", "strike" => "~~" }.freeze
       CODE = Set.new(Dom::INLINE_CODE).freeze
-      UNSAFE_SCHEME = /\A\s*(?:javascript|vbscript|data|tel|sms):/i.freeze
+      UNSAFE_SCHEME = /\A\s*(?:javascript|vbscript|data|tel|sms|file):/i.freeze
       FOOTNOTE_MARKER = /\A\s*(?:\[[^\]]{1,8}\]|[*†‡§]+)\s*\z/.freeze
       # Exponents are often written with the minus sign "−", not "-".
       SCRIPT_TEXT = /\A[0-9+\-−=()]+(?:,[0-9+\-−=()]+)*\z/.freeze
@@ -84,7 +84,8 @@ module Nokodown
       WORD = /[\p{L}\p{N}]/.freeze
 
       # Absolute URL worth linking to, or nil for in-page anchors, links to
-      # the page itself, scripts and phone numbers.
+      # the page itself, scripts, phone numbers and files on the author's
+      # computer.
       def self.link_url(href, urls)
         href = href.strip
         return if href.empty? || href.start_with?("#") || href.match?(UNSAFE_SCHEME)
@@ -228,8 +229,13 @@ module Nokodown
         "#{content[/\A\s*/]}#{marked}#{content[/\s*\z/]}"
       end
 
+      # Images that open the run go before its marker: Cleanup may remove
+      # them, and a marker left before a space marks nothing.
       def marked(text, marker)
         return text if text.match?(PARAGRAPH_BREAK) || text.empty? || text.match?(/\A[^\p{L}\p{N}]*\z/) || text.match?(LINK_ONLY)
+
+        images = text[Text::LEADING_IMAGES]
+        return "#{images}#{marked(text.delete_prefix(images), marker)}" if images && images != text
 
         "#{marker}#{text}#{marker}"
       end

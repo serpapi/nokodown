@@ -24,8 +24,12 @@ module Nokodown
         text.gsub(ADJACENT_BOLD, '\1').gsub(ADJACENT_ITALIC, " ")
       end
 
-      # Text without the emphasis runs that wrap all of it.
+      # Text without the emphasis runs that wrap all of it, after the images
+      # that open it.
       def unwrap(text)
+        images = text[Text::LEADING_IMAGES]
+        return "#{images}#{unwrap(text.delete_prefix(images))}" if images && images != text
+
         loop do
           inner = whole_run(text)
           return text unless inner
@@ -38,10 +42,12 @@ module Nokodown
       # for a heading ("**Ingredients**"); sentences and italics lose theirs.
       def paragraph(text)
         text = merge(text)
-        inner = unwrap(text)
-        return text if inner == text
+        images = text[Text::LEADING_IMAGES].to_s
+        run = text.delete_prefix(images)
+        inner = unwrap(run)
+        return text if inner == run
 
-        bold?(text) && label?(inner) ? "**#{inner}**" : inner
+        images + (bold?(run) && label?(inner) ? "**#{inner}**" : inner)
       end
 
       def label?(text)

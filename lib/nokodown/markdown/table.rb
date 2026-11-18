@@ -23,9 +23,10 @@ module Nokodown
         return caption + [Block.new(:list, name_values(grid))] if grid.size >= 2 && names?(grid) && !header_row?
 
         titles = title_rows(grid, spanning)
+        notes = note_rows(grid, spanning)
         return layout_blocks if grid.size < 2 || grid.first.size < 2
 
-        caption + titles + [Block.new(:table, gfm(grid))]
+        caption + titles + [Block.new(:table, gfm(grid))] + notes
       end
 
       private
@@ -45,6 +46,25 @@ module Nokodown
           titles << Block.new(:paragraph, Text.escape_line_starts(grid.shift.first.gsub("\\|", "|")))
         end
         titles
+      end
+
+      # Rows across the table at its end hold a note or the text of a post
+      # laid out in a table, which go below it as the blocks they hold,
+      # without the heading markers and the emphasis around all of a block
+      # that any cell drops.
+      def note_rows(grid, spanning)
+        notes = []
+        while grid.size > 1 && spanning.last && grid.last.first != ""
+          grid.pop
+          notes.unshift(*spanning.pop.map { |block| unmarked(block) })
+        end
+        notes
+      end
+
+      def unmarked(block)
+        return block unless %i[heading paragraph].include?(block.kind)
+
+        Block.new(:paragraph, Text.escape_line_starts(Emphasis.unwrap(block.content)))
       end
 
       # GFM takes a table's first row for its column names, which a table of
@@ -84,7 +104,8 @@ module Nokodown
       end
 
       # Drops empty rows, empty and separator columns and pads short rows;
-      # and whether each row is one cell across the table.
+      # and for each row that is one cell across the table, that cell's
+      # blocks.
       def trimmed_grid
         grid, spanning = cell_grid
         kept = grid.each_index.reject { |index| grid[index].all?(&:empty?) }
@@ -107,14 +128,15 @@ module Nokodown
       def cell_grid
         spans = {}
         rows = Tables.rows(@node)
+        blocks = []
         grid = rows.map do |row|
           line = spans.transform_values(&:first)
           spans = spans.transform_values { |text, rows_left| [text, rows_left - 1] }.reject { |_, (_, rows_left)| rows_left.zero? }
-          place_cells(row, line, spans)
+          blocks << place_cells(row, line, spans)
           (0..(line.keys.max || -1)).map { |column| line.fetch(column, "") }
         end
         width = grid.map(&:size).max.to_i
-        [grid, rows.map { |row| spanning?(row, width) }]
+        [grid, rows.each_index.map { |index| blocks[index].first if spanning?(rows[index], width) }]
       end
 
       def spanning?(row, width)
@@ -122,11 +144,13 @@ module Nokodown
         width > 1 && cells.size == 1 && span(cells.first, "colspan", MAX_COLSPAN) >= width
       end
 
+      # A row across the table keeps its cell's blocks to write them below it.
       def place_cells(row, line, spans)
         column = 0
-        Tables.cells(row).each do |cell|
+        Tables.cells(row).map do |cell|
           column += 1 while line.key?(column)
-          text = Emphasis.unwrap(Emphasis.merge(@renderer.cell_blocks(cell).map(&:text).join(" ")))
+          blocks = @renderer.cell_blocks(cell)
+          text = Emphasis.unwrap(Emphasis.merge(cell_text(blocks)))
           text = Text.table_cell(Text.unescape_lone(text))
           rows = span(cell, "rowspan", MAX_ROWSPAN)
           span(cell, "colspan", MAX_COLSPAN).times do |offset|
@@ -135,7 +159,13 @@ module Nokodown
             spans[column + offset] = [value, rows - 1] if rows > 1
           end
           column += 1 while line.key?(column)
+          blocks
         end
+      end
+
+      # A heading's markers mean nothing in a cell.
+      def cell_text(blocks)
+        blocks.map(&:content).join(" ")
       end
 
       def span(cell, attribute, limit)
