@@ -62,9 +62,12 @@ with `main_content: false`, `:none` for a document without a body.
 
 ## What it removes
 
-- Site navigation, headers, footers, sidebars, breadcrumbs, pagination and
-  tables of contents, found through HTML semantics (`nav`, page-level `header`
-  and `footer`, ARIA roles, schema.org types) and class/id names. Structure
+- Site navigation, headers, footers, sidebars, breadcrumbs, pagination
+  (runs of page numbers, by their shape too) and archive calendars of day
+  links, tables of contents and links back to the top (by class name, or as
+  links to points on the page itself), found through HTML semantics (`nav`,
+  page-level `header` and `footer`, ARIA roles, schema.org types) and
+  class/id names. Structure
   finds the rest: a site header of menus or notices above the page's title
   however much it holds, a footer by any name that ends a page (not one
   inside `main` or an article, nor the footer of a section, a card or a
@@ -212,12 +215,27 @@ region, or most of the page's text, is never removed because of its class name.
    pages, which are dropped from the content once it is cleaned.
 6. **Pruner**: in articles, Readability's conditional cleaning plus removal of
    bylines, datelines and inline boxes of links to other stories; on other
-   pages, removal of leftover link clusters, unless they hold most of the text
-   as on an index page. In both modes, short links and boxes styled as
-   buttons ("Add to cart", "Book a demo") are removed, except for disclosure
-   toggles, buttons inside a sentence and titles or labels styled as buttons.
-   If article cleaning removes almost everything, it is undone and light
-   cleaning is used instead.
+   pages, removal of leftover link clusters, with the heading over them, and
+   of columns of links beside a column of prose in layout tables, unless the
+   table declares them the wider column or they hold the page title, and of
+   narrow grid columns ("col-md-4", "span4") or side-named cells that are
+   mostly links, beside a column of 7/12 or more that holds the title. An
+   index page, whose link clusters hold most of its text, keeps them but for
+   its menus: lists of links holding one to the page itself, the clusters
+   above its title, and the side columns its table declares narrower. Such
+   a menu goes from other pages too, but not from a section that the page's
+   own table of contents lists, where it is content: the pieces of a set,
+   this item among them. Once a menu goes, the boxes around it are judged
+   as clusters again, up to one that still holds a heading: a card whose
+   tag line it was, and a run of cards is the listing. A heading that went
+   with the menu, its label or one of its entries, makes no card. In
+   both modes, short links and boxes styled as buttons ("Add to cart", "Book
+   a demo") are removed, except for disclosure toggles, buttons inside a
+   sentence and titles or labels styled as buttons. If article cleaning
+   keeps less than half of what it was given (unless what it removed from a
+   declared article was mostly links), it is undone and light cleaning,
+   which treats link clusters and menus as page pruning does, is used
+   instead; if it leaves almost nothing, the content is pruned as a page.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data

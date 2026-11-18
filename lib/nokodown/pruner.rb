@@ -35,6 +35,35 @@ module Nokodown
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
+    MIN_TITLED_CONTENT = 200
+    MIN_LEFT = 200
+    SENTENCE_TEXT = 20
+    MIN_PROSE_COLUMN = 100
+    GRID_CLASS = /\A(?:span|td-pb-span|col-(?:(xs|sm|md|lg|xl|xxl)-)?|(small|medium|large)-)(\d{1,2})\z/.freeze
+    BREAKPOINTS = [nil, "xs", "sm", "md", "lg", "xl", "xxl"].freeze
+    FOUNDATION = { "small" => "sm", "medium" => "md", "large" => "lg" }.freeze
+    SIDE_CELL = /\A(?:side-border-(?:left|right)|left-side|right-side)\z/.freeze
+    GRID_COLUMNS = "[class*=span], [class*=col-], [class*=large-], [class*=medium-], [class*=small-], [class*=side]"
+    SIDE_WIDTH = 3
+    FULL_WIDTH = 12
+    NOT_COLUMNS = %w[style script noscript template link meta].freeze
+    MIN_MAIN_WIDTH = 7
+    MAX_RAIL_WIDTH = 5
+    RAIL_LINK_SHARE = 0.5
+    WIDTH = /\A\s*(\d+(?:\.\d+)?)\s*(%|px)?\s*\z/i.freeze
+    STYLE_WIDTH = /(?:\A|;)\s*width\s*:\s*([^;]+)/i.freeze
+    MAX_LABEL = 40
+    HEADLINE_WIDTH = 30
+    SECTION_HEADINGS = %w[h2 h3 h4 h5 h6].freeze
+    SECTION_HEADING_SELECTOR = SECTION_HEADINGS.join(", ").freeze
+    MIN_SERIES = 3
+    MEDIA = %w[img picture iframe].freeze
+    MEDIA_SELECTOR = MEDIA.join(", ")
+    # A CJK character says about as much as a short word.
+    WIDE = /[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]/.freeze
+    # One colon, at the end: "Tag: Ants Show: Sort:" is a header with controls.
+    LEAD = /\A[^:：]+[:：]\z/.freeze
+    LETTER = /\p{L}/.freeze
     # What may follow a site footer: a copyright line, a back-to-top link.
     TAIL_SHARE = 0.1
     TAIL_CHARS = 100
@@ -47,18 +76,23 @@ module Nokodown
     SECTIONS = %w[section aside nav].freeze
     DOWNLOAD = /\.(?:pdf|zip|docx?|xlsx?|pptx?|csv|epub|mp3|mp4|dmg|exe|msi|apk|tar|gz)\z/i.freeze
 
-    def initialize(nodes, mode, conditional: true)
+    def initialize(nodes, mode, conditional: true, urls: nil)
       @nodes = nodes
       @mode = mode
       @conditional = conditional
+      @urls = urls
       @conditional_seen = 0
       @conditional_kept = 0
       @conditional_removed_links = 0
+      @data_tables = {}
     end
 
     def call
       @nodes.each do |root|
-        @mode == :article ? prune_article(root) : remove_link_clusters(root)
+        # Before the index decision, which a long pager would sway.
+        Pagers.find(root).each { |node| remove_with_label(node, root, Set.new) }
+        remove_in_page_links(root)
+        @mode == :article ? prune_article(root) : prune_page(root)
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
         ReadMoreLinks.new(root).call
@@ -81,6 +115,130 @@ module Nokodown
     end
 
     private
+
+    def remove_in_page_links(root)
+      @anchors ||= InPageLinks.anchors(root.document)
+      links = InPageLinks.new(root, @anchors, @urls)
+      links.contents.each { |node| remove_with_label(node, root, Set.new) }
+      links.back_links.each { |link| remove(link) }
+    end
+
+    # A page whose side columns made it look like an index is judged again
+    # without them, but no page becomes an index by losing them.
+    def prune_page(root)
+      clusters = link_clusters(root)
+      index = index?(root, clusters)
+      if remove_rail_columns(root, index)
+        clusters = link_clusters(root)
+        index &&= index?(root, clusters)
+      end
+      remove_link_clusters(root, clusters, index)
+    end
+
+    # Pages laid out in table columns put the site's menu or a rail of other
+    # stories in a column of links beside the column of prose. Says whether
+    # any went.
+    def remove_rail_columns(root, index)
+      rails = outermost(root.css("tr").flat_map { |row| rails_of(row, index) } + grid_rails(root))
+      return false if rails.empty? || Dom.text(root).length - rails.sum { |cell| Dom.text(cell).length } < MIN_LEFT
+
+      rails.each { |cell| remove(cell) }
+      true
+    end
+
+    def rails_of(row, index)
+      cells = Tables.cells(row)
+      return [] if cells.size < 2
+
+      prose = cells.select { |cell| prose_column?(cell) }
+      return [] if prose.empty? || in_data_table?(row)
+
+      cells.select { |cell| rail_column?(cell) && side_column?(cell, prose, cells, index) }
+    end
+
+    # Grid frameworks give columns their width in twelfths ("col-md-4" beside
+    # "col-md-8", "td-pb-span4"), and old portals name their side cells. A
+    # side column of links goes beside the widest column; one with little
+    # link text, such as a price box or
+    # an event's date and place, stays. Beside side-named cells, the other
+    # cell is the main one.
+    def grid_rails(root)
+      parents = root.css(GRID_COLUMNS).map(&:parent).uniq { |parent| Dom.key(parent) }
+      parents.flat_map { |parent| side_rails(parent.element_children.to_a) }
+    end
+
+    def side_rails(children)
+      columns = children.reject { |child| NOT_COLUMNS.include?(child.name) }
+      return [] unless columns.size.between?(2, 3)
+
+      side_row = columns.any? { |column| side_cell?(column) }
+      widths = columns.map { |column| side_row ? (side_cell?(column) ? SIDE_WIDTH : FULL_WIDTH) : grid_width(column) }
+      return [] if widths.include?(nil)
+
+      main = widths.index(widths.max)
+      return [] unless widths[main] >= MIN_MAIN_WIDTH && main_column?(columns[main], columns)
+
+      columns.each_index.select { |index| index != main && rail?(columns[index], widths[index]) }.map { |index| columns[index] }
+    end
+
+    # The title's column, or else a column of prose: beside a hub's main
+    # list of links, the narrow lists are more of the hub.
+    def main_column?(column, columns)
+      return !column.at_css("h1").nil? if columns.any? { |other| other.at_css("h1") }
+
+      link_density(column) < RAIL_LINK_SHARE
+    end
+
+    def rail?(column, width)
+      width <= MAX_RAIL_WIDTH && column.at_css("h1").nil? && link_density(column) >= RAIL_LINK_SHARE
+    end
+
+    def side_cell?(column)
+      column["class"].to_s.split.any? { |name| name.match?(SIDE_CELL) }
+    end
+
+    # Twelfths, from the widest breakpoint a class names.
+    def grid_width(column)
+      widths = column["class"].to_s.split.filter_map do |name|
+        match = name.match(GRID_CLASS)
+        [BREAKPOINTS.index(match[1] || FOUNDATION[match[2]]), match[3].to_i] if match
+      end
+      widths.max_by(&:first)&.last
+    end
+
+    # The widths a table declares tell a side column from the main one, which
+    # may be a listing beside a short contact or intro column. An index page
+    # only loses a column declared narrower, and the title is never on a side.
+    def side_column?(cell, prose, cells, index)
+      return false if cell.at_css("h1")
+      return prose.any? { |column| narrower?(cell, column, cells) } if index
+
+      prose.none? { |column| narrower?(column, cell, cells) }
+    end
+
+    # Declared narrower in the same unit, or beside a column that declares no
+    # width while the rest of the row does, as that one takes what is left.
+    def narrower?(column, other, cells)
+      width = column_width(column)
+      other_width = column_width(other)
+      return width.last == other_width.last && width.first < other_width.first if width && other_width
+
+      other_width.nil? && cells.all? { |cell| Dom.key(cell) == Dom.key(other) || column_width(cell)&.last == "px" }
+    end
+
+    def column_width(cell)
+      match = (cell["width"] || cell["style"].to_s[STYLE_WIDTH, 1]).to_s.match(WIDTH)
+      [match[1].to_f, match[2] == "%" ? "%" : "px"] if match
+    end
+
+    def prose_column?(cell)
+      Dom.text(cell).length >= MIN_PROSE_COLUMN && link_density(cell) < 0.3
+    end
+
+    # Preformatted listings link each of their entries too.
+    def rail_column?(cell)
+      cell.css("a[href]").size >= 3 && link_density(cell) >= 0.6 && !cell.at_css("pre")
+    end
 
     def prune_article(root)
       content_length = Dom.text(root).length
@@ -164,7 +322,10 @@ module Nokodown
 
     # Turned off, it still drops unlabeled navigation, as page pruning does.
     def clean_conditionally(root, content_length)
-      return remove_link_clusters(root) unless @conditional
+      unless @conditional
+        clusters = link_clusters(root)
+        return remove_link_clusters(root, clusters, index?(root, clusters))
+      end
 
       text_before = Dom.text(root).length
       links_before = link_text_length(root)
@@ -212,15 +373,276 @@ module Nokodown
     end
 
     # Navigation that survived as unlabeled markup: several links, almost no
-    # other text, and no link long enough to be a headline.
-    def remove_link_clusters(root)
-      clusters = root.css(CLUSTER_CONTAINERS).select { |node| link_cluster?(node) && !in_data_table?(node) }
-      # Removal can only start at one of these, so none means nothing to remove.
-      return if clusters.empty? || clusters_dominate?(root, clusters)
+    # other text, and no link long enough to be a headline. An index page
+    # keeps its clusters, which are its content, but not its menus.
+    #
+    # Elsewhere menus go after the clusters, so a menu does not split the
+    # cluster around it ("Posted in News | Tagged a, b | Comment") and leave
+    # pieces of it behind, and the boxes the menus sat in, such as the list a
+    # submenu hung from, are judged again.
+    def remove_link_clusters(root, clusters, index)
+      return remove_menus(root, clusters_above_title(root, clusters) + current_page_menus(root)) if index
 
+      # Removal can only start at a cluster, so none means nothing to remove.
+      repeated = repeated_shapes(clusters)
+      remove_clusters(root, repeated) unless clusters.empty?
+      menus = current_page_menus(root)
+      chains = menus.map { |menu| boxes_around(menu, root) }
+      return unless remove_menus(root, menus)
+
+      boxes = untitled_boxes(chains)
+      remove_clusters(root, repeated, boxes) unless boxes.empty?
+    end
+
+    def index?(root, clusters)
+      !clusters.empty? && clusters_dominate?(root, clusters)
+    end
+
+    # only: the keys of the elements to judge, or nil for all.
+    def remove_clusters(root, repeated, only = nil)
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
-        remove(node) if link_cluster?(node) && !in_data_table?(node)
+        next if only && !only.include?(Dom.key(node))
+
+        remove_with_label(node, root, repeated) if link_cluster?(node) && !in_data_table?(node)
       end
+    end
+
+    # The boxes a menu sits in below the root, innermost first. Taken
+    # before the menu goes, which cuts it from them.
+    def boxes_around(menu, root)
+      boxes = []
+      node = menu
+      boxes << node until (node = node.parent).nil? || node == root
+      boxes
+    end
+
+    # The keys of the boxes around the removed menus, up to the first that
+    # still holds a heading: that is a card whose tag line linked to the
+    # page itself ("<h2>Minutes 5</h2> 07.01.2025 Admin Read more"), and a
+    # run of cards is the listing. The menu's label and the headings among
+    # its entries went with it. A walk that reaches a box an earlier one
+    # went through stops there; the parser's clones of a <font face> share
+    # one key, so the box itself is compared.
+    def untitled_boxes(chains)
+      seen = Hash.new { |boxes, key| boxes[key] = [] }
+      chains.each_with_object(Set.new) do |chain, keys|
+        chain.each do |box|
+          key = Dom.key(box)
+          break if seen[key].any? { |other| other == box }
+
+          seen[key] << box
+          break if box.at_css(ContainerCheck::HEADINGS)
+
+          keys << key if key
+        end
+      end
+    end
+
+    # Menus stay when they are nearly all the page holds. Says whether any went.
+    def remove_menus(root, menus)
+      menus = outermost(menus.uniq { |menu| Dom.key(menu) })
+      return false if menus.empty? || Dom.text(root).length - menus.sum { |menu| Dom.text(menu).length } < MIN_LEFT
+
+      repeated = repeated_shapes(menus)
+      menus.each { |menu| remove_with_label(menu, root, repeated) }
+      true
+    end
+
+    def link_clusters(root)
+      root.css(CLUSTER_CONTAINERS).select { |node| link_cluster?(node) && !in_data_table?(node) }
+    end
+
+    # The page title opens the content, so the clusters before it are the
+    # site's menus. A title with little after it, like an SEO line at the
+    # foot of the page, opens nothing. Keys number elements in document
+    # order, so a lower key comes first.
+    def clusters_above_title(root, clusters)
+      title = root.at_css("h1")
+      return [] if title.nil? || Dom.key(title).nil? || text_length_after(title, root) < MIN_TITLED_CONTENT
+
+      position = Dom.key(title).to_i
+      outermost(clusters).select do |node|
+        Dom.key(node) && Dom.key(node).to_i < position && !node.at_css("h1") && !headlines?(node)
+      end
+    end
+
+    # A cluster's links are short in characters, but a CJK headline of
+    # fifteen characters reads as long as one in English, and a list of
+    # them is a listing, not a menu.
+    def headlines?(node)
+      node.css("a[href]").any? { |link| label_length(Dom.text(link)) >= HEADLINE_WIDTH }
+    end
+
+    def text_length_after(node, root)
+      length = 0
+      until node.nil? || Dom.key(node) == Dom.key(root)
+        sibling = node
+        length += Dom.text(sibling).length while (sibling = sibling.next_sibling)
+        node = node.parent
+      end
+      length
+    end
+
+    # A list of links holding one to the page itself shows the reader where
+    # they are: a menu, a breadcrumb trail, a pager. Links in one list share
+    # a holder, which is judged once. In a part of the page that its table
+    # of contents lists, such a list is content: the pieces of a set that
+    # holds this item.
+    def current_page_menus(root)
+      return [] unless @urls
+
+      link_counts = {}
+      holders = root.css("a[href]").filter_map do |link|
+        link_holder(link, root, link_counts) if @urls.current_page?(link["href"])
+      end
+      holders.uniq { |holder| Dom.key(holder) }.select do |holder|
+        !in_data_table?(holder) && !InPageLinks.listed?(holder) && menu_entries?(holder)
+      end
+    end
+
+    # The nearest ancestor below the root that holds three links or more.
+    def link_holder(link, root, link_counts)
+      root_key = Dom.key(root)
+      link.ancestors.each do |ancestor|
+        return unless ancestor.element?
+
+        key = Dom.key(ancestor)
+        return if key == root_key
+        return ancestor if (link_counts[key] ||= ancestor.css("a[href]").size) >= 3
+      end
+      nil
+    end
+
+    # Alike entries of one link each, perhaps with a count beside it, and
+    # separators between them. Cards that link to their title, category and
+    # author, or a post header whose title links to itself, are no menu. A
+    # label may lead the entries ("Tags:"), but words between them make a
+    # sentence or a list of names.
+    def menu_entries?(holder)
+      entries = []
+      lead = 0
+      holder.children.each do |child|
+        if child.element? && (child.name == "a" || child.at_css("a[href]"))
+          entries << child
+        elsif entries.empty?
+          lead += label_length(Dom.text(child))
+        elsif Dom.text(child).match?(LETTER)
+          return false
+        end
+      end
+      return false if lead > MAX_LABEL || entries.size < 3 || entries.map(&:name).uniq.size > 1
+
+      entries.all? { |entry| one_link?(entry) }
+    end
+
+    # A gallery's thumbnails link to each picture without a word.
+    def one_link?(entry)
+      links = entry.name == "a" ? [entry] : entry.css("a[href]")
+      return false unless links.size == 1
+
+      label = Dom.text(links.first)
+      !label.empty? && !Dom.text(entry).sub(label, "").match?(LETTER)
+    end
+
+    def inside?(node, root)
+      key = Dom.key(root)
+      node&.element? && node.ancestors.any? { |ancestor| ancestor.element? && Dom.key(ancestor) == key }
+    end
+
+    def remove_with_label(node, root, repeated)
+      labels = repeated.include?(shape(node)) ? [] : labels_of(node, root)
+      remove(node)
+      labels.each { |label| remove(label) }
+    end
+
+    # Alike boxes repeated down the page are the tags of a run of cards, and
+    # the heading over each is the card's title.
+    def repeated_shapes(boxes)
+      boxes.group_by { |box| shape(box) }.select { |_, alike| alike.size >= MIN_SERIES }.keys.to_set
+    end
+
+    def shape(node)
+      [node, node.parent].compact.flat_map { |element| [element.name, Dom.signature(element)] }
+    end
+
+    # The headings over a box of links label nothing once the box is gone,
+    # unless more of their section follows. Widgets nest the box and its
+    # heading in wrappers, each level with a heading of its own.
+    def labels_of(node, root)
+      labels = []
+      holder = node
+      loop do
+        holder = holder.parent while only_child?(holder) && inside?(holder.parent, root)
+        label = previous_content(holder)
+        break unless label && section_label?(label) && section_end?(holder, root)
+
+        labels << label
+        break unless previous_content(label).nil? && next_content(holder).nil? && inside?(holder.parent, root)
+
+        holder = holder.parent
+      end
+      labels
+    end
+
+    def only_child?(node)
+      previous_content(node).nil? && next_content(node).nil?
+    end
+
+    # The next section starts after the box, or after the wrapper the box
+    # ends: a card's body may follow in a row of its own below the row that
+    # holds its title and tags.
+    def section_end?(node, root)
+      following = next_content(node)
+      following = next_content(node.parent) if following.nil? && inside?(node.parent, root)
+      following.nil? || section_start?(following)
+    end
+
+    def section_start?(node)
+      node = node.children.find { |child| !blank?(child) } while node&.element? && !Dom.heading?(node)
+      !node.nil? && Dom.heading?(node)
+    end
+
+    def previous_content(node)
+      sibling = node.previous_sibling
+      sibling = sibling.previous_sibling while sibling && blank?(sibling)
+      sibling
+    end
+
+    def next_content(node)
+      sibling = node.next_sibling
+      sibling = sibling.next_sibling while sibling && blank?(sibling)
+      sibling
+    end
+
+    # Comments, white space, rules and empty spacers hold nothing of a section.
+    def blank?(node)
+      return !node.text? || Dom.text(node).empty? unless node.element?
+
+      !MEDIA.include?(node.name) && Dom.text(node).empty? && node.at_css(MEDIA_SELECTOR).nil?
+    end
+
+    # A short heading below the page title, a wrapper holding only one, or a
+    # lead that ends in a colon ("Tags:"). A linked or long heading is the
+    # title of a card, not a label, and a wrapper with a picture is a banner.
+    def section_label?(node)
+      text = Dom.text(node)
+      return false if text.empty? || label_length(text) > MAX_LABEL || linked?(node)
+      return true if text.match?(LEAD)
+      return false unless node.element?
+      return true if SECTION_HEADINGS.include?(node.name)
+      return false if node.at_css(MEDIA_SELECTOR)
+
+      node.css(SECTION_HEADING_SELECTOR).any? { |heading| Dom.text(heading) == text }
+    end
+
+    def linked?(node)
+      return true if Dom.ancestors_named(node, "a").any? { |link| link["href"] }
+
+      node.element? && ((node.name == "a" && !node["href"].nil?) || !node.at_css("a[href]").nil?)
+    end
+
+    def label_length(text)
+      text.length + text.scan(WIDE).size * 2
     end
 
     # On an index page (an A-Z list, a category grid) the clusters are the
@@ -247,12 +669,29 @@ module Nokodown
 
       text_length = Dom.text(node).length
       lengths = links.map { |link| Dom.text(link).length }
-      text_length.positive? && lengths.max < 30 && lengths.sum.fdiv(text_length) >= 0.7
+      text_length.positive? && lengths.max < 30 && lengths.sum.fdiv(text_length) >= 0.7 && !in_sentence?(node)
+    end
+
+    # Links that a sentence names ("Become a member by purchasing
+    # <span><a>Standard</a>, <a>Premium</a></span>!") are part of it.
+    def in_sentence?(node)
+      parent = node.parent
+      return false if Dom.block?(node) || !parent&.element?
+
+      parent.children.sum { |child| child.text? ? Dom.char_count(child.content) : 0 } >= SENTENCE_TEXT
     end
 
     def in_data_table?(node)
       tables = node.name == "table" ? [node] : []
-      (tables + Dom.ancestors_named(node, "table")).any? { |table| Tables.data_table?(table) }
+      (tables + Dom.ancestors_named(node, "table")).any? { |table| data_table?(table) }
+    end
+
+    # Each row, cell and cluster of a long table asks about the same table.
+    def data_table?(table)
+      key = Dom.key(table)
+      return Tables.data_table?(table) if key.nil?
+
+      @data_tables.fetch(key) { @data_tables[key] = Tables.data_table?(table) }
     end
 
     def remove_boilerplate_text(root)

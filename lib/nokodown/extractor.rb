@@ -64,9 +64,9 @@ module Nokodown
       attribution&.write(selection.nodes)
       teasers = Teasers.new(body, @url, urls, page_type).call
       nodes = selection.nodes
-      return [Teasers.strip(cleaned_article(nodes, page_type), teasers), :article] if selection.mode == :article
+      return [Teasers.strip(cleaned_article(nodes, page_type, urls), teasers), :article] if selection.mode == :article
 
-      Pruner.new(nodes, :page).call
+      Pruner.new(nodes, :page, urls: urls).call
       [Teasers.strip(nodes, teasers), :page]
     end
 
@@ -75,16 +75,16 @@ module Nokodown
     # (React apps, card grids) trips it, and a short intro would otherwise pass
     # for the article. When almost nothing is left at all, the content is
     # pruned like a page. Cleaning runs on a copy so it can be undone.
-    def cleaned_article(nodes, page_type)
+    def cleaned_article(nodes, page_type, urls)
       copies = nodes.map(&:dup)
       pruner = Pruner.new(copies, :article).call
       if almost_nothing_kept?(copies, nodes)
-        Pruner.new(nodes, :page).call
+        Pruner.new(nodes, :page, urls: urls).call
         return nodes
       end
       return copies if keep_conditional_cleaning?(pruner, page_type)
 
-      Pruner.new(nodes, :article, conditional: false).call
+      Pruner.new(nodes, :article, conditional: false, urls: urls).call
       nodes
     end
 

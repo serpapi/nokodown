@@ -182,6 +182,13 @@ RSpec.describe Nokodown do
     end
 
     let(:prose) { "<p>#{'The command line tool runs on every major platform and needs nothing else to work. ' * 3}</p>" }
+    let(:product) do
+      "<h1>Hardcover notebook, 200 sheets</h1><ul><li>Code: 31579</li><li>Barcode: 7894494526435</li>" \
+        "<li>Brand: Jandaia</li><li>Package: 4 units</li><li>Weight: 0.4 kg</li></ul>" \
+        "<p>A ruled notebook with a hard PET cover, a ribbon marker and a pocket inside the back cover. " \
+        "The sheets are 56 g paper with a margin line, and the notebook is sold by the package.</p>"
+    end
+    let(:delivery) { "<div><h3>Delivery</h3><p>Orders leave our warehouse the next working day.</p></div>" }
 
     it "keeps the link lists of an index page, which are its content" do
       sections = {
@@ -196,6 +203,172 @@ RSpec.describe Nokodown do
 
       markdown.should include("## A\n\n- [Anatomy](https://example.com/topics/anatomy)")
       markdown.should include("- [Diving](https://example.com/topics/diving)")
+    end
+
+    it "drops a menu that links to the page itself, even on an index page" do
+      topics = %w[
+        Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts
+        Dentistry Design Drama Diving Ecology Economics Energy Ethics Farming Fashion Fishing Forestry
+        Gardening Geography Geology Glassmaking Hiking History Horses Hunting
+      ]
+      index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
+      menu = '<ul><li><a href="/news">News</a></li><li><a href="https://www.example.com/page/">Topics</a> (8)</li>' \
+             '<li><a href="/events">Events</a></li></ul>'
+
+      markdown = extract("<main><h1>Topics</h1>#{index}#{menu}</main>")
+
+      markdown.should include("- [Baking](https://example.com/topics/baking)")
+      ["News", "Events"].each { |noise| markdown.should_not include(noise) }
+    end
+
+    it "keeps the link lists above a title that opens nothing, like an SEO line at the foot of an index" do
+      topics = %w[
+        Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts
+        Dentistry Design Drama Diving Ecology Economics Energy Ethics Farming Fashion Fishing Forestry
+        Gardening Geography Geology Glassmaking Hiking History Horses Hunting
+      ]
+      index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
+      intro = "<p>Every subject the library holds, from anatomy to hunting. Each topic lists its books, the shelf " \
+              "they stand on and when they are due back, and the librarians add new topics every month.</p>"
+
+      markdown = extract("<main>#{intro}#{index}<h1>Topics for every reader</h1><p>Browse them all.</p></main>")
+
+      markdown.should include("- [Anatomy](https://example.com/topics/anatomy)")
+    end
+
+    it "keeps the menu of an index page that holds little else" do
+      topics = %w[Anatomy Astronomy Architecture Art Biology Botany Banking Baking Chemistry Climate Cooking Crafts]
+      index = "<ul>#{topics.map { |topic| "<li><a href=\"/topics/#{topic.downcase}\">#{topic}</a></li>" }.join}</ul>"
+      menu = '<ul><li><a href="/news">News</a></li><li><a href="/page">Topics</a></li>' \
+             '<li><a href="/events">Events</a></li></ul>'
+
+      markdown = extract("<main><h1>Topics</h1>#{index}#{menu}</main>")
+
+      markdown.should include("- [Events](https://example.com/events)")
+    end
+
+    it "keeps a list of CJK headlines above the title of a page they dominate" do
+      headlines = Array.new(20) { |index| "<li><a href=\"/news/#{index}\">东京大学研究团队发现新型超导材料样品 #{index + 1}</a></li>" }
+      markdown = extract("<body><div><ul>#{headlines.join}</ul></div><div>#{product}</div></body>")
+
+      markdown.should include("东京大学研究团队发现新型超导材料样品 20")
+    end
+
+    it "drops the menus above the page title even when they hold most of the text" do
+      departments = %w[
+        Party Toys Bedding Cleaning Office School Kitchen Garden Tools Paint Pets Books Music Sports Baby Lighting
+        Bath Storage Crafts Travel
+      ]
+      groups = departments.map do |name|
+        slug = "/#{name.downcase}"
+        "<li><a href=\"#{slug}\">#{name}</a><ul><li><a href=\"#{slug}/new\">New</a></li>" \
+          "<li><a href=\"#{slug}/sale\">Sale</a></li><li><a href=\"#{slug}/all\">All #{name}</a></li></ul></li>"
+      end
+      markdown = extract("<body><div><ul>#{groups.join}</ul></div><div>#{product}</div></body>")
+
+      markdown.should include("- Barcode: 7894494526435")
+      ["Party", "Bedding", "All Books"].each { |noise| markdown.should_not include(noise) }
+    end
+
+    it "drops a column of links beside the column of prose in a layout table" do
+      news = ["Pool season opens with a new water system", "We are hiring installers for the summer",
+              "How we rebuilt the city pool in three weeks", "A sauna for every home: our new range"]
+      rail = news.map { |headline| "<p><a href=\"/news/#{headline.length}\">#{headline}</a></p>" }.join
+      product = "<h2>Whirlpool bath M-2056A</h2><p>Made in China by Monalisa, 1860 x 830 x 730 mm, " \
+                "with six jets, a heater and a headrest.</p><p>The acrylic shell is reinforced with fibreglass, " \
+                "and the pump and the heater sit behind a panel that lifts off for service.</p>"
+
+      markdown = extract("<table><tr><td>#{product}</td><td>#{rail}</td></tr></table>")
+
+      markdown.should include("with six jets, a heater and a headrest.")
+      markdown.should_not include("We are hiring")
+    end
+
+    it "keeps the index in a layout table column beside an intro" do
+      topics = %w[
+        Anatomy Astronomy Architecture Biology Botany Banking Chemistry Climate Cooking Dentistry
+        Design Drama Ecology Economics Farming Fashion Geology History Hiking
+      ]
+      index = topics.map { |topic| "<a href=\"/topics/#{topic.downcase}\">#{topic}</a><br>" }.join
+      intro = "<p>Welcome to the topic directory of our small library. Pick a subject to see the books we hold " \
+              "on it and when they are due back.</p>"
+
+      markdown = extract("<table><tr><td>#{intro}</td><td>#{index}</td></tr></table>")
+
+      markdown.should include("[Geology](https://example.com/topics/geology)")
+    end
+
+    it "keeps a column of links that holds the page title" do
+      names = %w[VMC750 VMC850 VMC1000 XH714 XH716]
+      related = names.map { |name| "<a href=\"/p/#{name}\">#{name} vertical machining centre</a><br>" }.join
+      product = "<h1>XHD2312 gantry machining centre</h1><img src=\"/img/xhd2312.jpg\">#{related}"
+      contact = "<p>Sales: Zhai Qing, 138 9766 3235, or write to sales@qyskjc.com. Address: 24 Jing'er Road North, " \
+                "Biological Park, Xining, Qinghai. Open from eight to five on working days, and on Saturday " \
+                "mornings by appointment.</p>"
+
+      markdown = extract("<table><tr><td>#{contact}</td><td>#{product}</td></tr></table>")
+
+      markdown.should include("# XHD2312 gantry machining centre")
+    end
+
+    it "keeps cards whose tags link to the page itself" do
+      tags = '<div><a href="/tags/tide">tide</a> <a href="/page">energy</a> <a href="/tags/coast">coast</a></div>'
+      card = "<article><h2><a href=\"/notes/lagoon\">The lagoon wall opens</a></h2>#{tags}</article>"
+
+      markdown = extract("<main><h1>Energy</h1>#{card}<p>Two more notes this week.</p></main>")
+
+      markdown.should include("## [The lagoon wall opens](https://example.com/notes/lagoon)")
+    end
+
+    it "keeps a list that links to the page itself in a section that the table of contents lists" do
+      pieces = %w[helmet cuirass gauntlets boots].map do |piece|
+        href = piece == "boots" ? "/page" : "/items/#{piece}"
+        "<a href=\"#{href}\"><li><div>Watcher scribe #{piece}</div><div>heavy armor</div></li></a>"
+      end
+      intro = "<h1>Watcher scribe boots</h1><p>Heavy boots of gear score 350, tier three, bound on pickup. " \
+              "They drop from the watchers in the eastern ruins and are crafted at an outfitting station.</p>"
+      toc = '<nav><ul><li><a href="#set">Full set</a></li><li><a href="#crafts">Crafts</a></li>' \
+            '<li><a href="#pictures">Pictures</a></li></ul></nav>'
+      sections = "<section id=\"set\"><h2>Full set</h2><ul><div>#{pieces.join}</div></ul></section>" \
+                 "<section id=\"crafts\"><h2>Crafts</h2><p>Sewn at a workbench.</p></section>" \
+                 "<section id=\"pictures\"><h2>Pictures</h2><p>No pictures yet.</p></section>"
+
+      markdown = extract("<main>#{intro}#{toc}#{sections}</main>")
+
+      markdown.should include("## Full set\n\n- - Watcher scribe helmet\n    heavy armor\n  - Watcher scribe cuirass")
+    end
+
+    it "drops the heading over a box of links it drops" do
+      kinds = %w[Notebooks Pens Folders Markers Erasers Rulers]
+      links = kinds.map { |kind| "<li><a href=\"/shop/#{kind.downcase}\">#{kind}</a></li>" }.join
+      box = "<div><h2>More from the shop</h2><ul>#{links}</ul></div>"
+
+      markdown = extract("<main>#{product}#{box}#{delivery}</main>")
+
+      markdown.should include("the notebook is sold by the package.\n\n### Delivery")
+      markdown.should_not include("More from the shop")
+    end
+
+    it "keeps a title too long to be the label of the box of links below it" do
+      tags = %w[Health Tech Equity].map { |tag| "<a href=\"/tags/#{tag.downcase}\">#{tag}</a>" }.join(" ")
+      tags = "<div>#{tags}</div>"
+      card = "<article><h2>The future of healthcare is digital: seven reasons why</h2>#{tags}</article>"
+
+      markdown = extract("<main><h1>Piotr's posts</h1>#{card}<p>One more post this week.</p></main>")
+
+      markdown.should include("## The future of healthcare is digital: seven reasons why")
+      markdown.should_not include("Equity")
+    end
+
+    it "drops the heading over a box of links that a rule parts from the next section" do
+      skills = %w[PHP Java Ruby Python Swift Kotlin]
+      links = skills.map { |skill| "<li><a href=\"/jobs/#{skill.downcase}\">#{skill}</a></li>" }.join
+      boxes = "<div><h2>Find jobs by type</h2><ul>#{links}</ul><hr><h3>Find jobs by skill</h3><ul>#{links}</ul></div>"
+
+      markdown = extract("<main>#{product}#{boxes}#{delivery}</main>")
+
+      markdown.should include("### Delivery")
+      markdown.should_not include("by type")
     end
 
     it "drops the few menu links left in a content area that holds almost nothing else" do
