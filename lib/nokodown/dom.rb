@@ -15,7 +15,10 @@ module Nokodown
     # Elements that stop Readability from treating a div as a paragraph.
     PARAGRAPH_BREAKERS = Set.new(%w[blockquote dl div img ol p pre table ul]).freeze
 
-    CODE = %w[pre code].freeze
+    # The renderer writes these as code, so their text is never furniture or
+    # leaked markup.
+    INLINE_CODE = %w[code kbd samp tt].freeze
+    CODE = ["pre", *INLINE_CODE].freeze
 
     NBSP = "\u00A0"
     WHITESPACE = " \t\n\r\f\u00A0"
@@ -40,7 +43,44 @@ module Nokodown
     # Set by HeadingAnchors on elements whose id is made from their heading.
     ANCHOR = "data-nokodown-anchor"
 
+    # Broken pages nest thousands of unclosed elements, deeper than the
+    # recursive walks after parsing can follow.
+    MAX_DEPTH = 256
+    UNRENDERED = Set.new(%w[script style template noscript]).freeze
+    # Text set straight in these is not in any of their cells or items.
+    FRAMES = Set.new(%w[table thead tbody tfoot tr ul ol dl menu dir]).freeze
+
     module_function
+
+    # Below MAX_DEPTH levels the first element that can hold text keeps
+    # only its text, with a space where a block or a line break parted it.
+    def flatten_deep(root)
+      stack = [[root, 0]]
+      until stack.empty?
+        node, depth = stack.pop
+        children = node.element_children
+        if depth < MAX_DEPTH || FRAMES.include?(node.name)
+          children.each { |child| stack << [child, depth + 1] }
+        elsif !children.empty?
+          node.content = flat_text(node)
+        end
+      end
+    end
+
+    def flat_text(node)
+      parts = []
+      stack = node.children.to_a.reverse
+      until stack.empty?
+        current = stack.pop
+        if current.text?
+          parts << current.content
+        elsif current.element? && !UNRENDERED.include?(current.name)
+          parts << " " if BLOCK.include?(current.name) || current.name == "br"
+          stack.concat(current.children.to_a.reverse)
+        end
+      end
+      squish(parts.join)
+    end
 
     def assign_keys(root)
       root[KEY] = "0"

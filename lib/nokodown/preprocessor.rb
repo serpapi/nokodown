@@ -47,10 +47,12 @@ module Nokodown
     def call
       place_streamed_segments
       @body.xpath(".//comment()").each(&:remove)
+      ProtectedEmails.reveal(@body)
       unwrap_noscript
       @body.css("img").each { |img| restore_lazy_image(img) }
       restore_picture_sources
       @body.css(JUNK).each(&:remove)
+      LeakedMarkup.clean(@body)
       @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
       @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
