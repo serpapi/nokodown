@@ -1,16 +1,16 @@
 # frozen_string_literal: true
 
 RSpec.describe Nokodown::Boilerplate do
-  def cleaned(html)
+  def cleaned(html, url: nil)
     body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
     Nokodown::Preprocessor.new(body).call
-    Nokodown::Boilerplate.new(body).call
+    Nokodown::Boilerplate.new(body, url: url).call
     body
   end
 
   # Text left by boilerplate removal alone, before the content is located.
-  def remaining(html)
-    Nokodown::Dom.text(cleaned(html))
+  def remaining(html, url: nil)
+    Nokodown::Dom.text(cleaned(html, url: url))
   end
 
   def prose(topic, count)
@@ -106,12 +106,13 @@ RSpec.describe Nokodown::Boilerplate do
         <div class="content-container has-sidebar">#{prose('Grinding coffee', 1)}</div>
         <div class="clearfix with-navigation">#{prose('Brewing', 1)}</div>
         <div class="td-content-and-menu">#{prose('Storing beans', 1)}</div>
+        <div class="o_wsale_container o_wsale_has_sidebar">#{prose('Roasting', 1)}</div>
         <div class="product-grid sidebar-enabled--true"><a href="/p/1">House blend</a> <a href="/p/2">Dark roast</a></div>
         <div class="sidebar"><p>Archive of older posts</p></div>
       HTML
 
       text = remaining(html)
-      ["Grinding coffee", "Brewing", "Storing beans", "House blend"].each { |content| text.should include(content) }
+      ["Grinding coffee", "Brewing", "Storing beans", "Roasting", "House blend"].each { |content| text.should include(content) }
       text.should_not include("Archive")
     end
 
@@ -132,6 +133,15 @@ RSpec.describe Nokodown::Boilerplate do
         text = remaining(html)
         text.should include("Lancia MusaThe Musa is explained")
         text.should_not include("Imprint")
+      end
+    end
+
+    it "removes a footer or side pane whose h1 is the site's name linked home" do
+      ["footer", "aside"].each do |tag|
+        html = "<#{tag}><h1><a href=\"/\">Auto Lexicon</a></h1><p>Car reviews since 1998, written in Turin.</p></#{tag}>" \
+               "<h2>Lancia Musa</h2><p>A small car with a tall roof and room for five.</p>"
+
+        remaining(html).should_not include("Auto Lexicon")
       end
     end
   end
@@ -161,6 +171,29 @@ RSpec.describe Nokodown::Boilerplate do
       html = "<header><a href='/'>Home</a></header><section class=\"related-product\">#{products.join}</section><footer>Contact us</footer>"
 
       remaining(html).should include("Robotic mower KR500")
+    end
+
+    it "keeps a post whose wrapper is named for the room a consent banner leaves" do
+      reply = "<p>The link is in the first post. I had never seen screw plugs for tyres before, and nobody here sells them.</p>" * 3
+      %w[cookiebot-padding-bottom cookie-consent-margin-top].each do |room|
+        html = "<div class=\"content-holder #{room}\"><h2>Re: Screw type tire plugs</h2>#{reply}</div>" \
+               "<div class=\"cookie-notice\"><p>We use cookies.</p></div>"
+
+        text = remaining(html)
+        text.should include("screw plugs")
+        text.should_not include("We use cookies")
+      end
+    end
+
+    it "keeps the largest guessed block when a cookie banner that outweighs it goes" do
+      products = Array.new(6) { |index| "<a href=\"/mower-#{index}\">Robotic mower KR#{index}00 for lawns up to #{index + 1} acres</a>" }
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 6
+      html = "<h1>Mowers</h1><section class=\"related-product\">#{products.join}</section>" \
+             "<div class=\"cmplz-cookiebanner-container\"><div class=\"cmplz-cookiebanner\">#{notice}</div></div>"
+
+      text = remaining(html)
+      text.should include("Robotic mower KR500")
+      text.should_not include("Google Analytics")
     end
   end
 
@@ -322,6 +355,227 @@ RSpec.describe Nokodown::Boilerplate do
        "<h1>Branches</h1><div class=\"header\"><ul>#{notices}</ul></div>"].each do |html|
         remaining(html).should include("Branch 12")
       end
+    end
+  end
+
+  describe "furniture that outweighs a short page" do
+    def hours
+      days = %w[Monday Tuesday Wednesday Thursday Friday Saturday].map { |day| "#{day} 9:00-13:00, 14:00-17:30" }
+      "<p>Sakura Clinic<br>3-6-1 Kego, Fukuoka<br>Tel 092 725 7900<br>#{days.join('<br>')}</p>"
+    end
+
+    it "removes a sidebar or footer beside a short post" do
+      ["<div id=\"sidebar\"><h2>Contact</h2>#{hours}</div>", "<div class=\"footer\"><h2>Contact</h2>#{hours}</div>"].each do |box|
+        html = "<div class=\"main\"><h1>Fully booked on Friday</h1><p>The morning slots are taken.</p></div>#{box}"
+
+        text = remaining(html)
+        text.should include("The morning slots are taken.")
+        text.should_not include("Sakura Clinic")
+      end
+    end
+
+    it "keeps a block named like a sidebar under a title that stands alone" do
+      html = "<div class=\"main\"><div class=\"title\"><h1>Sakura Clinic</h1></div><div id=\"sidebar\">#{hours}</div></div>"
+
+      remaining(html).should include("Monday 9:00")
+    end
+
+    it "keeps a listing in the main grid column or in the layout around a sidebar" do
+      products = Array.new(10) do |index|
+        "<div class=\"product\"><h5><a href=\"/p/#{index}\">Aloe vera gel, #{index + 1} gallons</a></h5>" \
+          "As low as $#{index + 15}.50 a gallon, shipped to all states</div>"
+      end
+      header = "<div class=\"titleclass\"><h1>Carrier Oils</h1><p>Showing all 10 results, sorted by price</p></div>"
+      in_main = "#{header}<div class=\"row\"><div class=\"main col-lg-9\">" \
+                "<div class=\"products shopcolumn4 shopsidebarwidth\">#{products.join}</div></div>" \
+                "<aside class=\"col-lg-3\"></aside></div>"
+      around = "#{header}<div class=\"torso tmpl_two_col_sidebar\"><div class=\"sidebar\"><p>Filters</p></div>" \
+               "<div class=\"main\">#{products.join}</div></div>"
+      prefixed = "#{header}<div class=\"dprime-wf-app dprime-wf-sidebar-left\"><aside class=\"dprime-wf-sidebar\"><p>Filters</p></aside>" \
+                 "<div class=\"dprime-wf-content\">#{products.join}</div></div>"
+
+      [in_main, around, prefixed].each { |html| remaining(html).should include("Aloe vera gel, 10 gallons") }
+    end
+
+    it "removes a sidebar in a narrow grid column, or one holding a widget, beside the title" do
+      title = "<h1>Fully booked on Friday</h1><p>The morning slots are taken.</p>"
+      nested = "<div class=\"title\">#{title}</div><div class=\"row\"><div class=\"col-md-9\"><div class=\"row\">" \
+               "<div class=\"col-md-8 entry\"><p>Call us.</p></div><div class=\"col-md-4 sidebar\">#{hours}</div></div></div></div>"
+      beside = "<div class=\"row\"><div class=\"col-md-8\">#{title}</div><div class=\"col-md-4\"><div id=\"sidebar\">#{hours}</div></div></div>"
+      widget = "<div class=\"main\">#{title}</div><div class=\"sidebar\"><div class=\"widget\">" \
+               "<h3 class=\"sidebar-title\">Contact</h3><div class=\"widget-content\">#{hours}</div></div></div>"
+      tabs = "<div class=\"main\">#{title}</div><div class=\"sidebar\"><ul class=\"sidebar-tabs\"><li>Contact</li></ul>" \
+             "<div class=\"tab-content\">#{hours}</div></div>"
+
+      [nested, beside, widget, tabs].each do |html|
+        text = remaining(html)
+        text.should include("The morning slots are taken.")
+        text.should_not include("Sakura Clinic")
+      end
+    end
+
+    it "looks for the layout around a sidebar in time linear in the sidebar's items" do
+      items = Array.new(2000) { |index| "<li class=\"sidebar-item\"><a href=\"/c/#{index}\">City #{index}</a> (#{index % 97} listings)</li>" }
+      html = "<div class=\"page-title\"><h1>Plumbers</h1><p>Updated 3 June 2026 by the editors</p></div><div class=\"wrap\">" \
+             "<div class=\"entry\"><p>No plumbers listed here yet.</p></div><div class=\"sidebar\"><ul>#{items.join}</ul></div></div>"
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining(html)
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      text.should include("No plumbers listed here yet.")
+      text.should_not include("City 1999")
+    end
+
+    it "keeps a block laid out beside a sidebar" do
+      products = Array.new(6) do |index|
+        "<li><a href=\"/disc-#{index}\">Diamond disc #{index + 1}25 mm</a> Segmented rim for granite and concrete, #{index + 3}50 UAH</li>"
+      end
+      html = "<div class=\"main\"><h1>Diamond discs</h1><p>Cutting discs for stone.</p></div>" \
+             "<ul class=\"catalog-grid catalog-grid--m catalog-grid--sidebar\">#{products.join}</ul>"
+
+      remaining(html).should include("Segmented rim")
+    end
+
+    it "keeps a sidebar or footer that holds prose, in paragraphs or in other blocks" do
+      descriptions = %w[Acupuncture Massage Cupping].map do |treatment|
+        "<div class=\"service\"><h3>#{treatment}</h3><div class=\"description\">#{treatment} eases the pain in the back " \
+          "and the neck, and helps the patient sleep through the night again.</div></div>"
+      end
+      ["<div id=\"sidebar\">#{prose('Our new address', 2)}</div>", "<div id=\"footer\">#{descriptions.join}</div>"]
+        .each do |box|
+        html = "<div class=\"main\"><h1>Clinic news</h1><p>We moved to Kego, two streets from the station.</p></div>#{box}"
+
+        remaining(html).should match(/Part 2|helps the patient sleep/)
+      end
+    end
+
+    it "removes a narrower grid column of links that outweighs the title's column" do
+      posts = ["Taiwan Graduate Scholarships", "Stirling Vice Chancellor Scholarship", "Gordon University Scholarship"]
+      cards = posts.map.with_index do |post, index|
+        "<div class=\"module\"><a href=\"/category/#{index}/\">Fully Funded</a>" \
+          "<h3><a href=\"/post-#{index}/\">#{post} 2027</a></h3></div>"
+      end
+      bare = posts.map.with_index do |post, index|
+        "<div><h3><a href=\"/post-#{index}/\">#{post} 2027</a></h3><time>Oct #{20 - index}, 2026</time></div>"
+      end
+      [cards, bare].each do |column|
+        html = "<div class=\"row\"><div class=\"col-12 col-md-8\"><p>Home › Tags › Konstanz Fellowship</p>" \
+               "<h1>Tag: Konstanz Fellowship</h1><p>No posts to display</p></div>" \
+               "<div class=\"col-12 col-md-4\"><h4>Latest Articles</h4>#{column.join}</div></div>"
+
+        text = remaining(html, url: "https://example.com/tag/konstanz-fellowship/")
+        text.should include("No posts to display")
+        text.should_not include("Latest Articles")
+        text.should_not include("Gordon University")
+      end
+    end
+
+    it "keeps a wider grid column, and a narrower one of two cards or beside a title's column with prose, more text or the title" do
+      guides = Array.new(12) { |index| "<h3><a href=\"/guide-#{index}/\">Fellowship guide, part #{index + 1}</a></h3>" }
+      side = "<div class=\"col-md-4\"><h4>Guides</h4>#{guides.join}</div>"
+      trail = "<p>Home › Fellowships › Germany</p>"
+      rows = ["<div class=\"col-md-8\">#{trail}<h1>Konstanz Fellowship</h1>#{prose('The fellowship', 1)}</div>#{side}",
+              "<div class=\"col-md-8\"><h1>Sakura Clinic</h1>#{hours}</div><div class=\"col-md-4\">#{guides.last(3).join}</div>",
+              "<div class=\"col-md-8\"><h1>Konstanz Fellowship</h1></div>#{side}",
+              "<div class=\"col-md-4\">#{trail}<h1>Konstanz Fellowship</h1></div>#{side.sub('col-md-4', 'col-md-8')}"]
+      rows.each do |row|
+        remaining("<div class=\"row\">#{row}</div>").should include("part 12")
+      end
+
+      cards = ["Taiwan Graduate Scholarships", "Stirling Vice Chancellor Scholarship"].map.with_index do |post, index|
+        "<div class=\"module\"><a href=\"/category/#{index}/\">Fully Funded</a><h3><a href=\"/post-#{index}/\">#{post}</a></h3>" \
+          "<p><a href=\"/post-#{index}/\">Applications open in March for students of any subject</a></p></div>"
+      end
+      html = "<div class=\"row\"><div class=\"col-md-8\">#{trail}<h1>Tag: Konstanz Fellowship</h1><p>No posts to display</p>" \
+             "</div><div class=\"col-md-4\"><h4>Latest Articles</h4>#{cards.join}</div></div>"
+      remaining(html).should include("Stirling Vice")
+    end
+
+    it "keeps a narrower grid column of the page's own links, as a profile's publications" do
+      papers = ["Tidal mixing in shallow harbors", "Sediment transport under ferry wakes", "A model of quay wall erosion",
+                "Salt marsh recovery after dredging", "Measuring wave energy at breakwaters", "Harbor seiches in closed basins"]
+      links = papers.map { |paper| "<li><a href=\"/papers/#{paper.downcase.tr(' ', '-')}\">#{paper}</a></li>" }
+      html = "<div class=\"row\"><div class=\"col-md-8\"><p>Home › People › Ana Puig</p><h1>Dr. Ana Puig</h1>" \
+             "<ul><li>Professor of coastal engineering</li><li>Room 3.14, Harbor Building</li></ul></div>" \
+             "<div class=\"col-md-4\"><h4>Publications</h4><ul>#{links.join}</ul></div></div>"
+
+      remaining(html).should include("Harbor seiches in closed basins")
+    end
+
+    it "keeps a narrower grid column of titles linked below the page, as a show's episodes" do
+      episodes = ["Tidal mixing in shallow harbors", "Sediment transport under ferry wakes", "A model of quay wall erosion",
+                  "Salt marsh recovery after dredging", "Measuring wave energy at breakwaters", "Harbor seiches in closed basins"]
+      cards = episodes.map.with_index do |episode, index|
+        "<div class=\"episode\"><h3><a href=\"/harbor-talk/#{48 - index}/\">#{episode}</a></h3>" \
+          "<span>Oct #{21 - index}, 2026 · 41 min</span></div>"
+      end
+      html = "<div class=\"row\"><div class=\"col-12 col-md-8\"><h1>Harbor Talk</h1>" \
+             "<p>Hosted by Ana Puig · Weekly · 48 episodes</p></div>" \
+             "<div class=\"col-12 col-md-4\"><h2>Episodes</h2>#{cards.join}</div></div>"
+
+      remaining(html, url: "https://example.com/harbor-talk/").should include("Harbor seiches in closed basins")
+    end
+
+    it "keeps a listing that wraps below a full-width title column in its row" do
+      posts = ["How ports plan for rising seas", "Inside a container terminal at night", "Why harbor pilots still matter"]
+      articles = posts.map.with_index do |post, index|
+        "<article><h2><a href=\"/2026/10/post-#{index}/\">#{post}</a></h2><div>Oct #{20 - index}, 2026</div></article>"
+      end
+      popular = Array.new(5) { |index| "<li><a href=\"/popular-#{index}/\">Popular post #{index + 1}</a></li>" }
+      [%w[col-12 col-lg-8 col-lg-4], %w[col-md-12 col-md-8 col-md-4]].each do |head, listing, side|
+        html = "<div class=\"row\"><div class=\"#{head}\"><h1>Category: Ports</h1><p>Stories about the harbor and " \
+               "its ports.</p></div><div class=\"#{listing}\">#{articles.join}</div>" \
+               "<div class=\"#{side}\"><h3>Popular</h3><ul>#{popular.join}</ul></div></div>"
+
+        remaining(html).should include("Why harbor pilots still matter")
+      end
+    end
+
+    it "removes a site header above the title that holds addresses in lines" do
+      html = "<div class=\"site-header\">#{hours * 2}</div><h1>Fully booked on Friday</h1>" \
+             "<p>#{'The morning slots are taken. ' * 8}</p>"
+
+      remaining(html).should_not include("Sakura Clinic")
+    end
+
+    it "removes a cookie banner that holds most of a page's text, named for what it is or laid over the page" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+      banners = ["<div id=\"dlgcookies\">#{notice}</div>", "<div class=\"widget-cookie-banner\"><h2>Cookie Policy</h2>#{notice}</div>",
+                 "<div class=\"cookies\" style=\"position: fixed; bottom: 0\">#{notice}</div>"]
+      banners.each do |banner|
+        remaining("<h1>Lake at dawn</h1><img src=\"/lake.jpg\">#{banner}").should_not include("Google Analytics")
+      end
+    end
+
+    it "keeps a cookie policy, the body of a page about cookies and a form named for them" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+      policy = "<h1>Privacy</h1><div class=\"cookie-policy\"><h2>Cookies we use</h2>#{notice}<h2>Refusing them</h2>#{notice}</div>"
+      page = "<h1>Cookies</h1><div class=\"cookies-banner\"><p>We use cookies.</p></div><section class=\"cookies-page__body\">#{notice}</section>"
+      form = "<h1>Create an account</h1><div class=\"user-info-from-cookie\">#{notice}</div>"
+
+      remaining(policy).should include("Refusing them")
+      remaining(page, url: "https://wordsforlife.org.uk/cookies/").should include("Google Analytics")
+      remaining(form).should include("Google Analytics")
+    end
+
+    it "keeps a product whose tags name cookies and a bar" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+      product = "<div class=\"product type-product product_tag-buy-girl-scout-cookies-online product_tag-bar-harbor\">#{notice}</div>"
+
+      remaining("<h1>Super Silver Haze</h1>#{product}").should include("Google Analytics")
+    end
+
+    it "keeps a block named for consent alone" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+
+      remaining("<h1>Study</h1><div class=\"consent-text\">#{notice}</div>").should include("Google Analytics")
+      remaining("<h1>Study</h1><div class=\"entry informed-consent\">#{notice}</div>").should include("Google Analytics")
+    end
+
+    it "keeps a block named as a cookie notice that holds the page's title" do
+      notice = "<p>Google Analytics counts the visits to this site and how long visitors stay on each page.</p>" * 4
+
+      remaining("<div class=\"cookie-notice-container page\"><h1>Lake at dawn</h1>#{notice}</div>").should include("Google Analytics")
     end
   end
 
@@ -560,6 +814,33 @@ RSpec.describe Nokodown::Boilerplate do
       end
 
       remaining("<h1>House plan 12</h1>#{prose('The plan', 2)}<div class='features'>#{facts.join}</div>").should include("Roof gable")
+    end
+  end
+
+  describe "blocks that hold the page's title" do
+    it "keeps a block named like furniture that holds the page's only title and prose" do
+      html = "<div class=\"dialog-off-canvas-main-canvas\"><h1>Visual identity</h1>#{prose('The logo', 1)}</div>" \
+             "<div class=\"sidebar\"><p>Branding and web studio in Riyadh, open Sunday to Thursday.</p></div>"
+
+      remaining(html).should include("Visual identity")
+    end
+
+    it "removes a sidebar headed by the site's name, and a trail or menu that holds the title" do
+      studio = "<p>Branding and web studio in Riyadh, open Sunday to Thursday.</p>"
+      sidebar = "<div class=\"sidebar\"><h1><a href=\"/\">Fikra</a></h1>#{studio}</div><h2>Visual identity</h2><p>Logos and type.</p>"
+      trail = "<div class=\"breadcrumb\"><a href=\"/\">Home</a> <h1>Gallery</h1></div><img src=\"/1.jpg\"><p>Photos.</p>"
+
+      remaining(sidebar).should_not include("Fikra")
+      remaining(trail).should_not include("Home")
+    end
+
+    it "does not read the layout a list is laid out in as its name" do
+      html = "<h1>News</h1>#{prose('The parade', 1)}<div class=\"posts-list one-right-sidebar\">#{prose('The jury', 2)}</div>" \
+             "<div class=\"product-grid layout-sidebar-left\">#{prose('The costume', 2)}</div>"
+
+      text = remaining(html)
+      text.should include("The jury is explained")
+      text.should include("The costume is explained")
     end
   end
 end

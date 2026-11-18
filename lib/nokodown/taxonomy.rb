@@ -77,29 +77,7 @@ module Nokodown
 
     # The outermost line around the link, with its kind.
     def outermost(link, site, judged)
-      found = nil
-      node = link.parent
-      while node&.element? && node.name != "body"
-        kind = judge(node, site, judged)
-        break unless kind
-
-        found = [node, kind]
-        node = node.parent
-      end
-      found
-    end
-
-    # Each tag of a line walks up through the same elements, so each is
-    # judged once. The parser's copies of a formatting element share its
-    # key, so the node is kept with its verdict and a copy is judged anew.
-    def judge(node, site, judged)
-      key = Dom.key(node)
-      seen = judged[key]
-      return seen.last if seen&.first == node
-
-      kind = line(node, site)
-      judged[key] = [node, kind]
-      kind
+      Dom.outermost_accepted(link, judged) { |node| line(node, site) }
     end
 
     # :tag when every link is a tag, :category when any is a category.

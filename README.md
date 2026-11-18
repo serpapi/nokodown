@@ -78,6 +78,21 @@ with `main_content: false`, `:none` for a document without a body.
   repeats the line (a card's tags) or is such an archive or the index of
   all tags or categories, and copyright and licence lines in the major web
   languages.
+- Once the content is chosen and pruned, so that they cannot sway either, a
+  line of links to the site's sign-in, registration, account, cart or feeds
+  ("您需要登录后才可以回帖 登录 | 注册", "View Cart (0)", "Subscribe to:
+  Posts (Atom)") by where they point, unless a sentence, a heading (one
+  inside a link too, with text beside it, as a card's title has its dates),
+  the page's title, a date, a table or a picture sits with them or they are
+  items of a larger menu, and comment, review and contact forms (a visible
+  text box, a name or e-mail field and little text) with the title above
+  them, and a note under that title, in any language. A form stays when it
+  wraps the page (ASP.NET), holds its title or main region, holds an e-mail
+  address or a phone number, holds a table of what it asks about (a row of
+  headers over a row of text, as an inquiry shows the flat it is about),
+  asks how many (an order with a note), or is all an application or
+  sign-up page's main region holds, and neither kind goes when it is all
+  the content holds, spacer images aside.
 - Cookie banners, ads, newsletter and sign-in prompts, share bars and share
   links by where they point, modals, chat widgets, "related", "recommended"
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
@@ -199,8 +214,37 @@ with `main_content: false`, `:none` for a document without a body.
 Every structural rule is guarded: an element that contains the `<main>`
 region, or most of the page's text, is never removed because of its class name,
 and neither is one named for what it has or allows (`has-sidebar`,
-`with-navigation`, `sidebar-enabled`). A `<footer>` or complementary pane that
-holds the page's only `<h1>` and a fair share of its text is the content.
+`with-navigation`, `sidebar-enabled`) or for the layout it is laid out in
+(`layout-sidebar-left`, `one-right-sidebar`). A `<footer>` or a complementary
+pane that holds the page's only `<h1>`, unless that links to the home page,
+and a fair share of its text is the content, and so is a block named like
+furniture (`dialog-off-canvas-main-canvas`) that also holds prose, unless it
+is named as a breadcrumb trail or a menu.
+Three kinds of named furniture go however much of a short page they hold: a
+site header above the title, a sidebar or footer without prose beside a title
+that has text of its own, and a cookie banner that one of its names calls a
+banner, a bar or a dialog along with the cookies (`cookie-notice`,
+`cmplz-cookiebanner`), or a consent manager, or that is laid over the page,
+unless it holds the page's `<h1>` or the page is about cookies. A shop's or
+a blog's tags (`product_tag-cookies`) name what it lists, not the block, and
+a name for the room a page leaves for the banner (`cookiebot-padding-bottom`)
+names the wrapper of its content, which stays when it holds most of the page.
+No sidebar is a block whose BEM modifier names its layout
+(`catalog-grid--sidebar`), or one whose nearest grid column short of the full
+row is wider than half of it: a shop's grid named `shopsidebarwidth` inside
+`col-lg-9` is in the main column, and a `col-md-4` nested there is a sidebar
+again. Nor is the layout that holds a sidebar beside the column with most of
+its text, when that column is named for the layout (`main`, `content-area`) or
+with the sidebar's prefix (`dprime-wf-content` beside `dprime-wf-sidebar`); a
+`widget-content` beside a `sidebar-title`, or a `tab-content` beside
+`sidebar-tabs`, is part of the sidebar. A grid column narrower than the
+title's and beside it ("col-md-4" beside "col-md-8") goes the same way,
+whatever its names, when it holds three or more linked headings and no prose,
+as the latest posts beside an empty tag archive do, unless most link below the
+page's own address, as a show's episodes do.
+Prose here is two sentences' worth of lines of 80 characters or
+more in any block, not counting link text or what an `<address>` holds:
+opening hours and contact details are lines, not prose.
 
 ## How it works
 
@@ -213,7 +257,9 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    shows it, and gives way to an `<h1>` that the page's URL names when the
    title does not.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
-   `<noscript>` copies), drop scripts, invisible elements and form controls.
+   `<noscript>` copies), drop scripts, invisible elements and form controls,
+   and mark the forms that ask for a message, with their titles, while their
+   controls are there.
 4. **Boilerplate**: remove page chrome and noise widgets across the whole page.
 5. **ContentLocator**: score paragraphs with Readability's algorithm. When one
    candidate holds most of the page's prose the content is narrowed to it
@@ -267,7 +313,9 @@ holds the page's only `<h1>` and a fair share of its text is the content.
    posts or products (alike blocks, each with a linked title, that hold most
    of the text) and a featured post beside them, since it would judge each
    item on its own. A teaser's linked title with its date and author links
-   is not a link cluster, however short.
+   is not a link cluster, however short. Then **MessageForms** and
+   **ServiceLinks** remove what is left in the content of the marked forms
+   and titles and of the sign-in, cart and feed lines.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data

@@ -37,6 +37,10 @@ module Nokodown
     UUID = /\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/.freeze
     ARBITRARY_VALUE = /\[[^\s\]]*\]/.freeze
     CSS_MODULE_HASH = /__(?=[\w-]{0,4}[A-Z\d])[\w-]{5}(?![\w-])/.freeze
+    GRID_CLASS = /\A(?:span|td-pb-span|col-(?:(xs|sm|md|lg|xl|xxl)-)?|(small|medium|large)-)(\d{1,2})\z/.freeze
+    BREAKPOINTS = [nil, "xs", "sm", "md", "lg", "xl", "xxl"].freeze
+    FOUNDATION = { "small" => "sm", "medium" => "md", "large" => "lg" }.freeze
+    FULL_WIDTH = 12
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
@@ -97,6 +101,28 @@ module Nokodown
       node[KEY]
     end
 
+    # The outermost of a node's ancestors below the body that the block
+    # accepts, with the block's verdict on it, climbing until it refuses
+    # one. The links of one line ask about the same ancestors, so verdicts
+    # are kept by key. The parser's copies of a formatting element share
+    # its key, so the node is kept with its verdict and a copy is judged
+    # anew.
+    def outermost_accepted(node, verdicts)
+      found = nil
+      node = node.parent
+      while node&.element? && node.name != "body"
+        key = key(node)
+        seen = verdicts[key]
+        verdict = seen&.first == node ? seen.last : yield(node)
+        verdicts[key] = [node, verdict]
+        break unless verdict
+
+        found = [node, verdict]
+        node = node.parent
+      end
+      found
+    end
+
     def mark_as_thread(node)
       node[THREAD] = "1"
       node.css("*").each { |descendant| descendant[THREAD] = "1" }
@@ -149,6 +175,16 @@ module Nokodown
 
     def heading?(node)
       node.element? && HEADINGS.include?(node.name)
+    end
+
+    # A grid column's width in twelfths, from the widest breakpoint its
+    # classes name: "col-12 col-md-4" is 4, "td-pb-span8" is 8.
+    def grid_width(column)
+      widths = column["class"].to_s.split.filter_map do |name|
+        match = name.match(GRID_CLASS)
+        [BREAKPOINTS.index(match[1] || FOUNDATION[match[2]]), match[3].to_i] if match
+      end
+      widths.max_by(&:first)&.last
     end
 
     def char_count(string)

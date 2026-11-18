@@ -14,21 +14,56 @@ module Nokodown
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
+    SIDE_FURNITURE = /sidebar|#{Patterns::WORD_START}footer#{Patterns::WORD_END}/.freeze
+    SIDEBAR = /sidebar/.freeze
+    # A main column is named for the layout ("main", "content-area",
+    # "l-main-content"), after any prefix: "dprime-wf-content".
+    MAIN_COLUMN = /
+      (?:\A|(?<=[-_]))(?:(?:site|page|l)[-_])?(?:main|content|primary)
+      (?:[-_](?:main|content|area|column|col|container|wrap|wrapper|inner))*\z
+    /x.freeze
+    # A BEM modifier names a variant of the block: "catalog-grid--sidebar" is
+    # the grid laid out beside a sidebar.
+    BEM_MODIFIER = /--[\w-]+/.freeze
+    TITLED_TEXT = 20
+    CONSENT_MANAGER = /onetrust|didomi|cookiebot|usercentrics/.freeze
+    # What a banner is, said in the same name as the cookies ("cookie-notice",
+    # "cmplz-cookiebanner", "gdpr-consent"): words in other names of the
+    # class list belong to them ("informed-consent", "product_tag-bar-harbor").
+    CONSENT_PROMPT = /
+      consent|banner|bar|notice|notification|popup|pop-up|popin|modal|dialog|dlg|overlay|alert|layer|box|prompt|wall
+    /x.freeze
+    # A shop's or a blog's tags and categories name the products or posts it
+    # lists ("product_tag-buy-cookies-online", "category-cookies").
+    LISTED_TAXONOMY = /(?<![\w-])(?:\w+_)?(?:tag|cat|category)-[\w-]+/.freeze
+    # The room a page leaves for the banner, named on the wrapper of its
+    # content: "cookiebot-padding-bottom".
+    ROOM_FOR_BANNER = /padding|margin|spacer|spacing|offset/.freeze
+    OVERLAY_ROLES = %w[dialog alertdialog].freeze
+    OVERLAY_STYLE = /(?:\A|;)\s*position\s*:\s*(?:fixed|sticky)/i.freeze
+    TRAIL_OR_MENU = /breadcrumb|crumbs|trail|#{Patterns::WORD_START}nav|menu/.freeze
     TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
     # What a wrapper has, lacks or allows does not name it: "has-sidebar",
-    # "with-navigation", "content-and-menu", "sidebar-enabled--true". The
-    # head of a compound names the wrapper, so "menu-and-content" stays a
-    # menu. "no-print" names what is left out of print, so it stays too.
+    # "o_wsale_has_sidebar", "with-navigation", "content-and-menu",
+    # "sidebar-enabled--true". The head of a compound names the wrapper, so
+    # "menu-and-content" stays a menu. "no-print" names what is left out of
+    # print, so it stays too. Nor does the layout it is laid out in:
+    # "layout-sidebar-left", "one-right-sidebar", "two-sidebars".
     MODIFIER = /
       (?:(?<![\w-])(?:has|with|without|no(?!-?print))|-(?:and|with|without))-[\w-]+|
-      (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])
+      (?<![\w-])[\w-]+-(?:enabled|disabled)(?:--[\w-]+)?(?![\w-])|
+      (?<![\w-])(?:layout|one|two)-[\w-]+|(?<![\w-])[\w-]+-layout(?![\w-])|
+      _(?:has|with|without)_[\w-]+
     /x.freeze
     MIN_CARD_RUN = 3
+    # A page's path without its closing slash: the pages below it add a slash and a segment.
+    PAGE_PATH = %r{\A/[^?#]*[^/?#]}.freeze
     MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
     TITLE_HOLDER_SHARE = 0.25
     # A note continues the prose only after a sentence or more of it, not after a line of links.
     NOTE_PROSE = 80
+    PROSE = 160
     FOOTNOTE_MARK = /\A[*†‡§]+/.freeze
     # The word goes with its separators: "footer__disclaimer" without it is "footer", not "footer__".
     DISCLAIMER_WORD = /[-_]*#{Patterns::DISCLAIMER.source}[-_]*/.freeze
@@ -42,10 +77,15 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
-      @single_h1 = @body.css("h1").size == 1
+      h1s = @body.css("h1").to_a
+      @single_h1 = h1s.size == 1
       @trails = Breadcrumbs.trails(@body).group_by { |trail| Dom.key(trail) }
       @taxonomy = Taxonomy.blocks(@body, @url).group_by { |block| Dom.key(block) }
-      @last_h1 = @body.css("h1").map { |h1| Dom.key(h1).to_i }.max.to_i
+      @title = h1s.last
+      @last_h1 = @title ? Dom.key(@title).to_i : 0
+      @title_columns = title_columns
+      @consent_page = @url.to_s.sub(Taxonomy::ADDRESS, "").split("?").first.to_s.downcase.match?(Patterns::CONSENT)
+      @prose_lines = {}
       # Card grids repeat the same class list hundreds of times.
       @names = Hash.new { |cache, signature| cache[signature] = signature.gsub(MODIFIER, " ") }
       @furniture = Hash.new { |cache, signature| cache[signature] = @names[signature].match?(Patterns::PAGE_FURNITURE) }
@@ -85,6 +125,8 @@ module Nokodown
       @stats.chars(@body) - removals.sum { |node, _| @stats.chars(node) } < MIN_LEFT
     end
 
+    # Furniture that goes however much of the page it holds is never the
+    # content, and would otherwise hide the guesses smaller than it.
     def content_guess(removals)
       guess = removals.select { |_, kind| kind == :guess }.max_by { |node, _| @stats.chars(node) }
       return unless guess && @stats.chars(guess.first) >= MIN_LEFT
@@ -94,18 +136,21 @@ module Nokodown
     end
 
     # Semantic chrome (nav, a page-level footer) goes even when it outweighs
-    # the content, as legal footnotes often do; class-name guesses do not.
+    # the content, as legal footnotes often do; class-name guesses only when
+    # where they sit or what they ask says they are furniture.
     def removal(node)
       return if @shielded.include?(Dom.key(node))
       # Side notes inside an article are content whatever their class says.
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if (chrome_element?(node) || chrome_role?(node)) && !title_holder?(node)
-      return if dominant?(node) && !header_above_title?(node)
+      return :furniture if side_column?(node)
+      return if dominant?(node) && !furniture_however_large?(node)
       return :guess if trail?(node) || found?(@taxonomy, node)
       return unless advertising?(node) || share_intent?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
+      return :panel if MemberPanel.panel?(node)
 
-      MemberPanel.panel?(node) ? :panel : :guess
+      dominant?(node) ? :furniture : :guess
     end
 
     # Themes render the post in a <footer> or in a complementary reading
@@ -114,7 +159,23 @@ module Nokodown
     def title_holder?(node)
       return false unless node.name == "footer" || node.name == "aside" || node["role"] == "complementary"
 
-      @single_h1 && !node.at_css("h1").nil? && @stats.text_chars(node) >= @total * TITLE_HOLDER_SHARE
+      holds_title?(node)
+    end
+
+    # A site's name in a sidebar links to its home page.
+    def holds_title?(node)
+      return false unless @single_h1 && @stats.text_chars(node) >= @total * TITLE_HOLDER_SHARE
+
+      h1 = node.at_css("h1")
+      !h1.nil? && h1.css("a[href]").none? { |link| Metadata.home_link?(link["href"].strip) }
+    end
+
+    # So is a block named like furniture that holds prose besides the title:
+    # page builders wrap the whole page in "dialog-off-canvas-main-canvas" or
+    # "sidebar-fixed". A breadcrumb trail or a menu with the title in it is
+    # still a trail or a menu.
+    def titled_page?(node)
+      holds_title?(node) && !@names[Dom.signature(node)].match?(TRAIL_OR_MENU) && prose_lines?(node)
     end
 
     # A trail stands apart from the text around it; one that words lead into
@@ -194,7 +255,7 @@ module Nokodown
     def class_noise?(node)
       return false if !@prose_blocks.empty? && prose_part?(node)
 
-      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node))
+      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node)) && !titled_page?(node)
     end
 
     # Fine print about the site is furniture, but a note on the content right
@@ -331,8 +392,182 @@ module Nokodown
       Dom.key(last_descendant(node)).to_i < @last_h1
     end
 
+    # A short page's sidebar or footer outweighs it too, and so does a
+    # cookie banner on a page whose content its scripts load.
+    def furniture_however_large?(node)
+      header_above_title?(node) || beside_title?(node) || consent_banner?(node)
+    end
+
+    # A sidebar or footer without prose sits beside the content when the
+    # page's title has text of its own. A title standing alone may head the
+    # block, as an archive's record title heads the fields its theme puts in
+    # a "sidebar".
+    def beside_title?(node)
+      return false unless @title && @names[Dom.signature(node)].gsub(BEM_MODIFIER, " ").match?(SIDE_FURNITURE)
+      return false unless node.at_css("h1").nil? && !prose_lines?(node)
+
+      branch = title_branch(node)
+      return false if branch.nil? || @stats.text_chars(branch) - @stats.text_chars(@title) < TITLED_TEXT
+
+      !in_main_column?(node, branch.parent) && !around_sidebar?(node)
+    end
+
+    # The nearest grid column short of the full row tells which one the
+    # node is in. One wider than half the row is the main one, beside which
+    # a sidebar sits: a shop's product grid named "shopsidebarwidth" for the
+    # room a sidebar leaves it is inside it. A narrower column, the node's
+    # own or one nested in the main one, holds a sidebar again.
+    def in_main_column?(node, shared)
+      column = node
+      while column.element? && Dom.key(column) != Dom.key(shared)
+        width = Dom.grid_width(column)
+        return width > Dom::FULL_WIDTH / 2 if width && width < Dom::FULL_WIDTH
+
+        column = column.parent
+      end
+      false
+    end
+
+    # The layout around a sidebar holds it beside the main column, which
+    # holds most of the text: "tmpl_two_col_sidebar" around "sidebar" and
+    # "main". On each level one child at most holds more than half the
+    # text, so the walk down to the column follows it.
+    def around_sidebar?(node)
+      half = @stats.text_chars(node) / 2
+      column = node
+      while (column = column.element_children.find { |child| @stats.text_chars(child) > half })
+        prefixes = main_column_prefixes(column)
+        return true if prefixes.any? && column.parent.element_children.any? { |side| sidebar_beside?(side, prefixes) }
+      end
+      false
+    end
+
+    # What a main column's names put before the layout's word: nothing in
+    # "main", "dprime-wf-" in "dprime-wf-content". A column named as
+    # furniture is not the main one.
+    def main_column_prefixes(column)
+      signature = Dom.signature(column)
+      return [] if @names[signature].match?(SIDE_FURNITURE) || @furniture[signature]
+
+      @names[signature].gsub(BEM_MODIFIER, " ").split.filter_map do |token|
+        layout = token.match(MAIN_COLUMN)
+        token[0, layout.begin(0)] if layout
+      end
+    end
+
+    # A theme gives the sidebar the prefix it gives the main column:
+    # "dprime-wf-sidebar" beside "dprime-wf-content". A sidebar's parts are
+    # named for themselves, so "sidebar-title" beside "widget-content" or
+    # "sidebar-tabs" beside "tab-content" is a widget, not a layout.
+    def sidebar_beside?(side, prefixes)
+      names = @names[Dom.signature(side)].gsub(BEM_MODIFIER, " ").split.grep(SIDEBAR)
+      names.any? { |name| prefixes.any? { |prefix| name.start_with?(prefix) } }
+    end
+
+    # The title's ancestor that sits beside the node, under the parent they share.
+    def title_branch(node)
+      around = node.ancestors.select(&:element?).map { |ancestor| Dom.key(ancestor) }.to_set
+      ([@title] + @title.ancestors.select(&:element?)).each_cons(2) do |branch, parent|
+        return branch if around.include?(Dom.key(parent))
+      end
+      nil
+    end
+
+    # Each ancestor of the title, by key, with its child that holds the title.
+    def title_columns
+      return {} unless @title
+
+      ([@title] + @title.ancestors.select(&:element?)).each_cons(2).to_h { |branch, parent| [Dom.key(parent), branch] }
+    end
+
+    # A grid column narrower than the title's column in the same row is a
+    # sidebar, however its theme names it, when it holds a run of linked
+    # titles, teasers of other pages, rather than prose. A column of plain
+    # links can be the page's own list: a profile's publications, a
+    # product's downloads. It passes for the content only when it outweighs
+    # that column and the column holds no prose, as on an empty archive;
+    # elsewhere its removal would only sway where the content is found. As
+    # beside a sidebar named so, a title standing alone may head it.
+    def side_column?(node)
+      column = @title_columns[Dom.key(node.parent)]
+      return false if column.nil? || Dom.key(column) == Dom.key(node) || !narrower?(node, column)
+      return false unless node.at_css("h1").nil? && @stats.link_density(node) >= 0.5 && !prose_lines?(node)
+      return false if @stats.chars(node) <= @stats.chars(column) || prose_lines?(column)
+      links = node.css(Dom::HEADING_SELECTOR).filter_map { |heading| heading.at_css("a[href]") }
+      return false if links.size < MIN_CARD_RUN || own_parts?(links)
+
+      @stats.text_chars(column) - @stats.text_chars(@title) >= TITLED_TEXT
+    end
+
+    # Titles linked below the page's own address are its parts: a show's
+    # episodes, a course's lessons, a book's chapters.
+    def own_parts?(links)
+      path = @url.to_s.sub(Taxonomy::ADDRESS, "")[PAGE_PATH]
+      return false if path.nil?
+
+      links.count { |link| link["href"].strip.sub(Taxonomy::ADDRESS, "").start_with?("#{path}/") } * 2 > links.size
+    end
+
+    # Columns that fill more than a row between them stack, as a full-width
+    # header above the listing and its sidebar does.
+    def narrower?(node, column)
+      width = Dom.grid_width(node)
+      other = Dom.grid_width(column)
+      !width.nil? && !other.nil? && width < other && width + other <= Dom::FULL_WIDTH
+    end
+
+    # A cookie banner is named for what it is as well as for the cookies, or
+    # is laid over the page, and never holds the page's title. On a page
+    # about cookies, what is named for them is the page.
+    def consent_banner?(node)
+      name = @names[Dom.signature(node)].gsub(LISTED_TAXONOMY, " ")
+      return false if @consent_page || !name.match?(Patterns::CONSENT) || node.at_css("h1")
+
+      name.split.any? { |token| consent_name?(token) } || OVERLAY_ROLES.include?(node["role"]) ||
+        node["aria-modal"] == "true" || node["style"].to_s.match?(OVERLAY_STYLE)
+    end
+
+    def consent_name?(token)
+      return false if token.match?(ROOM_FOR_BANNER)
+
+      token.match?(CONSENT_MANAGER) || (token.match?(Patterns::CONSENT) && token.sub(Patterns::CONSENT, " ").match?(CONSENT_PROMPT))
+    end
+
+    # A mega menu gives its entries blurbs, so in a header only a paragraph
+    # with a line long enough for a sentence is prose.
     def furniture_shaped?(node)
-      @stats.link_density(node) > 0.5 || node.css("p").none? { |paragraph| @stats.text_chars(paragraph) >= NOTE_PROSE }
+      @stats.link_density(node) > 0.5 || node.css("p").none? { |paragraph| prose_chars(paragraph) >= NOTE_PROSE }
+    end
+
+    # Two sentences' worth of running text in lines long enough for one, in
+    # any block. Short lines broken apart, as in opening hours, are not
+    # prose, nor is what an address holds, nor one line such as a motto or
+    # a quote, and the text of links is a menu's or a teaser's.
+    def prose_lines?(node)
+      key = Dom.key(node)
+      @prose_lines.fetch(key) { @prose_lines[key] = prose_chars(node) >= PROSE }
+    end
+
+    # Line breaks and the edges of blocks end a line; nil on the stack marks
+    # an edge.
+    def prose_chars(node)
+      prose = line = 0
+      stack = node.children.to_a.reverse
+      until stack.empty?
+        current = stack.pop
+        if current.nil? || current.name == "br"
+          prose += line if line >= NOTE_PROSE
+          line = 0
+        elsif current.text?
+          line += Dom.char_count(current.content)
+        elsif current.element? && current.name != "address" && !(current.name == "a" && current["href"])
+          block = Dom.block?(current)
+          stack << nil if block
+          stack.concat(current.children.to_a.reverse)
+          stack << nil if block
+        end
+      end
+      line >= NOTE_PROSE ? prose + line : prose
     end
 
     def last_descendant(node)
