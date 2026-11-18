@@ -14,6 +14,24 @@ module Nokodown
       IMAGE_ONLY = /\A!\[([^\]]*)\]\([^)]*\)\z/.freeze
       LINKED_HEADING = /\A#+ \[.*\]\(.*\)\z/.freeze
       TITLE_LIST_MIN = 3
+      # On a page with almost no text outside its headings, a heading of a
+      # sentence is the text, set large: page builders set a speaker's role
+      # or a painting's caption in headings, and the furniture that followed
+      # them can be gone. A linked heading is a teaser's title, and an H1 is
+      # the headline, for which the page's title stands in.
+      PROSE_HEADING_WORDS = 8
+      PROSE_HEADING_CJK = 20
+      CJK = /[\p{Han}\p{Hiragana}\p{Katakana}]/.freeze
+      # Furniture longer than the whole headings NOISE_HEADING names: calls
+      # to subscribe or follow, comment prompts, and a comment count or "No
+      # replies" before the post's quoted title ("One thought on “Title”").
+      PROMPT_HEADING = /
+        \A(?:subscribe|sign\s?up|join\s(?:our|the)\s(?:newsletter|mailing\slist|community|conversation|discussion)|
+        follow\sus|stay\s(?:connected|in\stouch|tuned|up\sto\sdate)|leave\sa\s(?:comment|reply)|commented|
+        abonn(?:ez|ieren|eer)|suivez|folge\suns|s[ií]guenos|seguici|suscr[ií]b\p{L}*|iscriviti|inscr[ií]bete)\b
+      /xi.freeze
+      QUOTED_TITLE = /\A(?:\S+\s+){1,4}[“"«„]\s*[^“”"«»„]+?\s*[”"»“]\z/.freeze
+      HASHTAG = /#[\p{L}\p{N}_]+/.freeze
       # A currency code or a unit beside the digits.
       FIGURE_LETTERS = 3
       QUESTION_END = /[?？]\s*\z/.freeze
@@ -190,7 +208,8 @@ module Nokodown
       # level, lost its section during extraction. Title lists are content in
       # their own right, and a page that is only its headline keeps it.
       def drop_empty_sections(blocks, asked = Set.new)
-        titles = title_list_indexes(blocks) | card_titles(blocks) | figures(blocks) | questions(blocks, asked)
+        titles = title_list_indexes(blocks) | card_titles(blocks) | figures(blocks) | prose_headings(blocks) |
+                 questions(blocks, asked)
         kept = blocks.each_index.reject { |index| !titles.include?(index) && empty_section?(blocks, index) }
         kept.pop while kept.any? && blocks[kept.last].kind == :heading && !titles.include?(kept.last)
         return blocks.values_at(*kept) if kept.any?
@@ -216,6 +235,23 @@ module Nokodown
           block = blocks[index]
           block.kind == :heading && figure?(heading_text(block))
         end.to_set
+      end
+
+      def prose_headings(blocks)
+        return Set.new unless few_words?(blocks.filter_map { |block| block.text unless block.kind == :heading })
+
+        blocks.each_index.select do |index|
+          block = blocks[index]
+          block.kind == :heading && block.level > 1 && !block.text.include?("](") && prose?(heading_text(block))
+        end.to_set
+      end
+
+      def prose?(text)
+        return false if text.match?(Patterns::NOISE_HEADING) || text.match?(PROMPT_HEADING) || text.match?(QUOTED_TITLE)
+        # A line of #tags is the tags of a post.
+        return false if text.scan(HASHTAG).size * 2 >= text.split.size
+
+        text.scan(/[\p{L}\p{N}]+/).size >= PROSE_HEADING_WORDS || text.scan(CJK).size >= PROSE_HEADING_CJK
       end
 
       def figure?(text)

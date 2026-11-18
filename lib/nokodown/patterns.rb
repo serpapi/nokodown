@@ -18,6 +18,19 @@ module Nokodown
       (?<![\w-])(?:(?:site|global|main|page|app|l|c|o|g)-?)?footer(?:-(?:wrapper|container|inner|main|top|bottom|links|nav|menu))?(?![\w-])
     /x.freeze
 
+    # Any footer by name; Pruner tells the site's by where it sits. The
+    # footer of a post, a card or a product is part of that unit, a modifier
+    # names what is not one (Weebly marks its content area "wsite-not-footer"),
+    # and "FootNote" splits into "foot-note".
+    FOOTER_NAME = /#{WORD_START}(?<!not-|no-|non-|has-|with-|without-)(?:footer|foot(?![-_]*notes?#{WORD_END}))#{WORD_END}/.freeze
+    UNIT_FOOTER = /
+      (?:post|entry|article|comment|card|product|item|story|review|event|news|blog|media|teaser|tile|book|testimonial|quote|
+      feed|panel|modal|#{WORD_START}(?:table|section))s?[-_]*foot
+    /x.freeze
+    # WordPress and WooCommerce name a post's terms in its classes: a shop's
+    # foot-care category is "product_cat-foot-care" on every product.
+    TAXONOMY_TERM = /(?<![\w-])(?:product_)?(?:cat|tag|category|term)-[\w-]+/.freeze
+
     # Fine print. WordPress puts category-* and tag-* terms on the post, and a
     # modifier ("hasDisclaimer") names the block that has one, not the note.
     DISCLAIMER = /#{WORD_START}(?<!category-|tag-|has-)(?:disclaimers?|disclosures)#{WORD_END}/.freeze
@@ -56,6 +69,15 @@ module Nokodown
       popular|trending|most-?read|most-?viewed|author-?bio|about-?the-?author|#{WORD_START}rss#{WORD_END}|
       (?<![\w-])(?:post-|entry-|article-)?tags?(?:-?(?:cloud|list|links))?(?![\w-])
     /x.freeze
+
+    # Share links of social networks, and mail links with no recipient.
+    SHARE_INTENT = %r{
+      (?:\A|//|\.)(?:facebook\.com/(?:sharer|share\.php|dialog/share)|(?:twitter|x)\.com/(?:share|intent/(?:tweet|post))|
+      linkedin\.com/(?:shareArticle|sharing|cws/share)|pinterest\.[a-z.]+/pin/create|reddit\.com/submit|digg\.com/submit|
+      vk\.com/share\.php|t\.me/share|tumblr\.com/(?:share|widgets/share)|getpocket\.com/(?:save|edit)|
+      line\.me/R/msg|service\.weibo\.com/share|connect\.ok\.ru/offer|(?:api\.whatsapp\.com/send/?|wa\.me/)\?text=)|
+      \Amailto:\?
+    }xi.freeze
 
     # Customer reviews, ratings and Q&A on a product page, by name or by the
     # class prefixes of review widget vendors. Modifiers ("has-reviews",
@@ -288,7 +310,20 @@ module Nokodown
       ¶|§|\#|🔗)[\s.:!…»›→>]*\z
     /xi.freeze
 
-    COPYRIGHT_TEXT = /\A(?:copyright\s*)?(?:©|\(c\)|&copy;)|all\srights\sreserved/i.freeze
+    # Copyright lines in the major web languages, and the licence numbers
+    # Chinese sites must print in their footer. Each takes the footer's form,
+    # since the same words run through text about copyright: "(c)" also
+    # numbers a clause, a 版权所有者 is a copyright owner, and an ICP备案 is
+    # the filing a licence number comes from.
+    COPYRIGHT_TEXT = /
+      \A[\s|·•-]*(?:copyright\s*)?(?:©|ⓒ|&copy;|\(c\)(?=.*\d{4}))|\A[\s|·•-]*copyright\s+\d{4}|
+      all\srights\sreserved|alle\srechte\svorbehalten|tous\sdroits\sréservés|todos\slos\sderechos\sreservados|
+      tutti\si\sdiritti\sriservati|todos\sos\sdireitos\sreservados|alle\srechten\svoorbehouden|
+      все\sправа\sзащищены|wszelkie\sprawa\szastrzeżone|tüm\shakları\ssaklıdır|hak\scipta\sdilindungi|
+      bản\squyền\sthuộc\svề|جميع\sالحقوق\sمحفوظة|版[权權]所有(?![者人权權])|
+      無断(?:転載|複製|転用|使用)[^。]{0,12}(?:禁|ご遠慮|お断り)|무단\s?전재[^.]{0,30}금지|
+      ICP[备證证][\s:：]*\d|公[网網]安[备備][\s:：]*\d
+    /xi.freeze
 
     NOISE_HEADING = /
       \A(?:related(?:\s\w+)?|share(?:\sthis)?(?:\s\w+)?|comments?|leave\sa\s(?:comment|reply)|

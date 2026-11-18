@@ -57,6 +57,15 @@ RSpec.describe Nokodown do
       Nokodown.to_markdown(html).should start_with("Photo by Ben Hon for Resy\n\n# The Resy Guide to the Michelin Winners")
     end
 
+    it "puts the title above content whose only H1 is a sentence or a line of tags at its end" do
+      html = "<title>Reel by Ann | Buzzer</title><body><p><a href='/u/ann'>Reel by Ann</a></p>"
+
+      Nokodown.to_markdown("#{html}<h1>#buzzer #viral #fyp #sports #daily #football #soccer #trending</h1></body>", url: "https://example.com/reels/7")
+              .should == "# Reel by Ann | Buzzer\n\n[Reel by Ann](https://example.com/u/ann)"
+      Nokodown.to_markdown("#{html}<h1>The best football and soccer moments of the day, every day</h1></body>", url: "https://example.com/reels/7")
+              .should == "# Reel by Ann | Buzzer\n\n[Reel by Ann](https://example.com/u/ann)"
+    end
+
     it "puts the page's title in place of a heading that only names the site" do
       body = "<p>#{'We caught twelve trout at the upper pond, and the water was cold and clear all day. ' * 3}</p>"
       html = "<title>Bonten Fishing Pond - Friends from afar</title><body><article>" \
@@ -410,6 +419,47 @@ RSpec.describe Nokodown do
 
     it "drops elements Webflow hides when their condition fails" do
       convert('<p>Open daily.</p><div class="w-condition-invisible"><p>Closed for the holidays.</p></div>').should == "Open daily."
+    end
+
+    it "drops link spam placed far off screen or in a strip one pixel high" do
+      html = '<p>Open daily.</p><div style="position: absolute; left: -7786px;"><a href="https://spam.example">casino bonus</a></div>' \
+             '<div style="position:fixed;top:-9000px"><a href="https://spam.example">live casino</a></div>' \
+             '<div style="position:absolute;left:-999em"><a href="https://spam.example">slots</a></div>' \
+             '<div style="overflow:hidden;height:1px;"><a href="https://spam.example">no kyc casino</a></div>' \
+             '<a href="https://spam.example" style="position:absolute;left:-9999px">cheap pills</a>'
+
+      convert(html).should == "Open daily."
+    end
+
+    it "keeps a paragraph placed off screen that the page shows nowhere else, as Sixshop writes its reviews there" do
+      review = "A neat ring for every day, though the gold engraving is a little loud on the silver."
+      html = "<h1>Ring review</h1><div style=\"position:absolute !important; top:-999999px !important; left:-999999px !important\">" \
+             "<h2>Pearl ring</h2><p>#{review}</p></div>" \
+             '<div style="position:absolute; left:-9999px"><a href="https://spam.example">casino bonus</a></div>' \
+             '<div style="position:absolute; left:-5000px"><input name="b_42" tabindex="-1" value="">Leave this empty</div>' \
+             '<p><img src="https://counter.example/watch/1" style="position:absolute; left:-9999px;" alt=""></p>'
+
+      convert(html).should == "# Ring review\n\n## Pearl ring\n\n#{review}"
+    end
+
+    it "drops off-screen text that is no paragraph of prose, or a copy of paragraphs the page shows" do
+      text = ["The harbour ferry leaves at noon and returns before dark every day from pier four.",
+              "Tickets are sold on board and cost twelve euros for adults, and children travel free."]
+      paragraphs = text.map { |line| "<p>#{line}</p>" }.join
+      html = "<h1>Ferry times</h1>#{paragraphs}" \
+             '<p>Read the <a href="/fares">fare table<span style="position:absolute;left:-9999px"> (opens in a new window)</span></a>.</p>' \
+             "<div style=\"position:absolute;left:-9999px\">#{paragraphs}</div>" \
+             '<div style="position:absolute;top:-10000px">buy cheap replica watches online best price replica rolex omega cartier store</div>' \
+             '<h2 style="position:absolute; top:-1000px;">Harbour ferry times and harbour ferry tickets</h2>' \
+             '<div style="position:fixed;left:-9000px;top:-9000px;"><noframes><progress id="zr"><noframes id="zr"></noframes></div>'
+
+      convert(html).should == "# Ferry times\n\n#{text.join("\n\n")}\n\nRead the [fare table](https://example.com/fares)."
+    end
+
+    it "keeps screen-reader text clipped to one pixel in place, which can be the only copy of a price" do
+      html = '<p>Camp kettle</p><span style="position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden">Price: 30 euro</span>'
+
+      convert(html).should == "Camp kettle\n\nPrice: 30 euro"
     end
 
     it "drops a large hidden block beside the visible title, but not an anti-flicker wrapper around the page" do

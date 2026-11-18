@@ -180,6 +180,115 @@ RSpec.describe Nokodown::Boilerplate do
     end
   end
 
+  describe "share links" do
+    it "removes links that ask a network to share the page, whatever their label" do
+      html = "#{prose('Bonsai care', 2)}<ul><li><a href=\"http://www.facebook.com/sharer.php?u=https%3A%2F%2Fex.com\">シェア</a></li>" \
+             "<li><a href=\"https://www.linkedin.com/shareArticle?mini=true\">Partager sur LinkedIn</a></li>" \
+             "<li><a href=\"mailto:?subject=Bonsai\">Envoyer</a></li></ul><p>Write to <a href=\"mailto:ana@ex.com\">Ana</a> " \
+             "or <a href=\"https://api.whatsapp.com/send?phone=34600000000\">message us</a>.</p>"
+      text = remaining(html)
+
+      %w[シェア LinkedIn Envoyer].each { |label| text.should_not include(label) }
+      text.should include("Write to Ana or message us")
+    end
+  end
+
+  describe "breadcrumb trails" do
+    it "removes a trail from the home page that no class names, in any language" do
+      trails = [
+        '<div><a href="https://shop.example/">首页</a> &gt; <a href="/dushi/">都市小说</a> &gt; 厌世假少爷</div>',
+        '<ol><li><a href="/">Úvod</a></li><li><a href="/umeni">Umění</a></li><li>Afghanistán známky</li></ol>',
+        '<span>Ti trovi in: <a href="index.php">Home</a> -&gt; <a href="ricerca.php">Ricerca</a> -&gt; Volume 0002</span>',
+        '<div><a href="/">Главная</a> / Люше (LYS)</div>'
+      ]
+      trails.each do |trail|
+        text = remaining("#{trail}#{prose('Choosing a stamp album', 2)}")
+
+        text.should start_with("Choosing a stamp album")
+      end
+    end
+
+    it "removes a trail in a font element, but not the copies the parser makes of it around the content" do
+      trail = '<a href="/">Home</a> › <a href="/lab/">Laboratory</a> › Stirrer'
+      html = "<p><font face=\"Arial\">#{trail}</p><h1>Stirrer</h1><div>#{prose('The stirrer', 1)}</div></font>"
+      text = remaining(html)
+
+      text.should_not include("Laboratory")
+      text.should include("The stirrer is explained")
+      remaining("<p><font face=\"Arial\">#{trail}</p><h1>Stirrer</h1><div>#{prose('The stirrer', 2)}</div><p>#{trail}</p></font>")
+        .should_not include("Laboratory")
+    end
+
+    it "keeps a category link followed by the post's date" do
+      remaining("<div><a href=\"/\">Home</a> | 20.07.2026 08:42</div>#{prose('Health', 2)}").should include("20.07.2026")
+    end
+
+    it "keeps a trail-shaped run of links that a sentence continues" do
+      sentences = {
+        "<p>Open <span><a href=\"/\">Home</a> › <a href=\"/account\">Account</a></span> and pick the order to send back.</p>" =>
+          "Open Home › Account and pick",
+        "<ul><li><a href=\"https://github.com/\">GitHub</a> / <a href=\"https://github.com/rails\">rails</a> is where Rails lives</li></ul>" =>
+          "GitHub / rails is where"
+      }
+      sentences.each { |sentence, text| remaining("#{prose('Returns', 2)}#{sentence}").should include(text) }
+    end
+
+    it "keeps a numbered list of links" do
+      steps = '<ol><li><a href="/">Homepage</a></li><li><a href="/settings">Settings</a></li><li><a href="/settings/close">Close account</a></li></ol>'
+
+      remaining("#{prose('Closing an account', 2)}#{steps}").should include("Close account")
+    end
+
+    it "keeps a credit linking to another site's home page" do
+      html = "<p>See <a href=\"https://museum.example/visit\">opening hours</a> and <a href=\"https://museum.example/shop\">the shop</a>.</p>" \
+             "#{prose('The Roman theatre', 2)}<p>© Photo: <a href=\"http://www.archeotech.ch/\">Archéotech S.A.</a> / SACV</p>"
+
+      remaining(html).should include("Archéotech S.A. / SACV")
+    end
+
+    it "keeps a list of other sites, each linked at its home page with a description" do
+      html = "#{prose('Salary research', 2)}<ul><li><a href=\"https://www.salary.com/\">Salary.com</a> – salaries by industry and zip code</li>" \
+             "<li><a href=\"https://www.homefair.com/\">HomeFair.com</a>: a relocation guide with a salary calculator</li></ul>"
+
+      text = remaining(html)
+      text.should include("salaries by industry")
+      text.should include("relocation guide")
+    end
+
+    it "judges a list of thousands of home links in time linear in its links" do
+      links = Array.new(10_000) { |index| "<li><a href=\"/\">Partner #{index}</a></li>" }.join
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining("#{prose('Our partners', 2)}<ul>#{links}</ul>")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 2
+      text.should include("Partner 9999")
+    end
+  end
+
+  describe "site headers" do
+    it "removes a header above the page's title however much it holds" do
+      notices = Array.new(12) { |index| "<li>Service centre #{index + 1}: 600 Friendship Road, open 8:30 to 18:30 by appointment</li>" }
+      html = "<div class=\"header\"><ul>#{notices.join}</ul></div><h1>Repairing a chronograph</h1>#{prose('Servicing a watch', 1)}"
+
+      remaining(html).should_not include("Service centre")
+    end
+
+    it "keeps a header that holds the page's prose above a banner's title" do
+      html = "<div class=\"main\"><header><h2>Neurology</h2>#{prose('Nerve pain', 3)}</header></div>" \
+             "<div class=\"banner\"><h1>New Medicine</h1></div>"
+
+      remaining(html).should include("Nerve pain")
+    end
+
+    it "keeps a header that holds the title or follows it" do
+      notices = Array.new(12) { |index| "<li>Branch #{index + 1}: 600 Friendship Road, open 8:30 to 18:30 by appointment</li>" }.join
+      ["<div class=\"header\"><h1>Branches</h1><ul>#{notices}</ul></div>",
+       "<h1>Branches</h1><div class=\"header\"><ul>#{notices}</ul></div>"].each do |html|
+        remaining(html).should include("Branch 12")
+      end
+    end
+  end
+
   describe "member panels" do
     def post(panel)
       "<div class=\"message\">#{panel}<div class=\"message-userContent\">#{prose('Bleeding the radiators', 2)}</div></div>"
@@ -330,6 +439,91 @@ RSpec.describe Nokodown::Boilerplate do
       html = "<h1>Heat pumps</h1>#{cards('site-menu-item', 8)}"
 
       remaining(html).should == "Heat pumps"
+    end
+  end
+
+  describe "taxonomy lines" do
+    def article(url, meta)
+      html = "<html><body><div class=\"entry\"><div><a href=\"/category/news/\">News</a></div><h1>Harbour</h1>" \
+             "<p>By <a href=\"/author/ann/\">Ann</a> on 3 May</p>#{prose('The harbour', 3)}#{meta}</div></body></html>"
+      Nokodown.to_markdown(html, url: url, title: false)
+    end
+
+    it "removes lines of links to the site's tag and category archives" do
+      meta = '<p>Tags: <a href="/tag/boats/">boats</a>, <a href="https://www.example.com/tag/tides/">tides</a></p>' \
+             '<p><span>Labels: <a href="/search/label/Sea" rel="tag">Sea</a></span></p>'
+      markdown = article("https://example.com/2024/05/harbour/", meta)
+
+      markdown.should start_with("# Harbour\n\nBy Ann on 3 May")
+      %w[News boats tides Sea].each { |word| markdown.should_not include(word) }
+    end
+
+    it "judges a tag line deep in nested blocks in time linear in its depth" do
+      tags = Array.new(50) { |index| "<a href=\"/tag/harbour-#{index}/\">harbour #{index}</a>" }.join(", ")
+      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      text = remaining("#{prose('Ferries', 2)}#{'<div>' * 200}<p>Tags: #{tags}</p>#{'</div>' * 200}")
+
+      (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
+      text.should_not include("harbour 1")
+    end
+
+    it "removes a tag line in a font element, but not the parser's copy of it around a paragraph that links a tag" do
+      html = '<h1>Magnetic stirrer</h1><div><font face="Arial">Tags: <a href="/tag/lab/">lab</a></div>' \
+             '<p>Our stirrer spins a bar magnet at up to 1500 rpm; see the <a href="/tag/glassware/">glassware</a> we pair it with.</p>' \
+             "#{prose('The stirrer', 2)}</font>"
+      text = remaining(html)
+
+      text.should_not include("Tags")
+      text.should include("Our stirrer spins")
+    end
+
+    it "keeps a line with other text, other links or another site's tags, and the lines of an archive itself" do
+      meta = '<p>Filed in <a href="/category/news/">News</a> on 3 May by Ann</p>' \
+             '<p>Tags: <a href="/tag/boats/">boats</a>, <a href="/boats-guide/">guide</a></p>' \
+             '<p>See <a href="https://other.example/tag/tides/">tides</a></p>'
+      markdown = article("https://example.com/2024/05/harbour/", meta)
+      markdown.should include("Filed in News on 3 May by Ann")
+      markdown.should include("boats")
+      markdown.should include("tides")
+
+      article("https://example.com/category/news/", "").should include("News")
+    end
+
+    it "keeps the list of every tag on the index of the tags" do
+      tags = %w[harbour-walks old-boats spring-tides night-ferries fishing-nets sailing-clubs sea-shanties tall-ships]
+      html = "<html><body><h1>Tags</h1><div>#{tags.map { |tag| "<a href=\"/tag/#{tag}/\">#{tag.tr('-', ' ')}</a>" }.join(', ')}</div></body></html>"
+
+      %w[/tags?view=popular /tags.html /category].each do |path|
+        Nokodown.to_markdown(html, url: "https://example.com#{path}", title: false).should include("[night ferries]")
+      end
+      Nokodown.to_markdown(html, url: "https://example.com/2024/05/harbour/", title: false).should_not include("ferries")
+    end
+
+    it "keeps the category line of every card in a listing" do
+      cards = %w[Bouldern Eisklettern Klettersteig].map do |name|
+        "<div class='card'><h3><a href='/angebote/#{name.downcase}/'>#{name} course, two days</a></h3>" \
+          "<p class='post-meta'><a href='/category/#{name.downcase}/' rel='tag'>#{name}</a></p><p>From 150 EUR</p></div>"
+      end
+
+      remaining("<h1>Courses</h1><div class='grid'>#{cards.join}</div>").should include("Eisklettern course, two daysEisklettern")
+    end
+
+    it "keeps a category line after the title, as a product's or an event's category is one of its facts" do
+      meta = '<p>SKU: 212-3 <span class="posted_in">Category: <a href="/product-category/climbing/" rel="tag">Climbing</a></span> ' \
+             'Kategorie <span><a href="/produkt/x/" rel="tag">Mosaik</a></span></p>' \
+             '<p><span>Brand: <a href="/marca/dook/" rel="tag">Dook</a></span></p>'
+      markdown = article("https://example.com/2024/05/harbour/", meta)
+
+      markdown.should include("SKU: 212-3 Category: Climbing Kategorie Mosaik")
+      markdown.should include("Brand: Dook")
+    end
+
+    it "keeps a product's facts linked to the filters of its category" do
+      facts = { "Roof" => "gable", "Garage" => "double", "Floors" => "two" }.map do |name, value|
+        "<div class='feature'><span>#{name}</span> <a href='/category/houses/#{value}/'>#{value}</a></div>"
+      end
+
+      remaining("<h1>House plan 12</h1>#{prose('The plan', 2)}<div class='features'>#{facts.join}</div>").should include("Roof gable")
     end
   end
 end

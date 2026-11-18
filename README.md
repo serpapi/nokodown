@@ -64,12 +64,22 @@ with `main_content: false`, `:none` for a document without a body.
 
 - Site navigation, headers, footers, sidebars, breadcrumbs, pagination and
   tables of contents, found through HTML semantics (`nav`, page-level `header`
-  and `footer`, ARIA roles, schema.org types) and class/id names.
-- Cookie banners, ads, newsletter and sign-in prompts, share bars, modals,
-  chat widgets, "related", "recommended" and "most popular" boxes, legal
-  disclaimers and disclosures (but not a note continuing the paragraph before
-  it, or the footnote to a mark just above), and, next to an article, its
-  comment thread.
+  and `footer`, ARIA roles, schema.org types) and class/id names. Structure
+  finds the rest: a site header of menus or notices above the page's title
+  however much it holds, a footer by any name that ends a page (not one
+  inside `main` or an article, nor the footer of a section, a card or a
+  quote), a breadcrumb trail by its shape in any language (a link to the
+  home page, then links down the site with separators), a line of links to
+  the site's tag or label archives ("Tags: a, b") with at most a short label
+  ending in a colon and a category kicker above the title, unless the page
+  repeats the line (a card's tags) or is such an archive or the index of
+  all tags or categories, and copyright and licence lines in the major web
+  languages.
+- Cookie banners, ads, newsletter and sign-in prompts, share bars and share
+  links by where they point, modals, chat widgets, "related", "recommended"
+  and "most popular" boxes, legal disclaimers and disclosures (but not a note
+  continuing the paragraph before it, or the footnote to a mark just above),
+  and, next to an article, its comment thread.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
@@ -78,10 +88,14 @@ with `main_content: false`, `:none` for a document without a body.
   summaries and rating histograms. An inline rating badge ("212 reviews" next
   to the price), testimonials and editorial reviews stay.
 - Invisible elements (`hidden`, `aria-hidden`, inline `display: none`,
-  screen-reader-only and other hiding classes), keeping collapsed accordions,
-  tab panels and FAQ answers. Content that React streams into hidden
-  containers at the end of the page is put back where the page shows it,
-  unless it is mostly links, as carousels of recommended products are.
+  screen-reader-only and other hiding classes, and elements placed far off
+  screen or in a one-pixel strip, where hacked sites hide link spam), keeping
+  collapsed accordions, tab panels and FAQ answers, and paragraphs placed off
+  screen with no link or field that the page shows nowhere else: shop
+  builders write reviews and posts there for search engines and show them by
+  script. Content that React streams into hidden containers at the end of the
+  page is put back where the page shows it, unless it is mostly links, as
+  carousels of recommended products are.
 - Sections rendered twice, such as a desktop and a mobile copy.
 - Repeated text and the labels of controls, in the major web languages:
   copies of the title (an H2 or bold line under the H1, a gallery label on
@@ -104,7 +118,9 @@ with `main_content: false`, `:none` for a document without a body.
   numbers, and repeated responsive copies of the same image.
 - Headings left at the end of the content with nothing under them, once
   what they headed is removed, unless one states a figure (a price, a
-  score, a year).
+  score, a year), or reads as a sentence on a page with almost no text
+  outside its headings. An H1, a call to subscribe or follow, a comment
+  heading ("One thought on “…”") or a line of #tags is no such sentence.
 - Markdown that costs tokens without meaning: horizontal rules, blank lines
   inside lists, headings inside list items, emphasis around a whole
   paragraph, cell, heading or link (a short bold label stays), separators

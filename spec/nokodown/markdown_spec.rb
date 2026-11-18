@@ -760,12 +760,12 @@ RSpec.describe "Markdown conversion" do
 
       it "keeps the one picture of a photo's own page that links to its full size" do
         photo = '<p><a href="/uploads/wedding-28.jpg"><img src="/uploads/wedding-28-300x200.jpg" alt=""></a></p>'
-        footer = "<p>September 11, 2024</p><p>Copyright 2021 © Example Design</p>" \
+        footer = "<p>September 11, 2024</p><p>Wedding and portrait photography in Sometown</p>" \
                  "<ul><li>Anna Example</li><li>Long Lane 3</li><li>97996 Sometown</li><li>Tel.: 0152 5365126</li></ul>" \
                  '<p><a href="/imprint/">Imprint</a> <a href="/privacy/">Privacy</a></p>'
         extract("<main><h1>Vineyard wedding 28</h1>#{photo}#{footer}</main>").should ==
           "# Vineyard wedding 28\n\n![](https://example.com/uploads/wedding-28-300x200.jpg)\n\nSeptember 11, 2024\n\n" \
-          "Copyright 2021 © Example Design\n\n- Anna Example\n- Long Lane 3\n- 97996 Sometown\n- Tel.: 0152 5365126\n\n" \
+          "Wedding and portrait photography in Sometown\n\n- Anna Example\n- Long Lane 3\n- 97996 Sometown\n- Tel.: 0152 5365126\n\n" \
           "[Imprint](https://example.com/imprint/) [Privacy](https://example.com/privacy/)"
         text = "<p>We dressed the long tables in linen and vine leaves, and lit the courtyard with lanterns as the evening drew on.</p>"
         extract("<main><h1>Vineyard wedding</h1>#{text}#{photo}</main>").should_not include(".jpg")
@@ -1286,6 +1286,32 @@ RSpec.describe "Markdown conversion" do
       html = "<p>#SKU: HW73826</p><h1>Coffee set x12</h1><h3 class='price'>$ 24.284,10</h3><div><span>Cantidad</span></div>"
       convert(html).should == "#SKU: HW73826\n\n# Coffee set x12\n\n### $ 24.284,10"
       convert("<h2>Intro</h2><p>Text</p><h2>Top 10 picks</h2>").should == "## Intro\n\nText"
+    end
+
+    it "keeps headings of a sentence that end a page with no other text, as builders set whole pages in headings" do
+      html = "<p>SP</p><h1>Sébastien Poirier</h1><h4>CNOSF Comité national olympique et sportif français</h4>" \
+             "<h4>Vice-président du CNOSF en charge de la transformation économique</h4>"
+      convert(html).should == "SP\n\n# Sébastien Poirier\n\n#### CNOSF Comité national olympique et sportif français\n\n" \
+                              "#### Vice-président du CNOSF en charge de la transformation économique"
+      text = "<p>#{'The harbour is explained here in a sentence long enough to read like text. ' * 2}</p>"
+      convert("<h2>Harbour</h2>#{text}<h2>Other stories you might enjoy from our harbour desk this week</h2>").should_not include("Other stories")
+    end
+
+    it "does not keep furniture, a linked title, a line of tags or an H1 as a heading of a sentence" do
+      lead = "<h1>Spring concert</h1><p>Photos below.</p>"
+      ["Subscribe to our newsletter for the latest news and events",
+       "Follow us on Facebook, Instagram and Twitter for more updates",
+       "Commented yet? Go on..you know you want to :)",
+       "One thought on “Spring concert at the old harbour hall”",
+       "Inga svar till “20 % i rabatt vid köp över 1400 kr”",
+       "#concert #harbour #spring #music #live #choir #brass #evening",
+       "More from the harbour hall and the town choir this spring",
+       '<a href="/news/41">Autumn concert at the old harbour hall with the town choir</a>'].each do |heading|
+        convert("#{lead}<h3>#{heading}</h3>").should == "# Spring concert\n\nPhotos below."
+      end
+      convert("<p>Photos below.</p><h1>Spring concert at the old harbour hall with the town choir</h1>").should == "Photos below."
+      convert("<p>写真</p><h3>港のホールで開かれた春の演奏会には町の合唱団と吹奏楽団が出演しました</h3>")
+        .should == "写真\n\n### 港のホールで開かれた春の演奏会には町の合唱団と吹奏楽団が出演しました"
     end
 
     it "keeps the last card's linked title when the control after it is removed" do
