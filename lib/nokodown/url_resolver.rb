@@ -64,6 +64,18 @@ module Nokodown
     # The lookbehind keeps a long run of slashes from backtracking on Ruby 2.7.
     TRAILING_SLASHES = %r{(?<!/)/+\z}.freeze
 
+    # Escapes what URI.parse rejects, raw non-ASCII letters among them.
+    def self.encode(string)
+      string.gsub(UNSAFE) { |char| char.bytes.map { |byte| format("%%%02X", byte) }.join }
+    end
+
+    def self.web_address(url)
+      uri = URI.parse(encode(url.to_s.strip))
+      uri if uri.is_a?(URI::HTTP) && uri.host
+    rescue URI::Error, ArgumentError
+      nil
+    end
+
     def initialize(url, base_href = nil)
       @url = parse(url)
       @base = @url
@@ -127,7 +139,7 @@ module Nokodown
     def parse(url)
       return if url.nil? || url.to_s.strip.empty?
 
-      URI.parse(encode(url.to_s.strip))
+      URI.parse(UrlResolver.encode(url.to_s.strip))
     rescue URI::Error, ArgumentError
       nil
     end
@@ -135,13 +147,9 @@ module Nokodown
     def join(base, href)
       return parse(href) unless base
 
-      base.merge(encode(href))
+      base.merge(UrlResolver.encode(href))
     rescue URI::Error, ArgumentError
       nil
-    end
-
-    def encode(string)
-      string.gsub(UNSAFE) { |char| char.bytes.map { |byte| format("%%%02X", byte) }.join }
     end
 
     def clean_link(uri, redirects = 0)
