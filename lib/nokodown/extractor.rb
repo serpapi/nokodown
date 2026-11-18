@@ -30,7 +30,7 @@ module Nokodown
 
       product_page = @main_content && ProductReviews.product_page?(doc, metadata[:page_type])
       Preprocessor.new(body).call
-      nodes, mode = select_content(body, metadata[:page_type], product_page)
+      nodes, mode = select_content(body, metadata[:page_type], product_page, urls)
       blocks = render(nodes, mode, urls)
       blocks = with_title(blocks, metadata) if @title
       blocks = Markdown::Orphans.call(Markdown::Repeats.call(blocks))
@@ -53,18 +53,21 @@ module Nokodown
       Markdown::RedundantImages.new(nodes, mode, urls).call
     end
 
-    def select_content(body, page_type, product_page)
+    def select_content(body, page_type, product_page, urls)
       return [[body], :full] unless @main_content
 
       attribution = PostAttribution.new(body).call if ContentLocator::DISCUSSIONS.include?(page_type)
       Boilerplate.new(body, url: @url).call
       ProductReviews.new(body).call if product_page
       selection = ContentLocator.new(body, page_type: page_type).call
+      # Writing the attributions numbers the elements anew.
       attribution&.write(selection.nodes)
-      return [cleaned_article(selection.nodes, page_type), :article] if selection.mode == :article
+      teasers = Teasers.new(body, @url, urls, page_type).call
+      nodes = selection.nodes
+      return [Teasers.strip(cleaned_article(nodes, page_type), teasers), :article] if selection.mode == :article
 
-      Pruner.new(selection.nodes, :page).call
-      [selection.nodes, :page]
+      Pruner.new(nodes, :page).call
+      [Teasers.strip(nodes, teasers), :page]
     end
 
     # Like Readability, fall back to lighter cleaning when conditional cleaning

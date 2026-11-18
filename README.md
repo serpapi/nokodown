@@ -80,6 +80,19 @@ with `main_content: false`, `:none` for a document without a body.
   and "most popular" boxes, legal disclaimers and disclosures (but not a note
   continuing the paragraph before it, or the footnote to a mark just above),
   and, next to an article, its comment thread.
+- Blocks of teasers for other pages of the same site whatever their class
+  names: a run of cards, each a title link with a thumbnail, a date or an
+  excerpt, under a title of its own in any language ("Flere Nyheder",
+  "Похожие товары"). They go when they list pages like this one (the same
+  path but for its last segment, with the same query keys and ids for the
+  values that differ) after a line of the page's own text, or, on a page that
+  declares itself an article, a product or a thread, when the page's own
+  text, or its own list, outweighs them. They stay on home pages, in hubs of
+  sections built alike, in forum posts (attachments), in a section that the
+  page's own table of contents lists, when they link to pages below this
+  one, when they hold the pager to this page's other pages (a listing under
+  its column's title), and when the content would be left with fewer than 20
+  words outside headings.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
   the panel holds it. A quote that repeats a post already in the output is cut
@@ -195,7 +208,8 @@ region, or most of the page's text, is never removed because of its class name.
    boilerplate removal, become one line above the post's body
    (`**JGD** · April 2, 2024`) in place of the header, the panel around the
    name and repeated copies of the date. A post "by" Advertisement is an ad
-   slot and goes.
+   slot and goes. **Teasers** then finds the blocks of teasers for other
+   pages, which are dropped from the content once it is cleaned.
 6. **Pruner**: in articles, Readability's conditional cleaning plus removal of
    bylines, datelines and inline boxes of links to other stories; on other
    pages, removal of leftover link clusters, unless they hold most of the text
