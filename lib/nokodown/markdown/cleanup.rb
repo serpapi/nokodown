@@ -2,11 +2,15 @@
 
 module Nokodown
   module Markdown
-    # Block-level tidying after rendering: repeated blocks, stray rules,
-    # punctuation-only lines, section headings left without a section, and
-    # redundant or repeated images.
+    # Block-level tidying after rendering: repeated blocks, punctuation-only
+    # lines, section headings left without a section, and redundant or
+    # repeated images.
     module Cleanup
       DEDUPE_WINDOW = 4
+      # A page with fewer words than this is its images: a gallery, a
+      # photo post.
+      IMAGE_PAGE_WORDS = 20
+      LINK = /!?\[#{Text::LINK_TEXT}\]\(#{Text::DESTINATION}\)/.freeze
       IMAGE_ONLY = /\A!\[([^\]]*)\]\([^)]*\)\z/.freeze
       LINKED_HEADING = /\A#+ \[.*\]\(.*\)\z/.freeze
       TITLE_LIST_MIN = 3
@@ -22,13 +26,31 @@ module Nokodown
 
       # images: the Renderer's rendered_images.
       def call(blocks, images = {})
-        blocks = blocks.reject { |block| noise?(block) }
+        blocks = CodeBlock.without_labels(blocks.reject { |block| noise?(block) })
+        blocks = Lists.call(blocks)
         blocks = dedupe(blocks)
         blocks = drop_repeated_runs(blocks)
         blocks = shorten_repeated_quotes(blocks)
-        blocks = trim_rules(blocks)
-        blocks = drop_empty_sections(blocks)
-        images.empty? ? blocks : ImageCleanup.new(images).call(blocks)
+        blocks = drop_empty_sections(RepeatedLinks.new(blocks).call)
+        images.empty? ? blocks : ImageCleanup.new(images, unnamed: !image_page?(blocks, images)).call(blocks)
+      end
+
+      def image_page?(blocks, images)
+        few_words?(blocks.map(&:text)) || photo_page?(blocks, images)
+      end
+
+      # A photo's own page links its one picture to the full-size file. Its
+      # title, and the address list and links a site leaves beside it, say
+      # nothing about the photo; only the words of paragraphs count.
+      def photo_page?(blocks, images)
+        return false unless images.size == 1 && images.each_value.first.full_size
+
+        few_words?(blocks.filter_map { |block| block.text.gsub(LINK, " ") if block.kind == :paragraph })
+      end
+
+      def few_words?(texts)
+        words = 0
+        texts.none? { |text| (words += Text.plain(text).scan(/[\p{L}\p{N}]+/).size) >= IMAGE_PAGE_WORDS }
       end
 
       def noise?(block)
@@ -157,16 +179,6 @@ module Nokodown
         alt && alt.length >= 10 ? "image:#{alt}" : block.text
       end
 
-      def trim_rules(blocks)
-        blocks = blocks.each_with_object([]) do |block, kept|
-          next if block.kind == :rule && (kept.empty? || kept.last.kind == :rule || kept.last.kind == :heading)
-
-          kept << block
-        end
-        blocks.pop while blocks.last&.kind == :rule
-        blocks
-      end
-
       # A heading followed by nothing, or by a heading at the same or a higher
       # level, lost its section during extraction. Title lists are content in
       # their own right, and a page that is only its headline keeps it.
@@ -183,7 +195,7 @@ module Nokodown
         block = blocks[index]
         return false unless block.kind == :heading
 
-        following = blocks[(index + 1)..].find { |b| b.kind != :rule }
+        following = blocks[index + 1]
         return true if following.nil?
         return false unless following.kind == :heading && following.level <= block.level
 
@@ -194,7 +206,7 @@ module Nokodown
       # whose details were removed (products, related guides), not sections.
       # A "Trending" or "Related" heading among them is still a section label.
       def title_list_indexes(blocks)
-        runs = blocks.each_index.reject { |index| blocks[index].kind == :rule }.slice_when do |a, b|
+        runs = blocks.each_index.slice_when do |a, b|
           blocks[a].kind != :heading || blocks[b].kind != :heading || blocks[a].level != blocks[b].level
         end
         indexes = runs.select { |run| title_list?(blocks.values_at(*run)) }.flatten

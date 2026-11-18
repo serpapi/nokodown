@@ -7,6 +7,7 @@ module Nokodown
   module ProtectedEmails
     CLOUDFLARE_LINK = %r{/cdn-cgi/l/email-protection(?:#(\h+))?\z}.freeze
     EMAIL = /\A[^\s@]+@[^\s@]+\.[^\s@]+\z/.freeze
+    PLACEHOLDER = "[email protected]"
 
     module_function
 
@@ -26,7 +27,10 @@ module Nokodown
     def relink(link)
       hex = link["href"].to_s.strip[CLOUDFLARE_LINK, 1]
       email = hex ? decode(hex) : Dom.text(link)
-      link["href"] = "mailto:#{email}" if email&.match?(EMAIL)
+      return unless email&.match?(EMAIL)
+
+      link["href"] = "mailto:#{email}"
+      link.content = email if Dom.text(link) == PLACEHOLDER
     end
 
     # The first byte is the key the others are XORed with.

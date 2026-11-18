@@ -83,15 +83,37 @@ with `main_content: false`, `:none` for a document without a body.
   containers at the end of the page is put back where the page shows it,
   unless it is mostly links, as carousels of recommended products are.
 - Sections rendered twice, such as a desktop and a mobile copy.
-- Tracking pixels, spacers, icons, placeholders, README badges, click-tracking
-  URL parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors,
-  "Read more" links, code line numbers, and repeated responsive copies of the
-  same image.
-- In the main content, images marked decorative (`role="presentation"` or
-  `role="none"`, and outside an `:article` also `alt=""`) unless they sit in a
-  figure, an image link or a text-free paragraph or table cell, or declare a
-  width or height of 300 pixels or more; and card thumbnails while the
-  Markdown still has a text link to the same page. "Read more" or
+- Tracking pixels, spacers, icons, placeholders and loading spinners
+  (`no-image.png`, `img_load.gif`), README badges, click-tracking URL
+  parameters (`utm_*`, `gclid`, `fbclid`, ...), permalink anchors, "Read more"
+  links, code line numbers, and repeated responsive copies of the same image.
+- Markdown that costs tokens without meaning: horizontal rules, blank lines
+  inside lists, headings inside list items, emphasis around a whole
+  paragraph, cell, heading or link (a short bold label stays), separators
+  between links and at line ends, lines of only punctuation, icon-font
+  glyphs, code-language labels and copy buttons, and escapes that cannot
+  change the rendering. A card's repeated links to its own page keep their
+  text without the URL (its title keeps the link), and a button such as
+  "Read more", a text the page uses once for each of several pages, goes when
+  it ends its line; texts that take turns from card to card ("Sold",
+  "Available") are values and stay.
+  Lines of one paragraph that each open with a link are a list written
+  without its markup, and every item keeps its link, even where several
+  link to the same file.
+- In the main content, images whose alt text does not say what they show, at
+  any size and in any wrapper (a figure keeps its caption): no alt text, a
+  file or camera name ("IMG_6175.JPG"), a hash, or a word for "image" or
+  "loading" ("photo", "foto", "画像"); icons, logos and avatars, told by their
+  file name ("QDLogoBlue.gif"), folder (`/icons/`), class or alt text. An image
+  alone in a text-free cell of a data table, such as a tick in a comparison
+  table, stays, and so do all images of a page with fewer than 20 words
+  besides them. So does the one picture of a photo's own page, linked to its
+  full-size file, when the paragraphs hold fewer than 20 words besides
+  their links. An image with alt text that is marked decorative
+  (`role="presentation"` or `role="none"`) goes unless it sits in a figure, an
+  image link or a text-free paragraph or table cell, or declares a width or
+  height of 300 pixels or more; and card thumbnails go while the Markdown
+  still has a text link to the same page. "Read more" or
   "3 comments" never names the page, and a label without letters ("$40") or
   with only a date ("Oct 1, 2026") names it only for an image without alt
   text. Any other text does, so in `:page` mode a thumbnail beside a
@@ -149,10 +171,22 @@ region, or most of the page's text, is never removed because of its class name.
 7. **Markdown**: headings, emphasis, links, images, nested and ordered lists,
    task lists, block quotes, fenced code with the language from the
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data
-   tables while layout tables are unwrapped, definition lists, details, TeX
-   from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
-   other scripts as 2^(n-1) and a_n. Text is escaped only where it would
-   otherwise change meaning.
+   tables while layout tables are unwrapped, and a list of "name: value" lines
+   for a two-column table without column names, definition lists, details,
+   TeX from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
+   other scripts as 2^(n-1) and a_n. A `<pre>` whose lines are set with `<br>`
+   or `<p>` and read as sentences, as site builders write product
+   descriptions, is text, not code. A label and its value, or a number and
+   its unit, set in sibling elements share a line ("Type: Condo"), and words,
+   numbers and dates that adjacent elements run together are spaced
+   ("20.07 2026"). Text is escaped only where it would otherwise change
+   meaning.
+   A list whose items hold whole sections, as tab panels do (two headings
+   of different names, each over text of its own), is written as those
+   sections, and its items without a heading as a list. An ordered one
+   keeps its numbers on the heading that opens each item, after a product
+   photo ("## 4. Acme Drill"), unless every heading has a rank of its own,
+   and stays a numbered list if an item opens with anything else.
 
 ## Quality
 

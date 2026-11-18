@@ -11,19 +11,29 @@ module Nokodown
     # paragraphs; block elements are rendered by tag.
     class Renderer
       MAX_DEPTH = 400
-      SEPARATOR_LINE = /\A\s*([-=_*~])\1{2,}\s*\z/.freeze
       GLYPHS = "•·▪◦‣►▶▸➤→■●○"
       # A run of glyphs (●●●○○) is a rating, not a bullet.
       BULLET_GLYPH = /\A(?:[#{GLYPHS}](?![#{GLYPHS}])|[-–—](?=\s))\s*/.freeze
       # Any symbols before a space can be an item's marker (+ and - in pros
       # and cons, ✓ and ✗), not only the glyphs that are stripped.
       LEADING_SYMBOLS = /\A[^\p{L}\p{N}\s]+(?=\s)/.freeze
+      SIGN_LENGTH = 3
+      # Heading-anchor markup puts a permalink before or after the text.
+      # A sign before a number is the heading's own: "§ 1 Geltungsbereich".
+      PERMALINK = /\A[#¶§🔗]\s+(?!\d)|\s+[#¶§🔗]\z/.freeze
+      # Characters of a paragraph that a section holds and a card does not.
+      SECTION_TEXT = 80
+      TYPED_RANK = /\A\d+[.)]\s/.freeze
 
-      def initialize(urls, images: true, links: true, redundant_images: {})
-        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images)
+      def initialize(urls, images: true, links: true, redundant_images: {}, main_content: false)
+        @inline = Inline.new(urls, images: images, links: links, redundant_images: redundant_images,
+                                   main_content: main_content)
         @links = links
         @depth = 0
         @contains_block = {}
+        @in_cell = false
+        @keep_lists = false
+        @kept_lists = {}
       end
 
       def render(nodes)
@@ -31,30 +41,48 @@ module Nokodown
       end
 
       def children_blocks(node)
-        blocks = []
+        groups = []
         run = []
         node.children.each do |child|
           if block_level?(child)
-            blocks.concat(paragraphs(run))
+            groups << paragraphs(run)
             run = []
-            blocks.concat(block(child))
+            groups << block(child)
           else
             run << child
           end
         end
-        blocks.concat(paragraphs(run))
+        groups << paragraphs(run)
+        Labels.siblings(groups.reject(&:empty?))
       end
 
       def paragraphs(nodes)
         nodes.empty? ? [] : text_paragraphs(@inline.render(nodes))
       end
 
+      # A data table's cell holds values, where a line of only a sign ("+",
+      # "×", "—") is one; a longer one ("_____") still separates.
+      def cell_blocks(cell)
+        outer = @in_cell
+        @in_cell = true
+        @inline.in_cell(cell) { children_blocks(cell) }
+      ensure
+        @in_cell = outer
+      end
+
       # Two or more <br> in a row separate paragraphs, as Readability treats them.
       def text_paragraphs(text)
         text.split(/[ \t]*\n[ \t]*\n\s*/).filter_map do |chunk|
-          chunk = Text.tidy(chunk).lines.reject { |line| line.match?(SEPARATOR_LINE) }.join.strip
-          Block.new(:paragraph, Text.escape_line_starts(chunk)) unless chunk.empty?
+          lines = Text.tidy(chunk).split("\n").filter_map { |line| Separators.line(line) || (line if sign?(line)) }
+          chunk = Labels.lines(lines.join("\n").strip)
+          next if chunk.empty?
+
+          Block.new(:paragraph, Text.escape_line_starts(Text.unescape_lone(Emphasis.paragraph(chunk))))
         end
+      end
+
+      def sign?(line)
+        @in_cell && line.length <= SIGN_LENGTH
       end
 
       def inline(nodes)
@@ -101,11 +129,11 @@ module Nokodown
         when "ul", "ol", "menu", "dir" then list(node)
         when "li" then format_list([children_blocks(node)].reject(&:empty?), nil)
         when "blockquote" then quote(node)
-        when "pre" then CodeBlock.render(node, CodeBlock.preformatted(node))
+        when "pre" then CodeBlock.prose?(node) ? children_blocks(node) : CodeBlock.render(node, CodeBlock.preformatted(node))
         when "code" then CodeBlock.render(node, node.content)
         when "table" then Table.new(self, node).blocks
         when "dl" then definition_list(node)
-        when "hr" then [Block.new(:rule, "---")]
+        when "hr" then []
         when "iframe" then embed(node)
         when "summary" then summary(node)
         when "a" then linked_blocks(node)
@@ -115,7 +143,8 @@ module Nokodown
 
       # Text that long is a paragraph some site wrapped in a heading tag.
       def heading(node)
-        text = Text.single_line(@inline.render(node.children, heading: true))
+        text = Emphasis.unwrap(Text.single_line(@inline.render(node.children, heading: true)))
+        text = Text.unescape_lone(text.gsub(PERMALINK, ""))
         return [] if text.empty?
         return [Block.new(:paragraph, text)] if text.length > 300
 
@@ -131,16 +160,136 @@ module Nokodown
         blocks.each { |block| block.links_home = true if block.kind == :heading }
       end
 
+      # A list that stays a list writes the headings of its items as lines,
+      # so the sections of a list nested in an item would run together. Its
+      # items are rendered again, and each nested list stays a list.
       def list(node)
+        start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
+        return kept_list(node, start) if @keep_lists
+
+        items = list_items(node)
+        return sections(unlisted(items, start)) if sections_list?(items, start)
+        return format_list(items, start) unless items.any? { |blocks| sections?(blocks) }
+
+        keeping_lists { kept_list(node, start) }
+      end
+
+      # Each list around it that stays a list renders it again, so nested
+      # lists would be rendered once for every level above them.
+      def kept_list(node, start)
+        key = Dom.key(node)
+        return format_list(list_items(node), start) unless key
+
+        (@kept_lists[[key, @in_cell]] ||= format_list(list_items(node), start)).map(&:dup)
+      end
+
+      def list_items(node)
         items = []
         list_children(node).each do |child|
           blocks = list_item(child)
           owner = list_owner(items, wrapped: child.name == "li") if sublist?(child, blocks)
           owner ? owner.concat(blocks) : items << blocks
         end
-        items.reject!(&:empty?)
-        start = node.name == "ol" ? Integer(node["start"].to_s, exception: false) || 1 : nil
-        format_list(items, start)
+        items.reject(&:empty?)
+      end
+
+      def keeping_lists
+        @keep_lists = true
+        yield
+      ensure
+        @keep_lists = false
+      end
+
+      # Tab panels and accordions set whole sections in list items: two
+      # headings of different names, each over text of its own. Their
+      # headings stay headings, outside a list. A card repeats its one
+      # title, the date under a card's excerpt heads at most an icon, and
+      # a contact list heads a phone number.
+      def sections?(blocks)
+        names = blocks.each_cons(2).filter_map { |block, following| block.text.sub(/\A#+ /, "") if heads_text?(block, following) }
+        return false if names.uniq.size < 2
+
+        blocks.drop_while { |block| block.kind != :heading }.any? { |block| section_text?(block) }
+      end
+
+      def heads_text?(block, following)
+        block.kind == :heading && following.kind != :heading && following.text.gsub(ImageCleanup::IMAGE, "").match?(/[\p{L}\p{N}]/)
+      end
+
+      def section_text?(block)
+        %i[table list].include?(block.kind) || (block.kind == :paragraph && block.text.length >= SECTION_TEXT)
+      end
+
+      # An ordered list ranks its items, so each number goes on the heading
+      # that opens its item ("## 4. Acme Drill"). A heading further down is
+      # a label inside the item ("Cost / License"), not its name, so an item
+      # that opens with anything else keeps the list.
+      def sections_list?(items, start)
+        return false unless items.any? { |blocks| sections?(blocks) }
+
+        start.nil? || items.all? { |blocks| opening(blocks) }
+      end
+
+      # A product photo may go before the heading that names its item. Past
+      # a photo, a heading names the item only when it outranks the item's
+      # other headings: an app card's logo goes before labels of one level.
+      def opening(blocks)
+        heading = blocks.find { |block| !picture?(block) }
+        heading if heading&.kind == :heading && (heading.equal?(blocks.first) || outranks?(heading, blocks))
+      end
+
+      def outranks?(heading, blocks)
+        blocks.none? { |block| block.kind == :heading && !block.equal?(heading) && block.level <= heading.level }
+      end
+
+      # A rating ("★★★★☆") or a price ("$$$") has no letter either, and
+      # outside the list a line without one would be dropped.
+      def picture?(block)
+        text = block.text
+        block.kind == :paragraph && text.match?(ImageCleanup::IMAGE) && !text.gsub(ImageCleanup::IMAGE, "").match?(/[\p{L}\p{N}]/)
+      end
+
+      def unlisted(items, start)
+        return headed_items(items) unless start
+        return items.flatten(1) if ranked_by_site?(items)
+
+        items.each_with_index.flat_map do |blocks, index|
+          heading = opening(blocks)
+          blocks.map { |block| block.equal?(heading) ? ranked(block, start + index) : block }
+        end
+      end
+
+      # Items without a heading would read as text of the section before
+      # them, so each run of them stays a list.
+      def headed_items(items)
+        runs = items.slice_when { |item, following| headed?(item) || headed?(following) }
+        runs.flat_map { |run| headed?(run.first) ? run.first : format_list(run, nil) }
+      end
+
+      def headed?(blocks)
+        blocks.any? { |block| block.kind == :heading }
+      end
+
+      # A countdown, or a ranking's second page, types into every heading a
+      # rank that the list does not set. A name can open with a number too
+      # ("1. FC Union Berlin"), so one heading's number is not a rank.
+      def ranked_by_site?(items)
+        items.all? { |blocks| opening(blocks).text.split(" ", 2).last.match?(TYPED_RANK) }
+      end
+
+      # A site may type the number into the heading already.
+      def ranked(heading, number)
+        hashes, text = heading.text.split(" ", 2)
+        return heading if text.match?(/\A#{number}\b/)
+
+        Block.new(:heading, "#{hashes} #{number}. #{text}", heading.level)
+      end
+
+      # A heading that ends the list heads nothing in it, as an API
+      # reference's closing "Returns void", and is a line of its text.
+      def sections(blocks)
+        last = blocks.last
+        last.kind == :heading ? blocks[0...-1] << item_paragraph(last.text.sub(/\A#+ /, "")) : blocks
       end
 
       # A nested list belongs to the item before it, also when a site wraps
@@ -184,10 +333,31 @@ module Nokodown
         nested_only = items.map { |blocks| blocks.size == 1 && bulleted_list?(blocks.first) }
         rendered = items.each_with_index.map do |blocks, index|
           previous = index.positive? && nested_only[index - 1]
-          list_entry(start ? "#{start + index}. " : "- ", blocks, nested_only[index] && !previous && !nested_only[index + 1])
+          list_entry(start ? "#{start + index}. " : "- ", item_blocks(blocks), nested_only[index] && !previous && !nested_only[index + 1])
         end
-        loose = items.any? { |blocks| blocks.drop(1).any? { |block| block.kind != :list } }
-        [Block.new(:list, rendered.join(loose ? "\n\n" : "\n"))]
+        [Block.new(:list, rendered.join("\n"))]
+      end
+
+      # Card grids put each title in a heading and a badge in a list of its
+      # own ("- - Popular"); in a list item the marker already sets them
+      # apart, as it does an item set in bold throughout.
+      def item_blocks(blocks)
+        first = blocks.first
+        return [item_paragraph(Emphasis.unwrap(first.text))] if blocks.size == 1 && first.kind == :paragraph
+
+        blocks.each_with_index.map do |block, index|
+          if block.kind == :heading
+            item_paragraph(block.text.sub(/\A#+ /, ""))
+          elsif index.zero? && blocks.size > 1 && bulleted_list?(block) && !block.text.include?("\n")
+            item_paragraph(block.text.delete_prefix("- "))
+          else
+            block
+          end
+        end
+      end
+
+      def item_paragraph(text)
+        Block.new(:paragraph, Text.escape_line_starts(text))
       end
 
       # Markers that differ between items carry meaning, as in legends where
@@ -238,13 +408,10 @@ module Nokodown
         ([marker + first.to_s] + rest.map { |line| line.empty? ? "" : indent + line }).join("\n")
       end
 
-      # A nested list hugs the line above it; other blocks are separated.
+      # Blank lines inside or between items cost tokens and change nothing
+      # for a reader: the indentation keeps an item's blocks together.
       def join_item(blocks)
-        blocks.each_with_index.map { |block, index| (index.zero? ? "" : separator(block)) + block.text }.join
-      end
-
-      def separator(block)
-        block.kind == :list ? "\n" : "\n\n"
+        Labels.blocks(blocks).map(&:text).join("\n")
       end
 
       def quote(node)
@@ -261,10 +428,7 @@ module Nokodown
         entries = definition_groups(node).map do |term, definitions|
           compact?(definitions) ? definition_line(term, definitions) : list_entry("- ", definition_item(term, definitions))
         end
-        return [] if entries.empty?
-
-        runs = entries.slice_when { |a, b| a.include?("\n") || b.include?("\n") }
-        [Block.new(:list, runs.map { |run| run.join("\n") }.join("\n\n"))]
+        entries.empty? ? [] : [Block.new(:list, entries.join("\n"))]
       end
 
       # [term, [blocks of each <dd>]] pairs; a term may be nil or have no <dd>.

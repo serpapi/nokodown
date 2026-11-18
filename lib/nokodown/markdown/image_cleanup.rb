@@ -6,24 +6,22 @@ module Nokodown
     # image anywhere on the page. Run earlier, it would leave a heading whose
     # section held only an image for drop_empty_sections to take.
     class ImageCleanup
-      # Markup as Inline writes it: "](" in the alt is escaped, and the
-      # destination's parentheses are balanced or percent-encoded. One pattern
-      # for every image keeps the cost linear on pages with thousands; the
-      # rare URL with nested parentheses is not matched, so its image stays.
-      IMAGE = /!\[(?:\\.|[^\\\[\]\n]|\[(?:\\.|[^\\\[\]\n])*\])*\]\((?:[^()\s]|\([^()\s]*\))*\)/.freeze
-      DESTINATION = /\]\(((?:[^()\s]|\([^()\s]*\))*)\)/.freeze
+      # One pattern for every image keeps the cost linear on pages with
+      # thousands; the rare URL with nested parentheses is not matched, so its
+      # image stays.
+      IMAGE = /!\[#{Text::LINK_TEXT}\]\(#{Text::DESTINATION}\)/.freeze
+      DESTINATION = /\]\((#{Text::DESTINATION})\)/.freeze
       # A line with nothing but list or quote markers, nested lists included.
       BARE_LINE = /\A(?:\s|>|[-*+]|\d+\.)*\z/.freeze
       LIST_MARKER = /\A *(?:[-*+]|\d+\.) /.freeze
       LIST_MARKERS = /\A *(?:(?:[-*+]|\d+\.) )+/.freeze
       # The indentation and markers before a line's text.
       LINE_PREFIX = /\A(?: |>|(?:[-*+]|\d+\.) )*/.freeze
-      # Text never starts a line with ``` (Text.escape_line_starts), so this
-      # is the fence of a code block nested in a list or a quote.
-      FENCE = /#{LINE_PREFIX.source}(`{3,})/.freeze
 
-      def initialize(images)
+      # unnamed: also remove the images Inline found to say nothing.
+      def initialize(images, unnamed: false)
         @images = images
+        @unnamed = unnamed
         # Image URL => @text_lines when its last copy was written.
         @seen = {}
         @text_lines = 0
@@ -54,28 +52,14 @@ module Nokodown
       end
 
       def without_images(text)
-        lines = with_code_flags(text.split("\n")).map do |line, code|
+        lines = text.split("\n")
+        lines = lines.zip(CodeBlock.nested_code_lines(lines)).map do |line, code|
           next [line, line_without_images(line), false] unless code
 
           @text_lines += 1
           [line, line, true]
         end
         squeeze(drop_bare_lines(lines)).strip
-      end
-
-      # Each line, and whether it belongs to a nested code block, whose lines
-      # stay as they are.
-      def with_code_flags(lines)
-        fence = nil
-        lines.map do |line|
-          run = line[FENCE, 1]
-          if fence
-            fence = nil if run && run.length >= fence.length
-            next [line, true]
-          end
-          fence = run
-          [line, !run.nil?]
-        end
       end
 
       # Text that followed a removed image can now start the line, where "#"
@@ -120,7 +104,7 @@ module Nokodown
       # A thumbnail goes only while the Markdown still links to its page; a
       # card whose title link was dropped keeps its image.
       def redundant?(image)
-        image.redundant && image.targets.all? { |target| @linked.include?(target) }
+        (@unnamed && image.unnamed) || (image.redundant && image.targets.all? { |target| @linked.include?(target) })
       end
 
       # Lines left with only markers go. A list item whose first line held

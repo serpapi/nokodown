@@ -209,7 +209,7 @@ RSpec.describe Nokodown do
 
       markdown = extract("<main><h1>Mugs</h1>#{categories}<ul>#{card * 3}</ul></main>")
 
-      markdown.should include("## [Stoneware mug](https://example.com/p/mug)\n\n  $18")
+      markdown.should include("- [Stoneware mug](https://example.com/p/mug)\n  $18")
       ["Cups", "Add to cart", "Quick view"].each { |noise| markdown.should_not include(noise) }
     end
 
@@ -538,6 +538,12 @@ RSpec.describe Nokodown do
       markdown = Nokodown.to_markdown(html, url: "https://www.oceansafetytraining.com/cert", title: false)
       markdown.should include("cc@oceansafetytraining.com and")
       markdown.should_not include("protected")
+    end
+
+    it "writes a protected mail link that holds only the placeholder as its address" do
+      html = '<p>Write to <a href="/cdn-cgi/l/email-protection#5a33343c351a3f223b372a363f74393537">[email&#160;protected]</a> today.</p>'
+
+      Nokodown.to_markdown(html, title: false).should == "Write to info@example.com today."
     end
 
     it "drops a decoy that a stylesheet hides inside an address" do

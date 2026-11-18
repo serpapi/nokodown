@@ -11,7 +11,6 @@ module Nokodown
                "aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?"
       # A squashed label that is only a date: "Oct 1, 2026", "1 October".
       DATE = /\A(?:\d+(?:#{MONTHS})\d*|(?:#{MONTHS})\d+)\z/.freeze
-      CONTENT_SIZE = 300
       LABEL_SHARE = 0.3
 
       # Where a link destination points, ignoring the fragment and a trailing
@@ -102,11 +101,7 @@ module Nokodown
         presentation = %w[presentation none].include?(img["role"].to_s.strip.downcase)
         return false unless presentation || (@mode == :page && img.key?("alt") && Dom.squish(img["alt"]).empty?)
 
-        !content_sized?(img) && !placed_as_content?(img)
-      end
-
-      def content_sized?(img)
-        [img["width"], img["height"]].any? { |value| Image.pixels(value).to_i >= CONTENT_SIZE }
+        !Image.content_sized?(img) && !placed_as_content?(img)
       end
 
       # In a figure, linked to its full-size file, or in a paragraph or table
