@@ -102,7 +102,8 @@ RSpec.describe Nokodown::PostAttribution do
   end
 
   # Class names that read as a member panel ("user-info") turn up inside
-  # posts too: in a sentence, in code, around a quoted post's author.
+  # posts too: in a sentence, in code, around a quoted post's author. The
+  # body may be one element or the run of elements after the header.
   it "keeps what a post's body holds under a member panel's class" do
     quote = "<blockquote><div class='message-user'><a class='username' href='/members/celia'>celia</a></div>" \
             "<p>Rye flour wakes a sluggish starter faster than anything else I have tried.</p></blockquote>"
@@ -110,55 +111,94 @@ RSpec.describe Nokodown::PostAttribution do
       ["wren", "<p>I keep it beside a bowl of <span class='user-info'>green apples</span> all night.</p>#{quote}<p>#{question}</p>"],
       ["basil", "<p>#{answer}</p><pre><code>feed(<span class='userinfo'>starter</span>)</code></pre>"]
     ]
-    posts = bodies.map do |name, body|
-      user = "<h4 class='message-name'><a class='username' href='/members/#{name}'>#{name}</a></h4>"
-      "<article class='message'><section class='message-user'>#{user}<dl class='pairs'><dt>Joined</dt><dd>Jan 2020</dd></dl></section>" \
-        "<div class='message-main'><header class='message-attribution'>#{user}" \
-        "<a href='/posts/1'><time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></a></header>" \
-        "<div class='message-content'><div class='bbWrapper'>#{body}</div></div></div></article>"
-    end
-    markdown = thread(posts)
+    [->(body) { "<div class='message-content'><div class='bbWrapper'>#{body}</div></div>" }, ->(body) { body }].each do |wrap|
+      posts = bodies.map do |name, body|
+        user = "<h4 class='message-name'><a class='username' href='/members/#{name}'>#{name}</a></h4>"
+        "<article class='message'><section class='message-user'>#{user}<dl class='pairs'><dt>Joined</dt><dd>Jan 2020</dd></dl></section>" \
+          "<div class='message-main'><header class='message-attribution'>#{user}" \
+          "<a href='/posts/1'><time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></a></header>#{wrap.call(body)}</div></article>"
+      end
+      markdown = thread(posts)
 
-    markdown.should include("a bowl of green apples all night")
-    markdown.should include("feed(starter)")
-    markdown.should include("celia")
-    markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+      markdown.should include("a bowl of green apples all night")
+      markdown.should include("feed(starter)")
+      markdown.should include("celia")
+      markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+    end
   end
 
-  # A reply nested in a post, and not attributed itself, is named only by
-  # its own member panel.
+  # Replies nested in a post, and not attributed themselves, are named only
+  # by their own member panels, dated or not.
   it "keeps the member panel of a reply nested in a post" do
-    comment = lambda do |name, day, body, replies = ""|
-      "<div class='comment'><div class='user-info'><a class='username' href='/u/#{name}'>#{name}</a> Posts: 12</div>" \
-        "<div class='comment-head'><time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></div>" \
+    comment = lambda do |name, day, body, replies: "", head: true, panel: ""|
+      "<div class='comment'><div class='user-info'><a class='username' href='/u/#{name}'>#{name}</a> Posts: 12#{panel}</div>" \
+        "#{"<div class='comment-head'><time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></div>" if head}" \
         "<div class='comment-body'><p>#{body}</p></div>#{replies}</div>"
     end
-    nested = "<div class='replies'>#{comment.call('basil', 4, answer)}</div>"
-    markdown = thread([comment.call("wren", 3, question, nested), comment.call("fern", 5, question.upcase)])
+    [
+      comment.call("basil", 4, answer),
+      comment.call("basil", 3, answer),
+      comment.call("basil", 4, answer, head: false),
+      comment.call("basil", 4, answer, head: false, panel: " <time datetime='2024-05-04T08:45:00Z'>May 4, 2024</time>")
+    ].each do |reply|
+      markdown = thread([comment.call("wren", 3, question, replies: "<div class='replies'>#{reply}</div>"), comment.call("fern", 5, question.upcase)])
 
-    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
-    markdown.should include("**fern** · May 5, 2024")
-    markdown.should include("**basil**")
-    markdown.should include(answer)
-    markdown.scan(/\*\*(?:wren|fern)\*\*/).size.should == 2
+      markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+      markdown.should include("**fern** · May 5, 2024")
+      markdown.should match(/\*\*basil\*\*.*\n\n(?:May 4, 2024\n\n)?#{Regexp.escape(answer)}/)
+      markdown.scan(/\*\*(?:wren|fern)\*\*/).size.should == 2
+    end
   end
 
-  # A date of the member's own ("Last post") does not make the panel a reply.
+  # A date of the member's own ("Last post") does not make the panel a
+  # post, in the post or in a cell beside it.
   it "writes one line when the member panel holds a date of its own" do
-    posts = [["wren", question], ["basil", answer]].map do |name, body|
-      user = "<h4 class='message-name'><a class='username' href='/members/#{name}'>#{name}</a></h4>"
-      "<article class='message'><div class='message-main'><header class='message-attribution'>#{user}" \
+    user = ->(name) { "<h4 class='message-name'><a class='username' href='/members/#{name}'>#{name}</a></h4>" }
+    main = lambda do |name, body, cell = "message-main"|
+      "<div class='#{cell}'><header class='message-attribution'>#{user.call(name)}" \
         "<a href='/posts/1'><time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></a></header>" \
-        "<div class='message-content'><div class='bbWrapper'>#{body}</div></div></div>" \
-        "<div class='message-cell--user'><section class='message-user'>#{user}" \
-        "<div>Last post <time datetime='2024-06-01T10:00:00Z'>Jun 1, 2024</time></div></section></div></article>"
+        "<div class='message-content'><div class='bbWrapper'>#{body}</div></div></div>"
     end
-    markdown = thread(posts)
+    panel = ->(name) { "<section class='message-user'>#{user.call(name)}<div>Last post <time datetime='2024-06-01T10:00:00Z'>Jun 1, 2024</time></div></section>" }
+    layouts = [
+      ->(name, body) { "<article class='message'>#{main.call(name, body)}<div class='message-cell--user'>#{panel.call(name)}</div></article>" },
+      lambda do |name, body|
+        "<article class='message'><div class='message-inner'><div class='message-cell message-cell--user'>#{panel.call(name)}</div>" \
+          "#{main.call(name, body, 'message-cell message-cell--main')}</div></article>"
+      end
+    ]
+    layouts.each do |layout|
+      markdown = thread([layout.call("wren", question), layout.call("basil", answer)])
 
-    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
-    markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
-    markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
-    markdown.should_not include("Jun 1, 2024")
+      markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+      markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+      markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+      markdown.should_not include("Jun 1, 2024")
+    end
+  end
+
+  # The panel's cell may be a plain div, or share the post's class.
+  it "writes one line when the member panel stands in a cell of its own" do
+    user = ->(name) { "<a class='username' href='/members/#{name}'>#{name}</a>" }
+    rest = lambda do |name, day|
+      "<div class='message-main'><header class='message-attribution'>#{user.call(name)} " \
+        "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></header>" \
+        "<div class='message-content'><p>#{name == 'wren' ? question : answer}</p></div></div>"
+    end
+    layouts = [
+      ->(name, day) { "<div id='post-#{day}'><div><section class='message-user'>#{user.call(name)}</section></div>#{rest.call(name, day)}</div>" },
+      lambda do |name, day|
+        "<article class='message'><div class='message message-cell--user'><section class='message-user'>#{user.call(name)}</section></div>" \
+          "#{rest.call(name, day)}</article>"
+      end
+    ]
+    layouts.each do |layout|
+      markdown = thread([layout.call("wren", 3), layout.call("basil", 5)])
+
+      markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+      markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
+      markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+    end
   end
 
   it "shows a full date where the page shows a relative one" do

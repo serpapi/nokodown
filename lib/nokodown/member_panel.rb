@@ -30,17 +30,23 @@ module Nokodown
       Dom.signature(node).match?(Patterns::MEMBER_PANEL)
     end
 
-    # A panel with no name, a block of stats, is removed whole. In a post
-    # PostAttribution writes a line for, the panel's line is a second one,
-    # which goes with the header once the content is selected.
+    # A panel with no name, a block of stats, is removed whole. Where
+    # PostAttribution writes a line naming the same poster, the panel's line
+    # is a second one, which goes with the header once the content is
+    # selected.
     def reduce(panel)
       name = name(panel)
       if name && !bylined?(panel, name)
         line = line(panel.document, name, date(panel, name))
-        line[PostAttribution::REPLACED] = "" if panel.key?(PostAttribution::REPLACED)
+        line[PostAttribution::REPLACED] = "" if poster?(panel, name)
         panel.add_previous_sibling(line)
       end
       panel.remove
+    end
+
+    def poster?(panel, name)
+      poster = panel[PostAttribution::POSTER]
+      !poster.nil? && poster.casecmp?(name.sub(PostAttribution::BY, ""))
     end
 
     # The post beside the panel may open with a line naming the poster
