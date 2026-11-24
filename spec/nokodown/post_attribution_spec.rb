@@ -125,6 +125,42 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
   end
 
+  # A reply nested in a post, and not attributed itself, is named only by
+  # its own member panel.
+  it "keeps the member panel of a reply nested in a post" do
+    comment = lambda do |name, day, body, replies = ""|
+      "<div class='comment'><div class='user-info'><a class='username' href='/u/#{name}'>#{name}</a> Posts: 12</div>" \
+        "<div class='comment-head'><time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></div>" \
+        "<div class='comment-body'><p>#{body}</p></div>#{replies}</div>"
+    end
+    nested = "<div class='replies'>#{comment.call('basil', 4, answer)}</div>"
+    markdown = thread([comment.call("wren", 3, question, nested), comment.call("fern", 5, question.upcase)])
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**fern** · May 5, 2024")
+    markdown.should include("**basil**")
+    markdown.should include(answer)
+    markdown.scan(/\*\*(?:wren|fern)\*\*/).size.should == 2
+  end
+
+  # A date of the member's own ("Last post") does not make the panel a reply.
+  it "writes one line when the member panel holds a date of its own" do
+    posts = [["wren", question], ["basil", answer]].map do |name, body|
+      user = "<h4 class='message-name'><a class='username' href='/members/#{name}'>#{name}</a></h4>"
+      "<article class='message'><div class='message-main'><header class='message-attribution'>#{user}" \
+        "<a href='/posts/1'><time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></a></header>" \
+        "<div class='message-content'><div class='bbWrapper'>#{body}</div></div></div>" \
+        "<div class='message-cell--user'><section class='message-user'>#{user}" \
+        "<div>Last post <time datetime='2024-06-01T10:00:00Z'>Jun 1, 2024</time></div></section></div></article>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+    markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+    markdown.should_not include("Jun 1, 2024")
+  end
+
   it "shows a full date where the page shows a relative one" do
     markdown = thread([
       post("wren", "<time datetime='2024-04-02T05:03:15Z'><span>April 2, 2024</span><span>1 yr</span></time>", question),

@@ -42,6 +42,8 @@ module Nokodown
     # Labels a header may hold besides the name and date: "Posted", "Members".
     MAX_LABELS = 40
     MAX_PANEL = 200
+    # Dates held below one element before it counts as holding many.
+    MAX_STAMPS = 3
     MIN_BODY = 25
     BODY_TAGS = %w[p blockquote pre table].freeze
     BODY_PROPS = %w[text articleBody].freeze
@@ -230,17 +232,70 @@ module Nokodown
     def replaced(post)
       placement = post.placement
       header = placement.header if repeats?(placement, post.author, post.date)
-      [header, author_panel(post.author, post.date, placement.body), *member_panels(post.node, placement.body),
+      [header, author_panel(post.author, post.date, placement.body), *member_panels(post.node, placement.body, post.date),
        *copies(post.node, post.date)].compact
     end
 
     # The member panel beside a post (XenForo's message-user) names the
     # poster as well when the name is read from the header: Boilerplate
-    # would reduce it to a second line.
-    def member_panels(post, body)
-      post.css("[class]").select do |node|
-        MemberPanel.panel?(node) && !quoted?(node) && !inside?(node, body) && !inside?(body, node)
+    # would reduce it to a second line. The search stays out of the body,
+    # quotes and replies nested in the post: a reply that is not attributed
+    # itself is named only by its own panel.
+    def member_panels(post, body, date)
+      return [] if panel_keys.empty?
+
+      holding_body = body.ancestors.map { |node| Dom.key(node) }.to_set
+      own = holding_body | date.ancestors.map { |node| Dom.key(node) }
+      stamp = stamp(date)
+      panels = []
+      pending = post.element_children.to_a
+      until pending.empty?
+        node = pending.pop
+        key = Dom.key(node)
+        next if key == Dom.key(body) || node.name == "blockquote" || (!own.include?(key) && reply?(node, post, stamp))
+
+        panels << node if panel_keys.include?(key) && !holding_body.include?(key)
+        pending.concat(node.element_children.to_a)
       end
+      panels
+    end
+
+    def panel_keys
+      @panel_keys ||= @body.css("[class]").select { |node| MemberPanel.panel?(node) }.map { |node| Dom.key(node) }.to_set
+    end
+
+    # Beside the post's header and body, a reply is of the post's own kind,
+    # or holds a date other than the post's outside member panels, whose
+    # dates may date the member ("Last post").
+    def reply?(node, post, stamp)
+      return true if kind(node) == kind(post)
+
+      held = date_stamps[Dom.key(node)]
+      !held.nil? && (held == :many || held.any? { |other| other != stamp })
+    end
+
+    # The dates outside member panels each element holds, by key, or :many
+    # past a few; found in one pass, as the holders are.
+    def date_stamps
+      @date_stamps ||= @body.css(DATES).each_with_object({}) do |date, stamps|
+        next if quoted?(date) || date.at_css(DATES) || member_date?(date)
+
+        holders = date.ancestors.select(&:element?).map { |node| Dom.key(node) }
+        next if holders.any? { |key| panel_keys.include?(key) }
+
+        value = stamp(date)
+        holders.each do |key|
+          held = stamps[key] ||= Set.new
+          next if held == :many
+
+          held << value
+          stamps[key] = :many if held.size > MAX_STAMPS
+        end
+      end
+    end
+
+    def stamp(date)
+      date["datetime"] || date["content"] || Dom.text(date)
     end
 
     # The names before the date, nearest first: a thread's header reads
