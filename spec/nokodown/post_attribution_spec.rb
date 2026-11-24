@@ -97,7 +97,32 @@ RSpec.describe Nokodown::PostAttribution do
 
     markdown.should include("**wren** · May 3, 2024\n\n#{question}")
     markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+    markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
     markdown.should_not include("Reaction score")
+  end
+
+  # Class names that read as a member panel ("user-info") turn up inside
+  # posts too: in a sentence, in code, around a quoted post's author.
+  it "keeps what a post's body holds under a member panel's class" do
+    quote = "<blockquote><div class='message-user'><a class='username' href='/members/celia'>celia</a></div>" \
+            "<p>Rye flour wakes a sluggish starter faster than anything else I have tried.</p></blockquote>"
+    bodies = [
+      ["wren", "<p>I keep it beside a bowl of <span class='user-info'>green apples</span> all night.</p>#{quote}<p>#{question}</p>"],
+      ["basil", "<p>#{answer}</p><pre><code>feed(<span class='userinfo'>starter</span>)</code></pre>"]
+    ]
+    posts = bodies.map do |name, body|
+      user = "<h4 class='message-name'><a class='username' href='/members/#{name}'>#{name}</a></h4>"
+      "<article class='message'><section class='message-user'>#{user}<dl class='pairs'><dt>Joined</dt><dd>Jan 2020</dd></dl></section>" \
+        "<div class='message-main'><header class='message-attribution'>#{user}" \
+        "<a href='/posts/1'><time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></a></header>" \
+        "<div class='message-content'><div class='bbWrapper'>#{body}</div></div></div></article>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("a bowl of green apples all night")
+    markdown.should include("feed(starter)")
+    markdown.should include("celia")
+    markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
   end
 
   it "shows a full date where the page shows a relative one" do
