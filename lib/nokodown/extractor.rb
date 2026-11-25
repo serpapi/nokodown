@@ -35,6 +35,7 @@ module Nokodown
     private
 
     def render(nodes, mode, urls)
+      PostAttribution.finish(nodes) unless mode == :full
       redundant = redundant_images(nodes, mode, urls)
       renderer = Markdown::Renderer.new(urls, images: @images, links: @links, redundant_images: redundant)
       Markdown::Cleanup.call(renderer.render(nodes), renderer.rendered_images)

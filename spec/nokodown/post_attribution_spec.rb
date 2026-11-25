@@ -201,6 +201,93 @@ RSpec.describe Nokodown::PostAttribution do
     end
   end
 
+  # The rest of the panel's column (a rank, a post count) stands between the
+  # panel's line and the post's.
+  it "writes one line when the member panel's column holds more" do
+    ["<p class='userTitle'>Moderator</p>", "<p>Posts: 41</p>"].each do |extra|
+      posts = [["wren", 3, question], ["basil", 5, answer]].map do |name, day, body|
+        user = "<a class='username' href='/members/#{name}'>#{name}</a>"
+        "<article class='message'><div class='message-cell--user'><section class='message-user'>#{user}</section>#{extra}</div>" \
+          "<div class='message-main'><header class='message-attribution'>#{user} <time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></header>" \
+          "<div class='message-content'><p>#{body}</p></div></div></article>"
+      end
+      markdown = thread(posts)
+
+      markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+      markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
+      markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+    end
+  end
+
+  # Which lines go is settled once the content is pruned: a shorter post
+  # reads as more of a link list.
+  it "keeps a short post whole that links out" do
+    linked = "<div class='message'><div class='message-user'><a class='username' href='/members/SourdoughBaker'>SourdoughBaker</a></div>" \
+             "<header><a class='username' href='/members/SourdoughBaker'>SourdoughBaker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+             "<p>Keep enough room in the jar for a full rise. <a href='/guide'>Feeding instructions</a></p></div>"
+    markdown = thread([linked, post("basil", "<time datetime='2024-05-04T09:10:00Z'>May 4, 2024</time>", "<p>#{answer}</p><p>#{question}</p>")])
+
+    markdown.should include("**SourdoughBaker** · May 3, 2024\n\nKeep enough room in the jar for a full rise. [Feeding instructions]")
+    markdown.scan("**SourdoughBaker**").size.should == 1
+  end
+
+  # A panel after the body, with more after it, names a reply or a quote,
+  # however short, and by the poster too.
+  it "keeps the member panel's line before a reply or a quote of the poster's" do
+    user = "<a class='username' href='/members/wren'>wren</a>"
+    head = "<div class='message-main'><header>#{user} <time>May 3, 2024</time></header><p>#{question}</p>"
+    [
+      "#{head}</div><div class='response'><div class='message-user'>#{user} <time>May 4, 2024 at 08:45 UTC</time></div>" \
+        "<div><a href='/mixing-log.pdf'>Log</a></div></div>",
+      "#{head}<div class='quote'><div class='message-user'>#{user}</div><span>I agree.</span></div></div>",
+      "#{head}<div class='message-user'>#{user}<time>May 2, 2024</time></div><p>That advice worked.</p></div>"
+    ].each do |inner|
+      markdown = thread([
+        "<article class='message'><div class='message-user'>#{user}</div>#{inner}</article>",
+        post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+      ])
+
+      markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+      markdown.should match(/#{Regexp.escape(question)}\n\n\*\*wren\*\*( · May [42], 2024( at 08:45 UTC)?)?\n\n(\[Log\]|I agree\.|That advice worked\.)/)
+    end
+  end
+
+  # The same name may be another member's, or come with a fuller date.
+  it "keeps the member panel's line where it says more than the post's" do
+    posts = [
+      ["<a class='username' href='/members/101'>Wren</a>", "<a class='username' href='/members/202'>wren</a> <time>May 3, 2024</time>"],
+      ["<a class='username' href='/members/wren'>wren</a><div class='post-time'>May 3, 2024 at 08:45 UTC</div>",
+       "<a class='username' href='/members/wren'>wren</a> <time>May 3, 2024</time>"],
+      ["<a class='username' href='/members/wren'>wren</a><span class='post-date'>May 3, 2024</span>",
+       "<a class='username' href='/members/wren'>wren</a> <time>Yesterday</time>"]
+    ]
+    posts.each do |panel, header|
+      markdown = thread([
+        "<article class='message'><div class='message-user'>#{panel}</div><div class='message-main'><header>#{header}</header><p>#{question}</p></div></article>",
+        post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+      ])
+
+      markdown.scan(/\*\*wren\*\*/i).size.should == 2
+      markdown.should include("#{question}")
+    end
+  end
+
+  # Boilerplate removes a share bar the post's line was to go above.
+  it "keeps the poster's name where the post's line has no place" do
+    posts = [["wren", 3, question], ["basil", 5, answer]].map do |name, day, body|
+      user = "<a class='username' href='/members/#{name}'>#{name}</a>"
+      time = "<time datetime='2024-05-0#{day}'>May #{day}, 2024</time>"
+      "<article class='message'><div class='message-cell message-cell--user'><div class='message-user'>#{user}</div><div>#{time}</div></div>" \
+        "<div class='message-cell message-cell--main'><header>#{user} #{time}</header>" \
+        "#{"<div class='share-buttons'>Share this post with other bakers</div>" if name == 'wren'}<p>#{body}</p></div></article>"
+    end
+    markdown = thread(posts)
+
+    markdown.should match(/\*\*wren\*\*.*\n\n(May 3, 2024\n\n)?#{Regexp.escape(question)}/)
+    markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
+    markdown.scan("**basil**").size.should == 1
+  end
+
   it "shows a full date where the page shows a relative one" do
     markdown = thread([
       post("wren", "<time datetime='2024-04-02T05:03:15Z'><span>April 2, 2024</span><span>1 yr</span></time>", question),

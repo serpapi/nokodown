@@ -15,8 +15,8 @@ module Nokodown
     STAMPS = "time, [datetime], [class]"
     DATE_CLASS = /date|time/.freeze
     # Dates that date the member, not the post.
-    MEMBER_DATE = /\b(?:joined|join\s?date|member\ssince|registered|last\s(?:seen|active|visit)|local\stime)\b/i.freeze
-    MEMBER_DATE_CLASS = /join|regist|last-?(?:seen|active|visit)|local-?time/.freeze
+    MEMBER_DATE = /\b(?:joined|join\s?date|member\ssince|registered|last\s(?:seen|active|visit|post(?:ed)?)|local\stime)\b/i.freeze
+    MEMBER_DATE_CLASS = /join|regist|last-?(?:seen|active|visit|post)|local-?time/.freeze
     BY = /(?:by|von|par|por)\s+/i.freeze
     LETTER = /\p{L}/.freeze
     MAX_NAME = 60
@@ -30,23 +30,23 @@ module Nokodown
       Dom.signature(node).match?(Patterns::MEMBER_PANEL)
     end
 
-    # A panel with no name, a block of stats, is removed whole. Where
-    # PostAttribution writes a line naming the same poster, the panel's line
-    # is a second one, which goes with the header once the content is
-    # selected.
+    # A panel with no name, a block of stats, is removed whole. The line a
+    # panel PostAttribution marked as a post's leaves carries the post's
+    # number and the name's profile link, so that the line can go where the
+    # post's own line repeats it (PostAttribution.finish).
     def reduce(panel)
       name = name(panel)
       if name && !bylined?(panel, name)
         line = line(panel.document, name, date(panel, name))
-        line[PostAttribution::REPLACED] = "" if poster?(panel, name)
         panel.add_previous_sibling(line)
+        repeats(line, panel, name) if panel[PostAttribution::PANEL]
       end
       panel.remove
     end
 
-    def poster?(panel, name)
-      poster = panel[PostAttribution::POSTER]
-      !poster.nil? && poster.casecmp?(name.sub(PostAttribution::BY, ""))
+    def repeats(line, panel, name)
+      link = panel.css("a[href]").find { |candidate| Dom.text(candidate) == name }
+      line[PostAttribution::REPEAT] = [panel[PostAttribution::PANEL], link && link["href"]].compact.join(" ")
     end
 
     # The post beside the panel may open with a line naming the poster

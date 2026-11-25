@@ -65,8 +65,10 @@ with `main_content: false`, `:none` for a document without a body.
   comment thread.
 - On forums, the member panel and signature repeated beside every post. The
   member panel leaves one line naming the poster, with the post's date when
-  the panel holds it. A quote that repeats a post already in the output is cut
-  to its opening sentence, so the reply still shows what it answers.
+  the panel holds it, and none where the post's own author line (below)
+  follows it and says as much. A quote that repeats a post already in the
+  output is cut to its opening sentence, so the reply still shows what it
+  answers.
 - On product pages, customer reviews and Q&A widgets, with their review
   summaries and rating histograms. An inline rating badge ("212 reviews" next
   to the price), testimonials and editorial reviews stay.

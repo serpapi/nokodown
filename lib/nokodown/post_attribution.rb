@@ -9,6 +9,8 @@ module Nokodown
   # #call reads the attributions before boilerplate removal and marks where
   # they go; #write puts them in once the content is selected, so that the
   # lines, and the headers they replace, do not change what is selected.
+  # .finish drops the lines member panels left that repeat them, once the
+  # content is pruned, so that those lines do not change what is pruned.
   class PostAttribution
     Post = Struct.new(:node, :date, :author, :placement)
     Placement = Struct.new(:header, :body, :tail)
@@ -42,9 +44,6 @@ module Nokodown
     # Labels a header may hold besides the name and date: "Posted", "Members".
     MAX_LABELS = 40
     MAX_PANEL = 200
-    # Nodes read beside a member panel before its column counts as holding
-    # more than the panel.
-    MAX_COLUMN = 100
     MIN_BODY = 25
     BODY_TAGS = %w[p blockquote pre table].freeze
     BODY_PROPS = %w[text articleBody].freeze
@@ -54,7 +53,125 @@ module Nokodown
     AUTHOR = "data-nokodown-author"
     DATE = "data-nokodown-date"
     REPLACED = "data-nokodown-replaced"
-    POSTER = "data-nokodown-poster"
+    # The number of the post a body, the line written there, or a member
+    # panel belongs to; MemberPanel copies a panel's onto the line it leaves.
+    # A body's and a line's give the profile the name links to after it:
+    # "3 /members/wren.12/". One attribute each, as every one more on the
+    # lines slows the pruning that reads them.
+    POST = "data-nokodown-post"
+    LINE = "data-nokodown-line"
+    PANEL = "data-nokodown-panel"
+    REPEAT = "data-nokodown-repeat"
+    # What may stand between a member panel's line and the line written
+    # below it for the same post, as the rest of the panel's column ("Posts:
+    # 41", a rank): non-space characters, and nodes read.
+    MAX_BETWEEN = 80
+    MAX_STEPS = 500
+    # What shows in the Markdown with no text of its own.
+    SHOWN = %w[img picture video audio iframe embed object svg canvas].freeze
+    SEPARATOR = /\A\s*·\s*/.freeze
+    # Every element Patterns::MEMBER_PANEL can match, and few others.
+    PANEL_CANDIDATES = %w[user poster author profile].flat_map { |word| ["[class*=#{word} i]", "[id*=#{word} i]"] }.join(", ").freeze
+    HOST = %r{\A(?:[a-z][a-z\d+.-]*:)?//[^/?#]*}i.freeze
+
+    class << self
+      # nodes: the content as it is rendered. The line a member panel left
+      # goes where the line written for its post follows it, past no more
+      # than the rest of the panel's column, or where it comes after that
+      # line with nothing after it before the next post; and only where it
+      # says no more: the same poster, with the same date or none. A line
+      # with anything after it in the post names a reply or a quote, and one
+      # with a date of its own adds it.
+      def finish(nodes)
+        repeats = nodes.flat_map { |node| (node[REPEAT] ? [node] : []) + node.css("[#{REPEAT}]").to_a }
+        return if repeats.empty?
+
+        roots = nodes.each_with_index.to_h { |node, index| [Dom.key(node), index] }
+        roots.delete(nil)
+        lines = {}
+        nodes.each { |node| ((node[LINE] ? [node] : []) + node.css("[#{LINE}]").to_a).each { |line| lines[mark(line).first] ||= line } }
+        repeats.select { |repeat| repeated?(repeat, nodes, roots, lines) }.each(&:remove)
+      end
+
+      private
+
+      def repeated?(repeat, nodes, roots, lines)
+        number = mark(repeat).first
+        chars = 0
+        shown = false
+        node = following(repeat, nodes, roots)
+        MAX_STEPS.times do
+          if node.nil? || (node.element? && (node[LINE] || node[REPEAT]) && mark(node).first != number)
+            return !shown && chars.zero? && after?(repeat, lines[number])
+          elsif node.element? && node[LINE]
+            return same_line?(repeat, node)
+          elsif node.element? && node[REPEAT]
+            node = following(node, nodes, roots)
+          elsif node.element?
+            shown ||= SHOWN.include?(node.name)
+            node = node.child || following(node, nodes, roots)
+          else
+            chars += Dom.char_count(node.content) if node.text?
+            return false if chars > MAX_BETWEEN
+
+            node = following(node, nodes, roots)
+          end
+        end
+        false
+      end
+
+      # The panel's line comes after its post's line, saying no more.
+      def after?(repeat, line)
+        !line.nil? && Dom.key(line).to_i < Dom.key(repeat).to_i && same_line?(repeat, line)
+      end
+
+      # The node after this one and what it holds, in the order the content
+      # is rendered: past the last node of a root, the next root.
+      def following(node, nodes, roots)
+        until node.element? && (index = roots[Dom.key(node)])
+          return node.next_sibling if node.next_sibling
+
+          node = node.parent
+          return if node.nil? || !node.element?
+        end
+        nodes[index + 1]
+      end
+
+      def same_line?(repeat, line)
+        number, href = mark(repeat)
+        own_number, own_href = mark(line)
+        return false unless number == own_number && same_profile?(href, own_href)
+
+        name, date = parts(repeat)
+        own_name, own_date = parts(line)
+        return false if name.nil? || own_name.nil?
+
+        name.sub(BY, "").casecmp?(own_name) && (date.empty? || date.casecmp?(own_date))
+      end
+
+      # A line's post number and profile link.
+      def mark(line)
+        (line[LINE] || line[REPEAT]).split(" ", 2)
+      end
+
+      def parts(line)
+        strong = line.at_css("strong")
+        return if strong.nil?
+
+        name = Dom.text(strong)
+        [name, Dom.text(line).delete_prefix(name).sub(SEPARATOR, "")]
+      end
+
+      # Two names alike link to the same profile, when both link to one:
+      # "Wren" and "wren" may be two members.
+      def same_profile?(href, other)
+        href.nil? || other.nil? || profile_path(href).casecmp?(profile_path(other))
+      end
+
+      def profile_path(href)
+        href.strip.sub(HOST, "").sub(/#.*/m, "").sub(%r{\A/+}, "").chomp("/")
+      end
+    end
 
     def initialize(body)
       @body = body
@@ -80,11 +197,14 @@ module Nokodown
 
       @body.css("[#{REPLACED}]").each(&:remove)
       selected = nodes.map { |node| Dom.key(node) }
-      bodies.each do |body|
+      lines = bodies.map do |body|
         line = line(body[AUTHOR], body[DATE])
         selected.include?(Dom.key(body)) ? body.prepend_child(line) : body.add_previous_sibling(line)
+        [line, body]
       end
       Dom.assign_keys(@body)
+      # After the key, which is read most.
+      lines.each { |line, body| line[LINE] = body[POST] if body[POST] }
     end
 
     private
@@ -238,142 +358,87 @@ module Nokodown
     end
 
     # The member panel beside a post (XenForo's message-user) names the
-    # poster as well when the line's name is read from the header:
-    # Boilerplate reduces it to a second line. A panel beside a post's
-    # header and body is marked with the poster, and MemberPanel drops the
-    # line it leaves when that names the same one. Nothing else goes: the
-    # panel is Boilerplate's to remove or keep, and a reply's panel names
-    # its own poster.
+    # poster again, and Boilerplate reduces it to a line of its own. Each
+    # panel is marked with the post it stands in, or beside in a row that
+    # holds that one post, for .finish to weigh the line it leaves against
+    # the post's own. A panel in a quote names the quoted poster. A panel
+    # that repeats the post's date reads as a post of its own, with the
+    # panel's stats for a body: that post's line goes with the panel, and
+    # the panel stands beside the post its row holds besides.
     def mark_member_panels(posts)
-      panels = @body.css("[class]").select { |node| MemberPanel.panel?(node) }
+      panels = @body.css(PANEL_CANDIDATES).select { |node| MemberPanel.panel?(node) }
       return if panels.empty?
 
-      @panel_keys = panels.map { |panel| Dom.key(panel) }.to_set
-      @holds_body = {}
-      @row_bodies = {}
-      sides = posts.to_h { |post| [Dom.key(post.node), sides(post)] }
-      # A member panel that repeats the post's date reads as a post of its
-      # own, with the panel's stats for a body.
-      posts = posts.reject { |post| in_panel?(post, sides[Dom.key(post.node)].first) }
-      by_node = posts.to_h { |post| [Dom.key(post.node), post] }
-      held = posts_held(posts)
+      panel_keys = panels.map { |panel| Dom.key(panel) }.to_set
+      posts = posts.reject { |post| in_panel?(post, panel_keys) }
+      numbers = {}
+      posts.each_with_index do |post, index|
+        post.placement.body[POST] = [index, href(post.author)].compact.join(" ")
+        numbers[Dom.key(post.node)] = index.to_s
+      end
+      rows = rows(posts, numbers)
+      owners = {}
       panels.each do |panel|
-        post, container = owner(panel, by_node, held)
-        next unless post && beside?(panel, post, container, sides[Dom.key(post.node)])
-
-        panel[POSTER] = post.placement.body[AUTHOR]
+        number = owner(panel, numbers, rows, owners)
+        panel[PANEL] = number if number
       end
     end
 
-    def in_panel?(post, body_side)
-      @panel_keys.include?(Dom.key(post.node)) || body_side.any? { |key| @panel_keys.include?(key) }
-    end
+    def in_panel?(post, panel_keys)
+      node = post.placement.body
+      until Dom.key(node) == Dom.key(post.node)
+        return true if panel_keys.include?(Dom.key(node))
 
-    # The keys from the post's body, and from its date, up to the post.
-    def sides(post)
-      [keys_below(post.placement.body, post.node), keys_below(post.date, post.node)]
-    end
-
-    def keys_below(node, post)
-      post_key = Dom.key(post)
-      keys = Set.new
-      while node.element? && Dom.key(node) != post_key
-        keys << Dom.key(node)
         node = node.parent
       end
-      keys
+      panel_keys.include?(Dom.key(node))
     end
 
-    # The post each element holds, by key, or :many: a cell beside a post's
-    # cell (XenForo's message-cell--user) is in no post, but its row holds
-    # one. Found in one pass, each climb stopping where it meets another's.
-    def posts_held(posts)
-      posts.each_with_object({}) do |post, held|
-        ([post.node] + post.node.ancestors.to_a).each do |node|
+    # The number of the one post each ancestor of a post holds, or nil where
+    # it holds more, found in one pass, each climb stopping at an ancestor
+    # that holds more already.
+    def rows(posts, numbers)
+      posts.each_with_object({}) do |post, rows|
+        post.node.ancestors.each do |node|
           break unless node.element?
 
           key = Dom.key(node)
-          break if held[key] == :many
+          break if rows.key?(key) && rows[key].nil?
 
-          held[key] = held.key?(key) ? :many : post
+          rows[key] = rows.key?(key) ? nil : numbers[Dom.key(post.node)]
         end
       end
     end
 
-    # The innermost post around the panel, or the one post its row holds,
-    # with that post or row. None in a quote.
-    def owner(panel, posts, held)
+    # The innermost post around the panel, or the one post its row holds.
+    # Elements climbed through are remembered with what was found above
+    # them, so each is climbed through once.
+    def owner(panel, numbers, rows, owners)
+      passed = []
+      number = nil
       node = panel.parent
       while node&.element?
-        return if node.name == "blockquote"
-
         key = Dom.key(node)
-        return [posts[key], node] if posts.key?(key)
-        return held[key] == :many ? nil : [held[key], node] if held.key?(key)
+        if owners.key?(key)
+          number = owners[key]
+          break
+        end
+        passed << key
+        break if node.name == "blockquote"
 
+        if numbers.key?(key) || rows.key?(key)
+          number = numbers[key] || rows[key]
+          break
+        end
         node = node.parent
       end
-      nil
+      passed.each { |key| owners[key] = number }
+      number
     end
 
-    # A panel beside the post's header and body stands in a column of its
-    # own, which holds no body besides member panels. A panel in the body,
-    # or in a reply nested in the post, shares its column with a body. In a
-    # row around the post, the panel's column and the post are all the row
-    # holds.
-    def beside?(panel, post, container, sides)
-      body_side, date_side = sides
-      key = Dom.key(panel)
-      return false if body_side.include?(key)
-      return true if date_side.include?(key)
-
-      column = panel
-      column = column.parent until column_end?(column.parent, container, sides)
-      return false if Dom.key(column.parent) == Dom.key(post.placement.body) || holds_body?(column)
-      return true if Dom.key(container) == Dom.key(post.node)
-
-      branch = keys_below(post.node, container)
-      row_bodies(container).all? { |child| branch.include?(child) }
-    end
-
-    # The children of a row that hold a body, by key.
-    def row_bodies(row)
-      @row_bodies[Dom.key(row)] ||= row.element_children.select { |child| holds_body?(child) }.map { |child| Dom.key(child) }
-    end
-
-    def column_end?(node, container, sides)
-      key = Dom.key(node)
-      key == Dom.key(container) || sides.any? { |side| side.include?(key) }
-    end
-
-    # Read outside member panels until a body shows, or past what a column
-    # beside a post holds.
-    def holds_body?(column)
-      @holds_body.fetch(Dom.key(column)) { @holds_body[Dom.key(column)] = read_body?(column) }
-    end
-
-    def read_body?(column)
-      chars = 0
-      pending = [column]
-      MAX_COLUMN.times do
-        node = pending.pop
-        return false if node.nil?
-
-        if node.text?
-          chars += Dom.char_count(node.content)
-          return true if chars >= MIN_BODY
-        elsif node.element? && !@panel_keys.include?(Dom.key(node))
-          return true if body_part?(node)
-
-          pending.concat(node.children.to_a.reverse)
-        end
-      end
-      true
-    end
-
-    def body_part?(node)
-      BODY_TAGS.include?(node.name) || node["itemprop"].to_s.split.any? { |prop| BODY_PROPS.include?(prop) } ||
-        Dom.signature(node).match?(BODY_CLASS)
+    def href(author)
+      link = author.name == "a" ? author : author.css("a[href]").find { |candidate| !Dom.text(candidate).empty? }
+      link && link["href"]
     end
 
     # The names before the date, nearest first: a thread's header reads
