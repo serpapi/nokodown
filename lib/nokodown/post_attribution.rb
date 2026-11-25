@@ -67,30 +67,44 @@ module Nokodown
     # 41", a rank): non-space characters, and nodes read.
     MAX_BETWEEN = 80
     MAX_STEPS = 500
-    # What shows in the Markdown with no text of its own.
-    SHOWN = %w[img picture video audio iframe embed object svg canvas].freeze
+    # What shows in the Markdown with no text of its own: a formula renders
+    # its alttext, a box its checkbox.
+    SHOWN = %w[img picture video audio iframe embed object svg canvas math input].freeze
     SEPARATOR = /\A\s*·\s*/.freeze
     # Every element Patterns::MEMBER_PANEL can match, and few others.
     PANEL_CANDIDATES = %w[user poster author profile].flat_map { |word| ["[class*=#{word} i]", "[id*=#{word} i]"] }.join(", ").freeze
-    HOST = %r{\A(?:[a-z][a-z\d+.-]*:)?//[^/?#]*}i.freeze
+    HOST = %r{\A(?:[a-z][a-z\d+.-]*:)?//([^/?#]*)}i.freeze
+    # "bbCodeBlock--quote", "bbcode_quote", "ipsQuote", Discourse's
+    # aside.quote; not XenForo's "js-selectToQuote" around a body.
+    QUOTE = /(?<![a-z])(?<!to-)quote/.freeze
+    # The children each container renders; the renderer skips the rest (a
+    # <p> between a table's rows, or between a list's terms).
+    RENDERED = {
+      "table" => %w[tr thead tbody tfoot], "thead" => %w[tr], "tbody" => %w[tr], "tfoot" => %w[tr],
+      "tr" => %w[td th], "dl" => %w[dt dd div]
+    }.freeze
 
     class << self
       # nodes: the content as it is rendered. The line a member panel left
       # goes where the line written for its post follows it, past no more
       # than the rest of the panel's column, or where it comes after that
       # line with nothing after it before the next post; and only where it
-      # says no more: the same poster, with the same date or none. A line
-      # with anything after it in the post names a reply or a quote, and one
-      # with a date of its own adds it.
+      # says no more: the same poster, with the same date or none, and where
+      # the post's line is rendered. A line with anything after it in the
+      # post names a reply or a quote, and one with a date of its own adds
+      # it. Returns the nodes to render, without a line that was one.
       def finish(nodes)
         repeats = nodes.flat_map { |node| (node[REPEAT] ? [node] : []) + node.css("[#{REPEAT}]").to_a }
-        return if repeats.empty?
+        return nodes if repeats.empty?
 
         roots = nodes.each_with_index.to_h { |node, index| [Dom.key(node), index] }
         roots.delete(nil)
         lines = {}
         nodes.each { |node| ((node[LINE] ? [node] : []) + node.css("[#{LINE}]").to_a).each { |line| lines[mark(line).first] ||= line } }
-        repeats.select { |repeat| repeated?(repeat, nodes, roots, lines) }.each(&:remove)
+        removed = repeats.select { |repeat| repeated?(repeat, nodes, roots, lines) }
+        removed.each(&:remove)
+        keys = removed.filter_map { |line| Dom.key(line) }.to_set
+        nodes.reject { |node| keys.include?(Dom.key(node)) }
       end
 
       private
@@ -102,9 +116,9 @@ module Nokodown
         node = following(repeat, nodes, roots)
         MAX_STEPS.times do
           if node.nil? || (node.element? && (node[LINE] || node[REPEAT]) && mark(node).first != number)
-            return !shown && chars.zero? && after?(repeat, lines[number])
+            return !shown && chars.zero? && after?(repeat, lines[number], roots)
           elsif node.element? && node[LINE]
-            return same_line?(repeat, node)
+            return !shown && rendered?(node, roots) && same_line?(repeat, node)
           elsif node.element? && node[REPEAT]
             node = following(node, nodes, roots)
           elsif node.element?
@@ -121,8 +135,34 @@ module Nokodown
       end
 
       # The panel's line comes after its post's line, saying no more.
-      def after?(repeat, line)
-        !line.nil? && Dom.key(line).to_i < Dom.key(repeat).to_i && same_line?(repeat, line)
+      def after?(repeat, line, roots)
+        !line.nil? && Dom.key(line).to_i < Dom.key(repeat).to_i && rendered?(line, roots) && same_line?(repeat, line)
+      end
+
+      # Is the line in the Markdown: below a root through children that
+      # each container renders.
+      def rendered?(line, roots)
+        node = line
+        until roots.key?(Dom.key(node))
+          parent = node.parent
+          return false unless parent&.element?
+
+          children = RENDERED[parent.name] || (definitions?(parent, roots) && RENDERED["dl"])
+          return false if children && !children.include?(node.name)
+
+          node = parent
+        end
+        true
+      end
+
+      # A <div> in a <dl> holds terms and definitions, as the <dl> does.
+      def definitions?(node, roots)
+        while node.name == "div" && !roots.key?(Dom.key(node))
+          node = node.parent
+          return false unless node&.element?
+          return true if node.name == "dl"
+        end
+        false
       end
 
       # The node after this one and what it holds, in the order the content
@@ -163,13 +203,19 @@ module Nokodown
       end
 
       # Two names alike link to the same profile, when both link to one:
-      # "Wren" and "wren" may be two members.
+      # "Wren" and "wren" may be two members, as may /members/WREN and
+      # /members/wren, or one path on two hosts.
       def same_profile?(href, other)
-        href.nil? || other.nil? || profile_path(href).casecmp?(profile_path(other))
+        return true if href.nil? || other.nil?
+
+        host, path = profile(href)
+        other_host, other_path = profile(other)
+        path == other_path && (host.nil? || other_host.nil? || host.casecmp?(other_host))
       end
 
-      def profile_path(href)
-        href.strip.sub(HOST, "").sub(/#.*/m, "").sub(%r{\A/+}, "").chomp("/")
+      def profile(href)
+        href = href.strip
+        [href[HOST, 1], href.sub(HOST, "").sub(/#.*/m, "").sub(%r{\A(?:\.?/)+}, "").chomp("/")]
       end
     end
 
@@ -377,9 +423,10 @@ module Nokodown
         numbers[Dom.key(post.node)] = index.to_s
       end
       rows = rows(posts, numbers)
+      kinds = posts.filter_map { |post| post_kind(post.node) }.to_set
       owners = {}
       panels.each do |panel|
-        number = owner(panel, numbers, rows, owners)
+        number = owner(panel, numbers, rows, kinds, owners)
         panel[PANEL] = number if number
       end
     end
@@ -411,9 +458,11 @@ module Nokodown
     end
 
     # The innermost post around the panel, or the one post its row holds.
-    # Elements climbed through are remembered with what was found above
-    # them, so each is climbed through once.
-    def owner(panel, numbers, rows, owners)
+    # A panel in a quote names the quoted poster, and one in a reply the
+    # post holds, undated, names the reply's: an element of a post's kind
+    # that is no post of its own. Elements climbed through are remembered
+    # with what was found above them, so each is climbed through once.
+    def owner(panel, numbers, rows, kinds, owners)
       passed = []
       number = nil
       node = panel.parent
@@ -424,16 +473,26 @@ module Nokodown
           break
         end
         passed << key
-        break if node.name == "blockquote"
-
         if numbers.key?(key) || rows.key?(key)
           number = numbers[key] || rows[key]
           break
         end
+        break if node.name == "blockquote" || Dom.signature(node).match?(QUOTE) || kinds.include?(post_kind(node))
+
         node = node.parent
       end
       passed.each { |key| owners[key] = number }
       number
+    end
+
+    # A post's tag and classes, or its id without the number ("post-"):
+    # a plain <div> around a panel is no post.
+    def post_kind(node)
+      classes = node["class"].to_s.split.join(" ")
+      return [node.name, classes] unless classes.empty?
+
+      id = node["id"].to_s
+      [node.name, "##{id.gsub(/\d+/, '')}"] if id.match?(/\d/)
     end
 
     def href(author)

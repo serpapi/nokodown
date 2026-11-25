@@ -151,8 +151,9 @@ RSpec.describe Nokodown::PostAttribution do
   end
 
   # A date of the member's own ("Last post") does not make the panel a
-  # post, in the post or in a cell beside it.
-  it "writes one line when the member panel holds a date of its own" do
+  # post, in the post or in a cell beside it. The panel's line keeps the
+  # date, as "Last posted" may date the post too.
+  it "writes the post's line when the member panel holds a date of its own" do
     user = ->(name) { "<h4 class='message-name'><a class='username' href='/members/#{name}'>#{name}</a></h4>" }
     main = lambda do |name, body, cell = "message-main"|
       "<div class='#{cell}'><header class='message-attribution'>#{user.call(name)}" \
@@ -172,8 +173,8 @@ RSpec.describe Nokodown::PostAttribution do
 
       markdown.should include("**wren** · May 3, 2024\n\n#{question}")
       markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
-      markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
-      markdown.should_not include("Jun 1, 2024")
+      markdown.scan(/\*\*(?:wren|basil)\*\*(?! · Last post)/).size.should == 2
+      markdown.scan("Last post Jun 1, 2024").size.should be <= 2
     end
   end
 
@@ -252,10 +253,34 @@ RSpec.describe Nokodown::PostAttribution do
     end
   end
 
+  # A quote, or a reply the post holds, before the post's header or after
+  # its body is the poster's too, and the panel's line is all that names it.
+  it "keeps the member panel's line in a quote or a reply of the poster's" do
+    user = "<a class='username' href='/members/wren'>wren</a>"
+    head = "<header>#{user} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p>"
+    {
+      "<div class='quote'><div class='message-user'>#{user}</div><span>I agree.</span></div>#{head}" => "I agree.",
+      "<div class='quote'><div class='message-user'>#{user}</div><img src='/starter.png' alt='Starter photo'></div>#{head}" => "![Starter photo]",
+      "<article class='message'><div class='message-user'>#{user}</div><p>I agree.</p></article>#{head}" => "I agree.",
+      "#{head}<div class='quote'><div class='message-user'>#{user}</div><math alttext='2^{10}=1024'></math></div>" => "$2^{10}=1024$"
+    }.each do |inner, shown|
+      markdown = thread([
+        "<article class='message'><div class='message-user'>#{user}</div>#{inner}</article>",
+        post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+      ])
+
+      markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+      markdown.should include("**wren**\n\n#{shown}")
+    end
+  end
+
   # The same name may be another member's, or come with a fuller date.
   it "keeps the member panel's line where it says more than the post's" do
     posts = [
       ["<a class='username' href='/members/101'>Wren</a>", "<a class='username' href='/members/202'>wren</a> <time>May 3, 2024</time>"],
+      ["<a class='username' href='/members/WREN'>Wren</a>", "<a class='username' href='/members/wren'>wren</a> <time>May 3, 2024</time>"],
+      ["<a class='username' href='https://bakers.example.net/members/wren'>Wren</a>",
+       "<a class='username' href='https://example.com/members/wren'>wren</a> <time>May 3, 2024</time>"],
       ["<a class='username' href='/members/wren'>wren</a><div class='post-time'>May 3, 2024 at 08:45 UTC</div>",
        "<a class='username' href='/members/wren'>wren</a> <time>May 3, 2024</time>"],
       ["<a class='username' href='/members/wren'>wren</a><span class='post-date'>May 3, 2024</span>",
@@ -269,6 +294,41 @@ RSpec.describe Nokodown::PostAttribution do
 
       markdown.scan(/\*\*wren\*\*/i).size.should == 2
       markdown.should include("#{question}")
+    end
+  end
+
+  # A panel in a link renders as the link to the member's profile.
+  it "keeps the member panel's line that links to the profile" do
+    markdown = thread([
+      "<article class='message'><a class='member-card' href='/members/101'><div class='message-user'><span class='username'>wren</span></div></a>" \
+      "<header><a class='username' href='/members/wren'>wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
+      post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+    ])
+
+    markdown.should include("[**wren**](https://example.com/members/101)")
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+  end
+
+  # The post's line may go where nothing renders it: between a table's
+  # rows, or a list's terms.
+  it "keeps the member panel's line where the post's line is not shown" do
+    layouts = [
+      lambda do |name, day, body|
+        user = "<a class='username' href='/members/#{name}'>#{name}</a>"
+        "<table class='tborder'><tr><td><div class='message-user'>#{user}</div></td></tr>" \
+          "<tr><td><header>#{user} <time datetime='2024-05-0#{day}'>May #{day}, 2024</time></header></td></tr><tr><td><p>#{body}</p></td></tr></table>"
+      end,
+      lambda do |name, day, body|
+        user = "<a class='username' href='/members/#{name}'>#{name}</a>"
+        "<article class='message'><dl><dd><div class='message-user'>#{user}</div></dd>" \
+          "<header>#{user} <time datetime='2024-05-0#{day}'>May #{day}, 2024</time></header><dd><p>#{body}</p></dd></dl></article>"
+      end
+    ]
+    layouts.each do |layout|
+      markdown = thread([layout.call("wren", 3, question), layout.call("basil", 5, answer)])
+
+      markdown.should match(/\*\*wren\*\*.*\n\n(- )?#{Regexp.escape(question)}|\*\*wren\*\*; #{Regexp.escape(question)}/)
+      markdown.should match(/\*\*basil\*\*.*\n\n(- )?#{Regexp.escape(answer)}|\*\*basil\*\*; #{Regexp.escape(answer)}/)
     end
   end
 

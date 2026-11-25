@@ -15,8 +15,8 @@ module Nokodown
     STAMPS = "time, [datetime], [class]"
     DATE_CLASS = /date|time/.freeze
     # Dates that date the member, not the post.
-    MEMBER_DATE = /\b(?:joined|join\s?date|member\ssince|registered|last\s(?:seen|active|visit|post(?:ed)?)|local\stime)\b/i.freeze
-    MEMBER_DATE_CLASS = /join|regist|last-?(?:seen|active|visit|post)|local-?time/.freeze
+    MEMBER_DATE = /\b(?:joined|join\s?date|member\ssince|registered|last\s(?:seen|active|visit)|local\stime)\b/i.freeze
+    MEMBER_DATE_CLASS = /join|regist|last-?(?:seen|active|visit)|local-?time/.freeze
     BY = /(?:by|von|par|por)\s+/i.freeze
     LETTER = /\p{L}/.freeze
     MAX_NAME = 60
@@ -33,13 +33,14 @@ module Nokodown
     # A panel with no name, a block of stats, is removed whole. The line a
     # panel PostAttribution marked as a post's leaves carries the post's
     # number and the name's profile link, so that the line can go where the
-    # post's own line repeats it (PostAttribution.finish).
+    # post's own line repeats it (PostAttribution.finish). A line in a link
+    # links to the profile, which the post's line does not.
     def reduce(panel)
       name = name(panel)
       if name && !bylined?(panel, name)
         line = line(panel.document, name, date(panel, name))
         panel.add_previous_sibling(line)
-        repeats(line, panel, name) if panel[PostAttribution::PANEL]
+        repeats(line, panel, name) if panel[PostAttribution::PANEL] && !linked?(panel)
       end
       panel.remove
     end
@@ -47,6 +48,10 @@ module Nokodown
     def repeats(line, panel, name)
       link = panel.css("a[href]").find { |candidate| Dom.text(candidate) == name }
       line[PostAttribution::REPEAT] = [panel[PostAttribution::PANEL], link && link["href"]].compact.join(" ")
+    end
+
+    def linked?(panel)
+      panel.ancestors.any? { |node| node.element? && node.name == "a" && node.key?("href") }
     end
 
     # The post beside the panel may open with a line naming the poster
