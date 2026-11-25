@@ -56,27 +56,39 @@ module Nokodown
     # The number of the post a body, the line written there, or a member
     # panel belongs to; MemberPanel copies a panel's onto the line it leaves.
     # A body's and a line's give the profile the name links to after it:
-    # "3 /members/wren.12/". One attribute each, as every one more on the
-    # lines slows the pruning that reads them.
+    # "3 /members/wren.12/". A panel's number ends in "+" where its column
+    # holds more than the panel ("3+"). One attribute each, as every one
+    # more on the lines slows the pruning that reads them.
     POST = "data-nokodown-post"
     LINE = "data-nokodown-line"
     PANEL = "data-nokodown-panel"
     REPEAT = "data-nokodown-repeat"
+    MORE = "+"
     # What may stand between a member panel's line and the line written
     # below it for the same post, as the rest of the panel's column ("Posts:
     # 41", a rank): non-space characters, and nodes read.
     MAX_BETWEEN = 80
     MAX_STEPS = 500
     # What shows in the Markdown with no text of its own: a formula renders
-    # its alttext, a box its checkbox.
-    SHOWN = %w[img picture video audio iframe embed object svg canvas math input].freeze
+    # its alttext, a box its checkbox, a rule a line.
+    SHOWN = %w[img picture video audio iframe embed object svg canvas math input hr].freeze
+    SHOWN_PARTS = SHOWN.join(", ").freeze
     SEPARATOR = /\A\s*·\s*/.freeze
     # Every element Patterns::MEMBER_PANEL can match, and few others.
     PANEL_CANDIDATES = %w[user poster author profile].flat_map { |word| ["[class*=#{word} i]", "[id*=#{word} i]"] }.join(", ").freeze
     HOST = %r{\A(?:[a-z][a-z\d+.-]*:)?//([^/?#]*)}i.freeze
     # "bbCodeBlock--quote", "bbcode_quote", "ipsQuote", Discourse's
-    # aside.quote; not XenForo's "js-selectToQuote" around a body.
-    QUOTE = /(?<![a-z])(?<!to-)quote/.freeze
+    # aside.quote, a "blockquote" class; not XenForo's "js-selectToQuote"
+    # around a body.
+    QUOTE = /(?<![a-z])(?<!to-)(?:block)?quote/.freeze
+    # Where a quote, or its credit, stands.
+    QUOTE_TAGS = %w[blockquote q cite figure figcaption details].freeze
+    QUOTE_PARTS = (QUOTE_TAGS + ["[class]"]).join(", ").freeze
+    # A reply's body, even one emptied of what it held (a checkbox).
+    REPLY_PARTS = %w[p blockquote pre table ul ol].join(", ").freeze
+    # Cells the renderer drops, with their column, when they show nothing.
+    CELLS = %w[td th dt dd].freeze
+    TABLE_CELLS = %w[td th].freeze
     # The children each container renders; the renderer skips the rest (a
     # <p> between a table's rows, or between a list's terms).
     RENDERED = {
@@ -88,12 +100,14 @@ module Nokodown
       # nodes: the content as it is rendered. The line a member panel left
       # goes where the line written for its post follows it, past no more
       # than the rest of the panel's column, or where it comes after that
-      # line with nothing after it before the next post; and only where it
-      # says no more: the same poster, with the same date or none, and where
-      # the post's line is rendered. A line with anything after it in the
-      # post names a reply or a quote, and one with a date of its own adds
-      # it. Returns the nodes to render, without a line that was one.
-      def finish(nodes)
+      # line with nothing after it before the next post, from a column that
+      # held the panel alone; and only where it says no more: the same
+      # poster, with the same date or none, and where the post's line is
+      # rendered. A line with anything after it in the post names a reply or
+      # a quote, and one with a date of its own adds it. A line that is all
+      # its cell shows keeps the cell. urls resolves the profile links.
+      # Returns the nodes to render, without a line that was one.
+      def finish(nodes, urls = nil)
         repeats = nodes.flat_map { |node| (node[REPEAT] ? [node] : []) + node.css("[#{REPEAT}]").to_a }
         return nodes if repeats.empty?
 
@@ -101,7 +115,7 @@ module Nokodown
         roots.delete(nil)
         lines = {}
         nodes.each { |node| ((node[LINE] ? [node] : []) + node.css("[#{LINE}]").to_a).each { |line| lines[mark(line).first] ||= line } }
-        removed = repeats.select { |repeat| repeated?(repeat, nodes, roots, lines) }
+        removed = repeats.select { |repeat| !cell?(repeat) && repeated?(repeat, nodes, roots, lines, urls) }
         removed.each(&:remove)
         keys = removed.filter_map { |line| Dom.key(line) }.to_set
         nodes.reject { |node| keys.include?(Dom.key(node)) }
@@ -109,16 +123,16 @@ module Nokodown
 
       private
 
-      def repeated?(repeat, nodes, roots, lines)
+      def repeated?(repeat, nodes, roots, lines, urls)
         number = mark(repeat).first
         chars = 0
         shown = false
         node = following(repeat, nodes, roots)
         MAX_STEPS.times do
           if node.nil? || (node.element? && (node[LINE] || node[REPEAT]) && mark(node).first != number)
-            return !shown && chars.zero? && after?(repeat, lines[number], roots)
+            return !shown && chars.zero? && alone?(repeat) && after?(repeat, lines[number], roots, urls)
           elsif node.element? && node[LINE]
-            return !shown && rendered?(node, roots) && same_line?(repeat, node)
+            return !shown && rendered?(node, roots) && same_line?(repeat, node, urls)
           elsif node.element? && node[REPEAT]
             node = following(node, nodes, roots)
           elsif node.element?
@@ -135,8 +149,34 @@ module Nokodown
       end
 
       # The panel's line comes after its post's line, saying no more.
-      def after?(repeat, line, roots)
-        !line.nil? && Dom.key(line).to_i < Dom.key(repeat).to_i && rendered?(line, roots) && same_line?(repeat, line)
+      def after?(repeat, line, roots, urls)
+        !line.nil? && Dom.key(line).to_i < Dom.key(repeat).to_i && rendered?(line, roots) && same_line?(repeat, line, urls)
+      end
+
+      # The panel held its column alone, with no reply or quote beside it.
+      def alone?(repeat)
+        !repeat[REPEAT].split(" ", 2).first.end_with?(MORE)
+      end
+
+      # The line is all its table cell, or list term or definition, shows,
+      # and the cell more than the line: without it the renderer drops the
+      # cell with what it shows with no text (a video, a formula), and, with
+      # a column, the table's caption.
+      def cell?(repeat)
+        text = Dom.text(repeat)
+        node = repeat.parent
+        while node&.element? && Dom.text(node) == text
+          return !node.at_css(SHOWN_PARTS).nil? || captioned?(node) if TABLE_CELLS.include?(node.name)
+          return true if CELLS.include?(node.name)
+
+          node = node.parent
+        end
+        false
+      end
+
+      def captioned?(cell)
+        table = cell.ancestors.find { |node| node.element? && node.name == "table" }
+        !table&.at_css("caption").nil?
       end
 
       # Is the line in the Markdown: below a root through children that
@@ -177,10 +217,10 @@ module Nokodown
         nodes[index + 1]
       end
 
-      def same_line?(repeat, line)
+      def same_line?(repeat, line, urls)
         number, href = mark(repeat)
         own_number, own_href = mark(line)
-        return false unless number == own_number && same_profile?(href, own_href)
+        return false unless number == own_number && same_profile?(href, own_href, urls)
 
         name, date = parts(repeat)
         own_name, own_date = parts(line)
@@ -191,7 +231,8 @@ module Nokodown
 
       # A line's post number and profile link.
       def mark(line)
-        (line[LINE] || line[REPEAT]).split(" ", 2)
+        number, href = (line[LINE] || line[REPEAT]).split(" ", 2)
+        [number.chomp(MORE), href]
       end
 
       def parts(line)
@@ -204,18 +245,20 @@ module Nokodown
 
       # Two names alike link to the same profile, when both link to one:
       # "Wren" and "wren" may be two members, as may /members/WREN and
-      # /members/wren, or one path on two hosts.
-      def same_profile?(href, other)
-        return true if href.nil? || other.nil?
+      # /members/wren, one path on two hosts, /users#/profiles/191 and
+      # /users#/profiles/105, or members/wren and /members/wren, read
+      # against the page's URL.
+      def same_profile?(href, other, urls)
+        return true if href.nil? || other.nil? || href == other
 
-        host, path = profile(href)
-        other_host, other_path = profile(other)
+        host, path = profile(href, urls)
+        other_host, other_path = profile(other, urls)
         path == other_path && (host.nil? || other_host.nil? || host.casecmp?(other_host))
       end
 
-      def profile(href)
-        href = href.strip
-        [href[HOST, 1], href.sub(HOST, "").sub(/#.*/m, "").sub(%r{\A(?:\.?/)+}, "").chomp("/")]
+      def profile(href, urls)
+        href = (urls && urls.resolve(href)) || href.strip
+        [href[HOST, 1], href.sub(HOST, "").chomp("/")]
       end
     end
 
@@ -407,10 +450,10 @@ module Nokodown
     # poster again, and Boilerplate reduces it to a line of its own. Each
     # panel is marked with the post it stands in, or beside in a row that
     # holds that one post, for .finish to weigh the line it leaves against
-    # the post's own. A panel in a quote names the quoted poster. A panel
-    # that repeats the post's date reads as a post of its own, with the
-    # panel's stats for a body: that post's line goes with the panel, and
-    # the panel stands beside the post its row holds besides.
+    # the post's own. A panel in a quote, or beside one, names the quoted
+    # poster. A panel that repeats the post's date reads as a post of its
+    # own, with the panel's stats for a body: that post's line goes with the
+    # panel, and the panel stands beside the post its row holds besides.
     def mark_member_panels(posts)
       panels = @body.css(PANEL_CANDIDATES).select { |node| MemberPanel.panel?(node) }
       return if panels.empty?
@@ -423,12 +466,84 @@ module Nokodown
         numbers[Dom.key(post.node)] = index.to_s
       end
       rows = rows(posts, numbers)
-      kinds = posts.filter_map { |post| post_kind(post.node) }.to_set
+      kinds = posts.flat_map { |post| post_kinds(post.node) }.to_set
+      taken = taken(posts)
       owners = {}
+      column_keys = {}
+      columns = {}
+      holds = {}
       panels.each do |panel|
+        next if quote?(panel)
+
         number = owner(panel, numbers, rows, kinds, owners)
-        panel[PANEL] = number if number
+        next unless number
+
+        column = column(panel, taken, column_keys, columns)
+        unless Dom.key(column) == Dom.key(panel)
+          held = (holds[Dom.key(column)] ||= column_of(column))
+          next if held.quotes.any? { |quote| !inside?(quote, panel) }
+
+          number = "#{number}#{MORE}" unless alone_in?(panel, held)
+        end
+        panel[PANEL] = number
       end
+    end
+
+    # What a member panel's column holds: its non-space characters, what
+    # shows with no text, the blocks a reply's body is made of, and the
+    # quotes in it.
+    Column = Struct.new(:chars, :shown, :parts, :quotes)
+
+    # A quote, or where its credit stands.
+    def quote?(node)
+      QUOTE_TAGS.include?(node.name) || Dom.signature(node).match?(QUOTE)
+    end
+
+    # The elements that are or hold a post's date or body: a panel's column
+    # stops below them.
+    def taken(posts)
+      posts.each_with_object(Set.new) do |post, keys|
+        [post.date, post.placement.body].each do |node|
+          node = node.parent while node&.element? && keys.add?(Dom.key(node))
+        end
+      end
+    end
+
+    # The panel's column: its highest ancestor that holds no post's date or
+    # body, or the panel, which then holds its column alone. Elements
+    # climbed through are remembered with the key of the column above them,
+    # so each is climbed through once.
+    def column(panel, taken, column_keys, columns)
+      passed = []
+      node = panel
+      until (key = column_keys[Dom.key(node)])
+        passed << Dom.key(node)
+        parent = node.parent
+        if parent.nil? || !parent.element? || taken.include?(Dom.key(parent))
+          key = Dom.key(node)
+          columns[key] = node
+          break
+        end
+        node = parent
+      end
+      passed.each { |passed_key| column_keys[passed_key] = key }
+      columns[key]
+    end
+
+    def column_of(node)
+      quotes = node.css(QUOTE_PARTS).select { |candidate| quote?(candidate) }
+      Column.new(Dom.char_count(node.content), shown(node), node.css(REPLY_PARTS).size, quotes)
+    end
+
+    def shown(node)
+      node.css(SHOWN_PARTS).size + (SHOWN.include?(node.name) ? 1 : 0)
+    end
+
+    # The panel holds its column alone: the column holds nothing else, such
+    # as a reply the panel's line names.
+    def alone_in?(panel, column)
+      Dom.char_count(panel.content) == column.chars && shown(panel) == column.shown &&
+        panel.css(REPLY_PARTS).size == column.parts
     end
 
     def in_panel?(post, panel_keys)
@@ -458,45 +573,72 @@ module Nokodown
     end
 
     # The innermost post around the panel, or the one post its row holds.
-    # A panel in a quote names the quoted poster, and one in a reply the
-    # post holds, undated, names the reply's: an element of a post's kind
-    # that is no post of its own. Elements climbed through are remembered
-    # with what was found above them, so each is climbed through once.
+    # A panel in a quote, or in a quote's credit, names the quoted poster,
+    # and one in a reply the post holds, undated, names the reply's: an
+    # element of a post's kind, in a post, that is no post of its own. One
+    # beside the post in its row is the row's other cell. Elements climbed
+    # through are remembered with what was found above them, so each is
+    # climbed through once.
     def owner(panel, numbers, rows, kinds, owners)
       passed = []
-      number = nil
+      found = [nil, false, false]
       node = panel.parent
       while node&.element?
         key = Dom.key(node)
         if owners.key?(key)
-          number = owners[key]
+          found = owners[key]
           break
         end
-        passed << key
         if numbers.key?(key) || rows.key?(key)
-          number = numbers[key] || rows[key]
+          found = [numbers[key] || rows[key], numbers.key?(key), false]
+          owners[key] = found
           break
         end
-        break if node.name == "blockquote" || Dom.signature(node).match?(QUOTE) || kinds.include?(post_kind(node))
+        if quote?(node)
+          found = [nil, false, false]
+          owners[key] = found
+          break
+        end
 
+        passed << [key, post_kind?(node, kinds)]
         node = node.parent
       end
-      passed.each { |key| owners[key] = number }
-      number
+      number, in_post, reply = found
+      passed.reverse_each do |key, kind|
+        reply ||= kind
+        owners[key] = [number, in_post, reply]
+      end
+      number unless in_post && reply
     end
 
-    # A post's tag and classes, or its id without the number ("post-"):
-    # a plain <div> around a panel is no post.
-    def post_kind(node)
-      classes = node["class"].to_s.split.join(" ")
-      return [node.name, classes] unless classes.empty?
+    # A post's kind: its tag with its first class, and with its id without
+    # the number ("post-"). A plain <div> around a panel is no post.
+    def post_kinds(node)
+      kinds = node["class"].to_s.split.first(1).map { |token| [node.name, token] }
+      stem = id_stem(node)
+      stem ? kinds << [node.name, stem] : kinds
+    end
 
+    # An element of a post's kind, whatever classes come with it ("message
+    # message--unread", "unread message").
+    def post_kind?(node, kinds)
+      return true if node["class"].to_s.split.any? { |token| kinds.include?([node.name, token]) }
+
+      stem = id_stem(node)
+      !stem.nil? && kinds.include?([node.name, stem])
+    end
+
+    def id_stem(node)
       id = node["id"].to_s
-      [node.name, "##{id.gsub(/\d+/, '')}"] if id.match?(/\d/)
+      "##{id.gsub(/\d+/, '')}" if id.match?(/\d/)
     end
 
+    # The profile link of the name the line gives: the link the name is or
+    # is in, or the first one it holds.
     def href(author)
-      link = author.name == "a" ? author : author.css("a[href]").find { |candidate| !Dom.text(candidate).empty? }
+      source = name_source(author) || author
+      link = ([source] + source.ancestors.to_a).find { |node| node.element? && node.name == "a" && node.key?("href") }
+      link ||= source.css("a[href]").find { |candidate| !Dom.text(candidate).empty? }
       link && link["href"]
     end
 
@@ -509,10 +651,15 @@ module Nokodown
     end
 
     def name(author)
-      source = author.at_css("[itemprop~=name]") if author["itemprop"].to_s.split.include?("author")
-      source ||= author.css("a[href]").find { |link| !Dom.text(link).empty? }
-      text = Dom.text(source || author).sub(BY, "")
+      text = Dom.text(name_source(author) || author).sub(BY, "")
       text unless text.empty? || text.length > MAX_NAME || label?(text)
+    end
+
+    # Where the name is read from: the author's name property, or the first
+    # link that says something.
+    def name_source(author)
+      source = author.at_css("[itemprop~=name]") if author["itemprop"].to_s.split.include?("author")
+      source || author.css("a[href]").find { |link| !Dom.text(link).empty? }
     end
 
     # The Pruner would strip a label ("Loading", "Share") from the line,

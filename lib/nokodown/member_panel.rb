@@ -46,8 +46,22 @@ module Nokodown
     end
 
     def repeats(line, panel, name)
-      link = panel.css("a[href]").find { |candidate| Dom.text(candidate) == name }
+      link = profile_link(panel, name)
       line[PostAttribution::REPEAT] = [panel[PostAttribution::PANEL], link && link["href"]].compact.join(" ")
+    end
+
+    # The link that says the name, or the one around it ("Wren" and a "Pro"
+    # badge in one link).
+    def profile_link(panel, name)
+      link = panel.css("a[href]").find { |candidate| Dom.text(candidate) == name }
+      return link if link
+
+      holder = panel.css("*").find { |node| Dom.text(node) == name }
+      holder&.ancestors&.each do |node|
+        break if !node.element? || Dom.key(node) == Dom.key(panel)
+        return node if node.name == "a" && node.key?("href")
+      end
+      nil
     end
 
     def linked?(panel)
