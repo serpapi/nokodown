@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://serpapi.com">
+    <img src="https://serpapi.com/assets/media_kit/logo-with-wordmark-gradient.svg" alt="SerpApi" width="220">
+  </a>
+</p>
+
 # nokodown
 
 Any web page to main-content Markdown, at Nokolexbor speed.
@@ -8,16 +14,28 @@ language). It works on articles and on everything else: home pages, search
 results, product and pricing pages, documentation, forums.
 
 Built on [Nokolexbor](https://github.com/serpapi/nokolexbor), for the
-`include_markdown` option of SerpApi's Extract API. The name is Nokolexbor's
-"noko" plus Markdown's "down".
+`include_markdown` option of SerpApi's [Extract API][extract]. The name is
+Nokolexbor's "noko" plus Markdown's "down".
+
+> **Don't want to fetch the pages yourself?** SerpApi's [Extract API][extract]
+> takes a URL and returns the page's Markdown as JSON, along with its meta
+> tags, structured data, links and images.
+> [Try the Extract API][extract].
 
 ## Installation
 
 ```ruby
-gem "nokodown", git: "git@github.com:serpapi/nokodown.git"
+gem "nokodown"
 ```
 
-Ruby 2.7 or newer, nokolexbor 0.6 or newer.
+Ruby 2.7 or newer, nokolexbor 0.6 or a later 0.x release. nokolexbor 0.7 and
+later need Ruby 3.1. Bundler picks 0.6.4 on older Rubies, but `gem install`
+does not, so install that version first:
+
+```sh
+gem install nokolexbor -v 0.6.4
+gem install nokodown
+```
 
 ## Usage
 
@@ -41,13 +59,17 @@ Nokodown.to_markdown(html, url: "https://example.com/post") # just the Markdown
 `html` is a string in any encoding. Binary strings are decoded using their
 `<meta charset>`, and invalid bytes are dropped.
 
+`Nokodown.extract`, `Nokodown.to_markdown` and `Nokodown::Result` are the
+public API. Other classes are internal and can change in any release.
+
 | Option | Default | |
 | --- | --- | --- |
 | `url` | `nil` | Page URL. Relative links and images are resolved against it (and `<base>`), and links to the page itself are reduced to their text. |
-| `main_content` | `true` | Keep only the main content. `false` converts the whole page, dropping only scripts, styles, hidden elements and form controls. |
+| `main_content` | `true` | Keep only the main content. `false` converts the whole page, or a selection of it, as it is: only scripts, styles, hidden elements, form inputs, closed dialogs and punctuation-only lines are dropped, and repeats, buttons, headings without a section and lines such as "Advertisement" or "Share" stay. |
 | `title` | `true` | Start with the page title as a `#` heading when the content has no `<h1>`, or when its first `<h1>` follows the opening paragraphs and so heads a section. When no content is found at all (a page rendered by scripts, a bot wall), `markdown` is empty and only `result.title` has the title. |
 | `images` | `true` | Include images. Emoji images are always kept as their text. |
 | `links` | `true` | Keep links. `false` keeps only their text. |
+| `max_length` | `nil` | Return at most this many characters of Markdown: exactly the first `max_length` characters of what `nil` gives, and the same `excerpt`. Rendering stops once the result is known, so a huge page costs less; when the start alone cannot settle it (an `<h1>` or a thumbnail further down can change it), the whole content is rendered once more. |
 
 `mode` says how the content was chosen: `:article` when the page was narrowed
 to one body of prose, `:page` when the whole main region was kept, `:full`
@@ -107,7 +129,10 @@ region, or most of the page's text, is never removed because of its class name.
 2. **Metadata**: JSON-LD, Open Graph and other `<meta>` tags, then the
    document, in Readability's order of preference.
 3. **Preprocessor**: restore lazy-loaded images (`data-src`, `srcset`,
-   `<noscript>` copies), drop scripts, invisible elements and form controls.
+   `<noscript>` copies, preferred over a placeholder or thumbnail `src`) and
+   link targets kept in `data-href` and similar attributes, drop scripts,
+   invisible elements and form controls, and turn elements nested more than
+   64 levels deep into plain text.
 4. **Boilerplate**: remove page chrome and noise widgets across the whole page.
 5. **ContentLocator**: score paragraphs with Readability's algorithm. When one
    candidate holds most of the page's prose the content is narrowed to it
@@ -135,8 +160,8 @@ region, or most of the page's text, is never removed because of its class name.
    highlighter's classes, GFM tables (rowspans and colspans filled in) for data
    tables while layout tables are unwrapped, definition lists, details, TeX
    from MathML, superscript and subscript digits as Unicode (10⁶, H₂O) and
-   other scripts as 2^(n-1) and a_n. Text is escaped only where it would
-   otherwise change meaning.
+   other scripts as 2^(n-1) and a_n, and video embeds and native players as
+   links. Text is escaped only where it would otherwise change meaning.
 
 ## Quality
 
@@ -144,7 +169,9 @@ region, or most of the page's text, is never removed because of its class name.
 
 [WCXB][wcxb] has 2,008 human-reviewed pages: 1,050 articles and 958 product,
 collection, listing, forum, documentation and service (SaaS, pricing) pages,
-split into a development set (1,497) and a held-out test set (511). Scores use
+split into a development set (1,497) and a test set (511). The test set was
+not held out: some of its pages were studied while tuning nokodown, and 139
+of them have the same HTML as a development page. Scores use
 its metric: word-level F1 against the reference main content, plus the share
 of "must include" snippets found and of boilerplate snippets leaked. All
 systems ran on the same pages with links, images and tables on; their Markdown
@@ -161,7 +188,7 @@ point.
 | rs-trafilatura 0.1.1 | 0.838 | 0.873 | 12.7% | 87.7% | 2,664 | 18% |
 | Trafilatura 2.3.1 | 0.816 | 0.858 | 8.1% | 81.8% | 2,552 | 17% |
 | Readability.js 0.6 + Turndown | 0.770 | 0.830 | 10.0% | 76.5% | 2,899 | 23% |
-| Current Extract rule | 0.782 | 0.802 | 43.2% | 90.1% | 4,356 | 35% |
+| Main-region baseline | 0.782 | 0.802 | 43.2% | 90.1% | 4,356 | 35% |
 
 F1 by page type on the test set (257 articles; 28 to 59 pages of each other type):
 
@@ -171,12 +198,12 @@ F1 by page type on the test set (257 articles; 28 to 59 pages of each other type
 | rs-trafilatura 0.1.1 | 0.942 | 0.740 | 0.732 | 0.714 | 0.829 | 0.953 | 0.801 |
 | Trafilatura 2.3.1 | 0.934 | 0.719 | 0.589 | 0.757 | 0.786 | 0.941 | 0.817 |
 | Readability.js 0.6 + Turndown | 0.931 | 0.634 | 0.614 | 0.637 | 0.711 | 0.882 | 0.805 |
-| Current Extract rule | 0.874 | 0.666 | 0.647 | 0.727 | 0.679 | 0.906 | 0.727 |
+| Main-region baseline | 0.874 | 0.666 | 0.647 | 0.727 | 0.679 | 0.906 | 0.727 |
 
-"Current Extract rule" is the Extract API's present `include_markdown`
-behaviour (the page's `<main>`, else its only `<article>`, else `<body>`)
-reproduced with nokodown's converter. See
-[benchmark/compare](benchmark/compare/README.md) to reproduce the table.
+"Main-region baseline" converts the page's `<main>`, else its only
+`<article>`, else `<body>`, with nokodown's converter and no main-content
+detection. See [benchmark/compare](benchmark/compare/README.md) to reproduce
+the table.
 
 ```sh
 bundle exec ruby benchmark/wcxb.rb tmp/corpora/wcxb test
@@ -217,28 +244,15 @@ bundle exec rake benchmark:speed
 ruby benchmark/speed.rb DIRECTORY --per-page   # any folder of .html or .html.gz files
 ```
 
-## Using it in the Extract API
-
-The Extract API currently fills `text_content.markdown` from the page's
-`<main>`, its only `<article>`, or the whole body. With this gem:
-
-```ruby
-markdown = Nokodown.to_markdown(html, url: final_url)
-```
-
-`main_content: false` gives the whole-page conversion if a request needs it.
-Truncation to 50,000 characters stays in the engine, and `include_tags` /
-`exclude_tags` can be applied to the HTML before it is passed in.
-
 ## Development
 
 ```sh
 bundle install
 bundle exec rspec
-NOKOLEXBOR_VERSION=0.6.4 bundle exec rspec   # the version SerpApi runs
+NOKOLEXBOR_VERSION=0.6.4 bundle exec rspec   # the last nokolexbor for Ruby 2.7
 ```
 
-Specs use RSpec's `should` syntax, like the main SerpApi app.
+Specs use RSpec's `should` syntax.
 
 ## License
 
@@ -246,5 +260,6 @@ Apache License 2.0. The scoring and cleaning heuristics are adapted from
 [Readability.js][mozilla]; see [NOTICE](NOTICE).
 
 [benchmark]: https://github.com/scrapinghub/article-extraction-benchmark
+[extract]: https://serpapi.com/extract-api
 [mozilla]: https://github.com/mozilla/readability
 [wcxb]: https://github.com/Murrough-Foley/web-content-extraction-benchmark

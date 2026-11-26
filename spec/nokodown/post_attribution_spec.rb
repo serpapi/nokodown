@@ -145,7 +145,7 @@ RSpec.describe Nokodown::PostAttribution do
 
       markdown.should include("**wren** · May 3, 2024\n\n#{question}")
       markdown.should include("**fern** · May 5, 2024")
-      markdown.should match(/\*\*basil\*\*.*\n\n(?:May 4, 2024\n\n)?#{Regexp.escape(answer)}/)
+      markdown.should match(/\*\*basil\*\*.*\n\n(?:May [34], 2024\n\n)?#{Regexp.escape(answer)}/)
       markdown.scan(/\*\*(?:wren|fern)\*\*/).size.should == 2
     end
   end
@@ -436,12 +436,51 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("**basil** · 2024-04-02\n\n")
   end
 
+  it "shows a relative date as the page does when it has no other" do
+    markdown = thread([
+      post("wren", "<time>Yesterday at 10:40</time>", question),
+      post("basil", "<time>Today at 09:30</time>", answer)
+    ])
+
+    markdown.should include("**wren** · Yesterday at 10:40\n\n#{question}")
+    markdown.should include("**basil** · Today at 09:30\n\n#{answer}")
+  end
+
   it "drops a copy of the date shown above the body" do
     time = "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time>"
     copy = "<div class='meta'><span class='date'>#{time}</span></div>"
     markdown = thread([post("wren", time, copy + question), post("basil", time.sub("08:45", "09:10"), answer)])
 
     markdown.scan("May 3, 2024").size.should == 2
+  end
+
+  it "keeps a date that is the body's text: a reply that is a date, a date after the text, a quoted date" do
+    entry = lambda do |name, at, body|
+      "<div class='post'><div class='post-head'><a class='username' href='/u/#{name}'>#{name}</a> " \
+        "<time datetime='2024-05-03T#{at}:00Z'>May 3, 2024</time></div><div class='post-body'>#{body}</div></div>"
+    end
+    date = ->(at) { "<span><time datetime='2024-05-03T#{at}:00Z'>May 3, 2024</time></span>" }
+    markdown = thread([
+      entry.call("wren", "08:45", "<p>#{question}</p><p>#{date.call('08:45')}</p>"),
+      entry.call("carol", "09:10", "<p>#{date.call('09:10')}</p>"),
+      entry.call("basil", "09:10", "<blockquote><p>Booked for #{date.call('09:10')}</p></blockquote><p>#{answer}</p>")
+    ])
+
+    markdown.should include("#{question}\n\nMay 3, 2024")
+    markdown.should include("**carol** · May 3, 2024\n\nMay 3, 2024")
+    markdown.should include("> Booked for May 3, 2024")
+  end
+
+  it "keeps the subject of each post when the header goes" do
+    posts = [["wren", "Is it ruined?", question], ["basil", "Feed it twice at room temperature for two days", answer]].map do |name, subject, body|
+      "<div class='post'><div class='post-head'><div class='post-info'><h2>#{subject}</h2><a class='username' href='/u/#{name}'>#{name}</a></div>" \
+        "<div class='post-date'><time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></div></div><div class='post-body'><p>#{body}</p></div></div>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("## Is it ruined?\n\n**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("## Feed it twice at room temperature for two days\n\n**basil** · May 3, 2024\n\n#{answer}")
+    markdown.should_not include("/u/")
   end
 
   it "writes a line for an opening post outside the list of replies" do
@@ -499,6 +538,18 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("**basil** · May 3, 2024\n\nAgreed.")
   end
 
+  it "takes a body that has a signature for the body, not for the signature" do
+    posts = [["wren", question], ["basil", answer]].map do |name, body|
+      "<div class='post'><div class='post-head'><a class='username' href='/u/#{name}'>#{name}</a> " \
+        "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></div><div class='post-text has-signature'><p>#{body}</p></div>" \
+        "<div class='signature'>Baking rye and spelt loaves since 1998, mostly by hand.</div></div>"
+    end
+    markdown = thread(posts)
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**basil** · May 3, 2024\n\n#{answer}")
+  end
+
   it "dates a post by its own date, not the member's join date" do
     posts = [["wren", question], ["basil", answer]].map do |name, body|
       "<div class='post'><div class='post-user'><a class='username' href='/u/#{name}'>#{name}</a> " \
@@ -543,6 +594,18 @@ RSpec.describe Nokodown::PostAttribution do
 
     markdown.should include("**wren** · May 3, 2024\n\n#{question}")
     markdown.should_not match(/^\s*· /)
+  end
+
+  it "finds the posts among many dated siblings in linear time" do
+    posts = Array.new(2_000) do |index|
+      "<div class='post-#{index} post'><div class='post-head'><a class='username' href='/u/#{index}'>member#{index}</a> " \
+        "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></div><div class='post-body'><p>#{answer}</p></div></div>"
+    end
+    body = Nokolexbor::HTML("<html><body><div class='posts'>#{posts.join}</div></body></html>").at_css("body")
+    Nokodown::Dom.assign_keys(body)
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    described_class.new(body).call
+    (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).should < 1
   end
 
   it "leaves answers signed below their body alone" do

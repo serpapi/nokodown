@@ -31,8 +31,8 @@ module Nokodown
       mitglied\sseit|registriert(?:\sseit)?|membre\sdepuis|inscrit(?:\sle)?|miembro\sdesde|registrado)\W*\z
     /xi.freeze
     # A sibling that ends a post: what the climb passed over before it was
-    # the body.
-    CLOSING = /(?<![a-z])(?:signature|footer)(?![a-z])/.freeze
+    # the body. A modifier ("has-signature") names a body that has one.
+    CLOSING = /(?<![a-z])(?<!has-|with-)(?:signature|footer)(?![a-z])/.freeze
     YEAR = /(?<!\d)(?:19|20)\d\d(?!\d)/.freeze
     ISO_DATE = /\A\d{4}-\d\d-\d\d/.freeze
     LETTER = /\p{L}/.freeze
@@ -53,6 +53,8 @@ module Nokodown
     AUTHOR = "data-nokodown-author"
     DATE = "data-nokodown-date"
     REPLACED = "data-nokodown-replaced"
+    SUBJECT = "data-nokodown-subject"
+    HEADINGS = "h1, h2, h3, h4, h5, h6"
     # The number of the post a body, the line written there, or a member
     # panel belongs to; MemberPanel copies a panel's onto the line it leaves.
     # A body's and a line's give the profile the name links to after it:
@@ -268,6 +270,7 @@ module Nokodown
 
     def call
       @authors = author_holders
+      @titles = @body.css("h1")
       posts = dated_posts.filter_map { |node, date| attributed(node, date) }
       ads, posts = posts.partition { |post| post.author.nil? }
       return self unless dated_above?(posts)
@@ -284,7 +287,10 @@ module Nokodown
       bodies = @body.css("[#{AUTHOR}]")
       return if bodies.empty?
 
-      @body.css("[#{REPLACED}]").each(&:remove)
+      @body.css("[#{REPLACED}]").each do |node|
+        node.css("[#{SUBJECT}]").each { |subject| node.add_previous_sibling(subject) }
+        node.remove
+      end
       selected = nodes.map { |node| Dom.key(node) }
       lines = bodies.map do |body|
         line = line(body[AUTHOR], body[DATE])
@@ -306,9 +312,10 @@ module Nokodown
     # from the inner one, which holds the machine-readable date.
     def dated_posts
       dates = @body.css(DATES).reject { |node| quoted?(node) || node.at_css(DATES) || member_date?(node) }
-      holders = dates.flat_map { |date| date.ancestors.select(&:element?) }.map { |node| Dom.key(node) }.compact.to_set
+      @holders = dates.flat_map { |date| date.ancestors.select(&:element?) }.map { |node| Dom.key(node) }.compact.to_set
+      @kinds = {}
       posts = dates.each_with_object({}) do |date, found|
-        post = post_of(date, holders)
+        post = post_of(date)
         found[Dom.key(post)] ||= [post, date] if post
       end
       posts = posts.values
@@ -345,10 +352,10 @@ module Nokodown
 
     # Posts repeat: a date's post is its lowest ancestor that has a sibling of
     # the same kind holding a date too, and that names an author.
-    def post_of(date, holders)
+    def post_of(date)
       date.ancestors.each do |ancestor|
         return if !ancestor.element? || ancestor.name == "body"
-        return ancestor if repeated?(ancestor, holders) && @authors.include?(Dom.key(ancestor))
+        return ancestor if repeated?(ancestor) && @authors.include?(Dom.key(ancestor))
       end
       nil
     end
@@ -372,11 +379,16 @@ module Nokodown
       Dom.squish(label)
     end
 
-    def repeated?(node, holders)
-      key = Dom.key(node)
-      node.parent.element_children.any? do |sibling|
-        Dom.key(sibling) != key && holders.include?(Dom.key(sibling)) && kind(sibling) == kind(node)
-      end
+    # The node holds a date, so it repeats when its parent has another child
+    # of its kind that holds one. Counted once per parent: every date in a
+    # long thread climbs through the same list of posts.
+    def repeated?(node)
+      kinds = @kinds[Dom.key(node.parent)] ||= dated_kinds(node.parent)
+      kinds.fetch(kind(node), 0) > 1
+    end
+
+    def dated_kinds(parent)
+      parent.element_children.select { |child| @holders.include?(Dom.key(child)) }.map { |child| kind(child) }.tally
     end
 
     # The first class, so an opening post marked "b-post--first" still
@@ -435,15 +447,34 @@ module Nokodown
       body[AUTHOR] = name(post.author)
       shown = date_text(post.date)
       body[DATE] = shown if shown
-      replaced(post).each { |node| node[REPLACED] = "" }
+      subjects = subjects(post, body)
+      subjects.each { |subject| subject[SUBJECT] = "" }
+      replaced(post, subjects).each { |node| node[REPLACED] = "" }
+    end
+
+    # A heading in the header that holds neither the name nor the date is
+    # the post's subject ("Re: The north bridge is closed"); it stays when
+    # the header goes, unless it repeats the thread's title, as the opening
+    # post's does on vBulletin 5. In a member panel it is the member's rank
+    # (XenForo's message-userTitle).
+    def subjects(post, body)
+      post.node.css(HEADINGS).reject do |heading|
+        @authors.include?(Dom.key(heading)) || inside?(post.date, heading) || inside?(heading, body) ||
+          quoted?(heading) || title?(heading) || heading.ancestors.any? { |ancestor| ancestor.element? && MemberPanel.panel?(ancestor) }
+      end
+    end
+
+    def title?(heading)
+      text = Dom.text(heading)
+      @titles.any? { |title| Dom.key(title) != Dom.key(heading) && Dom.text(title) == text }
     end
 
     # The line stands in for the header it was read from: the date line, the
     # panel around the name, and copies of the date above the body.
-    def replaced(post)
+    def replaced(post, subjects)
       placement = post.placement
-      header = placement.header if repeats?(placement, post.author, post.date)
-      [header, author_panel(post.author, post.date, placement.body), *copies(post.node, post.date)].compact
+      header = placement.header if repeats?(placement, post.author, post.date, subjects)
+      [header, author_panel(post.author, post.date, placement.body, subjects), *copies(post.node, post.date, placement.body)].compact
     end
 
     # The member panel beside a post (XenForo's message-user) names the
@@ -735,27 +766,30 @@ module Nokodown
         !node.at_css(BODY_PARTS).nil?
     end
 
-    # The header goes when the line says all it said: besides the name and
-    # the date it holds a few labels, and after the date only links and
-    # numbers ("#1"), not a short reply.
-    def repeats?(placement, author, date)
+    # The header goes when the line says all it said: besides the name, the
+    # date and the subject, which stays, it holds a few labels, and after the
+    # date only links and numbers ("#1"), not a short reply.
+    def repeats?(placement, author, date, subjects)
       return false if placement.tail.any? { |node| unlinked_text(node).match?(LETTER) }
 
       header = placement.header
       labels = Dom.text(header).length - Dom.text(date).length
       labels -= Dom.text(author).length if inside?(author, header)
+      labels -= subjects.sum { |subject| inside?(subject, header) ? Dom.text(subject).length : 0 }
       labels <= MAX_LABELS
     end
 
     # The highest ancestor of the name that holds neither the date nor the
-    # body: its avatar, rank and post count, when that is all it holds.
-    def author_panel(author, date, body)
+    # body: its avatar, rank and post count, when that is all it holds
+    # besides the post's subject.
+    def author_panel(author, date, body, subjects)
       taken = (date.ancestors.to_a + [body] + body.ancestors.to_a).select(&:element?).map { |node| Dom.key(node) }.to_set
       return if taken.include?(Dom.key(author))
 
       panel = author
       panel = panel.parent until taken.include?(Dom.key(panel.parent))
-      panel if Dom.text(panel).length <= MAX_PANEL && !prose?(panel)
+      length = Dom.text(panel).length - subjects.sum { |subject| inside?(subject, panel) ? Dom.text(subject).length : 0 }
+      panel if length <= MAX_PANEL && !prose?(panel)
     end
 
     def inside?(node, container)
@@ -770,31 +804,45 @@ module Nokodown
     end
 
     # Some themes show the date again above the body ("April 2, 2024 1 yr"):
-    # the outermost element around each copy that holds nothing else. A copy
-    # inside a phrase ("Posted April 2, 2024") stays, or the phrase would
-    # lose its date.
-    def copies(post, date)
+    # the outermost element around each copy that holds nothing else, short
+    # of the body. A copy inside a phrase ("Posted April 2, 2024") stays, or
+    # the phrase would lose its date, and so does one in a quote, one after
+    # the body's first words, and one that is all the body holds: a reply
+    # that is a date.
+    def copies(post, date, body)
       stamp = date["datetime"] || date["content"]
       return [] if stamp.nil?
 
+      stops = [Dom.key(post), Dom.key(body)]
       post.css(DATES).filter_map do |copy|
-        next if Dom.key(copy) == Dom.key(date) || (copy["datetime"] || copy["content"]) != stamp
+        next if Dom.key(copy) == Dom.key(date) || (copy["datetime"] || copy["content"]) != stamp || quoted?(copy)
 
         line = copy
-        line = line.parent while Dom.key(line.parent) != Dom.key(post) && Dom.text(line.parent) == Dom.text(copy)
-        line unless Dom.key(line) == Dom.key(copy)
+        line = line.parent while !stops.include?(Dom.key(line.parent)) && Dom.text(line.parent) == Dom.text(copy)
+        line if Dom.key(line) != Dom.key(copy) && above?(line, body)
       end
+    end
+
+    # Before the body, or first in it with more of the post after it. Keys
+    # follow document order.
+    def above?(line, body)
+      return false if inside?(body, line)
+      return Dom.key(line).to_i < Dom.key(body).to_i unless inside?(line, body)
+
+      text_before(line, body).zero? && Dom.text(body).length > Dom.text(line).length
     end
 
     # The date as the page shows it when that is a full date. "1 yr" or
     # "10 hours ago" depends on when the page was saved, so the machine
     # readable date replaces it, without its time down to the millisecond.
+    # Without one, the date the page shows ("Yesterday at 10:40") is all
+    # there is, and the header the line replaces showed it.
     def date_text(date)
       shown = [Dom.text(date)] + date.element_children.map { |child| Dom.text(child) } + [Dom.squish(date["title"].to_s)]
       text = shown.find { |candidate| candidate.length <= MAX_DATE && candidate.match?(YEAR) }
       return text unless text.nil? || text.match?(ISO_DATE)
 
-      (text || date["datetime"] || date["content"]).to_s[ISO_DATE]
+      (text || date["datetime"] || date["content"]).to_s[ISO_DATE] || (shown.first if shown.first.length.between?(1, MAX_DATE))
     end
 
     def line(name, date)

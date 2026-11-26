@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "json"
+
 module Nokodown
   # Removes everything that can never be content: scripts, invisible elements,
   # form controls, embeds. Lazy-loaded images are restored first so their
@@ -7,9 +9,20 @@ module Nokodown
   class Preprocessor
     JUNK = %w[
       script style noscript template link meta base object embed applet param canvas map area svg
-      source track audio video dialog select option optgroup datalist textarea output progress meter
-      keygen frame frameset portal slot
+      source track select option optgroup datalist progress meter keygen frame frameset portal slot
     ].join(",").freeze
+    # The same set in one :is(), which Lexbor finds in less than half the
+    # time. A ".//tag" XPath union is faster still, but its streaming
+    # evaluation stops 10,000 levels down, and these run before deep
+    # elements are flattened.
+    JUNK_SELECTOR = ":is(#{JUNK})".freeze
+    # XPath lists the same links in the same order as css("a"), in half the
+    # time. The axis is spelled out because ".//a" stops 10,000 levels down.
+    LINKS_XPATH = "descendant::a"
+    # Visible text that is not content, but is when a whole page, or a
+    # selection of it, is converted; a closed dialog is never visible.
+    CONTROLS = "dialog, textarea, output"
+    FULL_CONTROLS = "dialog:not([open])"
 
     HIDDEN_CLASSES = Set.new(%w[
       hidden hide d-none is-hidden u-hidden visually-hidden visuallyhidden sr-only screen-reader-text
@@ -18,53 +31,110 @@ module Nokodown
     ]).freeze
 
     # Found by Lexbor's selector engine, so the checks below only run on
-    # elements that could be hidden.
-    HIDDEN_CANDIDATES = (["[hidden]", "[aria-hidden=true]", "[style]"] + HIDDEN_CLASSES.map { |name| ".#{name}" }).join(", ").freeze
+    # elements that could be hidden. Lexbor walks the tree once for each
+    # selector of a list, but once for :is() of them; the results and their
+    # document order are the same.
+    HIDDEN_SELECTORS = (%w[[hidden] [aria-hidden=true] [style]] + HIDDEN_CLASSES.map { |name| ".#{name}" }).freeze
+    HIDDEN_CANDIDATES = ":is(#{HIDDEN_SELECTORS.join(", ")})".freeze
 
     # Utility classes that make a "hidden" element visible again at some breakpoint.
     RESPONSIVE_SHOW = /\A(?:(?:sm|md|lg|xl|2xl):(?:block|flex|grid|inline|inline-block|inline-flex|table|contents)|d-(?:sm|md|lg|xl|xxl)-(?:block|flex|grid|inline|inline-block|inline-flex|table))\z/.freeze
 
     STREAMED_LINK_SHARE = 0.5
+    SUSPENSE_OPEN = %w[$ $? $!].freeze
+    # The site's home page, maybe for one language ("/en/").
+    HOME_LINK = %r{\A(?:(?:https?:)?//[^/?#]+)?(?:/(?:[a-z]{2}(?:[-_][a-z]{2})?/?)?(?:index\.\w+)?)?\z}i.freeze
 
     HIDDEN_STYLE = /(?:\A|;)\s*(?:display\s*:\s*none|visibility\s*:\s*hidden)/i.freeze
 
     LINE_NUMBERS = /(?<![a-z])(?:line-?numbers?(?:-rows)?|linenos?|lineno|gutter|hljs-ln-numbers|ln-num)(?![a-z])/.freeze
 
-    VIDEO_HOSTS = %r{//(?:www\.)?(?:(?:dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq|bilibili|live\.bilibili)\.com|(?:archive|upload\.wikimedia)\.org|player\.twitch\.tv|fast\.wistia\.(?:net|com)|play\.vidyard\.com|loom\.com/embed)}i.freeze
+    # A player page on a video host: an http(s) or scheme-relative URL whose
+    # host is the provider's and which has a path, not a mention of the host
+    # anywhere in another URL ("mailto:x//player.vimeo.com/…").
+    VIDEO_HOSTS = %r{\A(?:https?:)?//(?:www\.)?(?:(?:(?:dailymotion|youtube|youtube-nocookie|player\.vimeo|v\.qq|bilibili|live\.bilibili)\.com|
+                     (?:archive|upload\.wikimedia)\.org|player\.twitch\.tv|fast\.wistia\.(?:net|com)|play\.vidyard\.com)(?::\d+)?/[^/?#\s]|
+                     loom\.com/embed/)}ix.freeze
 
     IMAGE_URL = /\.(?:jpe?g|png|webp|gif|avif)(?:[?#]\S*)?\s*\z/i.freeze
     IMAGE_SRCSET = /\.(?:jpe?g|png|webp|gif|avif)(?:\?\S*)?\s+\d/i.freeze
-    LAZY_SRC = %w[
-      data-src data-lazy-src data-original data-lazy data-url data-hi-res-src data-full-src
-      data-large-src data-orig-src data-actualsrc data-echo data-img-src data-image
+    # Where lazy loaders keep the real image: high-resolution names, then
+    # other loaders' names, thumbnails last.
+    HIGH_RES_SRC = %w[
+      data-a-hires data-src-hq data-client-src-hq data-hi-res-src data-large-src data-original data-full-src
+      data-original-src data-orig-src
     ].freeze
+    OTHER_LAZY_SRC = %w[
+      data-src data-lazy-src data-lazy data-lazysrc data-bsrc data-iurl data-image data-img data-a-image-source
+      data-fallback-src data-actualsrc data-thumb data-url data-echo data-img-src
+    ].freeze
+    LAZY_SRC = (HIGH_RES_SRC + OTHER_LAZY_SRC).freeze
+    # All but the generic names that hold an image only on an image marked
+    # as lazy; on others they are links or IDs.
+    OTHER_LAZY_ONLY_SRC = (OTHER_LAZY_SRC - %w[data-url data-echo data-img-src]).freeze
     LAZY_SRCSET = %w[data-srcset data-lazy-srcset data-original-set].freeze
+    # What a template writes for a missing value.
+    NO_VALUE = /\A(?:false|true|null|nil|none|undefined|NaN)\z/i.freeze
 
-    def initialize(body)
+    # Where script-driven links keep their target when they have no href.
+    LINK_TARGETS = %w[data-href data-url data-target-url data-delayed-url data-fallback-url ourl rl-link-href].freeze
+
+    # Below this many levels under <body>, elements become plain text. Page
+    # analysis and rendering recurse once per level, and a thread's stack
+    # (Puma serves requests in threads) runs out after a few hundred; real
+    # pages nest about 20 levels deep, rarely more than 50.
+    MAX_DEPTH = 64
+
+    # Elements whose renderer reads only certain children, and the wrapper
+    # their flattened text needs so it is not dropped.
+    TEXT_WRAPPERS = {
+      "table" => %w[tr td], "thead" => %w[tr td], "tbody" => %w[tr td], "tfoot" => %w[tr td],
+      "tr" => %w[td], "dl" => %w[dd]
+    }.freeze
+
+    def self.video_embed?(src)
+      UrlResolver.normalize(src).match?(VIDEO_HOSTS)
+    end
+
+    # full: the whole page, or a selection of it, is converted, so only what
+    # a reader cannot see goes; forms, buttons, labels and open dialogs stay.
+    def initialize(body, full: false)
       @body = body
+      @full = full
     end
 
     def call
       place_streamed_segments
-      @body.xpath(".//comment()").each(&:remove)
+      @body.xpath(".//comment()").to_a.each(&:remove)
       unwrap_noscript
-      @body.css("img").each { |img| restore_lazy_image(img) }
+      @body.css("img").to_a.each { |img| restore_lazy_image(img) }
       restore_picture_sources
-      @body.css(JUNK).each(&:remove)
-      @body.css("iframe").each { |iframe| iframe.remove unless iframe["src"].to_s.match?(VIDEO_HOSTS) }
-      @body.css("pre [class], table[class] td[class]").each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
+      @body.xpath(LINKS_XPATH).to_a.each { |link| restore_link_target(link) if UrlResolver.normalize(link["href"]).empty? }
+      @body.css("video, audio").to_a.each { |media| keep_playable(media) }
+      @body.css(JUNK_SELECTOR).to_a.each(&:remove)
+      @body.css(@full ? FULL_CONTROLS : CONTROLS).to_a.each(&:remove)
+      @body.css("iframe").to_a.each { |iframe| iframe.remove unless Preprocessor.video_embed?(iframe["src"]) }
+      @body.css("pre [class], table[class] td[class]").to_a.each { |node| node.remove if node["class"].downcase.match?(LINE_NUMBERS) }
       remove_hidden
       remove_form_controls
-      HeadingAnchors.mark(@body)
-      Dom.assign_keys(@body)
+      flatten_deep_elements
+      elements = Dom.elements(@body)
+      HeadingAnchors.mark(@body, elements)
+      Dom.assign_keys(@body, elements)
     end
 
     private
 
+    # Slots are found by id in a hash: an id put into a selector can break it
+    # ("S:1']"). A slot inside a fallback removed for an earlier segment is gone.
     def place_streamed_segments
-      @body.css("div[hidden][id^='S:']").each do |segment|
-        number = segment["id"].delete_prefix("S:")
-        slot = @body.at_css("template[id='B:#{number}'], template[id='P:#{number}']")
+      segments = @body.css("div[hidden][id^='S:']")
+      return if segments.empty?
+
+      slots = Hash.new { |hash, number| hash[number] = [] }
+      @body.css("template[id^='B:'], template[id^='P:']").each { |template| slots[template["id"][2..]] << template }
+      segments.each do |segment|
+        slot = slots[segment["id"].delete_prefix("S:")].find { |template| template.ancestors.include?(@body) }
         next if slot.nil? || link_list?(segment)
 
         remove_fallback(slot) if slot["id"].start_with?("B:")
@@ -82,10 +152,20 @@ module Nokodown
       text.positive? && links >= text * STREAMED_LINK_SHARE
     end
 
+    # The fallback runs to the comment that closes the boundary, past any
+    # boundaries nested in it ("$", "$?" or "$!" open one, "/$" closes it).
     def remove_fallback(slot)
       fallback = []
+      depth = 0
       node = slot.next_sibling
-      until node.nil? || (node.comment? && node.content == "/$")
+      until node.nil?
+        if node.comment? && SUSPENSE_OPEN.include?(node.content)
+          depth += 1
+        elsif node.comment? && node.content == "/$"
+          break if depth.zero?
+
+          depth -= 1
+        end
         fallback << node
         node = node.next_sibling
       end
@@ -138,18 +218,70 @@ module Nokodown
       !src.empty? && ["src", *LAZY_SRC].any? { |name| img[name].to_s.strip == src }
     end
 
+    # Loaders mark their images with a "lazy" class or with nothing but the
+    # attribute, so the attributes win over any src: a spacer, a
+    # placeholder or a low-quality thumbnail. Amazon lists its sizes in
+    # data-a-dynamic-image, of which the largest wins after the
+    # high-resolution names. A lazy srcset gives its largest image, after
+    # the plain attributes.
     def restore_lazy_image(img)
       img.remove_attribute("src") if placeholder_src?(img)
-      return if img["src"] && !img["class"].to_s.downcase.include?("lazy")
-
-      copy_first_attribute(img, LAZY_SRC, "src")
-      copy_first_attribute(img, LAZY_SRCSET, "srcset")
-      restore_from_any_attribute(img) unless img["src"] || img["srcset"]
+      marked = img["src"].to_s.strip.empty? || img["class"].to_s.downcase.include?("lazy")
+      source = lazy_source(img, HIGH_RES_SRC, marked: marked) || dynamic_image(img["data-a-dynamic-image"]) ||
+               lazy_source(img, marked ? OTHER_LAZY_SRC : OTHER_LAZY_ONLY_SRC, marked: marked) || lazy_srcset_source(img, marked)
+      img["src"] = source if source
+      restore_from_any_attribute(img) if marked && img["src"].to_s.strip.empty? && !img["srcset"]
     end
 
-    def copy_first_attribute(img, names, target)
-      value = names.map { |name| img[name].to_s.strip }.find { |v| !v.empty? && !v.start_with?("data:") }
-      img[target] = value if value
+    # The largest of the image URLs mapped to [width, height].
+    def dynamic_image(value)
+      return unless value.to_s.lstrip.start_with?("{")
+
+      sizes = JSON.parse(value)
+      return unless sizes.is_a?(Hash)
+
+      urls = sizes.select { |url, _| lazy_candidate?(url.strip) && image_location?(url.strip) }
+      urls.max_by { |_, size| size.is_a?(Array) && size[0].is_a?(Numeric) && size[1].is_a?(Numeric) ? size[0] * size[1] : 0 }&.first&.strip
+    rescue JSON::ParserError
+      nil
+    end
+
+    # The first of the attributes that holds an image location, as opposed
+    # to "false", an ID, a fragment, a template, another scheme or a spacer
+    # file. On a marked image any path, file name or query counts, spaces
+    # and all, as a loader may serve images from any relative URL. Without
+    # a src to fall back on (none, or an empty one), so does a bare word
+    # ("portrait"), in attribute order. An unmarked image's src is replaced
+    # only by a path, a query or a file name.
+    def lazy_source(img, names, marked:)
+      names.map { |name| img[name].to_s.strip }.find { |value| lazy_location?(img, value, marked) }
+    end
+
+    # The largest image of a lazy srcset, judged as the plain attributes are.
+    def lazy_srcset_source(img, marked)
+      urls = LAZY_SRCSET.map { |name| Markdown::Image.largest_srcset(img[name].to_s.strip).to_s.strip }
+      urls.find { |url| lazy_location?(img, url, marked) }
+    end
+
+    def lazy_location?(img, value, marked)
+      return false unless lazy_candidate?(value)
+      return image_location?(value) unless marked
+      return !value.match?(NO_VALUE) if img["src"].to_s.strip.empty?
+
+      value.match?(%r{[/.?]})
+    end
+
+    def lazy_candidate?(value)
+      return false if value.empty? || value.start_with?("#") || value.match?(/[{}<>]/)
+      return false if value.match?(/\A[a-z][a-z\d+.-]*:/i) && !value.match?(%r{\Ahttps?://}i)
+
+      !value.match?(Markdown::Image::TRACKING)
+    end
+
+    # A path, a query or a file name with an extension, without spaces: not
+    # a word ("Facebook", "X (formerly Twitter)"), an ID or a number ("1.5").
+    def image_location?(value)
+      !value.match?(/\s/) && value.match?(%r{[/?]|\.[a-z][a-z\d]{1,4}(?:[?#]|\z)}i)
     end
 
     def restore_from_any_attribute(img)
@@ -165,13 +297,73 @@ module Nokodown
       end
     end
 
-    # Tiny base64 GIF/PNG stand-ins that a lazy loader swaps out.
+    # Tiny base64 GIF/PNG stand-ins that a lazy loader swaps out, and
+    # spacer and placeholder files.
     def placeholder_src?(img)
       src = img["src"].to_s.strip
-      return false unless src.start_with?("data:")
+      return src.match?(Markdown::Image::TRACKING) unless src.start_with?("data:")
       return false if src.start_with?("data:image/svg+xml") && src.length > 200
 
       src.length < 300 || img.attribute_nodes.any? { |a| a.name != "src" && a.value.to_s.match?(IMAGE_URL) }
+    end
+
+    # Every later step reads href, which may be missing or blank. A
+    # template placeholder ("{url}") is no target.
+    def restore_link_target(link)
+      target = LINK_TARGETS.lazy.map { |name| link[name].to_s.strip }.find { |value| !value.empty? }
+      link["href"] = target if target && !target.match?(/[{}]/)
+    end
+
+    # A player is kept as an empty element with the file it plays, for the
+    # renderer to link to. Muted videos are autoplaying backgrounds. One
+    # inside a link is a preview of the page it links to: its file is not
+    # content, but a thumbnail it holds for browsers without video stays in
+    # its place, inside the link. Fallback text only says the player failed.
+    # A hidden one goes with its thumbnail, which would otherwise lose the
+    # attributes that hide it. Only its own children are read: a search of
+    # each nested player's subtree would take quadratic time.
+    def keep_playable(media)
+      src = playable_source(media)
+      return media.remove if src.nil? || media.key?("muted")
+      return keep_thumbnails(media) unless standalone_player?(media)
+
+      media.children.remove
+      media["src"] = src
+    end
+
+    def keep_thumbnails(media)
+      return media.remove if hidden_player?(media)
+
+      media.replace(Nokolexbor::NodeSet.new(media.document, media.element_children.select { |child| %w[img picture].include?(child.name) }))
+    end
+
+    # Its src, or that of a <source> in it. Blob URLs exist only in the
+    # browser that made them.
+    def playable_source(media)
+      return media["src"].strip if playable?(media["src"])
+
+      source = media.element_children.find { |child| child.name == "source" && playable?(child["src"]) }
+      source && source["src"].strip
+    end
+
+    def playable?(src)
+      src = src.to_s.strip
+      !src.empty? && !src.match?(/\A(?:blob|data):/i)
+    end
+
+    # Not in a link, and within MAX_DEPTH levels of <body>: a deeper player
+    # would become plain text, and walking up from each player of a deep
+    # nest to the top would take quadratic time. One whose outer player was
+    # emptied first has no way up at all.
+    def standalone_player?(media)
+      node = media.parent
+      MAX_DEPTH.times do
+        return false if node.nil? || node.name == "a"
+        return true if node == @body
+
+        node = node.parent
+      end
+      false
     end
 
     def restore_picture_sources
@@ -186,8 +378,8 @@ module Nokodown
 
     def remove_hidden
       total = Dom.char_count(@body.content)
-      @panel_ids = @body.css("[aria-controls]").flat_map { |control| control["aria-controls"].split }.to_set
-      @body.css(HIDDEN_CANDIDATES).each do |node|
+      @panel_ids = @body.css("[aria-controls]").to_a.flat_map { |control| control["aria-controls"].split }.to_set
+      @body.css(HIDDEN_CANDIDATES).to_a.each do |node|
         next unless hidden?(node)
         # A hidden wrapper around most of the page is an anti-flicker snippet
         # or an open modal in the snapshot, not something readers cannot see.
@@ -198,7 +390,24 @@ module Nokodown
     end
 
     def page_like?(node)
-      node.css("h1").size == @body.css("h1").size
+      titles(node).size == titles(@body).size
+    end
+
+    # A site logo marked up as an <h1> is on every page, outside any wrapper.
+    def titles(root)
+      root.css("h1").reject { |h1| logo?(h1) }
+    end
+
+    def logo?(h1)
+      return true if Dom.ancestors_named(h1, "nav").any?
+      return !h1.at_css("img").nil? if Dom.text(h1).empty?
+
+      home = [*Dom.ancestors_named(h1, "a"), *h1.css("a")].find { |link| home_link?(link["href"].to_s.strip) }
+      home && Dom.text(h1).length <= Dom.text(home).length
+    end
+
+    def home_link?(href)
+      !href.empty? && href.match?(HOME_LINK)
     end
 
     def hidden?(node)
@@ -207,6 +416,15 @@ module Nokodown
       return !disclosure?(node) if node["style"].to_s.match?(HIDDEN_STYLE)
 
       hidden_by_class?(node) && !disclosure?(node)
+    end
+
+    # As hidden? judges it, without the panels and page wrappers a player
+    # never is.
+    def hidden_player?(media)
+      return true if media.key?("hidden") && media["hidden"] != "until-found"
+      return !media["class"].to_s.include?("fallback-image") if media["aria-hidden"] == "true"
+
+      media["style"].to_s.match?(HIDDEN_STYLE) || hidden_by_class?(media)
     end
 
     def hidden_by_class?(node)
@@ -230,11 +448,19 @@ module Nokodown
     end
 
     def remove_form_controls
+      return remove_inputs if @full
+
       @body.css("form").each { |form| form.remove if utility_form?(form) }
       @body.css("input").each { |input| input.remove unless task_checkbox?(input) }
       @body.css("button").each { |button| disclosure_button?(button) ? button.replace(button.children) : button.remove }
       @body.css("label").each { |label| label.remove if label["for"] || Dom.ancestors_named(label, "form").any? }
       @body.css("form").each { |form| form.remove if leftover_form?(form) }
+    end
+
+    # Converting the whole page keeps the text of forms, buttons and labels.
+    def remove_inputs
+      @body.css("input").each { |input| input.remove unless task_checkbox?(input) }
+      @body.css("button").each { |button| button.replace(button.children) }
     end
 
     # Only a prompt such as "Search:" is left once the controls are gone.
@@ -256,6 +482,56 @@ module Nokodown
         form.css("input").any? { |i| %w[search email password].include?(i["type"].to_s.downcase) } ||
         form["action"].to_s.match?(/search|subscribe|newsletter|login|sign-?in|sign-?up/i) ||
         Dom.signature(form).match?(Patterns::NOISE)
+    end
+
+    # Runs last, so the text kept is only what would have been rendered, the
+    # content of <noscript> included.
+    def flatten_deep_elements
+      @body.xpath(".#{'/*' * MAX_DEPTH}[*]").each do |node|
+        text = @body.document.create_text_node(flat_text(node))
+        node.children.remove
+        text_wrappers(node).reverse_each { |name| text = wrap(name, text) }
+        node.add_child(text)
+      end
+    end
+
+    # Text of every descendant, without recursion. Block boundaries and <br>
+    # become line breaks, so words stay apart; <pre> keeps them as lines.
+    def flat_text(node)
+      text = +""
+      pending = node.children.to_a.reverse
+      until pending.empty?
+        current = pending.pop
+        if current.is_a?(String)
+          text << current
+        elsif current.text? || current.cdata?
+          text << current.content
+        elsif current.name == "br"
+          text << "\n"
+        elsif current.element?
+          boundary = Dom::BLOCK.include?(current.name)
+          text << "\n" if boundary
+          pending << "\n" if boundary
+          pending.concat(current.children.to_a.reverse)
+        end
+      end
+      text
+    end
+
+    # A <div> in a <dl> is read for its <dt>s and <dd>s, like the <dl>.
+    def text_wrappers(node)
+      return TEXT_WRAPPERS[node.name] if TEXT_WRAPPERS.key?(node.name)
+      return [] unless node.name == "div"
+
+      parent = node.parent
+      parent = parent.parent while parent&.name == "div"
+      parent&.name == "dl" ? %w[dd] : []
+    end
+
+    def wrap(name, child)
+      element = @body.document.create_element(name)
+      element.add_child(child)
+      element
     end
 
     # Accordion triggers usually carry the question text of an FAQ.

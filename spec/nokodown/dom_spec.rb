@@ -1,0 +1,331 @@
+# frozen_string_literal: true
+
+RSpec.describe Nokodown::Dom do
+  def element(attributes)
+    Nokolexbor::HTML("<div #{attributes}></div>").at_css("div")
+  end
+
+  describe ".paragraph_keys" do
+    def keyed(html)
+      body = Nokolexbor::HTML("<body>#{html}</body>").at_css("body")
+      described_class.assign_keys(body)
+      body
+    end
+
+    def paragraphs(body, root = body)
+      keys = described_class.paragraph_keys(root)
+      body.css("[id]").select { |node| keys.include?(described_class.key(node)) }.map { |node| node["id"] }
+    end
+
+    it "finds paragraphs and the divs without block children Readability rewrites into them" do
+      body = keyed(<<~HTML)
+        <div id="outer"><div id="text">Plain <b>text</b></div><p id="para">Para <span>graph</span></p>
+        <div id="list"><ul><li>Item</li></ul></div><div id="picture"><span><img src="a.jpg"></span></div><section id="section">Text</section></div>
+      HTML
+
+      paragraphs(body).should == %w[text para]
+      paragraphs(body, body.at_css("#text")).should == %w[text]
+    end
+
+    # Lexbor copies a link that is cut by a block into several elements that
+    # share one attribute list, so the copies share a key too. The copy
+    # visited last in a bottom-up pass decides, as it always has.
+    it "lets the last copy of a misnested link decide whether it holds a block" do
+      paragraphs(keyed('<div id="wrapper"><a href="/cart"><div>Offer</div><footer><span>Sale</span></a></footer></div>')).should ==
+        %w[wrapper]
+      paragraphs(keyed('<div id="wrapper"><a href="/cart"><span>Offer</span><footer><div>Sale</div></a></footer></div>')).should == []
+    end
+  end
+
+  describe ".elements" do
+    it "lists the elements under a root in document order, as css(\"*\") does" do
+      html = <<~HTML
+        <body><main><h1>Title</h1>text<!-- note --><section><p>One <b>bold</b> <i>two</i></p><ul><li>a</li><li><a>b</a></li></ul></section></main><footer><p>End</p></footer></body>
+      HTML
+      body = Nokolexbor::HTML(html).at_css("body")
+
+      described_class.elements(body).map(&:name).should == body.css("*").map(&:name)
+      described_class.elements(body.at_css("section")).map(&:name).should == %w[p b i ul li li a]
+      described_class.elements(body.at_css("b")).should == []
+    end
+
+    # Copies of a formatting element a block cuts share one attribute list
+    # in Lexbor; the walk must still visit each copy.
+    it "visits every copy of a misnested formatting element" do
+      body = Nokolexbor::HTML('<body><a href="/cart"><span>Offer</span><footer><div>Sale</div></a></footer><p>C</p></body>').at_css("body")
+
+      described_class.assign_keys(body)
+      described_class.shared_keys?(body).should == true
+
+      described_class.elements(body).map(&:name).should == body.css("*").map(&:name)
+    end
+
+    it "keys every element in document order" do
+      body = Nokolexbor::HTML("<body><div><p>x</p><p><b>y</b></p></div><p>z</p></body>").at_css("body")
+      described_class.assign_keys(body)
+
+      body.css("*").map { |node| described_class.key(node) }.should == %w[1 2 3 4 5]
+    end
+
+    # XPath's ".//*" is evaluated as a stream that stops 10,000 levels down.
+    it "lists and keys elements more than 10,000 levels down" do
+      depth = 10_050
+      body = Nokolexbor::HTML("<body>#{'<div>' * depth}<p>deep</p>#{'</div>' * depth}<p>top</p></body>").at_css("body")
+      described_class.assign_keys(body)
+
+      described_class.elements(body).size.should == depth + 2
+      described_class.key(body.css("p").first).should == (depth + 1).to_s
+      described_class.key(body.css("p").last).should == (depth + 2).to_s
+    end
+  end
+
+  describe ".children" do
+    it "lists a node's children with text, comments and templates, as children does" do
+      html = "<body><main>One <b>bold</b><!-- note --><template><i>t</i></template><svg><title>s</title></svg>" \
+             "<a href=\"/x\"><p>Block</p></a><pre>\n code</pre></main><p>End</p></body>"
+      body = Nokolexbor::HTML(html).at_css("body")
+
+      [body, body.at_css("main"), body.at_css("template"), body.at_css("svg"), body.at_css("b"), body.at_css("pre")].each do |node|
+        described_class.children(node).should == node.children.to_a
+      end
+      described_class.children(body.at_css("main")).map(&:name).should == %w[#text b #comment template svg a pre]
+      described_class.children(body.at_css("main b").child).should == []
+    end
+  end
+
+  describe ".element_children" do
+    it "lists a node's element children, as element_children does" do
+      html = "<body><main>One <b>bold</b><!-- note --><template><i>t</i></template><svg><title>s</title></svg>" \
+             "<a href=\"/x\"><p>Block</p></a> tail</main><p>End</p></body>"
+      body = Nokolexbor::HTML(html).at_css("body")
+
+      [body, body.at_css("main"), body.at_css("template"), body.at_css("svg"), body.at_css("a"), body.at_css("b")].each do |node|
+        described_class.element_children(node).should == node.element_children.to_a
+      end
+      described_class.element_children(body.at_css("main")).map(&:name).should == %w[b template svg a]
+      described_class.element_children(body.at_css("main b")).should == []
+    end
+  end
+
+  describe ".spaces_to_blanks" do
+    it "turns every Unicode space into a blank, as tr over the characters does" do
+      characters = (0..0x10FFFF).reject { |code| code.between?(0xD800, 0xDFFF) }.map { |code| code.chr(Encoding::UTF_8) }
+      [characters.join, characters.join("é"), "a\u00A0b\u3000c\u2028\u0085", "plain\ttext\n"].each do |string|
+        blanked = described_class.spaces_to_blanks(string)
+        blanked.should == string.tr(described_class::UNICODE_SPACES, " ")
+        blanked.encoding.should == Encoding::UTF_8
+      end
+    end
+
+    it "replaces the spaces of text full of their first bytes as characters" do
+      ["コーヒー　豆" * 50, "a\u00A0b\u2003" * 200, "a\u00A0" * 200, "a\u00A0" * 6, +"word#{"\u00A0" * 250}word"].each do |string|
+        string.should_receive(:tr).with(described_class::UNICODE_SPACES, " ").and_call_original
+        described_class.spaces_to_blanks(string).should == string.dup.tr(described_class::UNICODE_SPACES, " ")
+      end
+      ["one two three four five six seven\u00A0" * 20, +"one two three\u00A0", "\u00A0" * 8].each do |sparse|
+        sparse.should_not_receive(:tr)
+        described_class.spaces_to_blanks(sparse).should == sparse.dup.tr(described_class::UNICODE_SPACES, " ")
+      end
+    end
+
+    it "leaves invalid bytes and other encodings to tr, which raises" do
+      invalid = "a\u00A0b\xFF\tc".dup.force_encoding(Encoding::UTF_8)
+      latin = "a\u00A0b\tc".encode(Encoding::ISO_8859_1)
+      [[invalid, ArgumentError], [latin, Encoding::CompatibilityError]].each do |string, error|
+        -> { string.tr(described_class::UNICODE_SPACES, " ") }.should raise_error(error)
+        -> { described_class.spaces_to_blanks(string) }.should raise_error(error)
+      end
+    end
+  end
+
+  describe ".squish" do
+    it "gives text with single blanks between words back as it is" do
+      text = +"one two, three."
+      described_class.squish(text).should equal(text)
+      described_class.squish("one two").should == "one two"
+    end
+
+    it "squishes long text without searching it first" do
+      text = +("one two three " * 20).strip
+      text.should_not_receive(:match?)
+      described_class.squish(text).should == text
+    end
+
+    it "squishes as it does with no shortcut" do
+      slow = ->(string) { described_class.spaces_to_blanks(string).squeeze(" ").strip }
+      pieces = ["a", "b", " ", "  ", "\t", "\n", "\v", "\f", "\r", "\0", "\u00A0", "\u3000", "\u0085", "é"]
+      rng = Random.new(7)
+      2000.times do
+        string = Array.new(rng.rand(7)) { pieces[rng.rand(pieces.size)] }.join
+        described_class.squish(string.dup).should == slow.call(string)
+      end
+    end
+  end
+
+  describe ".squishes_longer?" do
+    it "is true only when the squished text is longer than the limit" do
+      units = [" ", "\u00A0", "\u3000", "\t", "\0", "a", "é", "コ", "😀", "\u200B"]
+      rng = Random.new(7)
+      strings = Array.new(3000) { Array.new(rng.rand(0..60)) { units.sample(random: rng) }.join }
+      strings += ["", " one two ", "a\v\fb\r\n", "\0a\0 ", "x" * 200, "x " * 200, "\u2000" * 300 + "x" * 30]
+      strings.each do |string|
+        [0, 1, 3, 10, 25].each do |limit|
+          next unless described_class.squishes_longer?(string, limit)
+
+          described_class.squish(string).length.should > limit
+        end
+      end
+      described_class.squishes_longer?("one two three", 10).should == true
+      described_class.squishes_longer?("o n e t w o", 10).should == false
+    end
+
+    # Text that is mostly blanks has to be squished anyway, so counting all
+    # of it first would only add to that.
+    it "reads only the start of long text" do
+      [+"a#{"\u2000" * 10_000}z", +"a#{" " * 10_000}z"].each do |string|
+        string.should_not_receive(:count)
+        described_class.squishes_longer?(string, 120).should == false
+      end
+      described_class.squishes_longer?("#{"x" * 121}#{"\u00A0" * 2000}", 120).should == true
+    end
+
+    # Counting characters means decoding them; bytes are read four times faster.
+    it "counts the bytes of other UTF-8, not its characters" do
+      counted = []
+      String.any_instance.stub(:count).and_wrap_original { |original, *sets| counted << original.receiver.encoding; original.call(*sets) }
+      described_class.squishes_longer?("日本語の文章です。#{"\u3000" * 3}" * 100, 120).should == true
+      described_class.squishes_longer?("\u2001" * 10_000, 120).should == false
+      counted.uniq.should == [Encoding::BINARY]
+    end
+
+    it "leaves text squish raises on to squish" do
+      invalid = "a\u00A0b\xFF\tc".dup.force_encoding(Encoding::UTF_8)
+      latin = "a\u00A0b\tc#{"x" * 20}".encode(Encoding::ISO_8859_1)
+      described_class.squishes_longer?(invalid, 2).should == false
+      described_class.squishes_longer?(latin, 2).should == false
+    end
+  end
+
+  describe ".elements_bottom_up" do
+    def traversed(root)
+      found = []
+      root.traverse { |node| found << node if node.element? }
+      found
+    end
+
+    it "lists root and its elements children first, as traverse yields them" do
+      body = Nokolexbor::HTML("<body><main><h1>Title</h1>text<!-- note --><section><p>One <b>bold</b></p><ul><li>a</li></ul></section></main><p>End</p></body>").at_css("body")
+
+      described_class.elements_bottom_up(body).map(&:name).should == %w[h1 b p li ul section main p body]
+      described_class.elements_bottom_up(body).map(&:name).should == traversed(body).map(&:name)
+      described_class.elements_bottom_up(body.at_css("b")).map(&:name).should == %w[b]
+    end
+
+    it "visits every copy of a misnested formatting element" do
+      body = Nokolexbor::HTML('<body><a href="/cart"><span>Offer</span><footer><div>Sale</div></a></footer><p>C</p></body>').at_css("body")
+      described_class.assign_keys(body)
+      described_class.shared_keys?(body).should == true
+
+      described_class.elements_bottom_up(body).map { |node| [node.name, described_class.key(node)] }
+        .should == traversed(body).map { |node| [node.name, described_class.key(node)] }
+    end
+  end
+
+  describe ".ancestors_named" do
+    it "lists the ancestors with the given names, nearest first" do
+      doc = Nokolexbor::HTML("<table><tr><td><div><p><b>Cell</b></p></div></td></tr></table>")
+
+      described_class.ancestors_named(doc.at_css("b"), "td", "p", "table").map(&:name).should == %w[p td table]
+      described_class.ancestors_named(doc.at_css("b"), "figure").should == []
+    end
+
+    it "climbs out of a copy or a fragment without failing" do
+      doc = Nokolexbor::HTML("<figure><p><b>Cell</b></p></figure>")
+      copy = doc.at_css("p").dup
+
+      described_class.ancestors_named(copy.at_css("b"), "p", "figure").map(&:name).should == %w[p]
+      described_class.ancestors_named(doc.fragment("<i><b>x</b></i>").at_css("b"), "i").map(&:name).should == %w[i]
+    end
+  end
+
+  describe ".signature" do
+    it "lowercases class and id and splits camelCase" do
+      described_class.signature(element('class="adContainer siteNav2Bar" id="mainHeader"')).should ==
+        "ad-container site-nav2-bar main-header"
+    end
+
+    it "drops generated ids and CSS module hashes" do
+      node = element('class="w-node-b5343ad4-1c2e-ad12-9f0b-3c4d5e6f7a8b mdx-table_root__adKqa"')
+      described_class.signature(node).should == "w-node-  mdx-table_root "
+    end
+
+    it "searches only names long enough to hold a generated id" do
+      described_class.signature_of("w-node-b5343ad4-1c2e-ad12-9f0b-3c4d5e6f7a8b").should == "w-node- "
+      described_class.signature_of("b5343ad4-1c2e-ad12-9f0b-3c4d5e6f7a8").should == "b5343ad4-1c2e-ad12-9f0b-3c4d5e6f7a8"
+      short = +"navBar main"
+      short.stub(:match?).and_call_original
+      short.should_not_receive(:match?).with(described_class::UUID)
+      described_class.signature_of(short).should == "nav-bar main"
+    end
+
+    it "is empty without class and id" do
+      described_class.signature(element('title="x"')).should == ""
+    end
+
+    it "gives the same signature from the cache an extraction keeps" do
+      nodes = %w[adContainer adContainer cookieBanner].map { |name| element("class=\"#{name}\" id=\"x#{name}\"") }
+      uncached = nodes.map { |node| described_class.signature(node) }
+
+      cached = described_class.caching_signatures do
+        Array.new(2) { nodes.map { |node| described_class.signature(node) } }
+      end
+
+      cached.should == [uncached, uncached]
+      Thread.current[described_class::SIGNATURES].should be_nil
+    end
+
+    it "finds a cached signature without building the string it is made from" do
+      node = element('class="adContainer siteNav" id="mainHeader"')
+      described_class.caching_signatures do
+        described_class.signature(node)
+        allocations = lambda do
+          before = GC.stat(:total_allocated_objects)
+          10.times { described_class.signature(node) }
+          GC.stat(:total_allocated_objects) - before
+        end
+        # Reading the class and the id are the only allocations left. Some
+        # Rubies allocate a little more the first time a block is measured.
+        Array.new(3) { allocations.call }.min.should <= 20
+      end
+    end
+
+    it "reads a cached class list once for elements with different ids" do
+      nodes = %w[a1 a2 navMain].map { |id| element("class=\"adContainer siteNav\" id=\"#{id}\"") }
+      nodes << element('class="adContainer siteNav"') << element('id="navMain"')
+      uncached = nodes.map { |node| described_class.signature(node) }
+
+      described_class.should_receive(:signature_of).with("adContainer siteNav").once.and_call_original
+      described_class.should_receive(:signature_of).with("").once.and_call_original
+      described_class.should_receive(:signature_of).with(anything).exactly(4).times.and_call_original
+      cached = described_class.caching_signatures { nodes.map { |node| described_class.signature(node) } }
+
+      uncached.should == ["ad-container site-nav a1", "ad-container site-nav a2", "ad-container site-nav nav-main", "ad-container site-nav ", " nav-main"]
+      cached.should == uncached
+    end
+
+    it "answers secondary? from the cache as the pattern does, and drops the cache after" do
+      nodes = ["comments", "comments", "post-body", "most-read", "most-read x", "related"].map { |name| element("class=\"#{name}\"") }
+      nodes << element('id="comments"') << element("")
+      uncached = nodes.map { |node| Nokodown::Patterns.secondary?(described_class.signature(node)) }
+
+      cached = described_class.caching_signatures do
+        Array.new(2) { nodes.map { |node| described_class.secondary?(node) } }
+      end
+
+      uncached.should == [true, true, false, true, true, false, true, false]
+      cached.should == [uncached, uncached]
+      nodes.map { |node| described_class.secondary?(node) }.should == uncached
+      Thread.current[described_class::SECONDARY].should be_nil
+    end
+  end
+end

@@ -3,4 +3,8 @@ Copyright 2026 SerpApi
 
 The content scoring, conditional cleaning, title and metadata heuristics are
 adapted from Readability.js (https://github.com/mozilla/readability),
-Copyright (c) 2010 Arc90 Inc, licensed under the Apache License, Version 2.0.
+licensed under the Apache License, Version 2.0. Its NOTICE reads:
+
+  Readability
+  Copyright (c) 2010 Arc90 Inc
+  Copyright (c) 2010-2026 Mozilla and Contributors

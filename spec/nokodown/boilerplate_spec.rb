@@ -36,6 +36,20 @@ RSpec.describe Nokodown::Boilerplate do
       remaining('<table class="mdx-table_root__adKqa"><tr><td>Provisioner type</td></tr></table>').should == "Provisioner type"
     end
 
+    it "removes blocks with ad attributes, and asks no element for them on a page without any" do
+      asked = []
+      Nokolexbor::Node.any_instance.stub(:key?).and_wrap_original do |original, name|
+        asked << name if name == "data-ad-slot"
+        original.call(name)
+      end
+
+      remaining('<p>Heat pumps move heat.</p><div><span data-ad-slot="x">Boiler sale</span></div>').should == "Heat pumps move heat."
+      asked.should_not be_empty
+      asked.clear
+      remaining("<p>Heat pumps move heat.</p><div><span>Boiler sale</span></div>").should include("Boiler sale")
+      asked.should be_empty
+    end
+
     it "removes ad slots, including sized ones" do
       html = <<~HTML
         <p>Heat pumps move heat instead of making it.</p>
@@ -56,6 +70,38 @@ RSpec.describe Nokodown::Boilerplate do
       HTML
 
       remaining(html).should == "Heat pumps move heat instead of making it. They keep working at minus twenty degrees."
+    end
+
+    it "reads no names into a variant with brackets inside its brackets" do
+      html = <<~HTML
+        <p>Heat pumps move heat instead of making it.</p>
+        <div class="[&:not([hidden])_.share-row]:flex">They keep working at minus twenty degrees.</div>
+      HTML
+
+      remaining(html).should == "Heat pumps move heat instead of making it. They keep working at minus twenty degrees."
+    end
+  end
+
+  describe "furniture class names" do
+    it "finds a furniture name anywhere in a class list" do
+      html = <<~HTML
+        <p>Heat pumps move heat instead of making it.</p>
+        <div class="col-md-4 js-sticky siteSidebar">Our showroom</div>
+        <div class="grid w-full" id="cookie-banner-root">We use cookies</div>
+      HTML
+
+      remaining(html).should == "Heat pumps move heat instead of making it."
+    end
+
+    # Boilerplate matches and caches each class name on its own, which only
+    # gives the same answer as matching the whole list while no pattern can
+    # match across the space between two names.
+    it "has no pattern that matches across class names" do
+      pattern = Nokodown::Patterns::PAGE_FURNITURE
+      pattern.source.should_not match(/\\[sSWDhH ]|\[\^|(?<!\\)\./)
+      ["sign up", "follow us", "ad slot", "site footer", "was this helpful", "table of contents"].each do |names|
+        names.match?(pattern).should == names.split.any? { |name| name.match?(pattern) }
+      end
     end
   end
 
@@ -107,6 +153,18 @@ RSpec.describe Nokodown::Boilerplate do
       remaining(html).should_not include("Another heat pump story")
     end
 
+    it "reads no names into WooCommerce's product terms" do
+      description = "Two dozen ginger biscuits baked with butter and dark molasses, in a tin that keeps them crisp. " * 3
+      html = <<~HTML
+        <div class="product type-product post-12 status-publish product_cat-cookies product_tag-social-gifts">
+          <h1>Ginger cookies</h1><p>#{description}</p>
+        </div>
+        <section>#{prose('Shipping', 3)}</section>
+      HTML
+
+      remaining(html).should include("Two dozen ginger biscuits")
+    end
+
     it "removes forum signatures, not the post" do
       html = <<~HTML
         <div class="message">
@@ -118,6 +176,21 @@ RSpec.describe Nokodown::Boilerplate do
       text = remaining(html)
       text.should include("Bleeding the radiators is explained")
       text.should_not include("My rig")
+    end
+
+    it "keeps a function's signature in API docs, and a post that has a signature" do
+      html = <<~HTML
+        <section class="tsd-panel"><div class="tsd-signature">heatOutput(flowTemperature: number): number</div></section>
+        <div class="member-signature">public double copAt(double outdoorTemperature)</div>
+        <h3 class="signature">#start_defrost(cycle) ⇒ Boolean</h3>
+        <div class="post"><div class="post-text has-signature">Bleed the radiators once a year.</div></div>
+      HTML
+
+      text = remaining(html)
+      text.should include("heatOutput(flowTemperature: number)")
+      text.should include("public double copAt")
+      text.should include("#start_defrost(cycle)")
+      text.should include("Bleed the radiators once a year.")
     end
 
     it "keeps the largest guessed block when removing furniture would leave nothing" do
@@ -331,5 +404,18 @@ RSpec.describe Nokodown::Boilerplate do
 
       remaining(html).should == "Heat pumps"
     end
+  end
+
+  it "judges a repeated furniture name as noise once" do
+    html = "#{prose('Heat pumps', 3)}#{'<div class="share-bar tag-heat"><a href="/s">Share</a></div>' * 20}"
+    calls = 0
+    trace = TracePoint.new(:c_call) { |point| calls += 1 if point.method_id == :gsub }
+
+    body = Nokolexbor::HTML("<html><body>#{html}</body></html>").at_css("body")
+    Nokodown::Preprocessor.new(body).call
+    trace.enable { Nokodown::Boilerplate.new(body).call }
+
+    body.css(".share-bar").should be_empty
+    calls.should < 5
   end
 end

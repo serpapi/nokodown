@@ -22,6 +22,13 @@ module Nokodown
     # modifier ("hasDisclaimer") names the block that has one, not the note.
     DISCLAIMER = /#{WORD_START}(?<!category-|tag-|has-)(?:disclaimers?|disclosures)#{WORD_END}/.freeze
 
+    # A member's signature under each forum post: XenForo message-signature,
+    # phpBB and SMF signature. A modifier ("has-signature") names the post
+    # that has one. API docs name a function's signature the same way, so
+    # Boilerplate removes one only when it is named after a post or sits in one.
+    SIGNATURE = /#{WORD_START}(?<!has-|with-)signature(?![\w-])/.freeze
+    POST = /post|message|comment|repl(?:y|ies)|thread|topic|forum|discussion|answer|question|bbp|msg/.freeze
+
     # The panel of member details beside each forum post: XenForo
     # message-user, phpBB postprofile, Invision cAuthorPane, vBulletin
     # userinfo. The token must end there, so XenForo's post body,
@@ -42,7 +49,7 @@ module Nokodown
       popup|pop-up|#{WORD_START}modal#{WORD_END}|interstitial|offcanvas|off-canvas|flyout|snackbar|tooltip|popover|
       #{WORD_START}toast#{WORD_END}|#{WORD_START}drawer#{WORD_END}|
       editsection|#{WORD_START}feedback#{WORD_END}|was-?this-?helpful|intercom|livechat|chat-?widget|
-      #{WORD_START}signature(?![\w-])|#{DISCLAIMER.source}|
+      #{SIGNATURE.source}|#{DISCLAIMER.source}|
       #{MEMBER_PANEL.source}|
       related|recommend|recirc|read-?next|more-?stories|you-?may-?like|also-?like|
       #{WORD_START}(?:search-?form|search-?box|search-?bar)#{WORD_END}
@@ -74,6 +81,56 @@ module Nokodown
     # Cheap first pass: most elements match none of the patterns below.
     PAGE_FURNITURE = Regexp.union(CHROME, NOISE)
 
+    # Onigmo tries the branches of an alternation one at a time, so a word
+    # list matches faster once branches share their prefixes: "pag|print"
+    # becomes "p(?:ag|rint)". A word holding another adds nothing.
+    def self.word_hint(words)
+      words = words.reject { |word| words.any? { |other| other != word && word.include?(other) } }
+      Regexp.new(prefix_tree(words)).freeze
+    end
+
+    def self.prefix_tree(words)
+      branches = words.group_by { |word| word[0] }.map do |first, group|
+        rest = group.map { |word| word[1..] }
+        rest.include?("") ? first : first + prefix_tree(rest)
+      end
+      branches.size == 1 ? branches.first : "(?:#{branches.join("|")})"
+    end
+    private_class_method :word_hint, :prefix_tree
+
+    # Every name the furniture patterns match holds one of these words, and
+    # most class names hold none, so checking them first skips the slow
+    # patterns for most names. A new furniture name needs its word here.
+    FURNITURE_HINT = word_hint(%w[
+      nav menu bar masthead crumb pag skip print toc table colophon copyright rail footer
+      cookie consent gdpr ccpa onetrust didomi usercentrics newsletter subscribe sign opt log
+      ad dfp doubleclick taboola outbrain revcontent zergnet sponsor promoted shar social follow
+      pop modal interstitial canvas flyout tooltip toast drawer editsection feedback helpful
+      intercom chat discl postprofile poster author message user related recommend recirc read
+      stories like search
+    ])
+
+    # The same for SECONDARY.
+    SECONDARY_HINT = word_hint(%w[comment disqus respond repl popular trending most author rss tag])
+
+    # HEADER and MENU only match a name holding one of these words, which
+    # most names do not, so checking for the word first skips the pattern.
+    def self.site_header?(value)
+      (value.include?("header") || value.include?("masthead")) && value.match?(HEADER)
+    end
+
+    def self.menu?(value)
+      value.include?("menu") && value.match?(MENU)
+    end
+
+    def self.furniture?(value)
+      value.match?(FURNITURE_HINT) && value.match?(PAGE_FURNITURE)
+    end
+
+    def self.secondary?(value)
+      value.match?(SECONDARY_HINT) && value.match?(SECONDARY)
+    end
+
     # Furniture named after where it sits. A section may be named after the
     # table-of-contents entry or skip link that points to it ("toc-para",
     # "skip-item"), but never after a place on the page.
@@ -92,7 +149,7 @@ module Nokodown
     # Readability's class weighting regexes.
     POSITIVE = /article|body|content|entry|hentry|h-entry|main|page|pagination|post|text|blog|story/.freeze
     NEGATIVE = /
-      -ad-|hidden|^hid$|\shid$|\shid\s|^hid\s|banner|combx|comment|com-|contact|footer|gdpr|masthead|
+      -ad-|hidden|(?<!\S)hid(?!\S)|banner|combx|comment|com-|contact|footer|gdpr|masthead|
       media|meta|outbrain|promo|related|scroll|share|shoutbox|sidebar|skyscraper|sponsor|shopping|tags|widget
     /x.freeze
 
@@ -159,6 +216,16 @@ module Nokodown
     /xi.freeze
 
     COPYRIGHT_TEXT = /\A(?:copyright\s*)?(?:©|\(c\)|&copy;)|all\srights\sreserved/i.freeze
+
+    # COPYRIGHT_TEXT in two parts. In one pattern Onigmo retries the anchored
+    # part at every position of a text that does not match; apart, it is
+    # tried once.
+    COPYRIGHT_START = /\A(?:copyright\s*(?:©|\(c\)|&copy;)|©|\(c\)|&copy;)/i.freeze
+    RIGHTS_RESERVED = /all\srights\sreserved/i.freeze
+
+    def self.copyright?(text)
+      text.match?(COPYRIGHT_START) || text.match?(RIGHTS_RESERVED)
+    end
 
     NOISE_HEADING = /
       \A(?:related(?:\s\w+)?|share(?:\sthis)?(?:\s\w+)?|comments?|leave\sa\s(?:comment|reply)|
