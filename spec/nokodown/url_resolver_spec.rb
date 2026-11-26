@@ -98,6 +98,18 @@ RSpec.describe Nokodown::UrlResolver do
     kept.each { |href| urls.resolve("#{href}#{target}").should == "#{href}#{target}" }
   end
 
+  it "reads where a link goes against the page's URL, cleaning nothing off" do
+    {
+      "../members/wren" => "https://example.com/members/wren",
+      "HTTPS://Example.COM:443/members/Wren" => "https://example.com/members/Wren",
+      "/user?icid=72" => "https://example.com/user?icid=72",
+      "/members/wren/" => "https://example.com/members/wren/",
+      "/users#/profiles/191" => "https://example.com/users#/profiles/191"
+    }.each { |href, url| 2.times { urls.target(href).should == url } }
+    urls.target(" ").should be_nil
+    urls.target("javascript:x").should be_nil
+  end
+
   it "finds anchors to the page only in URLs with a fragment" do
     urls.same_page?("https://example.com/dir/page").should == false
     urls.same_page?("https://example.com/dir/page#").should == true

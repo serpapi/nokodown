@@ -203,8 +203,8 @@ RSpec.describe Nokodown::PostAttribution do
   end
 
   # The rest of the panel's column (a rank, a post count) stands between the
-  # panel's line and the post's.
-  it "writes one line when the member panel's column holds more" do
+  # panel's line and the post's, and may say whose it is.
+  it "keeps the member panel's line when its column holds more" do
     ["<p class='userTitle'>Moderator</p>", "<p>Posts: 41</p>"].each do |extra|
       posts = [["wren", 3, question], ["basil", 5, answer]].map do |name, day, body|
         user = "<a class='username' href='/members/#{name}'>#{name}</a>"
@@ -214,9 +214,8 @@ RSpec.describe Nokodown::PostAttribution do
       end
       markdown = thread(posts)
 
-      markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+      markdown.should include("**wren**\n\n#{extra.gsub(/<[^>]+>/, '')}\n\n**wren** · May 3, 2024\n\n#{question}")
       markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
-      markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
     end
   end
 
@@ -271,7 +270,14 @@ RSpec.describe Nokodown::PostAttribution do
       "<div><cite>#{panel}</cite><blockquote>I fed mine twice.</blockquote></div>#{head}" => "> I fed mine twice.",
       "<details><summary>Earlier reply</summary>#{panel}<blockquote>I fed mine twice.</blockquote></details>#{head}" => "> I fed mine twice.",
       "<div class='quote-author user-info'>#{user}</div><p>I agree.</p>#{head}" => "I agree.",
-      "<div class='blockquote'>#{panel}<p>I agree.</p></div>#{head}" => "I agree."
+      "<div class='blockquote'>#{panel}<p>I agree.</p></div>#{head}" => "I agree.",
+      "<div class='bbquote'>#{panel}<p>I agree.</p></div>#{head}" => "I agree.",
+      "<div class='quotation'>#{panel}<p>I agree.</p></div>#{head}" => "I agree.",
+      "<div role='blockquote'>#{panel}<p>I agree.</p></div>#{head}" => "I agree.",
+      "<div>#{panel}<p id='quote-435'>I agree.</p></div>#{head}" => "I agree.",
+      "<section>#{panel}<div id='blockquote-2'><p>I agree.</p></div></section>#{head}" => "I agree.",
+      "#{panel}<p>I agree.</p>#{head}" => "I agree.",
+      "#{panel}<span>I agree.</span>#{head}" => "I agree."
     }.each do |inner, shown|
       markdown = thread([
         "<article class='message'><div class='message-user'>#{user}</div>#{inner}</article>",
@@ -296,18 +302,23 @@ RSpec.describe Nokodown::PostAttribution do
   it "keeps the member panel's line of a reply in a post of its kind" do
     user = "<a class='username' href='/members/wren'>wren</a>"
     head = "<header>#{user} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p>"
-    [["message unread", "unread message"], ["message dark", "message light"]].each do |outer, inner|
+    kinds = [["message unread", "unread message"], ["message dark", "message light"], ["theme-dark message", "message theme-light"],
+             ["unread message", "read message"]]
+    kinds.product([["post-435", "post-436"], nil]).each do |(outer, inner), ids|
+      outer_id, inner_id = ids&.map { |id| " id='#{id}'" }
       markdown = thread([
-        "<article class='#{outer}' id='post-435'><article class='#{inner}' id='post-436'><div class='message-user'>#{user}</div>" \
+        "<article class='#{outer}'#{outer_id}><article class='#{inner}'#{inner_id}><div class='message-user'>#{user}</div>" \
         "<p>I agree.</p></article>#{head}</article>",
-        post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+        "<article class='#{outer}'><header><a class='username' href='/members/basil'>basil</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+        "<p>#{answer}</p></article>"
       ])
 
       markdown.should include("**wren**\n\nI agree.\n\n**wren** · May 3, 2024\n\n#{question}")
     end
   end
 
-  # The same name may be another member's, or come with a fuller date.
+  # The same name may be another member's, at another URL or where the
+  # panel links to two of that name, or come with a fuller date.
   it "keeps the member panel's line where it says more than the post's" do
     posts = [
       ["<a class='username' href='/members/101'>Wren</a>", "<a class='username' href='/members/202'>wren</a> <time>May 3, 2024</time>"],
@@ -321,6 +332,14 @@ RSpec.describe Nokodown::PostAttribution do
       ["<a class='username' href='/members/72'>Wren</a>",
        "<span itemprop='author'><a href='/members/72'>Team</a><a href='/members/84' itemprop='name'>wren</a></span> <time>May 3, 2024</time>"],
       ["<a class='username' href='/users#/profiles/191'>Wren</a>", "<a class='username' href='/users#/profiles/105'>wren</a> <time>May 3, 2024</time>"],
+      ["<a class='username' href='/users#@server/a/'>Wren</a>", "<a class='username' href='/users#@server/a'>wren</a> <time>May 3, 2024</time>"],
+      ["<a class='username' href='/members/wren/'>Wren</a>", "<a class='username' href='/members/wren'>wren</a> <time>May 3, 2024</time>"],
+      ["<a class='username' href='http://example.com/members/wren'>Wren</a>", "<a class='username' href='/members/wren'>wren</a> <time>May 3, 2024</time>"],
+      ["<a class='username' href='/user?icid=72'>Wren</a>", "<a class='username' href='/user?icid=84'>wren</a> <time>May 3, 2024</time>"],
+      ["<a href='/members/72'><span class='username'>Wren</span><span class='badge'>Pro</span></a><span>Referred by <a href='/members/84'>Wren</a></span>",
+       "<a class='username' href='/members/84'>wren</a> <time>May 3, 2024</time>"],
+      ["<a href='/members/72'><span class='username'>Wren</span></a><span>Last visitor:</span><a class='username' href='/members/84'>Wren</a>",
+       "<a class='username' href='/members/84'>wren</a> <time>May 3, 2024</time>"],
       ["<a class='username' href='/members/wren'>wren</a><div class='post-time'>May 3, 2024 at 08:45 UTC</div>",
        "<a class='username' href='/members/wren'>wren</a> <time>May 3, 2024</time>"],
       ["<a class='username' href='/members/wren'>wren</a><span class='post-date'>May 3, 2024</span>",
@@ -339,7 +358,7 @@ RSpec.describe Nokodown::PostAttribution do
 
   # One profile, however its link is written.
   it "writes one line where the member panel links to the post's profile" do
-    ["../members/wren", "https://example.com:443/members/wren/"].each do |link|
+    ["../members/wren", "https://example.com:443/members/wren", "HTTPS://Example.com/members/wren"].each do |link|
       markdown = thread([
         "<article class='message'><div class='message-user'><a class='username' href='#{link}'>wren</a></div>" \
         "<div class='message-main'><header><a class='username' href='/members/wren'>wren</a> <time>May 3, 2024</time></header>" \
@@ -349,6 +368,33 @@ RSpec.describe Nokodown::PostAttribution do
 
       markdown.should include("**wren** · May 3, 2024\n\n#{question}")
       markdown.scan("**wren**").size.should == 1
+    end
+
+    markdown = thread([
+      "<article class='message'><div class='message-user'><a class='username' href='./wren'>wren</a></div>" \
+      "<div class='message-main'><header><a class='username' href='https://example.com/people/wren'>wren</a> <time>May 3, 2024</time></header>" \
+      "<p>#{question}</p></div></article>",
+      post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+    ], head: '<meta name="generator" content="XenForo"><base href="https://example.com/people/">')
+
+    markdown.scan("**wren**").size.should == 1
+  end
+
+  # A credit before the panel ("Last edited by") makes its line the name of
+  # who did it, not the poster's again.
+  it "keeps the member panel's line after a credit" do
+    user = "<a class='username' href='/members/wren'>wren</a>"
+    head = "<header>#{user} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p>"
+    {
+      "#{head}<p>Last edited by</p><div class='message-user'>#{user}</div>" => "Last edited by\n\n**wren**\n\n**basil**",
+      "<div>Reviewed by</div><div class='message-user'>#{user}</div>#{head}" => "Reviewed by\n\n**wren**\n\n**wren** · May 3, 2024"
+    }.each do |inner, shown|
+      markdown = thread([
+        "<article class='message'>#{inner}</article>",
+        post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+      ])
+
+      markdown.should include(shown)
     end
   end
 
@@ -388,8 +434,9 @@ RSpec.describe Nokodown::PostAttribution do
   end
 
   # A table drops a cell that shows nothing, and with its column the
-  # table's caption: a panel's line keeps the cell where it shows more.
-  it "keeps the member panel's cell that shows more than the line" do
+  # table's caption, and reads a sparser grid as a layout, dropping what its
+  # rows show with no text: a panel's line in a table stays.
+  it "keeps the member panel's line in a table" do
     row = lambda do |name, day, body, extra|
       user = "<a class='username' href='/members/#{name}'>#{name}</a>"
       "<tr><td>#{extra}<div class='message-user'>#{user}</div></td>" \
@@ -403,6 +450,27 @@ RSpec.describe Nokodown::PostAttribution do
     }.each do |(open, extra), shown|
       markdown = thread(["#{open}#{row.call('wren', 3, question, extra)}#{row.call('basil', 5, answer, '')}</table>"],
                         head: '<meta name="generator" content="vBulletin">')
+
+      markdown.should include(shown)
+      markdown.should include(question)
+      markdown.should include(answer)
+    end
+
+    user = "<a class='username' href='/members/wren'>wren</a>"
+    head = "<header>#{user} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p>"
+    basil = "<header><a class='username' href='/members/basil'>basil</a> <time datetime='2024-05-05'>May 5, 2024</time></header><p>#{answer}</p>"
+    caption = "<caption><a href='/archives/friday'>Friday fermentation log</a></caption>"
+    {
+      "<table>#{caption}<tr><td><div class='desktop message-user'>#{user}</div><div class='mobile message-user'>#{user}</div></td>" \
+      "<td>#{head}</td></tr><tr><td></td><td>#{basil}</td></tr></table>" => "[Friday fermentation log](https://example.com/archives/friday)",
+      "<table>#{caption}<tr><td><table role='presentation'><tr><td><div class='message-user'>#{user}</div></td></tr></table></td>" \
+      "<td>#{head}</td></tr><tr><td></td><td>#{basil}</td></tr></table>" => "[Friday fermentation log](https://example.com/archives/friday)",
+      "<table><tr><td><div class='message-user'>#{user}</div></td><td>#{head}</td><td>Starter</td></tr>" \
+      "<tr><td><div class='message-user'><a class='username' href='/members/basil'>basil</a></div></td><td>#{basil}</td><td>Starter</td></tr>" \
+      "<tr><td>Attachment</td><td><iframe src='https://www.youtube.com/embed/abcd1234567' title='Starter demonstration'></iframe></td><td></td></tr>" \
+      "<tr><td>Bake</td><td>Cover the loaf.</td><td></td></tr></table>" => "[Starter demonstration](https://www.youtube.com/watch?v=abcd1234567)"
+    }.each do |table, shown|
+      markdown = thread([table], head: '<meta name="generator" content="vBulletin">')
 
       markdown.should include(shown)
       markdown.should include(question)
@@ -423,7 +491,6 @@ RSpec.describe Nokodown::PostAttribution do
 
     markdown.should match(/\*\*wren\*\*.*\n\n(May 3, 2024\n\n)?#{Regexp.escape(question)}/)
     markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
-    markdown.scan("**basil**").size.should == 1
   end
 
   it "shows a full date where the page shows a relative one" do

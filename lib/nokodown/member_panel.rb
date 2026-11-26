@@ -36,32 +36,40 @@ module Nokodown
     # post's own line repeats it (PostAttribution.finish). A line in a link
     # links to the profile, which the post's line does not.
     def reduce(panel)
-      name = name(panel)
+      name, source = named(panel)
       if name && !bylined?(panel, name)
         line = line(panel.document, name, date(panel, name))
         panel.add_previous_sibling(line)
-        repeats(line, panel, name) if panel[PostAttribution::PANEL] && !linked?(panel)
+        repeats(line, panel, name, source) if panel[PostAttribution::PANEL] && !linked?(panel)
       end
       panel.remove
     end
 
-    def repeats(line, panel, name)
-      link = profile_link(panel, name)
-      line[PostAttribution::REPEAT] = [panel[PostAttribution::PANEL], link && link["href"]].compact.join(" ")
+    # A panel whose links leave the name's profile in doubt marks no line.
+    def repeats(line, panel, name, source)
+      href = profile_href(panel, name, source)
+      line[PostAttribution::REPEAT] = [panel[PostAttribution::PANEL], href].compact.join(" ") unless href == false
     end
 
-    # The link that says the name, or the one around it ("Wren" and a "Pro"
-    # badge in one link).
-    def profile_link(panel, name)
-      link = panel.css("a[href]").find { |candidate| Dom.text(candidate) == name }
-      return link if link
+    # The profile link of the name: the link the name is read from is, or
+    # is in ("Wren" and a "Pro" badge in one link), or, without one, the
+    # one link the panel holds. nil where the panel links nowhere; false
+    # where it is in doubt: another link says the name and goes elsewhere
+    # (a "Referred by" or "Last visitor" of the same name), or the panel
+    # holds links to more than one place and none is the name's.
+    def profile_href(panel, name, source)
+      links = panel.css("a[href]").to_a
+      return if links.empty?
 
-      holder = panel.css("*").find { |node| Dom.text(node) == name }
-      holder&.ancestors&.each do |node|
+      link = ([source] + source.ancestors.to_a).find do |node|
         break if !node.element? || Dom.key(node) == Dom.key(panel)
-        return node if node.name == "a" && node.key?("href")
+
+        node.name == "a" && node.key?("href")
       end
-      nil
+      named = links.select { |candidate| Dom.text(candidate).casecmp?(name) }.map { |candidate| candidate["href"] }
+      hrefs = link ? [link["href"]] : links.map { |candidate| candidate["href"] }
+      hrefs = (hrefs + named).uniq
+      hrefs.size == 1 ? hrefs.first : false
     end
 
     def linked?(panel)
@@ -77,12 +85,18 @@ module Nokodown
       end
     end
 
-    def name(panel)
+    # The name, with the element it is read from.
+    def named(panel)
       holders = panel.css(HOLDERS).select { |node| name_holder?(node) }
       # A holder around another ("avatar-username" around "username") can
       # hold the name twice, as responsive copies.
       holders.reject! { |holder| holder.css(HOLDERS).any? { |node| name_holder?(node) } }
-      holders.map { |holder| name_text(holder) }.compact.first || link_name(panel)
+      holders.each do |holder|
+        source = first_link(holder) || holder
+        text = name_text(source)
+        return [text, source] if text
+      end
+      link_name(panel)
     end
 
     def name_holder?(node)
@@ -90,8 +104,8 @@ module Nokodown
     end
 
     # A holder may hold the member's badges too; the profile link is the name.
-    def name_text(holder)
-      text = Dom.text(first_link(holder) || holder)
+    def name_text(source)
+      text = Dom.text(source)
       text if text.length.between?(1, MAX_NAME)
     end
 
@@ -101,7 +115,7 @@ module Nokodown
     def link_name(panel)
       link = first_link(panel)
       text = link && Dom.text(link)
-      text if text && text.length <= MAX_NAME && Dom.text(panel).start_with?(text)
+      [text, link] if text && text.length <= MAX_NAME && Dom.text(panel).start_with?(text)
     end
 
     def first_link(node)

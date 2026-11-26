@@ -66,31 +66,30 @@ module Nokodown
     PANEL = "data-nokodown-panel"
     REPEAT = "data-nokodown-repeat"
     MORE = "+"
-    # What may stand between a member panel's line and the line written
-    # below it for the same post, as the rest of the panel's column ("Posts:
-    # 41", a rank): non-space characters, and nodes read.
-    MAX_BETWEEN = 80
+    # Nodes read from a member panel's line to the line written below it
+    # for the same post.
     MAX_STEPS = 500
     # What shows in the Markdown with no text of its own: a formula renders
     # its alttext, a box its checkbox, a rule a line.
     SHOWN = %w[img picture video audio iframe embed object svg canvas math input hr].freeze
     SHOWN_PARTS = SHOWN.join(", ").freeze
     SEPARATOR = /\A\s*·\s*/.freeze
+    # Text a line names who did it after: "Last edited by", "Reviewed by:".
+    CREDIT = /(?:(?<!\p{L})(?:by|von|par|por|from)|:)\s*\z/i.freeze
     # Every element Patterns::MEMBER_PANEL can match, and few others.
     PANEL_CANDIDATES = %w[user poster author profile].flat_map { |word| ["[class*=#{word} i]", "[id*=#{word} i]"] }.join(", ").freeze
-    HOST = %r{\A(?:[a-z][a-z\d+.-]*:)?//([^/?#]*)}i.freeze
     # "bbCodeBlock--quote", "bbcode_quote", "ipsQuote", Discourse's
-    # aside.quote, a "blockquote" class; not XenForo's "js-selectToQuote"
-    # around a body.
-    QUOTE = /(?<![a-z])(?<!to-)(?:block)?quote/.freeze
+    # aside.quote, a "blockquote" class or id, "bbquote", "quotation"; not
+    # XenForo's "js-selectToQuote" around a body.
+    QUOTE = /(?<![a-z])(?<!to-)(?:block|bb)?quot(?:e|ation)/.freeze
     # Where a quote, or its credit, stands.
     QUOTE_TAGS = %w[blockquote q cite figure figcaption details].freeze
-    QUOTE_PARTS = (QUOTE_TAGS + ["[class]"]).join(", ").freeze
+    QUOTE_PARTS = (QUOTE_TAGS + %w[[class] [id] [role]]).join(", ").freeze
     # A reply's body, even one emptied of what it held (a checkbox).
     REPLY_PARTS = %w[p blockquote pre table ul ol].join(", ").freeze
-    # Cells the renderer drops, with their column, when they show nothing.
+    # Cells, which a line leaves the table's or the list's shape to: a
+    # column, a caption, or a row showing a video in a layout table.
     CELLS = %w[td th dt dd].freeze
-    TABLE_CELLS = %w[td th].freeze
     # The children each container renders; the renderer skips the rest (a
     # <p> between a table's rows, or between a list's terms).
     RENDERED = {
@@ -100,15 +99,17 @@ module Nokodown
 
     class << self
       # nodes: the content as it is rendered. The line a member panel left
-      # goes where the line written for its post follows it, past no more
-      # than the rest of the panel's column, or where it comes after that
-      # line with nothing after it before the next post, from a column that
-      # held the panel alone; and only where it says no more: the same
-      # poster, with the same date or none, and where the post's line is
-      # rendered. A line with anything after it in the post names a reply or
-      # a quote, and one with a date of its own adds it. A line that is all
-      # its cell shows keeps the cell. urls resolves the profile links.
-      # Returns the nodes to render, without a line that was one.
+      # goes where its panel held its column alone and nothing shows between
+      # it and the line written for its post, or after it to the next post's
+      # where it comes after that line; and only where it says no more: the
+      # same poster, at the same profile link, with the same date or none,
+      # where the post's line is rendered, and not after a credit ("Last
+      # edited by"). A line with anything after it in the post names a reply
+      # or a quote, one beside a rank or "Posts: 41" may say whose they are,
+      # and one with a date of its own adds it. A line in a table or a list
+      # of terms stays, as the table's shape may hang on it. urls reads the
+      # profile links. Returns the nodes to render, without a line that was
+      # one.
       def finish(nodes, urls = nil)
         repeats = nodes.flat_map { |node| (node[REPEAT] ? [node] : []) + node.css("[#{REPEAT}]").to_a }
         return nodes if repeats.empty?
@@ -125,24 +126,27 @@ module Nokodown
 
       private
 
+      # Nothing shows between the panel's line and the post's line, or after
+      # the panel's line to the next post's.
       def repeated?(repeat, nodes, roots, lines, urls)
+        return false unless alone?(repeat)
+
         number = mark(repeat).first
-        chars = 0
-        shown = false
         node = following(repeat, nodes, roots)
         MAX_STEPS.times do
           if node.nil? || (node.element? && (node[LINE] || node[REPEAT]) && mark(node).first != number)
-            return !shown && chars.zero? && alone?(repeat) && after?(repeat, lines[number], roots, urls)
+            line = lines[number]
+            return after?(repeat, line, roots, urls) && !credited?(repeat, line)
           elsif node.element? && node[LINE]
-            return !shown && rendered?(node, roots) && same_line?(repeat, node, urls)
+            return rendered?(node, roots) && same_line?(repeat, node, urls) && !credited?(repeat, node)
           elsif node.element? && node[REPEAT]
             node = following(node, nodes, roots)
           elsif node.element?
-            shown ||= SHOWN.include?(node.name)
+            return false if SHOWN.include?(node.name)
+
             node = node.child || following(node, nodes, roots)
           else
-            chars += Dom.char_count(node.content) if node.text?
-            return false if chars > MAX_BETWEEN
+            return false if node.text? && Dom.char_count(node.content).positive?
 
             node = following(node, nodes, roots)
           end
@@ -160,25 +164,38 @@ module Nokodown
         !repeat[REPEAT].split(" ", 2).first.end_with?(MORE)
       end
 
-      # The line is all its table cell, or list term or definition, shows,
-      # and the cell more than the line: without it the renderer drops the
-      # cell with what it shows with no text (a video, a formula), and, with
-      # a column, the table's caption.
+      # The line is in a table cell, or a list term or definition: without
+      # it the renderer may drop the cell, with its column and the table's
+      # caption, or read a sparser grid as a layout and drop what its rows
+      # show with no text (a video, a formula).
       def cell?(repeat)
-        text = Dom.text(repeat)
-        node = repeat.parent
-        while node&.element? && Dom.text(node) == text
-          return !node.at_css(SHOWN_PARTS).nil? || captioned?(node) if TABLE_CELLS.include?(node.name)
-          return true if CELLS.include?(node.name)
+        repeat.ancestors.any? { |node| node.element? && CELLS.include?(node.name) }
+      end
+
+      # The text before the panel's line in the post, the post's line apart,
+      # credits someone: the line names who.
+      def credited?(repeat, line)
+        post = ([line] + line.ancestors.to_a).filter_map { |node| Dom.key(node) if node.element? }.to_set
+        node = repeat
+        while node&.element? && !post.include?(Dom.key(node))
+          text = text_before(node)
+          return text.match?(CREDIT) if text
 
           node = node.parent
         end
         false
       end
 
-      def captioned?(cell)
-        table = cell.ancestors.find { |node| node.element? && node.name == "table" }
-        !table&.at_css("caption").nil?
+      def text_before(node)
+        sibling = node.previous_sibling
+        while sibling
+          if sibling.text? || sibling.element?
+            text = Dom.text(sibling)
+            return text unless text.empty?
+          end
+          sibling = sibling.previous_sibling
+        end
+        nil
       end
 
       # Is the line in the Markdown: below a root through children that
@@ -245,22 +262,18 @@ module Nokodown
         [name, Dom.text(line).delete_prefix(name).sub(SEPARATOR, "")]
       end
 
-      # Two names alike link to the same profile, when both link to one:
-      # "Wren" and "wren" may be two members, as may /members/WREN and
-      # /members/wren, one path on two hosts, /users#/profiles/191 and
-      # /users#/profiles/105, or members/wren and /members/wren, read
-      # against the page's URL.
+      # Two names alike link to the same profile, when both link to one, at
+      # the same URL read against the page's: "Wren" and "wren" may be two
+      # members, as may /members/WREN and /members/wren, /members/wren/ and
+      # /members/wren, one path on two hosts or schemes, ?id=72 and ?id=84,
+      # /users#/profiles/191 and /users#/profiles/105, or, without the
+      # page's URL, /members/wren and a URL on another site.
       def same_profile?(href, other, urls)
         return true if href.nil? || other.nil? || href == other
 
-        host, path = profile(href, urls)
-        other_host, other_path = profile(other, urls)
-        path == other_path && (host.nil? || other_host.nil? || host.casecmp?(other_host))
-      end
+        return false unless urls
 
-      def profile(href, urls)
-        href = (urls && urls.resolve(href)) || href.strip
-        [href[HOST, 1], href.sub(HOST, "").chomp("/")]
+        (urls.target(href) || href) == (urls.target(other) || other)
       end
     end
 
@@ -527,7 +540,7 @@ module Nokodown
 
     # A quote, or where its credit stands.
     def quote?(node)
-      QUOTE_TAGS.include?(node.name) || Dom.signature(node).match?(QUOTE)
+      QUOTE_TAGS.include?(node.name) || node["role"].to_s.split.include?("blockquote") || Dom.signature(node).match?(QUOTE)
     end
 
     # The elements that are or hold a post's date or body: a panel's column
@@ -642,16 +655,16 @@ module Nokodown
       number unless in_post && reply
     end
 
-    # A post's kind: its tag with its first class, and with its id without
-    # the number ("post-"). A plain <div> around a panel is no post.
+    # A post's kind: its tag with each of its classes, and with its id
+    # without the number ("post-"). A plain <div> around a panel is no post.
     def post_kinds(node)
-      kinds = node["class"].to_s.split.first(1).map { |token| [node.name, token] }
+      kinds = node["class"].to_s.split.map { |token| [node.name, token] }
       stem = id_stem(node)
       stem ? kinds << [node.name, stem] : kinds
     end
 
     # An element of a post's kind, whatever classes come with it ("message
-    # message--unread", "unread message").
+    # message--unread", "unread message", "theme-light message").
     def post_kind?(node, kinds)
       return true if node["class"].to_s.split.any? { |token| kinds.include?([node.name, token]) }
 

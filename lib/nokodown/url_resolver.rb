@@ -104,10 +104,19 @@ module Nokodown
       @links = {}
       @images = {}
       @same_page = {}
+      @targets = {}
     end
 
     def resolve(href)
       @links.fetch(href) { @links[href.dup.freeze] = link(href).freeze }
+    end
+
+    # The URL a link goes to, read against the page's, with its scheme and
+    # host in lower case, and left as written otherwise: where two links may
+    # differ only by what #resolve cleans off (an "icid" that names a
+    # member, not a campaign).
+    def target(href)
+      @targets.fetch(href) { @targets[href.dup.freeze] = absolute(href, &:normalize).freeze }
     end
 
     def resolve_image(src)
