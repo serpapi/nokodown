@@ -202,6 +202,23 @@ RSpec.describe Nokodown::PostAttribution do
     end
   end
 
+  # phpBB's prosilver: a list of the poster's details, then the post's
+  # subject above the line naming the poster.
+  it "writes one line where the post's subject stands between the member panel and the post's line" do
+    posts = [["wren", 3, "Starter", question], ["basil", 5, "Re: Starter", answer]].map do |name, day, subject, body|
+      "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
+        "<dl class='postprofile'><dt><a class='username' href='/members/#{name}'>#{name}</a></dt>" \
+        "<dd class='profile-posts'><strong>Posts:</strong> 41</dd></dl>" \
+        "<div class='postbody'><h3><a href='#p#{day}'>#{subject}</a></h3>" \
+        "<p class='author'>by <strong><a class='username' href='/members/#{name}'>#{name}</a></strong> " \
+        "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></p><div class='content'>#{body}</div></div></div></div>"
+    end
+    markdown = thread(posts, head: '<meta name="generator" content="phpBB">')
+
+    markdown.should include("### Re: Starter\n\n**basil** · May 5, 2024\n\n#{answer}")
+    markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+  end
+
   # The rest of the panel's column (a rank, a post count) stands between the
   # panel's line and the post's, and may say whose it is.
   it "keeps the member panel's line when its column holds more" do

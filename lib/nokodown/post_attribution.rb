@@ -134,7 +134,7 @@ module Nokodown
             return false
           elsif node.element? && node[LINE]
             return rendered?(node, roots) && same_line?(repeat, node, urls) && !preceded?(repeat, node, roots)
-          elsif node.element? && node[REPEAT]
+          elsif node.element? && (node[REPEAT] || node[SUBJECT])
             node = following(node, nodes, roots)
           elsif node.element?
             return false if SHOWN.include?(node.name)
