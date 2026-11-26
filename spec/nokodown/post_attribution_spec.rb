@@ -380,14 +380,24 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.scan("**wren**").size.should == 1
   end
 
-  # A credit before the panel ("Last edited by") makes its line the name of
-  # who did it, not the poster's again.
-  it "keeps the member panel's line after a credit" do
+  # Text before the panel in the post ("Last edited by", in any language)
+  # may make its line the name of who did it, not the poster's again; a
+  # panel after the post's line names a reply, a quote, an attachment or an
+  # editor.
+  it "keeps the member panel's line after text in the post, or after the post's line" do
     user = "<a class='username' href='/members/wren'>wren</a>"
     head = "<header>#{user} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p>"
+    panel = "<div class='message-user'>#{user}</div>"
     {
-      "#{head}<p>Last edited by</p><div class='message-user'>#{user}</div>" => "Last edited by\n\n**wren**\n\n**basil**",
-      "<div>Reviewed by</div><div class='message-user'>#{user}</div>#{head}" => "Reviewed by\n\n**wren**\n\n**wren** · May 3, 2024"
+      "#{head}<p>Last edited by</p>#{panel}" => "Last edited by\n\n**wren**\n\n**basil**",
+      "<div>Reviewed by</div>#{panel}#{head}" => "Reviewed by\n\n**wren**\n\n**wren** · May 3, 2024",
+      "<p>Last edited by —</p>#{panel}#{head}" => "Last edited by —\n\n**wren**\n\n**wren** · May 3, 2024",
+      "<p>Última edición de</p>#{panel}#{head}" => "Última edición de\n\n**wren**\n\n**wren** · May 3, 2024",
+      "<p>Last edited by <span>(moderator)</span></p>#{panel}#{head}" => "(moderator)\n\n**wren**\n\n**wren** · May 3, 2024",
+      "#{head}<p>Laatst bewerkt door</p>#{panel}" => "Laatst bewerkt door\n\n**wren**\n\n**basil**",
+      "#{head}<p>最終編集者</p>#{panel}" => "最終編集者\n\n**wren**\n\n**basil**",
+      "#{head}<p>I independently reproduced this.</p>#{panel}" => "I independently reproduced this.\n\n**wren**\n\n**basil**",
+      "#{head}<blockquote>Mix again tomorrow.</blockquote><div class='citation'>#{panel}</div>" => "> Mix again tomorrow.\n\n**wren**\n\n**basil**"
     }.each do |inner, shown|
       markdown = thread([
         "<article class='message'>#{inner}</article>",
@@ -395,6 +405,47 @@ RSpec.describe Nokodown::PostAttribution do
       ])
 
       markdown.should include(shown)
+    end
+  end
+
+  # The line a panel leaves with a link (an attachment, a quoted file) is
+  # no reason to read their container as a list of links.
+  it "keeps a link beside the member panel's line" do
+    user = "<a class='username' href='/members/wren'>wren</a>"
+    head = "<header>#{user} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p>"
+    {
+      "<div class='quote'><div class='message-user'>#{user}</div><a href='/log.pdf'>Log</a></div>#{head}" => "[Log](https://example.com/log.pdf)",
+      "#{head}<div class='attachment'><div class='user-info'>#{user}</div><a href='/log.pdf'>Mixing log</a></div>" =>
+        "[Mixing log](https://example.com/log.pdf)"
+    }.each do |inner, shown|
+      markdown = thread([
+        "<article class='message'>#{inner}</article>",
+        post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+      ])
+
+      markdown.should include(shown)
+      markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    end
+  end
+
+  # Without the page's URL, ?member=72 and /?member=72 may be two members'.
+  # A panel that names the poster in no link, beside a link that names
+  # someone ("Referred by"), leaves the profile in doubt.
+  it "keeps the member panel's line where the profile is in doubt" do
+    [
+      ["<a class='username' href='/?member=72'>Wren</a>", "<a class='username' href='?member=72'>Wren</a>", nil],
+      ["<a class='username' href='/#wren'>Wren</a>", "<a class='username' href='#wren'>Wren</a>", nil],
+      ["<span class='username'>Wren</span><span>Referred by <a href='/members/72'>Wren</a></span>",
+       "<a class='username' href='/members/72'>Wren</a>", "https://example.com/threads/starter"]
+    ].each do |panel, header, url|
+      html = "<html><head><meta name='generator' content='XenForo'><title>Starter</title></head><body><main>" \
+             "<article class='message'><header>#{header} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p>" \
+             "<div>Guest contributor</div><div class='user-info'>#{panel}</div></article>" \
+             "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+             "<p>#{answer}</p></article></main></body></html>"
+      markdown = url ? Nokodown.to_markdown(html, url: url) : Nokodown.to_markdown(html)
+
+      markdown.should include("Guest contributor\n\n**Wren**\n\n**Fern** · May 5, 2024")
     end
   end
 

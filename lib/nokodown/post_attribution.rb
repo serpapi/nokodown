@@ -74,8 +74,7 @@ module Nokodown
     SHOWN = %w[img picture video audio iframe embed object svg canvas math input hr].freeze
     SHOWN_PARTS = SHOWN.join(", ").freeze
     SEPARATOR = /\A\s*·\s*/.freeze
-    # Text a line names who did it after: "Last edited by", "Reviewed by:".
-    CREDIT = /(?:(?<!\p{L})(?:by|von|par|por|from)|:)\s*\z/i.freeze
+    ABSOLUTE = %r{\A[a-z][a-z0-9+.-]*://}i.freeze
     # Every element Patterns::MEMBER_PANEL can match, and few others.
     PANEL_CANDIDATES = %w[user poster author profile].flat_map { |word| ["[class*=#{word} i]", "[id*=#{word} i]"] }.join(", ").freeze
     # "bbCodeBlock--quote", "bbcode_quote", "ipsQuote", Discourse's
@@ -99,26 +98,24 @@ module Nokodown
 
     class << self
       # nodes: the content as it is rendered. The line a member panel left
-      # goes where its panel held its column alone and nothing shows between
-      # it and the line written for its post, or after it to the next post's
-      # where it comes after that line; and only where it says no more: the
-      # same poster, at the same profile link, with the same date or none,
-      # where the post's line is rendered, and not after a credit ("Last
-      # edited by"). A line with anything after it in the post names a reply
-      # or a quote, one beside a rank or "Posts: 41" may say whose they are,
-      # and one with a date of its own adds it. A line in a table or a list
-      # of terms stays, as the table's shape may hang on it. urls reads the
-      # profile links. Returns the nodes to render, without a line that was
-      # one.
+      # goes where its panel held its column alone, nothing shows between it
+      # and the line written below it for its post, and nothing of the post
+      # shows before it; and only where it says no more: the same poster, at
+      # the same profile link, with the same date or none, where the post's
+      # line is rendered. A line after the post's names a reply, a quote, an
+      # attachment or an editor, one after text may be named by it ("Last
+      # edited by", in any language), one beside a rank or "Posts: 41" may
+      # say whose they are, and one with a date of its own adds it. A line in
+      # a table or a list of terms stays, as the table's shape may hang on
+      # it. urls reads the profile links. Returns the nodes to render,
+      # without a line that was one.
       def finish(nodes, urls = nil)
         repeats = nodes.flat_map { |node| (node[REPEAT] ? [node] : []) + node.css("[#{REPEAT}]").to_a }
         return nodes if repeats.empty?
 
         roots = nodes.each_with_index.to_h { |node, index| [Dom.key(node), index] }
         roots.delete(nil)
-        lines = {}
-        nodes.each { |node| ((node[LINE] ? [node] : []) + node.css("[#{LINE}]").to_a).each { |line| lines[mark(line).first] ||= line } }
-        removed = repeats.select { |repeat| !cell?(repeat) && repeated?(repeat, nodes, roots, lines, urls) }
+        removed = repeats.select { |repeat| !repeat[REPEAT].empty? && !cell?(repeat) && repeated?(repeat, nodes, roots, urls) }
         removed.each(&:remove)
         keys = removed.filter_map { |line| Dom.key(line) }.to_set
         nodes.reject { |node| keys.include?(Dom.key(node)) }
@@ -126,19 +123,17 @@ module Nokodown
 
       private
 
-      # Nothing shows between the panel's line and the post's line, or after
-      # the panel's line to the next post's.
-      def repeated?(repeat, nodes, roots, lines, urls)
+      # Nothing shows between the panel's line and the post's line after it.
+      def repeated?(repeat, nodes, roots, urls)
         return false unless alone?(repeat)
 
         number = mark(repeat).first
         node = following(repeat, nodes, roots)
         MAX_STEPS.times do
           if node.nil? || (node.element? && (node[LINE] || node[REPEAT]) && mark(node).first != number)
-            line = lines[number]
-            return after?(repeat, line, roots, urls) && !credited?(repeat, line)
+            return false
           elsif node.element? && node[LINE]
-            return rendered?(node, roots) && same_line?(repeat, node, urls) && !credited?(repeat, node)
+            return rendered?(node, roots) && same_line?(repeat, node, urls) && !preceded?(repeat, node, roots)
           elsif node.element? && node[REPEAT]
             node = following(node, nodes, roots)
           elsif node.element?
@@ -154,11 +149,6 @@ module Nokodown
         false
       end
 
-      # The panel's line comes after its post's line, saying no more.
-      def after?(repeat, line, roots, urls)
-        !line.nil? && Dom.key(line).to_i < Dom.key(repeat).to_i && rendered?(line, roots) && same_line?(repeat, line, urls)
-      end
-
       # The panel held its column alone, with no reply or quote beside it.
       def alone?(repeat)
         !repeat[REPEAT].split(" ", 2).first.end_with?(MORE)
@@ -169,33 +159,32 @@ module Nokodown
       # caption, or read a sparser grid as a layout and drop what its rows
       # show with no text (a video, a formula).
       def cell?(repeat)
-        repeat.ancestors.any? { |node| node.element? && CELLS.include?(node.name) }
+        Dom.ancestors_named(repeat, *CELLS).any?
       end
 
-      # The text before the panel's line in the post, the post's line apart,
-      # credits someone: the line names who.
-      def credited?(repeat, line)
-        post = ([line] + line.ancestors.to_a).filter_map { |node| Dom.key(node) if node.element? }.to_set
-        node = repeat
-        while node&.element? && !post.include?(Dom.key(node))
-          text = text_before(node)
-          return text.match?(CREDIT) if text
-
+      # Something shows before the panel's line in what holds it and the
+      # post's line, read back from the line up to MAX_STEPS siblings: a
+      # forum prints the panel first in the post.
+      def preceded?(repeat, line, roots)
+        post = Set.new
+        node = line
+        while node&.element?
+          post << Dom.key(node)
           node = node.parent
         end
-        false
-      end
-
-      def text_before(node)
-        sibling = node.previous_sibling
-        while sibling
-          if sibling.text? || sibling.element?
-            text = Dom.text(sibling)
-            return text unless text.empty?
+        node = repeat
+        MAX_STEPS.times do
+          if (previous = node.previous_sibling)
+            node = previous
+            next unless node.text? || node.element?
+            return true if Dom.char_count(node.content).positive?
+            return true if node.element? && (SHOWN.include?(node.name) || node.at_css(SHOWN_PARTS))
+          else
+            node = node.parent
+            return false if node.nil? || !node.element? || post.include?(Dom.key(node)) || roots.key?(Dom.key(node))
           end
-          sibling = sibling.previous_sibling
         end
-        nil
+        true
       end
 
       # Is the line in the Markdown: below a root through children that
@@ -248,15 +237,16 @@ module Nokodown
         name.sub(BY, "").casecmp?(own_name) && (date.empty? || date.casecmp?(own_date))
       end
 
-      # A line's post number and profile link.
+      # A line's post number and profile link; "" for a line that names no
+      # post.
       def mark(line)
         number, href = (line[LINE] || line[REPEAT]).split(" ", 2)
-        [number.chomp(MORE), href]
+        [number.to_s.chomp(MORE), href]
       end
 
       def parts(line)
-        strong = line.at_css("strong")
-        return if strong.nil?
+        strong = line.first_element_child
+        return unless strong&.name == "strong"
 
         name = Dom.text(strong)
         [name, Dom.text(line).delete_prefix(name).sub(SEPARATOR, "")]
@@ -267,13 +257,16 @@ module Nokodown
       # members, as may /members/WREN and /members/wren, /members/wren/ and
       # /members/wren, one path on two hosts or schemes, ?id=72 and ?id=84,
       # /users#/profiles/191 and /users#/profiles/105, or, without the
-      # page's URL, /members/wren and a URL on another site.
+      # page's URL, /members/wren and a URL on another site, or ?member=72
+      # and /?member=72, which only the page's URL tells apart.
       def same_profile?(href, other, urls)
         return true if href.nil? || other.nil? || href == other
 
         return false unless urls
 
-        (urls.target(href) || href) == (urls.target(other) || other)
+        target = urls.target(href)
+        other_target = urls.target(other)
+        !target.nil? && target == other_target && target.match?(ABSOLUTE)
       end
     end
 
@@ -517,20 +510,26 @@ module Nokodown
       columns = {}
       holds = {}
       panels.each do |panel|
-        next if quote?(panel)
-
-        number = owner(panel, numbers, rows, kinds, owners)
-        next unless number
-
-        column = column(panel, taken, column_keys, columns)
-        unless Dom.key(column) == Dom.key(panel)
-          held = (holds[Dom.key(column)] ||= column_of(column))
-          next if held.quotes.any? { |quote| !inside?(quote, panel) }
-
-          number = "#{number}#{MORE}" unless alone_in?(panel, held)
-        end
-        panel[PANEL] = number
+        panel[PANEL] = panel_number(panel, numbers, rows, kinds, owners, taken, column_keys, columns, holds) || ""
       end
+    end
+
+    # The number a member panel's line is marked with, or nil where the line
+    # stays whatever comes after it: one in a quote, or in no post, or beside
+    # a quote in its column.
+    def panel_number(panel, numbers, rows, kinds, owners, taken, column_keys, columns, holds)
+      return if quote?(panel)
+
+      number = owner(panel, numbers, rows, kinds, owners)
+      return unless number
+
+      column = column(panel, taken, column_keys, columns)
+      return number if Dom.key(column) == Dom.key(panel)
+
+      held = (holds[Dom.key(column)] ||= column_of(column))
+      return if held.quotes.any? { |quote| !inside?(quote, panel) }
+
+      alone_in?(panel, held) ? number : "#{number}#{MORE}"
     end
 
     # What a member panel's column holds: its non-space characters, what
@@ -681,7 +680,8 @@ module Nokodown
     # is in, or the first one it holds.
     def href(author)
       source = name_source(author) || author
-      link = ([source] + source.ancestors.to_a).find { |node| node.element? && node.name == "a" && node.key?("href") }
+      link = source if source.name == "a" && source.key?("href")
+      link ||= Dom.ancestors_named(source, "a").find { |node| node.key?("href") }
       link ||= source.css("a[href]").find { |candidate| !Dom.text(candidate).empty? }
       link && link["href"]
     end

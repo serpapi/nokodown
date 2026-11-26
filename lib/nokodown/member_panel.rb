@@ -34,38 +34,42 @@ module Nokodown
     # panel PostAttribution marked as a post's leaves carries the post's
     # number and the name's profile link, so that the line can go where the
     # post's own line repeats it (PostAttribution.finish). A line in a link
-    # links to the profile, which the post's line does not.
+    # links to the profile, which the post's line does not. Every other line
+    # PostAttribution marked a panel for is marked empty: the Pruner reads
+    # past the lines that stand in for panels the header used to.
     def reduce(panel)
       name, source = named(panel)
       if name && !bylined?(panel, name)
         line = line(panel.document, name, date(panel, name))
         panel.add_previous_sibling(line)
-        repeats(line, panel, name, source) if panel[PostAttribution::PANEL] && !linked?(panel)
+        repeats(line, panel, name, source) if panel[PostAttribution::PANEL]
       end
       panel.remove
     end
 
-    # A panel whose links leave the name's profile in doubt marks no line.
+    # A panel whose links leave the name's profile in doubt, or in a link,
+    # marks its line empty, as one PostAttribution numbered no post for.
     def repeats(line, panel, name, source)
-      href = profile_href(panel, name, source)
-      line[PostAttribution::REPEAT] = [panel[PostAttribution::PANEL], href].compact.join(" ") unless href == false
+      number = panel[PostAttribution::PANEL]
+      number = "" if !number.empty? && linked?(panel)
+      href = profile_href(panel, name, source) unless number.empty?
+      line[PostAttribution::REPEAT] = href == false ? "" : [number, href].compact.join(" ")
     end
 
     # The profile link of the name: the link the name is read from is, or
     # is in ("Wren" and a "Pro" badge in one link), or, without one, the
-    # one link the panel holds. nil where the panel links nowhere; false
-    # where it is in doubt: another link says the name and goes elsewhere
-    # (a "Referred by" or "Last visitor" of the same name), or the panel
-    # holds links to more than one place and none is the name's.
+    # one link the panel holds, an avatar's. nil where the panel links
+    # nowhere; false where it is in doubt: another link says the name and
+    # goes elsewhere (a "Referred by" or "Last visitor" of the same name), or
+    # the name is read from no link and a link that says something may be
+    # another member's.
     def profile_href(panel, name, source)
       links = panel.css("a[href]").to_a
       return if links.empty?
 
-      link = ([source] + source.ancestors.to_a).find do |node|
-        break if !node.element? || Dom.key(node) == Dom.key(panel)
+      link = link_around(source, panel)
+      return false if link.nil? && links.any? { |candidate| !Dom.text(candidate).empty? }
 
-        node.name == "a" && node.key?("href")
-      end
       named = links.select { |candidate| Dom.text(candidate).casecmp?(name) }.map { |candidate| candidate["href"] }
       hrefs = link ? [link["href"]] : links.map { |candidate| candidate["href"] }
       hrefs = (hrefs + named).uniq
@@ -73,7 +77,19 @@ module Nokodown
     end
 
     def linked?(panel)
-      panel.ancestors.any? { |node| node.element? && node.name == "a" && node.key?("href") }
+      Dom.ancestors_named(panel, "a").any? { |node| node.key?("href") }
+    end
+
+    # The link the source is, or is in, below the panel.
+    def link_around(source, panel)
+      key = Dom.key(panel)
+      node = source
+      while node&.element? && Dom.key(node) != key
+        return node if node.name == "a" && node.key?("href")
+
+        node = node.parent
+      end
+      nil
     end
 
     # The post beside the panel may open with a line naming the poster

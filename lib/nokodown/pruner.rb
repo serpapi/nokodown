@@ -20,6 +20,11 @@ module Nokodown
     # letter folds to these, so it answers as downcasing first would.
     BUTTON_WORD = /btn|button|cta/i.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
+    # A member panel's line (PostAttribution), and the blocks besides one
+    # that stop a div from reading as a paragraph.
+    PANEL_LINE = "descendant::*[@#{PostAttribution::REPEAT}][1]"
+    OTHER_BREAKER = "descendant::*[#{Dom::PARAGRAPH_BREAKERS.map { |name| "self::#{name}" }.join(' or ')}]" \
+                    "[not(@#{PostAttribution::REPEAT})][1]"
     # XPath finds a list of tags faster than CSS.
     CALL_TO_ACTION_HOLDERS = ".//a|.//span|.//div|.//p"
     # Tables not inside another table. Listing what is under every table
@@ -177,11 +182,20 @@ module Nokodown
       ["form, fieldset", "table", "ul", "div"].each do |selector|
         root.css(selector).to_a.reverse_each do |node|
           next if paragraph_keys.include?(Dom.key(node)) || !ContainerCheck.new(node, content_length, paragraph_keys, memo).remove?
+          next if panel_paragraph?(node)
 
           ContainerCheck.forget(memo, node)
           remove(node)
         end
       end
+    end
+
+    # The line a member panel leaves in a thread (PostAttribution) stands
+    # where the panel did, which the post's header line replaced before: a
+    # div that holds no other block (a quote's credit and its attachment) is
+    # still a paragraph. Asked only of a container about to go.
+    def panel_paragraph?(node)
+      node.name == "div" && !node.at_xpath(PANEL_LINE).nil? && node.at_xpath(OTHER_BREAKER).nil?
     end
 
     # A forum's thread is content.
