@@ -99,10 +99,14 @@ module Nokodown
     private
 
     # What the block answers with the poster's nodes (and what was held or
-    # spared) out of the root, as main read it.
-    def without_own(root)
+    # spared) out of the root, as main read it; all but what holds the node
+    # kept.
+    def without_own(root, kept = nil)
       own = {}
-      root.css(LEFT_OUT).each { |node| hold(own, node) if below?(node, root) }
+      keep = kept ? [kept, *kept.ancestors].select(&:element?).map { |node| Dom.key(node) }.to_set : Set.new
+      root.css(LEFT_OUT).each do |node|
+        hold(own, node) if below?(node, root) && !keep.include?(Dom.key(node))
+      end
       yield
     ensure
       release(taken(own), root)
@@ -124,12 +128,6 @@ module Nokodown
       yield
     ensure
       shown&.each(&:unlink)
-    end
-
-    # A node a rule removes as main read the post goes only if it goes as
-    # base read it too; else it stays, marked as spared.
-    def remove_or_spare(node, base_removes)
-      base_removes ? remove(node) : node[SPARED] = ""
     end
 
     # The member panels a post's line stood for before PostAttribution read
@@ -327,10 +325,10 @@ module Nokodown
     # main's view drops it, it stays, spared.
     def remove_article_furniture(root, content_length)
       root.css("footer").each do |node|
-        furniture(node, content_length) { |total| Dom.text(node).length <= total * 0.5 }
+        furniture(root, node, content_length) { |total| Dom.text(node).length <= total * 0.5 }
       end
       root.css("aside").each do |node|
-        furniture(node, content_length) { |total| Dom.text(node).length < 200 || ContainerCheck.new(node, total, Set.new).remove? }
+        furniture(root, node, content_length) { |total| Dom.text(node).length < 200 || ContainerCheck.new(node, total, Set.new).remove? }
       end
       Dom.elements(root).each do |node|
         next unless node.key?("class") || node.key?("id")
@@ -339,8 +337,10 @@ module Nokodown
       end
     end
 
-    def furniture(node, content_length)
-      main = without_own(node) { yield(content_length) }
+    # Main's view holds the poster's nodes, and what was spared before, out
+    # of the whole root: a post the node is in is weighed without them.
+    def furniture(root, node, content_length)
+      main = without_own(root, node) { yield(content_length) }
       base = with_lines(node) { yield(@raw_length) }
       if main && base
         remove(node)
@@ -357,6 +357,9 @@ module Nokodown
       end
 
       @aside = set_aside(root, PostAttribution::OWN_PANEL)
+      # What main's view removed and base's kept was gone when main
+      # cleaned: it is out while the share is read, and put back after.
+      spared = root.css("[#{SPARED}]").each_with_object({}) { |node, store| hold(store, node) if below?(node, root) }
       text_before = Dom.text(root).length
       links_before = link_text_length(root)
       remove_suspicious_containers(root, content_length)
@@ -364,6 +367,7 @@ module Nokodown
       @conditional_kept += Dom.text(root).length
       @conditional_removed_links += links_before - link_text_length(root)
       release(taken(@held), root)
+      release(taken(spared), root)
       release(taken(@aside), root)
     end
 

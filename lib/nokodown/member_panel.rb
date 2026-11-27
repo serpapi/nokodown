@@ -24,6 +24,16 @@ module Nokodown
     # An address in a link's text: a scheme, a "www.", a path, or a domain
     # before a slash.
     ADDRESS = %r{\S*(?:://|www\.)\S*|(?<!\S)\.{0,2}/\S*|\S*\.[a-z]{2,}/\S*}i.freeze
+    EMAIL = /\S+@\S+/.freeze
+    MAILTO = /\Amailto:/i.freeze
+    SCHEME = %r{\A[a-z][a-z0-9+.-]*:(?://)?}i.freeze
+    # What an address shows: a file, a domain, a query, a scheme, an email
+    # or a board path ("gallery/profile/wren"); not a word ("profile") or a
+    # label ("Profile/Account").
+    ADDRESS_TEXT = %r{[.?@:]|/.*/}.freeze
+    # An email address the panel gives for the member, which tells apart
+    # only from another address, not from a profile.
+    IDENTITY = "~"
     MAX_NAME = 60
     MAX_DATE = 50
     # A post's title and by-line come first, within this many characters.
@@ -87,9 +97,16 @@ module Nokodown
 
       hrefs = link ? [link["href"]] : links.select { |candidate| avatar_link?(candidate) || profile_link?(candidate) }.map { |candidate| candidate["href"] }
       hrefs = (hrefs + named).uniq
-      return if hrefs.empty?
+      return identity(links) if hrefs.empty?
 
       hrefs.size == 1 ? hrefs.first : false
+    end
+
+    # A panel's one email link, where nothing else says who the member is:
+    # a co-author's address beside a post linked to another address.
+    def identity(links)
+      mails = links.map { |candidate| candidate["href"].to_s.strip }.select { |href| href.match?(MAILTO) }.uniq
+      "#{IDENTITY}#{mails.first}" if mails.size == 1
     end
 
     def avatar_link?(link)
@@ -110,29 +127,35 @@ module Nokodown
     # A link that says it is the profile: rel="author", or "View profile"
     # or "View account 41" in its text or label. An address shown as the
     # text (phpBB's URL fields) says where it goes, not what it is;
-    # "Profile/Account" is a label. An email link is no profile, whatever
-    # its address says.
+    # "Profile/Account" is a label. An email link is a profile only where
+    # it says so ("View profile"), not by its address ("account@...").
     def profile_link?(link)
-      return author_rel?(link) if link["href"].to_s.strip.downcase.start_with?("mailto:")
-
       text = address_link?(link) ? "" : Dom.text(link)
       words = "#{text} #{link['aria-label']} #{link['title']}".gsub(ADDRESS, "")
+      words = words.gsub(EMAIL, "") if link["href"].to_s.strip.match?(MAILTO)
       author_rel?(link) || words.match?(PROFILE)
     end
 
     # A link phpBB made of an address (postlink, postlink-local) shows the
     # address: the end of its href (a board path, "ucp.php?i=profile"), or
-    # its start and end around " ... " where it is long. A theme's
-    # "View profile" button of that class says what it is.
+    # its start and end around " ... " where it is long, with or without
+    # the scheme phpBB adds ("www.", an email). A theme's "View profile" or
+    # "profile" button of that class says what it is.
     def address_link?(link)
-      return false unless link["class"].to_s.split.any? { |name| name.start_with?("postlink") }
+      classes = link["class"].to_s.split
+      return false unless classes.any? { |name| name.start_with?("postlink") }
 
       text = Dom.text(link)
       href = link["href"].to_s.strip
-      return false if text.empty?
+      # A board's own link shows its path below the board's full URL: a
+      # word ("wren") as well.
+      local = classes.include?("postlink-local") && href.match?(SCHEME) && href.end_with?("/#{text}")
+      return false unless local || text.match?(ADDRESS_TEXT)
 
       head, tail = text.split(" ... ", 2)
-      tail ? href.start_with?(head) && href.end_with?(tail) : href.end_with?(text)
+      return href.end_with?(text) unless tail
+
+      [href, href.sub(SCHEME, "")].any? { |address| address.start_with?(head) } && href.end_with?(tail)
     end
 
     def author_rel?(link)

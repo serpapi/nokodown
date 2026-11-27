@@ -297,12 +297,21 @@ module Nokodown
       # and /?member=72, which only the page's URL tells apart.
       def same_profile?(href, other, urls)
         return true if href.nil? || other.nil? || href == other
+        return same_address?(href, other) if href.start_with?(MemberPanel::IDENTITY) || other.start_with?(MemberPanel::IDENTITY)
 
         return false unless urls
 
         target = urls.target(href)
         other_target = urls.target(other)
         !target.nil? && target == other_target && target.match?(ABSOLUTE)
+      end
+
+      # A panel's email address and the post's link: one member only where
+      # both are the same address. An address beside a profile is another
+      # member's, as base and main read it.
+      def same_address?(href, other)
+        href, other = [href, other].map { |value| value.delete_prefix(MemberPanel::IDENTITY) }
+        href.match?(MemberPanel::MAILTO) && other.match?(MemberPanel::MAILTO) && href.casecmp?(other)
       end
     end
 

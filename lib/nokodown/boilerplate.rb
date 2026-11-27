@@ -11,6 +11,8 @@ module Nokodown
     LANDMARKS = "main, [role=main], [itemprop~=articleBody]"
     CONTENT_ANCESTORS = %w[article main].freeze
     SECTIONING = %w[article aside main nav section].freeze
+    # Cards in a row sit this many wrappers deep at most.
+    ROW_DEPTH = 3
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     AD_ATTRIBUTE_SELECTORS = AD_ATTRIBUTES.map { |name| "[#{name}]" }.freeze
@@ -207,9 +209,9 @@ module Nokodown
       loop do
         return false unless holder.parent&.element?
         return true if holder.parent.element_children.any? do |sibling|
-          Dom.key(sibling) != Dom.key(holder) && lone_cards(sibling).any? { |card| alike_card?(node, card) }
+          Dom.key(sibling) != Dom.key(holder) && row_cards(sibling).any? { |card, lone| row_card?(node, card, lone) }
         end
-        break unless depth < 2 && holder.parent.element_children.size == 1
+        break unless depth < ROW_DEPTH && holder.parent.element_children.size == 1
 
         holder = holder.parent
         depth += 1
@@ -217,17 +219,27 @@ module Nokodown
       false
     end
 
-    # A sibling and the element alone in it, two deep: cards in a row may
-    # sit in wrappers, some of them only.
-    def lone_cards(node)
-      cards = [node]
-      2.times do
-        children = cards.last.element_children
-        break unless children.size == 1
+    # A sibling and what it holds, three deep, each with whether it is
+    # alone in its wrappers: cards in a row may sit in wrappers, some of
+    # them only, and beside a badge ("Staff member").
+    def row_cards(node)
+      level = [[node, true]]
+      cards = level.dup
+      ROW_DEPTH.times do
+        level = level.flat_map do |parent, lone|
+          children = parent.element_children
+          children.map { |child| [child, lone && children.size == 1] }
+        end
+        break if level.empty?
 
-        cards << children.first
+        cards.concat(level)
       end
       cards
+    end
+
+    # A card beside other elements in its wrapper is a member card with text.
+    def row_card?(node, card, lone)
+      alike_card?(node, card) && (lone || (MemberPanel.panel?(card) && !Dom.text(card).empty?))
     end
 
     def alike_card?(node, sibling)
