@@ -74,8 +74,8 @@ module Nokodown
       link = link_around(source, panel) || source.css("a[href]").find { |inner| Dom.text(inner).casecmp?(name) }
       # A contact block's links (phpBB's "View Facebook Profile", a member
       # named Facebook's own Facebook) are ways to reach the member, not the
-      # forum's profile.
-      links = panel.css("a[href]").reject { |candidate| contact?(candidate, panel) }
+      # forum's profile, unless one says it is (rel="author").
+      links = panel.css("a[href]").reject { |candidate| contact?(candidate, panel) && !author_rel?(candidate) }
       return link && link["href"] if links.empty?
 
       # A count ("404" posts, by a member named 404) names no one.
@@ -110,7 +110,11 @@ module Nokodown
     # "Profile/Account" is a label.
     def profile_link?(link)
       words = "#{Dom.text(link)} #{link['aria-label']} #{link['title']}".gsub(ADDRESS, "")
-      link["rel"].to_s.downcase.split.include?("author") || words.match?(PROFILE)
+      author_rel?(link) || words.match?(PROFILE)
+    end
+
+    def author_rel?(link)
+      link["rel"].to_s.downcase.split.include?("author")
     end
 
     def linked?(panel)

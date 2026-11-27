@@ -589,6 +589,55 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("**Basil Alexander Cunningham of West Lancashire**\n\n[PDF](/schedule.pdf)\n\n[Log](/notes.pdf)\n\n[CSV](/data.pdf)")
   end
 
+  # Held in one order, a group after the panel it holds: put back the other way.
+  it "keeps a member panel's line held inside a group held after it" do
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled.</p><div id='group'><div class='supplier' id='credit0'><div class='user-info'><span class='username'>Basil Cunningham</span></div><p></p></div>" \
+           "<div class='user-info'><a class='username' href='/members/49'>Aster Marshall</a></div></div>" \
+           "<div class='reviewer' id='other'><div class='message-user'><span class='username'>Mira Rivers</span></div><p></p></div></article>" \
+           "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+           "<p>Leave room in the jar.</p></article></main></body></html>"
+
+    markdown = Nokodown.to_markdown(html, url: "https://example.com/t")
+    markdown.should include("**Basil Cunningham**\n\n**Aster Marshall**\n\n**Mira Rivers**")
+  end
+
+  # Whether cleaning left almost nothing is read as before the panels were.
+  it "prunes like a page when cleaning keeps little more than the panels' lines" do
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled.</p><div id='group'><div class='contributor' id='credit0'><div class='user-info'><a class='username' href='/members/48'>Basil Cunningham</a></div>" \
+           "<div><p>Measurements</p><a href='/raw.pdf'>Mixing log A</a></div></div>" \
+           "<div class='user-info'><a class='username' href='/members/49'>Aster Marshall</a></div></div>" \
+           "<footer><p>Original laboratory records.</p><a href='/mix.pdf'>Mixing log</a></footer>" \
+           "<aside><p>Note A. The mixer was weighed before fermentation and the total was entered in the register. </p></aside>" \
+           "<aside><p>Note B. The water was weighed before fermentation and the total was entered in the register. </p></aside></article>" \
+           "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+           "<p>Leave room in the jar.</p></article></main></body></html>"
+
+    markdown = Nokodown.to_markdown(html, url: "https://example.com/t")
+    markdown.should include("(https://example.com/raw.pdf)", "(https://example.com/mix.pdf)", "Note A.", "Note B.", "**Basil Cunningham**")
+  end
+
+  # The lighter pass tells a cluster of links without the panels, too.
+  it "keeps a file beside member panels on the lighter pass" do
+    credit = lambda do |id, member, name, file|
+      "<div class='contributor' id='credit#{id}'><div class='user-info'><a class='username' href='/members/#{member}'>#{name}</a></div>" \
+        "<p>Original records</p><a href='/#{file}.pdf'>Mixing log #{file[-1].upcase}</a></div>"
+    end
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled.</p><ul id='group'><li>#{credit.call(0, 48, 'Basil Cunningham', 'trial-a')}" \
+           "<div class='user-info'><a class='username' href='/members/49'>Aster Marshall</a></div></li></ul>" \
+           "#{credit.call(2, 50, 'Lark Bronson', 'trial-b')}#{credit.call(3, 51, 'Cori Meyer', 'trial-c')}</article>" \
+           "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+           "<p>Leave room in the jar.</p></article></main></body></html>"
+
+    markdown = Nokodown.to_markdown(html, url: "https://example.com/t")
+    markdown.should include("(https://example.com/trial-a.pdf)", "(https://example.com/trial-b.pdf)", "(https://example.com/trial-c.pdf)")
+  end
+
   # Each container is weighed against the post as it was before.
   it "keeps a post's files that outweigh the rest without the lines" do
     links = (0..3).map { |index| "<a href='/schedule#{index}.pdf'>#{['Rye starter protocol', 'Feeding timetable', 'Fermentation diary', 'Rye starter protocol'][index]} #{index}</a>" }
@@ -766,7 +815,10 @@ RSpec.describe Nokodown::PostAttribution do
       ["<div class='user-info'><span class='contact-panel'><a class='username' href='/members/41'>Wren</a></span></div>",
        "<a class='username' href='/members/90'>Wren</a>"],
       ["<div class='user-info'><span class='username'>Wren</span><a href='/members/41'>Profile/Account</a></div>",
-       "<a class='username' href='/members/90'>Wren</a>"]
+       "<a class='username' href='/members/90'>Wren</a>"],
+      # rel="author" names the profile even in contact details.
+      ["<div class='user-info'>Contributed by <span class='username'>Wren</span><span class='contact-details'><a rel='author' href='/members/92'>View profile</a></span></div>",
+       "<a class='username' href='/members/72'>Wren</a>"]
     ].each do |panel, header|
       markdown = thread([
         "<article class='message'>#{panel}<header>#{header} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",

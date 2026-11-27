@@ -66,6 +66,23 @@ module Nokodown
       removed.zero? ? 0.0 : @conditional_removed_links.fdiv(removed)
     end
 
+    # The nodes' text without the poster's panels and lines, as it was
+    # before PostAttribution read them.
+    def self.length_without_own(nodes)
+      pruner = new(nodes, :article)
+      nodes.sum { |node| pruner.length_without_own(node) }
+    end
+
+    # The root's length as it was before the poster's panels became lines:
+    # what each container is weighed against.
+    def length_without_own(root)
+      own = {}
+      root.css("[#{PostAttribution::OWN}]").each { |node| hold(own, node) if below?(node, root) }
+      Dom.text(root).length
+    ensure
+      release(taken(own), root)
+    end
+
     private
 
     # The member panels a post's line stood for before PostAttribution read
@@ -82,16 +99,17 @@ module Nokodown
       end
     end
 
-    # What a store holds, in the order it was held, leaving it empty.
+    # What a store holds, in the order it was held (not grouped by what
+    # holds it), leaving it empty.
     def taken(store)
-      held = store.values.flatten(1)
+      held = store.values.flatten(1).sort_by { |_, _, seq| seq }
       store.clear
       held
     end
 
     # Last held first, so what was held inside a later one is back in it.
     def release(held, root)
-      held.reverse_each do |node, place|
+      held.reverse_each do |node, place, _|
         place.add_previous_sibling(node) if below?(place, root)
         place.unlink
       end
@@ -111,7 +129,8 @@ module Nokodown
     def hold(store, node)
       place = node.document.create_comment("")
       node.add_previous_sibling(place)
-      (store[Dom.key(node.parent)] ||= []) << [node, place]
+      @seq = (@seq || 0) + 1
+      (store[Dom.key(node.parent)] ||= []) << [node, place, @seq]
       node.unlink
     end
 
@@ -134,16 +153,6 @@ module Nokodown
       remove_stray_lines(root)
       clean_conditionally(root, content_length)
       root.css("h1, h2").each { |heading| remove(heading) if Scorer.cleaning_weight(heading).negative? }
-    end
-
-    # The root's length as it was before the poster's panels became lines:
-    # what each container is weighed against.
-    def length_without_own(root)
-      own = {}
-      root.css("[#{PostAttribution::OWN}]").each { |node| hold(own, node) if below?(node, root) }
-      Dom.text(root).length
-    ensure
-      release(taken(own), root)
     end
 
     # Boxes of links to other stories placed inside the body: "READ MORE:
@@ -229,9 +238,14 @@ module Nokodown
       end
     end
 
-    # Turned off, it still drops unlabeled navigation, as page pruning does.
+    # Turned off, it still drops unlabeled navigation, as page pruning does,
+    # telling it without the poster's panels, as before they were read.
     def clean_conditionally(root, content_length)
-      return remove_link_clusters(root) unless @conditional
+      unless @conditional
+        @aside = set_aside(root, PostAttribution::OWN_PANEL)
+        remove_link_clusters(root)
+        return release(taken(@aside), root)
+      end
 
       @aside = set_aside(root, PostAttribution::OWN_PANEL)
       text_before = Dom.text(root).length

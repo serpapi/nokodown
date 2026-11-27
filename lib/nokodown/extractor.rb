@@ -170,9 +170,10 @@ module Nokodown
       page_type == :article && pruner.removed_link_share > REMOVED_LINK_SHARE
     end
 
+    # Weighed without the poster's panels and lines, as before they were read.
     def almost_nothing_kept?(copies, nodes)
-      kept = copies.sum { |node| Dom.text(node).length }
-      kept < MIN_ARTICLE_LENGTH && kept < nodes.sum { |node| Dom.text(node).length } * 0.25
+      kept = Pruner.length_without_own(copies)
+      kept < MIN_ARTICLE_LENGTH && kept < Pruner.length_without_own(nodes) * 0.25
     end
 
     # One H1 at the top: the page's own if the content opens with one,
