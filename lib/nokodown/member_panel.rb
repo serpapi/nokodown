@@ -41,6 +41,7 @@ module Nokodown
     # What phpBB's word censor takes for a word: it replaces a whole run.
     CENSOR_CHAR = /[\p{Nd}\p{L}_-]/.freeze
     CENSOR_LAST = /[\p{Nd}\p{L}_-]+\z/.freeze
+    CENSOR_FIRST = /\A[\p{Nd}\p{L}_-]+/.freeze
     # An email address the panel gives for the member, which tells apart
     # only from another address, not from a profile.
     IDENTITY = "~"
@@ -125,6 +126,10 @@ module Nokodown
     end
 
     def contact?(link, panel)
+      # The board's own page that says it is the profile ("View forum
+      # profile") is the profile, beside the ways to reach the member.
+      return false if profile_link?(link) && !link["href"].to_s.strip.match?(SCHEME)
+
       key = Dom.key(panel)
       node = link.parent
       while node&.element? && Dom.key(node) != key
@@ -242,43 +247,58 @@ module Nokodown
       # the censored one, whose hidden middle the censor may have shortened.
       return false if !field && (scheme ? href : address).length <= PHPBB_LONG
 
-      host = lambda { |value| value.split(%r{[/?#]}, 2).first.to_s }
       # Cut inside the host (or an email's address), the start is its start,
       # cut where phpBB cuts: a whole host ("www.forum.org") is not the start
       # of a longer one ("www.forum.org.au"). A field's is phpBB's own cut,
       # where only the word at the cut may differ.
       cut = address[0, PHPBB_CUT - (head.length - start.length)].to_s
       exact = head.length == PHPBB_CUT && start == cut
-      same = if field then exact || censored_start?(start, cut)
-             elsif start.match?(%r{[/?#]}) then host.call(start) == host.call(address)
-             else exact
-             end
+      same = exact || (field && censored_start?(start, cut, address, head.length == PHPBB_CUT))
       # The end is phpBB's last 10 characters.
       ending = href[-PHPBB_END..].to_s
       !start.empty? && same && ((tail.length == PHPBB_END && tail == ending) || (field && censored_end?(tail, href)))
     end
 
-    # The censor replaced a whole word, the run of word characters at the
-    # cut: the start's last, which the href continues past the cut.
-    def censored_start?(start, cut)
+    # phpBB cuts the text first, then censors whole words in the text and
+    # the href alike, so they differ only in a word the cut split: the
+    # text's piece of it (the cut's last word, which the href continues),
+    # or the href's whole word, whose start the text shows. Either way the
+    # rest, before that word, is the same, and the href's word is in its
+    # path, or an email's name: not in the host.
+    def censored_start?(start, cut, address, whole)
       word = cut[CENSOR_LAST]
-      return false unless word
+      if word && address[cut.length].to_s.match?(CENSOR_CHAR)
+        kept = cut[0, cut.length - word.length]
+        return true if !kept.empty? && start.length > kept.length && start.start_with?(kept)
+      end
+      word = start[CENSOR_LAST]
+      return false unless whole && word
 
-      kept = cut[0, cut.length - word.length]
-      !kept.empty? && start.length > kept.length && start.start_with?(kept)
+      kept = start[0, start.length - word.length]
+      return false if kept.empty? || !address.start_with?(kept) || !address[kept.length].to_s.match?(CENSOR_CHAR)
+
+      address.include?("@") ? !kept.include?("@") : kept.match?(%r{[/?#]})
     end
 
-    # Or the end's first word, cut from a longer one the censor may have
-    # replaced in the href too: what follows it, from a character no word
-    # has ("/ab", ".co.uk"), is the href's end, shorter than phpBB's 10.
-    # Where the cut fell inside the href's last word, all 10 are that
-    # word's end, which the censor may have replaced whole.
+    # Or at the end: the text's first word, a piece of the href's the cut
+    # split, censored ("rude.co.uk" of "xrude.co.uk" shown "profile.co.uk",
+    # "contraband" of "xcontraband" shown "profile"); or the href's word,
+    # censored, whose end the text's 10 show ("profile/ab" of "myprofile/ab",
+    # "member/ab" in the href). What follows that word is the same.
     def censored_end?(tail, href)
       text = tail.downcase
       address = href.downcase
-      return true if address[CENSOR_LAST].to_s.length > PHPBB_END
+      ending = address[-PHPBB_END..].to_s
+      word = ending[CENSOR_FIRST]
+      if word && address[-PHPBB_END - 1].to_s.match?(CENSOR_CHAR)
+        rest = ending[word.length..]
+        return true if text.length > rest.length && text.end_with?(rest)
+      end
+      word = text[CENSOR_FIRST]
+      return false unless text.length == PHPBB_END && word && word.length < text.length
 
-      (1...text.length).any? { |index| !text[index].match?(CENSOR_CHAR) && text.length - index < PHPBB_END && address.end_with?(text[index..]) }
+      rest = text[word.length..]
+      address.length > rest.length && address.end_with?(rest) && address[-rest.length - 1].match?(CENSOR_CHAR)
     end
 
     def author_rel?(link)
@@ -370,10 +390,11 @@ module Nokodown
       # A phpBB profile field ("Birthday", "Time zone") dates the member
       # where only its name ("profile-birthdate") says date; phpBB prints
       # its value as text, so a <time> in one is a theme's, and so is
-      # another class or an id that says date ("post-date").
+      # another class or an id that says date ("post-date"). phpBB names a
+      # field in [a-z_] ("profile-time_zone"); "profile-post-date" is not one.
       classes = node["class"].to_s.split
       if node.name != "time" && !node.key?("datetime") && classes.include?(FIELD)
-        names = classes.reject { |name| name.start_with?("profile-") } << node["id"].to_s
+        names = classes.reject { |name| name.match?(/\Aprofile-[a-z_]*\z/) } << node["id"].to_s
         return false unless names.any? { |name| name.downcase.match?(DATE_CLASS) }
       end
 

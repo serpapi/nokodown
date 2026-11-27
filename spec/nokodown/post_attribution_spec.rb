@@ -306,6 +306,12 @@ RSpec.describe Nokodown::PostAttribution do
     # replace the whole shown tail, the end of a longer word.
     censored_href = field_set.call([["Lab", "https://field.example/aaaaaaaaaaaaaaaa/x/my-profile", "https://field.example/aaaaaaaaaaaaaaaa/ ... my-profile"],
                                     ["Lab", "https://field.example/aaaaaaaaaaaaaaaa/public-directory/mirror-spamsource", "https://field.example/aaaaaaaaaaaaaaaa/ ... profile withheld"]])
+    # The censor's word in the href where the text cut a longer one, or
+    # in the text's whole tail, a word's end.
+    censored_cut = field_set.call([["Lab", "https://field.example/fermentation/x/ab/my-profile", "https://field.example/fermentation/emba ... my-profile"],
+                                   ["Lab", "https://field.example/fermentation/x/ab/my-account", "https://field.example/fermentation/emba ... my-account"]])
+    censored_word = field_set.call([["Lab", "https://field.example/labs/experiments/calibrations/xcontraband", "https://field.example/labs/experiments/ ... profile"],
+                                   ["Lab", "https://field.example/labs/photographs/catalogue/xrestricted", "https://field.example/labs/photographs/ ... account"]])
     # prosilver prints a field named "field1" in a plain row as well.
     field1 = lambda do |_day|
       links = "<a class='postlink-local' href='https://example.com/profile'>profile</a> <a class='postlink-local' href='https://example.com/account'>account</a>"
@@ -327,9 +333,9 @@ RSpec.describe Nokodown::PostAttribution do
     [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [local, "wren"], [scripts, "wren"], [shortened, "wren"], [shortened_www, "wren"],
      [mail, "wren"], [mail_shortened, "wren"], [own_mail, "wren@example.com"], [censored, "wren"], [contacts, "wren"], [contacts, "Facebook"],
      ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"], [local_words, "wren"], [local_words, "profile"],
-     [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"], [censored_href, "wren"], [field1, "wren"], [field1, "profile"]].each do |extra, first|
+     [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"], [censored_href, "wren"], [field1, "wren"], [field1, "profile"], [censored_cut, "wren"], [censored_word, "wren"]].each do |extra, first|
       # Longer posts, as the fields' links would outweigh short ones.
-      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -1008,7 +1014,8 @@ RSpec.describe Nokodown::PostAttribution do
     [["Aster", "Wren’s lab safety officer", "", "div"], ["Wren", "Lab safety officer", "", "div"], ["Wren", "Lab safety officer", " featured", "div"],
      ["Wren", "Lab safety officer", "", "section"], ["Wren", "Lab safety officer", "", "li"], ["Wren", "Lab safety officer", "", "slot"],
      ["Wren", "Lab safety officer", "", "badge"], ["Wren", "Lab safety officer", "", "deep"],
-     ["Wren", "Lab safety officer", "", "lead-badge"], ["Wren", "Lab safety officer", "", "lead-caption"]].each do |first, role, extra, tag|
+     ["Wren", "Lab safety officer", "", "lead-badge"], ["Wren", "Lab safety officer", "", "lead-caption"],
+     ["Wren", "Lab safety officer", "", "shell"], ["Wren", "Lab safety officer", "", "badged-levels"]].each do |first, role, extra, tag|
       cards = [[first, role, "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
                ["Lark", "Sample custodian", "Sample manifest"], ["Juniper", "Records custodian", "Batch journal"]].each_with_index.map do |(name, title, report), index|
         name_tag = index.zero? && %w[div section].include?(tag) ? tag : "div"
@@ -1023,18 +1030,25 @@ RSpec.describe Nokodown::PostAttribution do
         next "<section><span>Lead contributor and laboratory archivist</span>#{card}</section>" if tag == "lead-caption" && index.zero?
         # Each card sits three wrappers deep.
         next "<li><section><div class='card-body'>#{card}</div></section></li>" if tag == "deep"
+        # The featured card in more wrappers, each around it alone.
+        next "<li><div class='card-shell'><div class='card-content'><div class='media-body'>#{card}</div></div></div></li>" if tag == "shell" && index.zero?
+        next "<li><div class='media-body'>#{card}</div></li>" if tag == "shell"
+        # The others three sections deep, each beside a badge.
+        next "<li>#{card}</li>" if tag == "badged-levels" && index.zero?
+        next "<li>#{'<section><span>Staff member</span>' * 3}#{card}#{'</section>' * 3}</li>" if tag == "badged-levels"
 
         tag == "li" ? "<li>#{card}</li>" : card
       end
       rows = [["Wren", question], ["Fern", answer], ["Moss", answer]].map do |name, body|
         "<article class='message'><header><a class='username' href='/u/#{name}'>#{name}</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{body}</p></article>"
       end
-      list = %w[li badge deep].include?(tag) ? "<ul>#{cards.join}</ul>" : cards.join
+      listed = %w[li badge deep shell badged-levels].include?(tag)
+      list = listed ? "<ul>#{cards.join}</ul>" : cards.join
       contributors = "<section class='contributors'><h3>Contributors</h3>#{list}</section>"
       markdown = thread(["<div class='reply-row'>#{contributors}#{rows[0]}</div>", *rows.drop(1).map { |row| "<div class='reply-row'>#{row}</div>" }])
 
       markdown.should include("**Wren** · May 3, 2024\n\n#{question}")
-      markdown.should include("#{'- ' if %w[li badge deep].include?(tag)}[#{first}](https://example.com/members/87) #{role} · [Safety review](https://example.com/reports/87.pdf)")
+      markdown.should include("#{'- ' if listed}[#{first}](https://example.com/members/87) #{role} · [Safety review](https://example.com/reports/87.pdf)")
     end
   end
 
@@ -1206,6 +1220,21 @@ RSpec.describe Nokodown::PostAttribution do
        "<a class='username' href='/members/72'>Wren</a>"],
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
        "<a class='postlink' href='https://directory.example/members/92/profile'>profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # A field's shown start or end that is not the href's, beyond a word
+      # the censor could have changed: another host, path, or file name.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
+       "<a class='postlink' href='https://directory.example.org/research/fermentation/contributors/92/wren.html'>https://directory.example.org/research/ ... View profile.html</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
+       "<a class='postlink' href='https://www.international-directory.org.uk/directory/membership/92/my-profile'>https://www.international-directory.net ... my-profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span>" \
+       "<a class='postlink' href='https://directory.example.org/research/fermentation/contributors/92/my-profile'>https://directory.example.org/people ... my-profile</a></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # The board's own profile page among the ways to reach the member.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-contact'>" \
+       "<a class='postlink' href='/members/92'>View forum profile</a></small></div>",
        "<a class='username' href='/members/72'>Wren</a>"]
     ].each do |panel, header|
       markdown = thread([
@@ -1363,7 +1392,8 @@ RSpec.describe Nokodown::PostAttribution do
   it "keeps a quoted author's date in an element of phpBB's field class" do
     ["<small class='profile-custom-field'><time datetime='2024-05-02'>May 2, 2024</time></small>",
      "<span class='post-date profile-custom-field'>May 2, 2024</span>",
-     "<span class='profile-custom-field' id='post-date-27'>May 2, 2024</span>"].each do |date|
+     "<span class='profile-custom-field' id='post-date-27'>May 2, 2024</span>",
+     "<span class='profile-custom-field profile-post-date'>May 2, 2024</span>"].each do |date|
       quote = "<blockquote><div id='user-info' aria-label='Original author'><span class='username'>Basil</span>#{date}</div><p>#{answer}</p></blockquote>"
       markdown = thread([
         "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \

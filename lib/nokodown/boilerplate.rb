@@ -11,7 +11,9 @@ module Nokodown
     LANDMARKS = "main, [role=main], [itemprop~=articleBody]"
     CONTENT_ANCESTORS = %w[article main].freeze
     SECTIONING = %w[article aside main nav section].freeze
-    # Cards in a row sit this many wrappers deep at most.
+    # Cards in a row sit this many wrappers deep at most, not counting a
+    # wrapper around one element only ("card-shell" around "card-content"),
+    # or beside labels ("Staff member").
     ROW_DEPTH = 3
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
@@ -211,10 +213,12 @@ module Nokodown
         return true if holder.parent.element_children.any? do |sibling|
           Dom.key(sibling) != Dom.key(holder) && row_cards(sibling).any? { |card, lone| row_card?(node, card, lone) }
         end
-        break unless depth < ROW_DEPTH && holder.parent.element_children.all? { |child| Dom.key(child) == Dom.key(holder) || badge?(child) }
+        children = holder.parent.element_children
+        single = wrapper?(children)
+        break unless (single || depth < ROW_DEPTH) && children.all? { |child| Dom.key(child) == Dom.key(holder) || badge?(child) }
 
         holder = holder.parent
-        depth += 1
+        depth += 1 unless single
       end
       false
     end
@@ -227,20 +231,28 @@ module Nokodown
         !node.key?(PostAttribution::POST) && node.at_css("[#{PostAttribution::POST}], [#{PostAttribution::OWNER}]").nil?
     end
 
-    # A sibling and what it holds, three deep, each with whether it is
-    # alone in its wrappers: cards in a row may sit in wrappers, some of
-    # them only, and beside a badge ("Staff member").
-    def row_cards(node)
-      level = [[node, true]]
-      cards = level.dup
-      ROW_DEPTH.times do
-        level = level.flat_map do |parent, lone|
-          children = parent.element_children
-          children.map { |child| [child, lone && children.size == 1] }
-        end
-        break if level.empty?
+    # A wrapper around one element, beside labels at most: a badge, a
+    # caption, of no elements, and no panel.
+    def wrapper?(children)
+      children.count { |child| !child.element_children.empty? || MemberPanel.panel?(child) } <= 1
+    end
 
-        cards.concat(level)
+    # A sibling and what it holds, three deep (a wrapper of one element
+    # adds none), each with whether it is alone in its wrappers: cards in
+    # a row may sit in wrappers, some of them only, and beside a badge
+    # ("Staff member").
+    def row_cards(node)
+      level = [[node, true, 0]]
+      cards = [[node, true]]
+      until level.empty?
+        level = level.flat_map do |parent, lone, depth|
+          children = parent.element_children
+          single = wrapper?(children)
+          next [] unless single || depth < ROW_DEPTH
+
+          children.map { |child| [child, lone && children.size == 1, single ? depth : depth + 1] }
+        end
+        level.each { |child, lone, _depth| cards << [child, lone] }
       end
       cards
     end
