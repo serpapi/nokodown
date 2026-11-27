@@ -562,15 +562,18 @@ RSpec.describe Nokodown::PostAttribution do
   # main kept as a paragraph: it counts as kept text, so the pass that
   # keeps it stands.
   it "keeps the links beside the poster's member panel lower in the post" do
-    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
-           "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
-           "<p>The starter doubled.</p><div class='files'><p>Attachment</p><a href='/report.pdf'>Laboratory mixing log</a></div>" \
-           "<div class='sources'><div class='user-info'><a class='username' href='/u/wren'>Wren</a></div>" \
-           "<a href='/first.pdf'>First trial data</a> <a href='/water.pdf'>Water measurements</a> <a href='/oven.pdf'>Oven temperature</a></div></article>" \
-           "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
-           "<p>Leave room in the jar.</p></article></main></body></html>"
+    # The box may name the panel as what describes it.
+    ["", " aria-describedby='owner'"].each do |described|
+      html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+             "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+             "<p>The starter doubled.</p><div class='files'><p>Attachment</p><a href='/report.pdf'>Laboratory mixing log</a></div>" \
+             "<div class='sources'#{described}><div class='user-info' id='owner'><a class='username' href='/u/wren'>Wren</a></div>" \
+             "<a href='/first.pdf'>First trial data</a> <a href='/water.pdf'>Water measurements</a> <a href='/oven.pdf'>Oven temperature</a></div></article>" \
+             "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+             "<p>Leave room in the jar.</p></article></main></body></html>"
 
-    Nokodown.to_markdown(html).should include("[Oven temperature](/oven.pdf)")
+      Nokodown.to_markdown(html).should include("[Oven temperature](/oven.pdf)")
+    end
   end
 
   # Cards after the post's first paragraph are its content, the poster's
@@ -648,6 +651,8 @@ RSpec.describe Nokodown::PostAttribution do
       # The profile link says so; the name's own id beats a referrer's.
       ["<div class='user-info'>Contributed by <span class='username'>Wren</span><a rel='author' href='/members/92'>View profile</a></div>",
        "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'><span class='username'>Wren</span><a href='/members/41' aria-label='View account 41'>✦</a></div>",
+       "<a class='username' href='/members/90'>Wren</a>"],
       ["<div class='user-info'>Contributed by <span class='username' data-user-id='92'>Wren</span> · " \
        "Referred by <a href='/members/72' data-user-id='72'>@Wren</a></div>",
        "<span class='username' data-user-id='72'>Wren</span>"]

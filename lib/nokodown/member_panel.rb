@@ -19,7 +19,7 @@ module Nokodown
     MEMBER_DATE_CLASS = /join|regist|last-?(?:seen|active|visit)|local-?time/.freeze
     BY = /(?:by|von|par|por)\s+/i.freeze
     LETTER = /\p{L}/.freeze
-    PROFILE = /\bprofile\b/i.freeze
+    PROFILE = /\b(?:profile|account)\b/i.freeze
     MAX_NAME = 60
     MAX_DATE = 50
     # A post's title and by-line come first, within this many characters.
@@ -84,9 +84,10 @@ module Nokodown
       Dom.text(link).empty? && !link["href"].to_s.strip.match?(/\A(?:#|javascript:)/i)
     end
 
-    # A link that says it is the profile: rel="author", or "View profile".
+    # A link that says it is the profile: rel="author", or "View profile"
+    # or "View account 41" in its text or label.
     def profile_link?(link)
-      link["rel"].to_s.split.include?("author") || Dom.text(link).match?(PROFILE)
+      link["rel"].to_s.split.include?("author") || "#{Dom.text(link)} #{link['aria-label']} #{link['title']}".match?(PROFILE)
     end
 
     def linked?(panel)

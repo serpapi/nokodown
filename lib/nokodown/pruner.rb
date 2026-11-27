@@ -220,8 +220,10 @@ module Nokodown
           if paragraph || kept
             # Spared for a line the check would remove it without counts as
             # removed; a post's line in a list the check keeps, as kept, as
-            # does a paragraph in the post that its line made a block.
-            spared << node unless numbered && (kept || (paragraph && !node.at_xpath(IN_POST).nil?))
+            # does a paragraph in the post that its line made a block, which
+            # the poster's panel was before (one that credits a box as well).
+            in_post = paragraph && !node.at_xpath(IN_POST).nil?
+            spared << node unless (numbered && (kept || in_post)) || (in_post && posters_line?(node))
             next
           end
 
@@ -240,6 +242,17 @@ module Nokodown
       node.name == "div" && !node.at_xpath(PANEL_LINE).nil? && node.at_xpath(OTHER_BREAKER).nil?
     end
 
+    # The line names the poster of the post it is in, outside a quote: the
+    # panel went before pruning, as the post's own.
+    def posters_line?(node)
+      line = node.at_xpath(PANEL_LINE)
+      return false if Dom.ancestors_named(line, "blockquote").any?
+
+      body = line.at_xpath(IN_POST)&.at_css("[#{PostAttribution::POST}]")
+      name = line.at_css("strong")
+      !body.nil? && !name.nil? && Dom.text(name).casecmp?(body[PostAttribution::AUTHOR].to_s)
+    end
+
     # A container the check keeps once its panels' lines are out of it, as
     # it was before the lines replaced the panels the header did: a file list
     # under the line reads as a list again, not as links.
@@ -247,7 +260,7 @@ module Nokodown
       lines = node.xpath(POST_PANEL_LINES).to_a
       return false if lines.empty?
 
-      check_memo = unlinked_memo(memo, lines)
+      check_memo = unlinked_memo(memo, lines, node)
       places = lines.map { |line| [line, line.parent, line.next_sibling].tap { line.unlink } }
       !ContainerCheck.new(node, content_length, paragraph_keys, check_memo).remove?
     ensure
@@ -255,13 +268,16 @@ module Nokodown
     end
 
     # Posts' lengths count the lines, so they are counted again. Tables'
-    # verdicts hold while no line is in a table, and the tags the root
-    # lacks hold as lines hold none of them. Read before the lines go.
-    def unlinked_memo(memo, lines)
-      fresh = { root: memo[:root] }
-      return fresh if lines.any? { |line| Dom.ancestors_named(line, "table").any? }
+    # verdicts hold but for the tables a line is in, and the tags the root
+    # lacks hold as lines hold none of them. With a line in a table, the
+    # node's own tables are read for the ones it holds, not the root's.
+    # Read before the lines go.
+    def unlinked_memo(memo, lines, node)
+      tables = (memo[:tables] ||= {})
+      holding = lines.flat_map { |line| Dom.ancestors_named(line, "table") }.map { |table| Dom.key(table) }.to_set
+      return { root: memo[:root], tables: tables, absent: (memo[:absent] ||= {}) } if holding.empty?
 
-      fresh.merge(tables: (memo[:tables] ||= {}), absent: (memo[:absent] ||= {}))
+      { root: node, tables: { verdicts: (tables[:verdicts] || {}).reject { |key, _| holding.include?(key) } } }
     end
 
     # A forum's thread is content.
