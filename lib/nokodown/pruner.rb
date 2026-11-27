@@ -50,6 +50,7 @@ module Nokodown
       @lines = {}
       @aside = {}
       @held = {}
+      @spared = {}
     end
 
     def call
@@ -190,11 +191,11 @@ module Nokodown
 
     # What is set aside or held whose places are in the node.
     def aside_in(node)
-      return [] if @lines.empty? && @aside.empty? && @held.empty?
+      return [] if @lines.empty? && @aside.empty? && @held.empty? && @spared.empty?
 
       node.xpath("descendant::comment()").to_a.filter_map do |place|
         key = Dom.key(place.parent)
-        [@lines, @aside, @held].flat_map { |store| store.fetch(key, []) }.find { |_, held| held == place }
+        [@lines, @aside, @held, @spared].flat_map { |store| store.fetch(key, []) }.find { |_, held| held == place }
       end
     end
 
@@ -338,9 +339,12 @@ module Nokodown
     end
 
     # Main's view holds the poster's nodes, and what was spared before, out
-    # of the whole root: a post the node is in is weighed without them.
+    # of the post the node is in (all the checks read), or of the node; of
+    # the root where the post holds it: the post is weighed without them.
     def furniture(root, node, content_length)
-      main = without_own(root, node) { yield(content_length) }
+      post = node.ancestors.find { |ancestor| ancestor.element? && Dom.thread_post?(ancestor) }
+      scope = post.nil? ? node : below?(post, root) ? post : root
+      main = without_own(scope, node) { yield(content_length) }
       base = with_lines(node) { yield(@raw_length) }
       if main && base
         remove(node)
@@ -359,7 +363,7 @@ module Nokodown
       @aside = set_aside(root, PostAttribution::OWN_PANEL)
       # What main's view removed and base's kept was gone when main
       # cleaned: it is out while the share is read, and put back after.
-      spared = root.css("[#{SPARED}]").each_with_object({}) { |node, store| hold(store, node) if below?(node, root) }
+      root.css("[#{SPARED}]").each { |node| hold(@spared, node) if below?(node, root) }
       text_before = Dom.text(root).length
       links_before = link_text_length(root)
       remove_suspicious_containers(root, content_length)
@@ -367,7 +371,7 @@ module Nokodown
       @conditional_kept += Dom.text(root).length
       @conditional_removed_links += links_before - link_text_length(root)
       release(taken(@held), root)
-      release(taken(spared), root)
+      release(taken(@spared), root)
       release(taken(@aside), root)
     end
 

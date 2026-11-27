@@ -86,27 +86,28 @@ module Nokodown
       # named Facebook's own Facebook) are ways to reach the member, not the
       # forum's profile, unless one says it is (rel="author").
       links = panel.css("a[href]").reject { |candidate| contact?(candidate, panel) && !author_rel?(candidate) }
-      return link && link["href"] if links.empty?
+      return link ? link["href"] : identity(panel.css("a[href]")) if links.empty?
 
       # A count ("404" posts, by a member named 404) names no one, nor an
       # address shown as itself (phpBB's "index.php", by a member of that name).
       named = links.select do |candidate|
-        Dom.text(candidate).casecmp?(name) && name.match?(LETTER) && !address_link?(candidate)
+        Dom.text(candidate).casecmp?(name) && name.match?(LETTER) && !shows_address?(candidate)
       end.map { |candidate| candidate["href"] }
       return false if link.nil? && !named.empty?
 
       hrefs = link ? [link["href"]] : links.select { |candidate| avatar_link?(candidate) || profile_link?(candidate) }.map { |candidate| candidate["href"] }
       hrefs = (hrefs + named).uniq
-      return identity(links) if hrefs.empty?
+      return identity(panel.css("a[href]")) if hrefs.empty?
 
       hrefs.size == 1 ? hrefs.first : false
     end
 
-    # A panel's one email link, where nothing else says who the member is:
-    # a co-author's address beside a post linked to another address.
+    # A panel's email links, contact ones too, where nothing else says who
+    # the member is: a co-author's addresses beside a post linked to
+    # another address or a profile.
     def identity(links)
       mails = links.map { |candidate| candidate["href"].to_s.strip }.select { |href| href.match?(MAILTO) }.uniq
-      "#{IDENTITY}#{mails.first}" if mails.size == 1
+      "#{IDENTITY}#{mails.join(' ')}" unless mails.empty?
     end
 
     def avatar_link?(link)
@@ -130,10 +131,18 @@ module Nokodown
     # "Profile/Account" is a label. An email link is a profile only where
     # it says so ("View profile"), not by its address ("account@...").
     def profile_link?(link)
-      text = address_link?(link) ? "" : Dom.text(link)
+      mail = link["href"].to_s.strip.match?(MAILTO)
+      text = shows_address?(link) ? "" : Dom.text(link)
       words = "#{text} #{link['aria-label']} #{link['title']}".gsub(ADDRESS, "")
-      words = words.gsub(EMAIL, "") if link["href"].to_s.strip.match?(MAILTO)
+      words = words.gsub(EMAIL, "") if mail
       author_rel?(link) || words.match?(PROFILE)
+    end
+
+    # phpBB's address links, and an email link showing its address, whole
+    # or shortened, of any class (phpBB's email fields have none).
+    def shows_address?(link)
+      href = link["href"].to_s.strip
+      address_link?(link) || (href.match?(MAILTO) && shown?(Dom.text(link), href))
     end
 
     # A link phpBB made of an address (postlink, postlink-local) shows the
@@ -148,14 +157,21 @@ module Nokodown
       text = Dom.text(link)
       href = link["href"].to_s.strip
       # A board's own link shows its path below the board's full URL: a
-      # word ("wren") as well.
-      local = classes.include?("postlink-local") && href.match?(SCHEME) && href.end_with?("/#{text}")
+      # word ("wren") as well, but not one that says it is the profile.
+      local = classes.include?("postlink-local") && href.match?(SCHEME) && href.end_with?("/#{text}") && !text.match?(PROFILE)
       return false unless local || text.match?(ADDRESS_TEXT)
 
+      shown?(text, href)
+    end
+
+    # The text is the href's end, or its start and end around " ... ": the
+    # start's host at least, as a word phpBB censors may differ in the rest.
+    def shown?(text, href)
       head, tail = text.split(" ... ", 2)
       return href.end_with?(text) unless tail
 
-      [href, href.sub(SCHEME, "")].any? { |address| address.start_with?(head) } && href.end_with?(tail)
+      host = head.split("/", 2).first
+      [href, href.sub(SCHEME, "")].any? { |address| address.start_with?(host) } && href.end_with?(tail)
     end
 
     def author_rel?(link)

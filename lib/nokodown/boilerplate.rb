@@ -13,6 +13,7 @@ module Nokodown
     SECTIONING = %w[article aside main nav section].freeze
     # Cards in a row sit this many wrappers deep at most.
     ROW_DEPTH = 3
+    MAX_BADGE = 40
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     AD_ATTRIBUTE_SELECTORS = AD_ATTRIBUTES.map { |name| "[#{name}]" }.freeze
@@ -211,12 +212,19 @@ module Nokodown
         return true if holder.parent.element_children.any? do |sibling|
           Dom.key(sibling) != Dom.key(holder) && row_cards(sibling).any? { |card, lone| row_card?(node, card, lone) }
         end
-        break unless depth < ROW_DEPTH && holder.parent.element_children.size == 1
+        break unless depth < ROW_DEPTH && holder.parent.element_children.all? { |child| Dom.key(child) == Dom.key(holder) || badge?(child) }
 
         holder = holder.parent
         depth += 1
       end
       false
+    end
+
+    # Beside a card in its wrapper, a badge ("Staff member"): short, not a
+    # panel, and no post's body (phpBB's postbody beside its postprofile).
+    def badge?(node)
+      Dom.text(node).length <= MAX_BADGE && !MemberPanel.panel?(node) &&
+        !node.key?(PostAttribution::POST) && node.at_css("[#{PostAttribution::POST}], [#{PostAttribution::OWNER}]").nil?
     end
 
     # A sibling and what it holds, three deep, each with whether it is

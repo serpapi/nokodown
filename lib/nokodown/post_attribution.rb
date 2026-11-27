@@ -306,12 +306,15 @@ module Nokodown
         !target.nil? && target == other_target && target.match?(ABSOLUTE)
       end
 
-      # A panel's email address and the post's link: one member only where
-      # both are the same address. An address beside a profile is another
+      # A panel's email addresses and the post's link: one member only where
+      # they share an address. An address beside a profile is another
       # member's, as base and main read it.
       def same_address?(href, other)
-        href, other = [href, other].map { |value| value.delete_prefix(MemberPanel::IDENTITY) }
-        href.match?(MemberPanel::MAILTO) && other.match?(MemberPanel::MAILTO) && href.casecmp?(other)
+        mine, others = [href, other].map do |value|
+          addresses = value.start_with?(MemberPanel::IDENTITY) ? value.delete_prefix(MemberPanel::IDENTITY).split : [value]
+          addresses.select { |address| address.match?(MemberPanel::MAILTO) }.map(&:downcase)
+        end
+        !(mine & others).empty?
       end
     end
 
