@@ -264,6 +264,9 @@ RSpec.describe Nokodown::PostAttribution do
         end.join
       end
     end
+    # phpBB brackets each link it makes in comments, which tell its field
+    # links from a theme's where its censor has changed them.
+    made = ->(field) { ->(day) { field.call(day).gsub("<a ", "<!-- m --><a ").gsub("</a>", "</a><!-- m -->") } }
     fields = field_set.call([["Code forge", "https://forge.example.net/profile/wren"], ["Community", "https://community.example.net/account/wren"]])
     local = field_set.call([["My gallery", "https://example.com/gallery/profile/wren", "gallery/profile/wren"],
                             ["Member journal", "https://example.com/journal/account/wren", "journal/account/wren"]])
@@ -274,8 +277,8 @@ RSpec.describe Nokodown::PostAttribution do
                                 ["Member journal", "#{long}/account/ab", "https://workshop.example/members/long-c ... account/ab"]])
     # A "www." address gets "http://" in its href only.
     www = "www.workshop.example/members/long-community-name/member-resources"
-    shortened_www = field_set.call([["My gallery", "http://#{www}/profile/ab", "www.workshop.example/members/long-c ... profile/ab"],
-                                    ["Member journal", "http://#{www}/account/ab", "www.workshop.example/members/long-c ... account/ab"]])
+    shortened_www = field_set.call([["My gallery", "http://#{www}/profile/ab", "www.workshop.example/members/long-commu ... profile/ab"],
+                                    ["Member journal", "http://#{www}/account/ab", "www.workshop.example/members/long-commu ... account/ab"]])
     mail = field_set.call([["Workshop", "mailto:account@workshop.example", "account@workshop.example"],
                            ["Society", "mailto:profile@society.example", "profile@society.example"]])
     # Email fields have no class, and a long address is cut in its middle.
@@ -285,38 +288,38 @@ RSpec.describe Nokodown::PostAttribution do
     # A member may be named as an address a field shows.
     own_mail = field_set.call([["Work email", "mailto:wren@example.com", "wren@example.com", ""]])
     # A word the board censors changes the href's middle the text cuts.
-    censored = field_set.call([["My gallery", "http://www.workshop.example/contributors/member/directory/profile/ab", "www.workshop.example/contributors/hellr ... profile/ab"],
-                               ["Member journal", "http://www.workshop.example/contributors/member/directory/account/ab", "www.workshop.example/contributors/hellr ... account/ab"]])
+    censored = made.call(field_set.call([["My gallery", "http://www.workshop.example/contributors/member/directory/profile/ab", "www.workshop.example/contributors/hellr ... profile/ab"],
+                                         ["Member journal", "http://www.workshop.example/contributors/member/directory/account/ab", "www.workshop.example/contributors/hellr ... account/ab"]]))
     # A member may be named as the board's own page a field links to.
     index = field_set.call([["Home page", "https://example.com/index.php", "index.php", "postlink-local"]])
     # A board's own page shows its path: the member's name as well.
     portfolio = field_set.call([["Portfolio", "https://example.com/wren", "wren", "postlink-local"]])
     # The board's own "/profile" and "/account" pages, shown as their path.
-    local_words = field_set.call([["Portfolio", "https://example.com/profile", "profile", "postlink-local"],
-                                  ["Journal", "https://example.com/account", "account", "postlink-local"]])
+    local_words = made.call(field_set.call([["Portfolio", "https://example.com/profile", "profile", "postlink-local"],
+                                            ["Journal", "https://example.com/account", "account", "postlink-local"]]))
     # A word the board censors at the cut ("rude" made "profile").
-    censored_tail = field_set.call([["Lab", "mailto:#{long_mail}@xrude.co.uk", "workshop-starter-baking-lab-calibration ... profile.co.uk", ""],
-                                    ["Lab", "mailto:#{long_mail}@xmean.co.uk", "workshop-starter-baking-lab-calibration ... account.co.uk", ""]])
+    censored_tail = made.call(field_set.call([["Lab", "mailto:#{long_mail}@xrude.co.uk", "workshop-starter-baking-lab-calibration ... profile.co.uk", ""],
+                                              ["Lab", "mailto:#{long_mail}@xmean.co.uk", "workshop-starter-baking-lab-calibration ... account.co.uk", ""]]))
     # A censor's words may have spaces ("profile withheld"), at the cut of
     # an address, or in a board's own page it shows as its path.
-    censored_words = field_set.call([["Lab", "mailto:#{long_mail}@xrude.co.uk", "workshop-starter-baking-lab-calibration ... profile withheld.co.uk", ""],
-                                     ["Website", "https://field.example/online/tools/spamfilter/directory/my-profile", "https://field.example/online/tools/link removed ... my-profile"],
-                                     ["Portfolio", "https://example.com/account page", "account page", "postlink-local"]])
+    censored_words = made.call(field_set.call([["Lab", "mailto:#{long_mail}@xrude.co.uk", "workshop-starter-baking-lab-calibration ... profile withheld.co.uk", ""],
+                                               ["Website", "https://field.example/online/tools/spamfilter/directory/my-profile", "https://field.example/online/tools/link removed ... my-profile"],
+                                               ["Portfolio", "https://example.com/account page", "account page", "postlink-local"]]))
     # The censor may shorten the href's hidden middle below phpBB's 55, or
     # replace the whole shown tail, the end of a longer word.
-    censored_href = field_set.call([["Lab", "https://field.example/aaaaaaaaaaaaaaaa/x/my-profile", "https://field.example/aaaaaaaaaaaaaaaa/ ... my-profile"],
-                                    ["Lab", "https://field.example/aaaaaaaaaaaaaaaa/public-directory/mirror-spamsource", "https://field.example/aaaaaaaaaaaaaaaa/ ... profile withheld"]])
+    censored_href = made.call(field_set.call([["Lab", "https://field.example/aaaaaaaaaaaaaaaa/x/my-profile", "https://field.example/aaaaaaaaaaaaaaaa/ ... my-profile"],
+                                              ["Lab", "https://field.example/aaaaaaaaaaaaaaaa/public-directory/mirror-spamsource", "https://field.example/aaaaaaaaaaaaaaaa/ ... profile withheld"]]))
     # The censor's word in the href where the text cut a longer one, or
     # in the text's whole tail, a word's end.
-    censored_cut = field_set.call([["Lab", "https://field.example/fermentation/x/ab/my-profile", "https://field.example/fermentation/emba ... my-profile"],
-                                   ["Lab", "https://field.example/fermentation/x/ab/my-account", "https://field.example/fermentation/emba ... my-account"]])
-    censored_word = field_set.call([["Lab", "https://field.example/labs/experiments/calibrations/xcontraband", "https://field.example/labs/experiments/ ... profile"],
-                                   ["Lab", "https://field.example/labs/photographs/catalogue/xrestricted", "https://field.example/labs/photographs/ ... account"]])
+    censored_cut = made.call(field_set.call([["Lab", "https://field.example/fermentation/x/ab/my-profile", "https://field.example/fermentation/emba ... my-profile"],
+                                             ["Lab", "https://field.example/fermentation/x/ab/my-account", "https://field.example/fermentation/emba ... my-account"]]))
+    censored_word = made.call(field_set.call([["Lab", "https://field.example/labs/experiments/calibrations/xcontraband", "https://field.example/labs/experiments/ ... profile"],
+                                             ["Lab", "https://field.example/labs/photographs/catalogue/xrestricted", "https://field.example/labs/photographs/ ... account"]]))
     # prosilver prints a field named "field1" in a plain row as well.
-    field1 = lambda do |_day|
+    field1 = made.call(lambda do |_day|
       links = "<a class='postlink-local' href='https://example.com/profile'>profile</a> <a class='postlink-local' href='https://example.com/account'>account</a>"
       "<dd><strong>Portfolio:</strong> #{links}</dd><dd class='profile-custom-field profile-field1'><strong>Portfolio:</strong> #{links}</dd>"
-    end
+    end)
     # A field named as a date ("time_zone", "birthdate") dates the member.
     dated_fields = lambda do |_day|
       "<dd class='profile-custom-field profile-time_zone'><strong>Time zone:</strong> UTC+03:00</dd>" \
@@ -329,13 +332,25 @@ RSpec.describe Nokodown::PostAttribution do
         "<a href='https://social.example/@wrenbakes' title='Mastodon account'><span class='contact-icon'>Mastodon account</span></a>" \
         "<a href='http://facebook.com/facebook/' title='Facebook'><span class='contact-icon'>Facebook</span></a></div></div></dd>"
     end
+    # The board's own pages, named as profiles, in the contact menu.
+    board_contacts = lambda do |_day|
+      "<dd class='profile-contact'><strong>Contact:</strong><div class='dropdown'><div class='dropdown-contents contact-icons'><div>" \
+        "<a href='/chat/users/wren' title='Chat profile'><span class='contact-icon chat-icon'>Chat profile</span></a>" \
+        "<a href='/directory/members/wren' title='Directory profile'><span class='contact-icon directory-icon'>Directory profile</span></a></div></div></div></dd>"
+    end
+    # The censor replaces a whole word of the href the text cuts, or the
+    # whole shown tail; phpBB's comments say it made the links.
+    censored_whole = made.call(field_set.call([["Lab", "https://lab.example/x/batch/calibration/archive/my-profile", "https://lab.example/x/batch/cali ... my-profile"],
+                                               ["Lab", "https://lab.example/calibration/fermentation/records/removed", "https://lab.example/calibration/ferment ... no-account"]]))
     # A member may be named 404 and have 404 posts, or begin with "@".
     [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [local, "wren"], [scripts, "wren"], [shortened, "wren"], [shortened_www, "wren"],
      [mail, "wren"], [mail_shortened, "wren"], [own_mail, "wren@example.com"], [censored, "wren"], [contacts, "wren"], [contacts, "Facebook"],
      ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"], [local_words, "wren"], [local_words, "profile"],
-     [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"], [censored_href, "wren"], [field1, "wren"], [field1, "profile"], [censored_cut, "wren"], [censored_word, "wren"]].each do |extra, first|
+     [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"], [censored_href, "wren"], [field1, "wren"], [field1, "profile"], [censored_cut, "wren"], [censored_word, "wren"],
+     [board_contacts, "wren"], [censored_whole, "wren"]].each do |extra, first|
       # Longer posts, as the fields' links would outweigh short ones.
-      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word,
+              board_contacts, censored_whole].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -1015,7 +1030,8 @@ RSpec.describe Nokodown::PostAttribution do
      ["Wren", "Lab safety officer", "", "section"], ["Wren", "Lab safety officer", "", "li"], ["Wren", "Lab safety officer", "", "slot"],
      ["Wren", "Lab safety officer", "", "badge"], ["Wren", "Lab safety officer", "", "deep"],
      ["Wren", "Lab safety officer", "", "lead-badge"], ["Wren", "Lab safety officer", "", "lead-caption"],
-     ["Wren", "Lab safety officer", "", "shell"], ["Wren", "Lab safety officer", "", "badged-levels"]].each do |first, role, extra, tag|
+     ["Wren", "Lab safety officer", "", "shell"], ["Wren", "Lab safety officer", "", "badged-levels"],
+     ["Wren", "Lab safety officer", "", "linked-levels"]].each do |first, role, extra, tag|
       cards = [[first, role, "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
                ["Lark", "Sample custodian", "Sample manifest"], ["Juniper", "Records custodian", "Batch journal"]].each_with_index.map do |(name, title, report), index|
         name_tag = index.zero? && %w[div section].include?(tag) ? tag : "div"
@@ -1036,19 +1052,21 @@ RSpec.describe Nokodown::PostAttribution do
         # The others three sections deep, each beside a badge.
         next "<li>#{card}</li>" if tag == "badged-levels" && index.zero?
         next "<li>#{'<section><span>Staff member</span>' * 3}#{card}#{'</section>' * 3}</li>" if tag == "badged-levels"
+        # The featured card four sections deep, each beside a linked label.
+        next "<li>#{"<section><small><a href='/team'>Staff</a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "linked-levels" && index.zero?
 
         tag == "li" ? "<li>#{card}</li>" : card
       end
       rows = [["Wren", question], ["Fern", answer], ["Moss", answer]].map do |name, body|
         "<article class='message'><header><a class='username' href='/u/#{name}'>#{name}</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{body}</p></article>"
       end
-      listed = %w[li badge deep shell badged-levels].include?(tag)
+      listed = %w[li badge deep shell badged-levels linked-levels].include?(tag)
       list = listed ? "<ul>#{cards.join}</ul>" : cards.join
       contributors = "<section class='contributors'><h3>Contributors</h3>#{list}</section>"
       markdown = thread(["<div class='reply-row'>#{contributors}#{rows[0]}</div>", *rows.drop(1).map { |row| "<div class='reply-row'>#{row}</div>" }])
 
       markdown.should include("**Wren** · May 3, 2024\n\n#{question}")
-      markdown.should include("#{'- ' if listed}[#{first}](https://example.com/members/87) #{role} · [Safety review](https://example.com/reports/87.pdf)")
+      markdown.should include("#{'- ' if listed && tag != 'linked-levels'}[#{first}](https://example.com/members/87) #{role} · [Safety review](https://example.com/reports/87.pdf)")
     end
   end
 
@@ -1235,6 +1253,16 @@ RSpec.describe Nokodown::PostAttribution do
       # The board's own profile page among the ways to reach the member.
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-contact'>" \
        "<a class='postlink' href='/members/92'>View forum profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-contact'>" \
+       "<a class='postlink' href='https://example.com/members/92'>View forum profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # A field-styled action phpBB did not make, shaped as a censored cut.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
+       "<a class='postlink' href='https://members.international-research-institute.org/directory/92/verification'>https://members.example.org/people/92 ... View profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
+       "<a class='postlink-local' href='https://example.com/members/92/profile'>profile</a></small></div>",
        "<a class='username' href='/members/72'>Wren</a>"]
     ].each do |panel, header|
       markdown = thread([
@@ -1393,7 +1421,8 @@ RSpec.describe Nokodown::PostAttribution do
     ["<small class='profile-custom-field'><time datetime='2024-05-02'>May 2, 2024</time></small>",
      "<span class='post-date profile-custom-field'>May 2, 2024</span>",
      "<span class='profile-custom-field' id='post-date-27'>May 2, 2024</span>",
-     "<span class='profile-custom-field profile-post-date'>May 2, 2024</span>"].each do |date|
+     "<span class='profile-custom-field profile-post-date'>May 2, 2024</span>",
+     "<span class='profile-custom-field profile-post_date' itemprop='datePublished'>May 2, 2024</span>"].each do |date|
       quote = "<blockquote><div id='user-info' aria-label='Original author'><span class='username'>Basil</span>#{date}</div><p>#{answer}</p></blockquote>"
       markdown = thread([
         "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \

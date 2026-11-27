@@ -232,9 +232,15 @@ module Nokodown
     end
 
     # A wrapper around one element, beside labels at most: a badge, a
-    # caption, of no elements, and no panel.
+    # caption, short, of elements that hold none (a link, an icon), and
+    # no panel.
     def wrapper?(children)
-      children.count { |child| !child.element_children.empty? || MemberPanel.panel?(child) } <= 1
+      children.count { |child| !label?(child) } <= 1
+    end
+
+    def label?(node)
+      !MemberPanel.panel?(node) && node.element_children.all? { |child| child.element_children.empty? } &&
+        Dom.text(node).length <= MemberPanel::MAX_NAME
     end
 
     # A sibling and what it holds, three deep (a wrapper of one element

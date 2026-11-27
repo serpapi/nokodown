@@ -79,6 +79,11 @@ module Nokodown
     # Where script-driven links keep their target when they have no href.
     LINK_TARGETS = %w[data-href data-url data-target-url data-delayed-url data-fallback-url ourl rl-link-href].freeze
 
+    # phpBB brackets each link it makes of an address in comments
+    # ("<!-- m --><a …>…</a><!-- m -->": m full, l the board's own, w www,
+    # e email), whatever its word censor then did to the text and href.
+    MADE_LINK = /\A [mlwe] \z/.freeze
+
     # Below this many levels under <body>, elements become plain text. Page
     # analysis and rendering recurse once per level, and a thread's stack
     # (Puma serves requests in threads) runs out after a few hundred; real
@@ -105,7 +110,10 @@ module Nokodown
 
     def call
       place_streamed_segments
-      @body.xpath(".//comment()").to_a.each(&:remove)
+      @body.xpath(".//comment()").to_a.each do |comment|
+        mark_made_link(comment)
+        comment.remove
+      end
       unwrap_noscript
       @body.css("img").to_a.each { |img| restore_lazy_image(img) }
       restore_picture_sources
@@ -124,6 +132,17 @@ module Nokodown
     end
 
     private
+
+    # The opening comment is read before it goes, the closing one after.
+    def mark_made_link(comment)
+      return unless comment.content.match?(MADE_LINK)
+
+      link = comment.next_sibling
+      return unless link&.element? && link.name == "a"
+
+      after = link.next_sibling
+      link[MemberPanel::MADE] = "" if after&.comment? && after.content == comment.content
+    end
 
     # Slots are found by id in a hash: an id put into a selector can break it
     # ("S:1']"). A slot inside a fallback removed for an earlier segment is gone.
