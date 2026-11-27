@@ -39,6 +39,10 @@ module Nokodown
     # Set by Preprocessor on a board's own link to a page in the folder of
     # the page read, the board's root.
     BOARD = "data-nokodown-board"
+    # Set by Preprocessor, where the page's URL is known, on a board-style
+    # link (postlink-local, or phpBB's "<!-- l -->") that is not below the
+    # board's URL: another host or port, or another folder.
+    FOREIGN = "data-nokodown-foreign"
     # Set on a plain <dd>: the links of the field rows after it that say
     # the same, read once for all its links.
     COPY = "data-nokodown-copy"
@@ -76,7 +80,10 @@ module Nokodown
       if name && !bylined?(panel, name)
         date, loose = date(panel, name)
         line = line(panel.document, name, date)
-        line[LOOSE] = "" if loose
+        # Only prosilver's own panel (dl.postprofile) holds its contact
+        # menu; a contact label in a panel known by its id alone is the
+        # panel's own line.
+        line[LOOSE] = "" if loose && panel["class"].to_s.match?(Patterns::MEMBER_PANEL)
         panel.add_previous_sibling(line)
         repeats(line, panel, name, source) if panel[PostAttribution::PANEL]
         line[PostAttribution::OWN] = PostAttribution::OWN_LINE if panel.key?(PostAttribution::OWN)
@@ -145,21 +152,24 @@ module Nokodown
     end
 
     def opener?(link)
-      nowhere?(link) && link["class"].to_s.split.include?("dropdown-trigger")
+      # prosilver's opener goes nowhere at all ("#"); a theme's
+      # "#member-92" or rel="author" goes to the member.
+      link["href"].to_s.strip.match?(/\A(?:#?|javascript:.*)\z/im) && link["class"].to_s.split.include?("dropdown-trigger") &&
+        !link["rel"].to_s.downcase.split.include?("author")
     end
 
     def contact?(link, panel)
-      # A link that says it is the profile ("View forum profile") is the
-      # profile, beside the ways to reach the member; but not an entry of
-      # phpBB's contact menu, named as the board's field is ("Chat
-      # profile", "View Facebook Profile"), wherever it goes.
-      return false if profile_link?(link) && !menu_entry?(link)
-
       key = Dom.key(panel)
       node = link.parent
       while node&.element? && Dom.key(node) != key
         # A custom field named "contact" is a field, not the contact block.
-        return true if Dom.signature(node).match?(CONTACT) && !node["class"].to_s.split.include?(FIELD)
+        if Dom.signature(node).match?(CONTACT) && !node["class"].to_s.split.include?(FIELD)
+          # A link that says it is the profile ("View forum profile") is
+          # the profile, beside the ways to reach the member; but not an
+          # entry of phpBB's contact menu, named as the board's field is
+          # ("Chat profile", "View Facebook Profile"), wherever it goes.
+          return !profile_link?(link) || menu_entry?(link)
+        end
 
         node = node.parent
       end
@@ -181,7 +191,9 @@ module Nokodown
     # it says so ("View profile"), not by its address ("account@...").
     def profile_link?(link)
       mail = link["href"].to_s.strip.match?(MAILTO)
-      text = shows_address?(link) ? "" : Dom.text(link)
+      # Only a text that says "profile" can be an address that does.
+      text = Dom.text(link)
+      text = "" if text.match?(PROFILE) && shows_address?(link)
       words = "#{text} #{link['aria-label']} #{link['title']}".gsub(ADDRESS, "")
       words = words.gsub(EMAIL, "") if mail
       author_rel?(link) || words.match?(PROFILE)
@@ -195,7 +207,9 @@ module Nokodown
     def shows_address?(link)
       href = link["href"].to_s.strip
       text = Dom.text(link)
-      return true if link.key?(MADE) && made_text?(text, href) && (made_row?(link) || field_row?(link, href, text))
+      # phpBB's "<!-- l -->" link goes below the board's URL; one that
+      # goes elsewhere (FOREIGN) is a theme's, whatever its comments.
+      return true if link.key?(MADE) && !link.key?(FOREIGN) && made_text?(text, href) && (made_row?(link) || field_row?(link, href, text))
 
       field_value?(link, href) || address_link?(link) || (href.match?(MAILTO) && shown?(Dom.text(link), href))
     end
@@ -205,7 +219,19 @@ module Nokodown
     # directory action made the same way ("Member directory: wren") names
     # a member.
     def field_row?(link, href, text)
-      link.ancestors.any? { |node| node.element? && node["class"].to_s.split.include?(FIELD) } || field_copy?(link, href, text)
+      field_rows(link).any? || field_copy?(link, href, text)
+    end
+
+    # The field rows the link sits in, read up its parents (faster than
+    # building its ancestors).
+    def field_rows(link)
+      rows = []
+      node = link.parent
+      while node&.element?
+        rows << node if node["class"].to_s.split.include?(FIELD)
+        node = node.parent
+      end
+      rows
     end
 
     def plain_row(link)
@@ -217,7 +243,11 @@ module Nokodown
     # comments sits in its own <small>, <div>, or <dd class="coauthor-directory">.
     def made_row?(link)
       [link.parent, link.parent&.parent].any? do |node|
-        node&.element? && node.name == "dd" && node["class"].to_s.split.all? { |name| name.match?(/\Aprofile-[a-z0-9_-]+\z/) }
+        # An ident is one word ("profile-website", "profile-field1"); a
+        # hyphened class is the field row's own ("profile-custom-field",
+        # "profile-field-0"), not a theme's "profile-coauthor-directory".
+        node&.element? && node.name == "dd" &&
+          node["class"].to_s.split.all? { |name| name.match?(/\Aprofile-(?:[a-z0-9_]+|[a-z0-9_-]*field[a-z0-9_-]*)\z/) }
       end
     end
 
@@ -226,7 +256,20 @@ module Nokodown
     # censor turned into words ("profile page"); not a theme's "View forum
     # profile" between the same comments.
     def made_text?(text, href)
-      !text.match?(/\s/) || text.match?(%r{[.:/@]}) || href.end_with?("/#{text}")
+      # phpBB shows the href itself, or its end, or its start and end
+      # around " ... ", censored alike; the censor's words keep their
+      # spaces in the href ("profile  page") that the text folds or strips
+      # (".../forum/ view profile"). A theme's "Profile" or "View profile
+      # for Wren" going to "/members/92" is not in its href.
+      return true if text.empty?
+
+      squeezed = href.gsub(/[[:space:]]+/, " ")
+      return true if squeezed.include?(text) || squeezed.gsub("/ ", "/").include?(text)
+
+      # A cut address the censor changed ("contributors/hellr ... profile/ab")
+      # keeps a word of address, or no space, around the cut.
+      head, tail = text.split(" ... ", 2)
+      !tail.nil? && (text.match?(%r{\w[.:/@]+\w}) || [head, tail].none? { |part| part.match?(/\s/) })
     end
 
     # Without phpBB's comments, a field's link shows its address as phpBB
@@ -246,7 +289,15 @@ module Nokodown
       return href.sub(MAILTO, "").casecmp?(text) if mail
 
       href == text || href == "http://#{text}" ||
-        (link["class"].to_s.split.include?("postlink-local") && href.end_with?("/#{text}") && (text.match?(ADDRESS_TEXT) || board_word?(link, href, text)))
+        (link["class"].to_s.split.include?("postlink-local") && dd_row?(link) && href.end_with?("/#{text}") && board_path?(link, href, text) &&
+          (text.match?(ADDRESS_TEXT) || board_word?(link, href, text)))
+    end
+
+    # phpBB prints a panel's field values in <dd> rows; a board's own
+    # link shown as its path elsewhere ("Staff directory: Wren.Baker" in a
+    # theme's <small>) is a theme's.
+    def dd_row?(link)
+      [link.parent, link.parent&.parent].any? { |node| node&.element? && node.name == "dd" }
     end
 
     # A board's own page shown as a word ("profile", "account/settings")
@@ -256,15 +307,17 @@ module Nokodown
     def board_word?(link, href, text)
       return false unless board_path?(link, href, text)
 
-      link.ancestors.none? { |node| node.element? && node["class"].to_s.split.include?(FIELD) } ||
-        link.ancestors.any? { |node| node.element? && node["class"].to_s.split.include?(FIELD) && node["class"].to_s.split.any? { |name| name.match?(/\Aprofile-[a-z_]+\z/) } }
+      rows = field_rows(link)
+      rows.empty? || rows.any? { |node| node["class"].to_s.split.any? { |name| name.match?(/\Aprofile-[a-z_]+\z/) } }
     end
 
     # The text is the path below the board's URL: at the site's root or
     # one folder below, or in the folder of the page read.
     # ".../directory/92/A.J." is a directory's, not a board's.
     def board_path?(link, href, text)
-      link.key?(BOARD) || href.sub(SCHEME, "").delete_suffix("/#{text}").split("/", -1).drop(1).size <= 1
+      return true if link.key?(BOARD)
+
+      !link.key?(FOREIGN) && href.sub(SCHEME, "").delete_suffix("/#{text}").split("/", -1).drop(1).size <= 1
     end
 
     # prosilver prints a field named "field1" twice: in a plain <dd>, then
@@ -275,19 +328,23 @@ module Nokodown
       row = plain_row(link)
       return false unless row
 
-      row[COPY] ||= copied_links(row)
-      row[COPY].include?("\n#{href}\t#{text}\n")
+      mark_copies(row) unless row.key?(COPY)
+      link.key?(COPY)
     end
 
-    def copied_links(row)
+    # Marks the row's links its copy rows hold, all at once.
+    def mark_copies(row)
+      row[COPY] = ""
       said = Dom.text(row)
-      links = []
+      copies = {}
       sibling = row.next_element
       while sibling && sibling["class"].to_s.split.include?(FIELD)
-        links.concat(sibling.css("a").map { |other| "#{other['href'].to_s.strip}\t#{Dom.text(other)}" }) if Dom.text(sibling) == said
+        sibling.css("a").each { |other| copies[[other["href"].to_s.strip, Dom.text(other)]] = true } if Dom.text(sibling) == said
         sibling = sibling.next_element
       end
-      "\n#{links.join("\n")}\n"
+      return if copies.empty?
+
+      row.css("a").each { |link| link[COPY] = "" if copies.key?([link["href"].to_s.strip, Dom.text(link)]) }
     end
 
     # A link phpBB made of an address (postlink, postlink-local) shows the
@@ -304,13 +361,13 @@ module Nokodown
       # A board's own link shows its path below the board's full URL: a
       # word ("wren") as well, in a field row, but not one that says it is
       # the profile.
-      local = classes.include?("postlink-local") && href.match?(SCHEME) && href.end_with?("/#{text}") && board_path?(link, href, text)
+      local = classes.include?("postlink-local") && dd_row?(link) && href.match?(SCHEME) && href.end_with?("/#{text}") && board_path?(link, href, text)
       return false unless (local && (text.match?(ADDRESS_TEXT) || (!text.match?(PROFILE) && field_row?(link, href, text)))) || text.match?(ADDRESS_TEXT)
       # Another address phpBB shows whole ("www." without its "http://"),
       # or cut, or a field row's path ("gallery/profile/wren"): not the end
       # of a directory's ".../@Wren.Baker".
       return false unless local || text.include?(" ... ") || href == text || href == "http://#{text}" || href.sub(MAILTO, "").casecmp?(text) ||
-                          (text.include?("/") && field_row?(link, href, text))
+                          (text.include?("/") && dd_row?(link) && field_row?(link, href, text) && board_path?(link, href, text))
 
       shown?(text, href)
     end

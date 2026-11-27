@@ -16,6 +16,7 @@ module Nokodown
     # or beside labels ("Staff member").
     ROW_DEPTH = 3
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
+    BADGE_INLINE = Set.new(%w[img br wbr ruby rt rp div]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     AD_ATTRIBUTE_SELECTORS = AD_ATTRIBUTES.map { |name| "[#{name}]" }.freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
@@ -249,7 +250,9 @@ module Nokodown
     end
 
     def phrase?(node)
-      node.css("*").all? { |inner| PHRASING.include?(inner.name) && !MemberPanel.panel?(inner) }
+      # A badge's image counts among them, a name's line breaks and ruby,
+      # and the box a link draws around its parts.
+      node.css("*").all? { |inner| (PHRASING.include?(inner.name) || BADGE_INLINE.include?(inner.name)) && !MemberPanel.panel?(inner) }
     end
 
     def chain?(node)

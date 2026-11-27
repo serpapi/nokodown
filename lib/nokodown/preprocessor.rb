@@ -146,15 +146,28 @@ module Nokodown
     private
 
     # A board's own link (postlink-local) to a page right in the folder of
-    # the page read ("profile" at ".../community/fermentation/profile") is
-    # a page of the board, however deep the board sits.
+    # the page read ("profile" at ".../community/fermentation/profile"), or
+    # in a folder above it (a route's ".../topic/starter.html"), is a page
+    # of the board, however deep the board sits.
     def mark_board_links
       folder = board_folder
       return unless folder
 
-      @body.css("a.postlink-local[href]").each do |link|
-        rest = link["href"].strip.sub(MemberPanel::SCHEME, "")
-        link[MemberPanel::BOARD] = "" if rest.casecmp?("#{folder}#{Dom.text(link)}")
+      host = folder[%r{\A[^/]*}]
+      @body.css("a.postlink-local[href], a[#{MemberPanel::MADE}='l'][href]").each do |link|
+        # An explicit default port (":443" on https) is the same board; the
+        # censor's words keep spaces in the href that the text folds.
+        rest = link["href"].strip.sub(%r{\Ahttps://([^/]*?):443(?=/|\z)}i, 'https://\1').sub(%r{\Ahttp://([^/]*?):80(?=/|\z)}i, 'http://\1')
+        rest = rest.sub(MemberPanel::SCHEME, "").gsub(/[[:space:]]+/, " ").gsub("/ ", "/").downcase
+        text = Dom.text(link).downcase
+        if !text.empty? && rest.end_with?("/#{text}") && folder.start_with?(rest[0, rest.length - text.length])
+          link[MemberPanel::BOARD] = ""
+        else
+          # phpBB's own link ("<!-- l -->") goes below the board's URL, at
+          # or above the page read; one elsewhere, or on another host or
+          # port, is a theme's.
+          link[MemberPanel::FOREIGN] = "" if link[MemberPanel::MADE] == "l" || rest[%r{\A[^/]*}] != host
+        end
       end
     end
 
@@ -162,7 +175,8 @@ module Nokodown
       uri = URI.parse(@url.to_s.strip)
       return unless uri.host && uri.path
 
-      folder = "#{uri.host}#{uri.path.sub(%r{[^/]*\z}, '')}"
+      host = uri.port && uri.port != uri.default_port ? "#{uri.host}:#{uri.port}" : uri.host
+      folder = "#{host}#{uri.path.sub(%r{[^/]*\z}, '')}".downcase
       folder.end_with?("/") ? folder : "#{folder}/"
     rescue URI::Error, ArgumentError
       nil
@@ -179,7 +193,7 @@ module Nokodown
       after = link.next_sibling
       return nil unless after&.comment? && after.content == comment.content
 
-      link[MemberPanel::MADE] = ""
+      link[MemberPanel::MADE] = comment.content.strip
       after
     end
 
