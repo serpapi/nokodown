@@ -286,8 +286,12 @@ module Nokodown
       return true if starts && ends
       # The censor can change a word on both sides of the cut
       # ("ext.example/x/catalog profile ... office account.01.pdf"): each
-      # side still keeps a piece of the address (".../", ".01.pdf").
-      kept = shared_address?(head.sub(SCHEME, ""), bare) && shared_address?(tail.reverse, squeezed.reverse)
+      # side still keeps a piece of the address (".../", ".01.pdf"), or
+      # the head keeps the href's scheme ("https://retiredlab ... ed/profile"
+      # for "https://legacy.example.net/.../archive/profile").
+      scheme = head[SCHEME]
+      shown = (scheme && scheme.casecmp?(squeezed[SCHEME].to_s)) || shared_address?(head.sub(SCHEME, ""), bare)
+      kept = shown && shared_address?(tail.reverse, squeezed.reverse)
       return false unless starts || ends || kept
 
       text.match?(%r{\w[.:/@]+\w}) || [head, tail].none? { |part| part.match?(/\s/) }
@@ -523,12 +527,14 @@ module Nokodown
       nil
     end
 
-    # prosilver's contact menu (".contact-icons" in its dropdown) hides
-    # the label; a theme's visible row of the same icon shows it.
+    # prosilver's contact menu ("div.dropdown-contents.contact-icons" in
+    # its dropdown) hides the label; a theme's visible row of the same
+    # icon, even one styled "contact-icons", shows it.
     def contact_menu?(node, panel)
       node = node.parent
       while node&.element? && Dom.key(node) != Dom.key(panel)
-        return true if node["class"].to_s.split.include?("contact-icons")
+        classes = node["class"].to_s.split
+        return true if classes.include?("contact-icons") && classes.include?("dropdown-contents")
 
         node = node.parent
       end

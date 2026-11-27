@@ -397,6 +397,9 @@ RSpec.describe Nokodown::PostAttribution do
     # board link's href alone ("fermentation/profile" to "fermentation/portfolio").
     censored_edges = made.call(field_set.call([["Lab", "https://ext.example/xxxxxxxxxxxxxxx/laboratory/fermentation/public.01.pdf", "https://ext.example/xxxxxxxxxxxxxxx/catalog profile ... office account.01.pdf"],
                                                ["Lab", "https://ext.example/xxxxxxxxxxxxxxx/laboratory/fermentation/public.02.pdf", "https://ext.example/xxxxxxxxxxxxxxx/catalog profile ... office account.02.pdf"]]))
+    # The censor's words in the host and the path, after the shown start.
+    censored_host = made.call(field_set.call([["Project", "https://legacy.example.net/ferments/archive/profile", "https://retiredlaboratoryfermentationar ... ed/profile"],
+                                              ["Project", "https://legacy.example.net/calibration/archive/account", "https://retiredlaboratoryfermentationar ... ed/account"]]))
     board_href = deep_fields.call("example.com/community/fermentation", %w[portfolio archive]).then do |field|
       ->(day) { field.call(day).sub(">portfolio<", ">profile<").sub(">archive<", ">account<") }
     end
@@ -410,11 +413,11 @@ RSpec.describe Nokodown::PostAttribution do
      [on_port, "wren", board.sub("example.com", "example.com:8443")], [default_port, "wren", board],
      [stripped_deep, "wren", "https://example.com/community/fermentation/topic/starter.html"], [censored_folder, "wren", board],
      [censored_slash, "wren", board], [other_host, "wren", board.sub("example.com", "forum.example.com")], [censored_edges, "wren"],
-     [board_href, "wren", board], [board_href, "profile", board]].each do |extra, first, url|
+     [board_href, "wren", board], [board_href, "profile", board], [censored_host, "wren", board]].each do |extra, first, url|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word, censored_tilde,
               board_contacts, censored_whole, blanked, stripped_words, office, censored_page, stripped_deep, numbered, censored_spaces, on_port,
-              default_port, censored_folder, censored_slash, other_host, censored_edges, board_href].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+              default_port, censored_folder, censored_slash, other_host, censored_edges, board_href, censored_host].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -463,6 +466,16 @@ RSpec.describe Nokodown::PostAttribution do
     markdown = thread([
       "<article class='message'><dl class='message-user postprofile'><dt><a class='username' href='/members/87'>W. Baker</a></dt>" \
       "<dd class='office-hours'><span class='contact-icon office_time-icon'>Office hours 09:00–12:00 UTC</span></dd></dl>" \
+      "<header><a class='username' href='/members/87'>W. Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p><p>#{answer}</p></article>",
+      post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+    ])
+    markdown.should include("Office hours 09:00–12:00 UTC")
+
+    # The same row styled with prosilver's "contact-icons" but shown
+    # inline, outside a dropdown.
+    markdown = thread([
+      "<article class='message'><dl class='message-user postprofile'><dt><a class='username' href='/members/87'>W. Baker</a></dt>" \
+      "<dd class='office-hours'><div class='contact-icons'><a href='/schedule'><span class='contact-icon office_time-icon'>Office hours 09:00–12:00 UTC</span></a></div></dd></dl>" \
       "<header><a class='username' href='/members/87'>W. Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p><p>#{answer}</p></article>",
       post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
     ])
