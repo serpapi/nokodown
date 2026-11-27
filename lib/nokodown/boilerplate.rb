@@ -176,7 +176,13 @@ module Nokodown
     def class_noise?(node)
       return false if !@prose_blocks.empty? && prose_part?(node)
 
-      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node))
+      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || post_panel?(node) || !card?(node))
+    end
+
+    # A run of member panels beside a thread's posts (phpBB's postprofile)
+    # repeats like cards, but PostAttribution has read whose post each is.
+    def post_panel?(node)
+      !node[PostAttribution::PANEL].to_s.empty? && MemberPanel.panel?(node)
     end
 
     # Fine print about the site is furniture, but a note on the content right

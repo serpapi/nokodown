@@ -54,6 +54,8 @@ module Nokodown
     DATE = "data-nokodown-date"
     REPLACED = "data-nokodown-replaced"
     SUBJECT = "data-nokodown-subject"
+    # A post's heading that repeats the thread's title, which stays in place.
+    TITLE = "data-nokodown-title"
     HEADINGS = "h1, h2, h3, h4, h5, h6"
     # The number of the post a body, the line written there, or a member
     # panel belongs to; MemberPanel copies a panel's onto the line it leaves.
@@ -65,6 +67,8 @@ module Nokodown
     LINE = "data-nokodown-line"
     PANEL = "data-nokodown-panel"
     REPEAT = "data-nokodown-repeat"
+    # The element a numbered post is.
+    OWNER = "data-nokodown-owner"
     MORE = "+"
     # Nodes read from a member panel's line to the line written below it
     # for the same post.
@@ -134,7 +138,7 @@ module Nokodown
             return false
           elsif node.element? && node[LINE]
             return rendered?(node, roots) && same_line?(repeat, node, urls) && !preceded?(repeat, node, roots)
-          elsif node.element? && (node[REPEAT] || node[SUBJECT])
+          elsif node.element? && (node[REPEAT] || post_subject?(node, repeat))
             node = following(node, nodes, roots)
           elsif node.element?
             return false if SHOWN.include?(node.name)
@@ -162,12 +166,15 @@ module Nokodown
         Dom.ancestors_named(repeat, *CELLS).any?
       end
 
-      # Something shows before the panel's line in what holds it and the
-      # post's line, read back from the line up to MAX_STEPS siblings: a
+      # Something shows before the panel's line in its post (or, where the
+      # panel stands outside the post's element, in what holds it and the
+      # post's line), read back from the line up to MAX_STEPS siblings: a
       # forum prints the panel first in the post.
       def preceded?(repeat, line, roots)
         post = Set.new
-        node = line
+        owner = owner_of(line)
+        panel_owner = owner && owner_of(repeat)
+        node = panel_owner && Dom.key(owner) == Dom.key(panel_owner) ? owner : line
         while node&.element?
           post << Dom.key(node)
           node = node.parent
@@ -185,6 +192,13 @@ module Nokodown
           end
         end
         true
+      end
+
+      # The post element around a line, where PostAttribution numbered it.
+      def owner_of(line)
+        node = line.parent
+        node = node.parent while node&.element? && !node.key?(OWNER)
+        node if node&.element?
       end
 
       # Is the line in the Markdown: below a root through children that
@@ -223,6 +237,16 @@ module Nokodown
           return if node.nil? || !node.element?
         end
         nodes[index + 1]
+      end
+
+      # The post's subject, kept where its header went, in a column apart
+      # from the panel's line (phpBB's postbody beside its postprofile).
+      # One beside the line is a heading the post shows.
+      def post_subject?(node, repeat)
+        return false unless node[SUBJECT] || node[TITLE]
+
+        key = Dom.key(node.parent)
+        repeat.ancestors.none? { |ancestor| ancestor.element? && Dom.key(ancestor) == key }
       end
 
       def same_line?(repeat, line, urls)
@@ -466,8 +490,17 @@ module Nokodown
     def subjects(post, body)
       post.node.css(HEADINGS).reject do |heading|
         @authors.include?(Dom.key(heading)) || inside?(post.date, heading) || inside?(heading, body) ||
-          quoted?(heading) || title?(heading) || heading.ancestors.any? { |ancestor| ancestor.element? && MemberPanel.panel?(ancestor) }
+          quoted?(heading) || repeated_title?(heading) ||
+          heading.ancestors.any? { |ancestor| ancestor.element? && MemberPanel.panel?(ancestor) }
       end
+    end
+
+    # Marked for the walk in finish, which steps over it as over a subject.
+    def repeated_title?(heading)
+      return false unless title?(heading)
+
+      heading[TITLE] = ""
+      true
     end
 
     def title?(heading)
@@ -500,6 +533,7 @@ module Nokodown
       numbers = {}
       posts.each_with_index do |post, index|
         post.placement.body[POST] = [index, href(post.author)].compact.join(" ")
+        post.node[OWNER] = ""
         numbers[Dom.key(post.node)] = index.to_s
       end
       rows = rows(posts, numbers)

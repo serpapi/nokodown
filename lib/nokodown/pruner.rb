@@ -182,7 +182,7 @@ module Nokodown
       ["form, fieldset", "table", "ul", "div"].each do |selector|
         root.css(selector).to_a.reverse_each do |node|
           next if paragraph_keys.include?(Dom.key(node)) || !ContainerCheck.new(node, content_length, paragraph_keys, memo).remove?
-          next if panel_paragraph?(node)
+          next if panel_paragraph?(node) || kept_without_panel_lines?(node, content_length, paragraph_keys, memo)
 
           ContainerCheck.forget(memo, node)
           remove(node)
@@ -196,6 +196,20 @@ module Nokodown
     # still a paragraph. Asked only of a container about to go.
     def panel_paragraph?(node)
       node.name == "div" && !node.at_xpath(PANEL_LINE).nil? && node.at_xpath(OTHER_BREAKER).nil?
+    end
+
+    # A container the check keeps once its panels' lines are out of it, as
+    # it was before the lines replaced the panels the header did: a file list
+    # under the line reads as a list again, not as links.
+    def kept_without_panel_lines?(node, content_length, paragraph_keys, memo)
+      lines = node.xpath("descendant::*[@#{PostAttribution::REPEAT}]").to_a
+      return false if lines.empty?
+
+      places = lines.map { |line| [line, line.parent, line.next_sibling].tap { line.unlink } }
+      # A memo of its own: the counts it holds are of the page as it is.
+      !ContainerCheck.new(node, content_length, paragraph_keys, { root: memo[:root] }).remove?
+    ensure
+      places&.reverse_each { |line, parent, following| following ? following.add_previous_sibling(line) : parent.add_child(line) }
     end
 
     # A forum's thread is content.

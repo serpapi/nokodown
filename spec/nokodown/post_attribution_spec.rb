@@ -202,21 +202,50 @@ RSpec.describe Nokodown::PostAttribution do
     end
   end
 
-  # phpBB's prosilver: a list of the poster's details, then the post's
-  # subject above the line naming the poster.
-  it "writes one line where the post's subject stands between the member panel and the post's line" do
-    posts = [["wren", 3, "Starter", question], ["basil", 5, "Re: Starter", answer]].map do |name, day, subject, body|
-      "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
-        "<dl class='postprofile'><dt><a class='username' href='/members/#{name}'>#{name}</a></dt>" \
-        "<dd class='profile-posts'><strong>Posts:</strong> 41</dd></dl>" \
-        "<div class='postbody'><h3><a href='#p#{day}'>#{subject}</a></h3>" \
-        "<p class='author'>by <strong><a class='username' href='/members/#{name}'>#{name}</a></strong> " \
-        "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></p><div class='content'>#{body}</div></div></div></div>"
+  # Each cell reads as a post of its own: the panel holds the name and
+  # the date, the main cell the post's line.
+  it "writes one line when the member panel's cell and the post's cell both name the poster" do
+    user = ->(name) { "<a class='username' href='/members/#{name}'>#{name}</a>" }
+    post = lambda do |name, day|
+      "<article class='message'><div class='message-inner'><div class='message-cell message-cell--user'>" \
+        "<section class='message-user'><h4 class='message-name'>#{user.call(name)}</h4>" \
+        "<div class='message-date'><time datetime='2024-05-0#{day}'>May #{day}, 2024</time></div></section></div>" \
+        "<div class='message-cell message-cell--main'><header class='message-attribution'>#{user.call(name)} " \
+        "<a href='/posts/#{day}'><time datetime='2024-05-0#{day}'>May #{day}, 2024</time></a></header>" \
+        "<div class='message-content'><p>#{name == 'wren' ? question : answer}</p></div></div></div></article>"
     end
-    markdown = thread(posts, head: '<meta name="generator" content="phpBB">')
+    markdown = thread([post.call("wren", 3), post.call("basil", 5)])
 
-    markdown.should include("### Re: Starter\n\n**basil** · May 5, 2024\n\n#{answer}")
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
     markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+  end
+
+  # phpBB's prosilver: a list of the poster's details, then the post's
+  # subject above the line naming the poster. Three or more lists repeat
+  # like cards. The opening post's subject is the thread's title; a
+  # localized board says "door", not "by".
+  it "writes one line where the post's subject stands between the member panel and the post's line" do
+    title = "Sourdough starter smells like acetone"
+    %w[by door].each do |by|
+      posts = [["wren", 3, title, question], ["basil", 5, "Re: Starter", answer], ["lark", 7, "Re: Starter", answer]]
+      posts = posts.map do |name, day, subject, body|
+        "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
+          "<dl class='postprofile'><dt><a class='username' href='/members/#{name}'>#{name}</a></dt>" \
+          "<dd class='profile-posts'><strong>Posts:</strong> <a href='/search?author=#{name}'>41</a></dd>" \
+          "<dd class='profile-joined'><strong>Joined:</strong> Fri Oct 14, 2016 12:00 pm</dd></dl>" \
+          "<div class='postbody'><h3><a href='#p#{day}'>#{subject}</a></h3>" \
+          "<p class='author'>#{by} <strong><a class='username' href='/members/#{name}'>#{name}</a></strong> " \
+          "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></p><div class='content'>#{body}</div></div></div></div>"
+      end
+      [posts.first(2), posts].each do |thread_posts|
+        markdown = thread(thread_posts, head: '<meta name="generator" content="phpBB">')
+
+        markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+        markdown.should include("### Re: Starter\n\n**basil** · May 5, 2024\n\n#{answer}")
+        markdown.scan(/\*\*(?:wren|basil|lark)\*\*/).size.should == thread_posts.size
+      end
+    end
   end
 
   # The rest of the panel's column (a rank, a post count) stands between the
@@ -414,7 +443,11 @@ RSpec.describe Nokodown::PostAttribution do
       "#{head}<p>Laatst bewerkt door</p>#{panel}" => "Laatst bewerkt door\n\n**wren**\n\n**basil**",
       "#{head}<p>最終編集者</p>#{panel}" => "最終編集者\n\n**wren**\n\n**basil**",
       "#{head}<p>I independently reproduced this.</p>#{panel}" => "I independently reproduced this.\n\n**wren**\n\n**basil**",
-      "#{head}<blockquote>Mix again tomorrow.</blockquote><div class='citation'>#{panel}</div>" => "> Mix again tomorrow.\n\n**wren**\n\n**basil**"
+      "#{head}<blockquote>Mix again tomorrow.</blockquote><div class='citation'>#{panel}</div>" => "> Mix again tomorrow.\n\n**wren**\n\n**basil**",
+      "<div class='edit'>Last edited by —</div><div class='message-inner'>#{panel}#{head}</div>" =>
+        "Last edited by —\n\n**wren**\n\n**wren** · May 3, 2024",
+      "#{panel}<h3>Verified by the above contributor</h3>#{head}" =>
+        "**wren**\n\n### Verified by the above contributor\n\n**wren** · May 3, 2024"
     }.each do |inner, shown|
       markdown = thread([
         "<article class='message'>#{inner}</article>",
@@ -433,7 +466,9 @@ RSpec.describe Nokodown::PostAttribution do
     {
       "<div class='quote'><div class='message-user'>#{user}</div><a href='/log.pdf'>Log</a></div>#{head}" => "[Log](https://example.com/log.pdf)",
       "#{head}<div class='attachment'><div class='user-info'>#{user}</div><a href='/log.pdf'>Mixing log</a></div>" =>
-        "[Mixing log](https://example.com/log.pdf)"
+        "[Mixing log](https://example.com/log.pdf)",
+      "#{head}<div class='attachments'><div class='message-user'>#{user}</div><ul><li><a href='/log.pdf'>Mixing log</a></li></ul></div>" =>
+        "- [Mixing log](https://example.com/log.pdf)"
     }.each do |inner, shown|
       markdown = thread([
         "<article class='message'>#{inner}</article>",
