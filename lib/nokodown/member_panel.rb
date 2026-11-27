@@ -31,6 +31,8 @@ module Nokodown
     # or a board path ("gallery/profile/wren"); not a word ("profile") or a
     # label ("Profile/Account").
     ADDRESS_TEXT = %r{[.?@:]|/.*/}.freeze
+    # phpBB's container of a public profile field's value.
+    FIELD = "profile-custom-field"
     # An email address the panel gives for the member, which tells apart
     # only from another address, not from a profile.
     IDENTITY = "~"
@@ -106,8 +108,8 @@ module Nokodown
     # the member is: a co-author's addresses beside a post linked to
     # another address or a profile.
     def identity(links)
-      mails = links.map { |candidate| candidate["href"].to_s.strip }.select { |href| href.match?(MAILTO) }.uniq
-      "#{IDENTITY}#{mails.join(' ')}" unless mails.empty?
+      mails = links.map { |candidate| candidate["href"].to_s.strip.delete("\t\n\r") }.select { |href| href.match?(MAILTO) }.uniq
+      "#{IDENTITY}#{mails.join("\n")}" unless mails.empty?
     end
 
     def avatar_link?(link)
@@ -139,10 +141,19 @@ module Nokodown
     end
 
     # phpBB's address links, and an email link showing its address, whole
-    # or shortened, of any class (phpBB's email fields have none).
+    # or shortened, of any class (phpBB's email fields have none). A link
+    # phpBB made of a public field's value is the address the member gave,
+    # whatever it shows: the board's own "/profile" page as "profile", or a
+    # word the board censors in a shortened address.
     def shows_address?(link)
       href = link["href"].to_s.strip
-      address_link?(link) || (href.match?(MAILTO) && shown?(Dom.text(link), href))
+      field_value?(link, href) || address_link?(link) || (href.match?(MAILTO) && shown?(Dom.text(link), href))
+    end
+
+    def field_value?(link, href)
+      return false unless href.match?(MAILTO) || link["class"].to_s.split.any? { |name| name.start_with?("postlink") }
+
+      link.ancestors.any? { |ancestor| ancestor.element? && ancestor["class"].to_s.split.include?(FIELD) }
     end
 
     # A link phpBB made of an address (postlink, postlink-local) shows the
@@ -166,12 +177,18 @@ module Nokodown
 
     # The text is the href's end, or its start and end around " ... ": the
     # start's host at least, as a word phpBB censors may differ in the rest.
+    # An address has no spaces ("https://example.com/ View profile").
     def shown?(text, href)
       head, tail = text.split(" ... ", 2)
       return href.end_with?(text) unless tail
+      return false if head.match?(/\s/) || tail.match?(/\s/)
 
-      host = head.split("/", 2).first
-      [href, href.sub(SCHEME, "")].any? { |address| address.start_with?(host) } && href.end_with?(tail)
+      start = head.sub(SCHEME, "").downcase
+      address = href.sub(SCHEME, "").downcase
+      host = lambda { |value| value.split(%r{[/?#]}, 2).first.to_s }
+      # Cut inside the host (or an email's address), the start is its start.
+      same = start.match?(%r{[/?#]}) ? host.call(start) == host.call(address) : address.start_with?(start)
+      !start.empty? && same && href.end_with?(tail)
     end
 
     def author_rel?(link)

@@ -307,14 +307,15 @@ module Nokodown
       end
 
       # A panel's email addresses and the post's link: one member only where
-      # they share an address. An address beside a profile is another
-      # member's, as base and main read it.
+      # they are the same addresses. A co-author's own address beside a
+      # shared one (a laboratory's), or an address beside a profile, is
+      # another member's, as base and main read it.
       def same_address?(href, other)
         mine, others = [href, other].map do |value|
-          addresses = value.start_with?(MemberPanel::IDENTITY) ? value.delete_prefix(MemberPanel::IDENTITY).split : [value]
-          addresses.select { |address| address.match?(MemberPanel::MAILTO) }.map(&:downcase)
+          addresses = value.start_with?(MemberPanel::IDENTITY) ? value.delete_prefix(MemberPanel::IDENTITY).split("\n") : [value]
+          addresses.select { |address| address.match?(MemberPanel::MAILTO) }.map(&:downcase).uniq.sort
         end
-        !(mine & others).empty?
+        !mine.empty? && mine == others
       end
     end
 

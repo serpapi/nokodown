@@ -291,6 +291,12 @@ RSpec.describe Nokodown::PostAttribution do
     index = field_set.call([["Home page", "https://example.com/index.php", "index.php", "postlink-local"]])
     # A board's own page shows its path: the member's name as well.
     portfolio = field_set.call([["Portfolio", "https://example.com/wren", "wren", "postlink-local"]])
+    # The board's own "/profile" and "/account" pages, shown as their path.
+    local_words = field_set.call([["Portfolio", "https://example.com/profile", "profile", "postlink-local"],
+                                  ["Journal", "https://example.com/account", "account", "postlink-local"]])
+    # A word the board censors at the cut ("rude" made "profile").
+    censored_tail = field_set.call([["Lab", "mailto:#{long_mail}@xrude.co.uk", "workshop-starter-baking-lab-calibration ... profile.co.uk", ""],
+                                    ["Lab", "mailto:#{long_mail}@xmean.co.uk", "workshop-starter-baking-lab-calibration ... account.co.uk", ""]])
     # Contact fields are named as the board likes; one is the member's own.
     contacts = lambda do |_day|
       "<dd class='profile-contact'><strong>Contact:</strong><div class='dropdown'><div class='dropdown-contents contact-icons'>" \
@@ -301,9 +307,10 @@ RSpec.describe Nokodown::PostAttribution do
     # A member may be named 404 and have 404 posts, or begin with "@".
     [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [local, "wren"], [scripts, "wren"], [shortened, "wren"], [shortened_www, "wren"],
      [mail, "wren"], [mail_shortened, "wren"], [own_mail, "wren@example.com"], [censored, "wren"], [contacts, "wren"], [contacts, "Facebook"],
-     ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"]].each do |extra, first|
+     ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"], [local_words, "wren"], [local_words, "profile"],
+     [censored_tail, "wren"]].each do |extra, first|
       # Longer posts, as the fields' links would outweigh short ones.
-      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -943,7 +950,7 @@ RSpec.describe Nokodown::PostAttribution do
     [["Aster", "Wren’s lab safety officer", "", "div"], ["Wren", "Lab safety officer", "", "div"], ["Wren", "Lab safety officer", " featured", "div"],
      ["Wren", "Lab safety officer", "", "section"], ["Wren", "Lab safety officer", "", "li"], ["Wren", "Lab safety officer", "", "slot"],
      ["Wren", "Lab safety officer", "", "badge"], ["Wren", "Lab safety officer", "", "deep"],
-     ["Wren", "Lab safety officer", "", "lead-badge"]].each do |first, role, extra, tag|
+     ["Wren", "Lab safety officer", "", "lead-badge"], ["Wren", "Lab safety officer", "", "lead-caption"]].each do |first, role, extra, tag|
       cards = [[first, role, "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
                ["Lark", "Sample custodian", "Sample manifest"], ["Juniper", "Records custodian", "Batch journal"]].each_with_index.map do |(name, title, report), index|
         name_tag = index.zero? && %w[div section].include?(tag) ? tag : "div"
@@ -954,6 +961,8 @@ RSpec.describe Nokodown::PostAttribution do
         next "<li>#{index.zero? ? '' : '<span>Staff member</span>'}#{card}</li>" if tag == "badge"
         # The featured card's wrapper holds a badge beside it.
         next "<section>#{card}<span>Staff member</span></section>" if tag == "lead-badge" && index.zero?
+        # Or a caption longer than a badge.
+        next "<section><span>Lead contributor and laboratory archivist</span>#{card}</section>" if tag == "lead-caption" && index.zero?
         # Each card sits three wrappers deep.
         next "<li><section><div class='card-body'>#{card}</div></section></li>" if tag == "deep"
 
@@ -1071,7 +1080,17 @@ RSpec.describe Nokodown::PostAttribution do
        "<a class='username' href='mailto:wren.junior@example.com'>Wren</a>"],
       # A board-local button that says it is the profile.
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><a class='postlink-local' href='https://example.com/members/92/profile'>profile</a></div>",
-       "<a class='username' href='/members/72'>Wren</a>"]
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # A label between an address's start and end, or one host's start
+      # beside another's.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><a class='postlink' href='https://profiles.example.net/archive/members/92'>https://example.com/ View profile ... members/92</a></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><a class='postlink' href='https://www.example.com.au/archive/members/92'>www.example.com/ View profile ... members/92</a></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # A co-author's own address beside one shared with the poster.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><span class='contact-details'><a itemprop='email' href='mailto:wren.senior@example.com'>Email Wren</a>" \
+       "<a href='mailto:wren.junior@example.com'>Email laboratory</a></span></div>",
+       "<a class='username' href='mailto:wren.junior@example.com'>Wren</a>"]
     ].each do |panel, header|
       markdown = thread([
         "<article class='message'>#{panel}<header>#{header} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
