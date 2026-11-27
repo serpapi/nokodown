@@ -104,9 +104,7 @@ module Nokodown
         ProductReviews.new(body).call
         stats = nil
       end
-      reduced = boilerplate.reduced_copy
       selection = ContentLocator.new(body, page_type: page_type, stats: stats).call
-      selection = reduced_selection(body, reduced, page_type, selection) if reduced
       boilerplate.reduce_cards(selection.nodes)
       attribution&.write(selection.nodes)
       if selection.mode == :article
@@ -116,31 +114,6 @@ module Nokodown
 
       Pruner.new(selection.nodes, :page).call
       [selection.nodes, :page]
-    end
-
-    # The cards a post holds stay while the content is chosen, as on base;
-    # with them reduced, as on main, the choice can take in more of the
-    # thread (the next post). The wider choice, holding all of the first,
-    # wins.
-    def reduced_selection(body, copy, page_type, selection)
-      wider = ContentLocator.new(copy, page_type: page_type).call
-      return selection unless wider.mode == selection.mode
-
-      nodes = wider.nodes.map do |node|
-        was = node[Boilerplate::WAS].to_s
-        next body if was == Dom.key(body)
-
-        was.empty? ? nil : body.at_css("[#{Dom::KEY}='#{was}']")
-      end
-      return selection if nodes.any?(&:nil?)
-
-      keys = nodes.map { |node| Dom.key(node) }.to_set
-      return selection if keys == selection.nodes.map { |node| Dom.key(node) }.to_set
-
-      held = selection.nodes.all? do |node|
-        keys.include?(Dom.key(node)) || node.ancestors.any? { |ancestor| ancestor.element? && keys.include?(Dom.key(ancestor)) }
-      end
-      held ? ContentLocator::Selection.new(nodes, wider.mode) : selection
     end
 
     # An article body chosen inside <main> can leave out the headline above

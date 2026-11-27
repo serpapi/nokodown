@@ -268,6 +268,21 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("**wren** · May 3, 2024\n\nwren watched. #{body}")
     markdown.should_not include("About me")
     markdown.scan(/\*\*(?:wren|basil|iris)\*\*/).size.should == 3
+
+    # An editor's credit beside a post that holds the page is the page's
+    # content, with its report, as on base and main.
+    review = "Fern serves as the laboratory safety reviewer for this thread. She checked the calibration log, inspected the seals, " \
+             "and compared the signed readings with the stored measurements before approving the report. For any questions about " \
+             "the review, contact the laboratory coordinator and include the test number."
+    html = '<!doctype html><meta name="generator" content="XenForo"><main><ol><li class="reply-row"><article class="message"><header>' \
+           '<a class="username" href="/members/0">Wren</a> <time datetime="2024-05-03">May 3, 2024</time></header><p>The starter doubled.</p>' \
+           '</article></li><li class="reply-row"><article class="message"><header><a class="username" href="/members/5">Fern</a> ' \
+           '<time datetime="2024-05-04">May 4, 2024</time></header><p>A second reading confirmed the result.</p></article>' \
+           "<div class=\"message-user editor\"><a class=\"username\" href=\"/members/5\">Fern</a><p>#{review} " \
+           '<a href="/files/5.pdf">Signed calibration report</a>.</p></div></li></ol></main>'
+    markdown = Nokodown.extract(html, url: "https://example.com/threads/starter").markdown
+    markdown.should include(review)
+    markdown.should include("[Signed calibration report](https://example.com/files/5.pdf)")
   end
 
   # A board without profiles names the poster in no link; the posts count
@@ -432,6 +447,13 @@ RSpec.describe Nokodown::PostAttribution do
                                                     ["Project", "https://legacy.example.net/calibration/archived", "https://retiredlaboratoryfermentationar ... my-account"]]))
     censored_equals = made.call(field_set.call([["Project", "https://legacy.example.net/ferments/index?archive=profile", "https://retiredlaboratoryfermentationar ... ed=profile"],
                                                 ["Project", "https://legacy.example.net/calibration/index?archive=account", "https://retiredlaboratoryfermentationar ... ed=account"]]))
+    # A "www." link (<!-- w -->) shows "www." where others show the scheme.
+    censored_www = lambda do |_day|
+      %w[profile account].map do |word|
+        "<dd class='profile-custom-field profile-project'><strong>Project:</strong> <!-- w --><a class='postlink' href='http://www.legacy.example.net/#{word}s/archived'>" \
+          "www.retiredlaboratoryfermentationarchiv ... my-#{word}</a><!-- w --></dd>"
+      end.join
+    end
     board_href = deep_fields.call("example.com/community/fermentation", %w[portfolio archive]).then do |field|
       ->(day) { field.call(day).sub(">portfolio<", ">profile<").sub(">archive<", ">account<") }
     end
@@ -446,12 +468,13 @@ RSpec.describe Nokodown::PostAttribution do
      [stripped_deep, "wren", "https://example.com/community/fermentation/topic/starter.html"], [censored_folder, "wren", board],
      [censored_slash, "wren", board], [other_host, "wren", board.sub("example.com", "forum.example.com")], [censored_edges, "wren"],
      [board_href, "wren", board], [board_href, "profile", board], [censored_host, "wren", board], [censored_fragment, "wren"], [censored_query, "wren"],
-     [censored_tail_whole, "wren", board], [censored_tail_whole, "wren"], [censored_equals, "wren", board], [board_href, "profile"]].each do |extra, first, url|
+     [censored_tail_whole, "wren", board], [censored_tail_whole, "wren"], [censored_equals, "wren", board], [board_href, "profile"],
+     [censored_www, "wren", board], [censored_www, "wren"]].each do |extra, first, url|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word, censored_tilde,
               board_contacts, censored_whole, blanked, stripped_words, office, censored_page, stripped_deep, numbered, censored_spaces, on_port,
               default_port, censored_folder, censored_slash, other_host, censored_edges, board_href, censored_host, censored_fragment, censored_query,
-              censored_tail_whole, censored_equals].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+              censored_tail_whole, censored_equals, censored_www].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -516,13 +539,20 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("Office hours 09:00–12:00 UTC")
 
     # Or with prosilver's two menu classes, but in no dropdown.
-    markdown = thread([
-      "<article class='message'><dl class='message-user postprofile'><dt><a class='username' href='/members/87'>W. Baker</a></dt>" \
-      "<dd class='office-hours'><div class='dropdown-contents contact-icons' role='group'><a href='/schedule'><span class='contact-icon office_time-icon'>Office hours 09:00–12:00 UTC</span></a></div></dd></dl>" \
-      "<header><a class='username' href='/members/87'>W. Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p><p>#{answer}</p></article>",
-      post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
-    ])
-    markdown.should include("Office hours 09:00–12:00 UTC")
+    # Or in a dropdown shown open, or set in a section of a dropdown.
+    menu = "<div class='dropdown-contents contact-icons' role='group'><a href='/schedule'><span class='contact-icon office_time-icon'>Office hours 09:00–12:00 UTC</span></a></div>"
+    [menu, "<div class='dropdown' style='display:block' aria-hidden='false'>#{menu}</div>", "<div class='dropdown open' aria-expanded='true'>#{menu}</div>",
+     "<details class='dropdown' open><summary>Contact staff</summary>#{menu}</details>",
+     "<div class='dropdown'><button aria-expanded='false'>Choose department</button><ul role='menu' hidden><li>Fermentation</li></ul>" \
+       "<section aria-label='Published schedule'>#{menu}</section></div>"].each do |group|
+      markdown = thread([
+        "<article class='message'><dl class='message-user postprofile'><dt><a class='username' href='/members/87'>W. Baker</a></dt>" \
+        "<dd class='office-hours'>#{group}</dd></dl>" \
+        "<header><a class='username' href='/members/87'>W. Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p><p>#{answer}</p></article>",
+        post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+      ])
+      markdown.should include("Office hours 09:00–12:00 UTC"), group
+    end
   end
 
   # The rest of the panel's column (a rank, a post count) stands between the
@@ -1795,6 +1825,8 @@ RSpec.describe Nokodown::PostAttribution do
      "<span class='profile-custom-field' id='post-date-27'>May 2, 2024</span>",
      "<span class='profile-custom-field profile-post-date'>May 2, 2024</span>",
      "<span class='profile-custom-field profile-post_date' itemprop='datePublished'>May 2, 2024</span>",
+     # Or with only phpBB's field class and a field ident that says date.
+     "<span class='profile-custom-field profile-post_date'>May 2, 2024</span>",
      # Or with phpBB's contact icon class, saying it is the date.
      "<span class='contact-icon quoted-date' itemprop='datePublished'>May 2, 2024</span>"].each do |date|
       quote = "<blockquote><div id='user-info' aria-label='Original author'><span class='username'>Basil</span>#{date}</div><p>#{answer}</p></blockquote>"

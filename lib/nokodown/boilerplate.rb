@@ -40,20 +40,6 @@ module Nokodown
     # A member panel base keeps among a run of cards, which this pass marks
     # for its line after the content is chosen, as base chose it.
     CARD = "data-nokodown-card"
-    # A copy's element's key in the page it was copied from.
-    WAS = "data-nokodown-was"
-
-    # The page with its marked cards in posts reduced, as a copy whose
-    # elements keep their keys in WAS; nil where no card stands in a post.
-    def reduced_copy
-      return if @cards.nil? || @cards.none? { |card| card.ancestors.any? { |ancestor| ancestor.element? && ancestor.key?(PostAttribution::OWNER) } }
-
-      copy = @body.dup
-      ([copy] + Dom.elements(copy)).each { |node| node[WAS] = Dom.key(node).to_s }
-      copy.css("[#{CARD}]").to_a.each { |card| MemberPanel.reduce(card) }
-      Dom.assign_keys(copy)
-      copy
-    end
 
     # Replaces the marked panels with their lines, but one that is, or
     # holds, a chosen node, or lies outside them all: base keeps it.
@@ -100,8 +86,10 @@ module Nokodown
       walk(@body, removals)
       # Base keeps these as cards; they leave their lines once the content
       # is chosen as base chose it, from the page with them.
-      cards, removals = removals.partition { |_, kind| kind == :card }
-      @cards = cards.map(&:first).each { |node| node[CARD] = "" }
+      # A post's own panel that holds the page waits likewise: main chose
+      # the content with it whole, then took it out of the chosen content.
+      cards, removals = removals.partition { |_, kind| kind == :card || kind == :dominant }
+      @cards = cards.map { |node, kind| node[CARD] = kind == :dominant ? "dominant" : ""; node }
       removals.delete(content_guess(removals)) if almost_empty_without?(removals)
       if removals.none? { |_, kind| kind == :panel }
         @stats.remove(removals.map(&:first))
@@ -134,7 +122,7 @@ module Nokodown
           removals << [child, kind] if kind
           # A card stays until the content is chosen: what base takes out
           # of it goes now, as on base.
-          walk(child, removals) if kind.nil? || kind == :card
+          walk(child, removals) if kind.nil? || kind == :card || kind == :dominant
         end
         child = child.next_element
       end
@@ -160,9 +148,12 @@ module Nokodown
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if chrome_element?(node) || chrome_role?(node)
       # A post's own member panel, read as standing in for the post's line,
-      # goes as on main however long its fields ("About me"); another
-      # panel ("Reviewed by" a member) that holds the page stays.
-      return if dominant?(node) && !(node.key?(PostAttribution::OWN) && !node[PostAttribution::PANEL].to_s.empty?)
+      # goes from the chosen content as on main however long its fields
+      # ("About me"); another panel ("Reviewed by" a member) that holds
+      # the page stays.
+      if dominant?(node)
+        return node.key?(PostAttribution::OWN) && !node[PostAttribution::PANEL].to_s.empty? && MemberPanel.panel?(node) ? :dominant : nil
+      end
       return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
@@ -227,7 +218,7 @@ module Nokodown
     def class_noise?(node)
       return false if !@prose_blocks.empty? && prose_part?(node)
 
-      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || post_panel?(node) || !card?(node))
+      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node) || post_panel?(node))
     end
 
     # A run of member panels beside a thread's posts (phpBB's postprofile)
@@ -264,16 +255,28 @@ module Nokodown
       loop do
         return false unless holder.parent&.element?
         return true if holder.parent.element_children.any? do |sibling|
-          Dom.key(sibling) != Dom.key(holder) && row_cards(sibling).any? { |card, lone| row_card?(node, card, lone) }
+          Dom.key(sibling) != Dom.key(holder) && may_hold_card?(sibling, node) && row_cards(sibling).any? { |card, lone| row_card?(node, card, lone) }
         end
         children = holder.parent.element_children
+        break unless children.all? { |child| Dom.key(child) == Dom.key(holder) || badge?(child) }
+
         single = wrapper?(children)
-        break unless (single || depth < ROW_DEPTH) && children.all? { |child| Dom.key(child) == Dom.key(holder) || badge?(child) }
+        break unless single || depth < ROW_DEPTH
 
         holder = holder.parent
         depth += 1 unless single
       end
       false
+    end
+
+    # A card alike is of the node's tag, or a panel: a sibling holding
+    # neither (phpBB's postbody beside its postprofile) is not walked.
+    def may_hold_card?(sibling, node)
+      return true if sibling.name == node.name || MemberPanel.panel?(sibling)
+      # A tag no selector can name is walked as before.
+      return true unless node.name.match?(/\A[a-z][a-z\d-]*\z/)
+
+      sibling.css("#{node.name}, #{PostAttribution::PANEL_CANDIDATES}").any? { |inner| inner.name == node.name || MemberPanel.panel?(inner) }
     end
 
     # Beside a card in its wrapper, a badge or caption ("Staff member",
@@ -288,17 +291,19 @@ module Nokodown
     # caption, short, of elements that hold none (a link, an icon), and
     # no panel.
     def wrapper?(children)
-      children.count { |child| !label?(child) } <= 1
+      others = 0
+      children.none? { |child| !label?(child) && (others += 1) > 1 }
     end
 
     def label?(node)
       # Elements that hold none (a link, an icon), or a chain of one in each
       # (a link around a span), or text-level elements only ("<b>Team</b>
       # <span>Safety staff</span>" in a link): a caption, up to a heading's
-      # length.
-      return false if MemberPanel.panel?(node) || Dom.text(node).length > MemberPanel::MAX_HEAD
+      # length. The text, read last, costs the most.
+      return false if MemberPanel.panel?(node)
+      return false unless node.element_children.all? { |child| child.element_children.empty? } || chain?(node) || phrase?(node)
 
-      node.element_children.all? { |child| child.element_children.empty? } || chain?(node) || phrase?(node)
+      Dom.text(node).length <= MemberPanel::MAX_HEAD
     end
 
     def phrase?(node)

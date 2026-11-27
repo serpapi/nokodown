@@ -294,7 +294,11 @@ module Nokodown
       # the censor did to the rest ("https://retiredlab ... my-profile" for
       # "https://legacy.example.net/ferments/archived").
       scheme = head[SCHEME]
-      kept = (scheme && scheme.casecmp?(squeezed[SCHEME].to_s)) ||
+      # phpBB's "www." links (<!-- w -->) show "www." where others show
+      # the scheme ("www.retiredlab ... my-profile" for
+      # "http://www.legacy.example.net/ferments/archived").
+      www = head.match?(/\Awww\./i) && bare.match?(/\Awww\./i)
+      kept = www || (scheme && scheme.casecmp?(squeezed[SCHEME].to_s)) ||
              (shared_address?(head.sub(SCHEME, ""), bare) && shared_address?(tail.reverse, squeezed.reverse))
       return false unless starts || ends || kept
 
@@ -523,8 +527,12 @@ module Nokodown
     end
 
     def date(panel, name)
+      # A field dates the member only where the panel's line can stand in
+      # for a post's; any other panel's line keeps it, as base and main do
+      # (a quoted post's "post_date", a reader's "Time zone").
+      own = !panel[PostAttribution::PANEL].to_s.empty?
       panel.css(STAMPS).each do |stamp|
-        next unless stamp?(stamp)
+        next unless stamp?(stamp, own)
 
         text = Dom.text(widened(stamp, panel, name))
         return [text, contact_icon?(stamp) && contact_menu?(stamp, panel)] if date_text?(text, name) && !text.match?(MEMBER_DATE)
@@ -538,15 +546,28 @@ module Nokodown
     # no dropdown, shows it.
     def contact_menu?(node, panel)
       node = node.parent
-      menu = false
       while node&.element? && Dom.key(node) != Dom.key(panel)
         classes = node["class"].to_s.split
-        return true if menu && classes.include?("dropdown")
+        # prosilver's menu is the dropdown's child and waits closed for its
+        # trigger; a theme's group shown open ("open", aria-expanded,
+        # display:block, <details open>), or set elsewhere in a dropdown, is
+        # the panel's own line.
+        if classes.include?("contact-icons") && classes.include?("dropdown-contents")
+          dropdown = node.parent
+          return false if expanded?(node, classes) || !dropdown&.element? || Dom.key(dropdown) == Dom.key(panel)
 
-        menu ||= classes.include?("contact-icons") && classes.include?("dropdown-contents")
+          outer = dropdown["class"].to_s.split
+          return outer.include?("dropdown") && !expanded?(dropdown, outer)
+        end
+
         node = node.parent
       end
       false
+    end
+
+    def expanded?(node, classes)
+      node.name == "details" || node.key?("open") || classes.include?("open") || node["aria-expanded"] == "true" ||
+        node["aria-hidden"] == "false" || node["style"].to_s.match?(/display\s*:\s*(?!none)\w/i)
     end
 
     # phpBB's contact menu names a field's icon by its ident
@@ -558,7 +579,7 @@ module Nokodown
         classes.all? { |name| name == "contact-icon" || name.match?(/\A[a-z_]+-icon\z/) } && !"#{node['id']} #{node['itemprop']}".match?(DATE_CLASS)
     end
 
-    def stamp?(node)
+    def stamp?(node, own = true)
       signature = Dom.signature(node)
       return false unless node.name == "time" || node.key?("datetime") || signature.match?(DATE_CLASS)
       # A phpBB profile field ("Birthday", "Time zone") dates the member
@@ -568,7 +589,7 @@ module Nokodown
       # "datePublished"). phpBB names a field in [a-z_] ("profile-time_zone");
       # "profile-post-date" is not one.
       classes = node["class"].to_s.split
-      if node.name != "time" && !node.key?("datetime") && classes.include?(FIELD)
+      if own && node.name != "time" && !node.key?("datetime") && classes.include?(FIELD)
         names = classes.reject { |name| name.match?(/\Aprofile-[a-z_]*\z/) } << node["id"].to_s << node["itemprop"].to_s
         return false unless names.any? { |name| name.downcase.match?(DATE_CLASS) }
       end
