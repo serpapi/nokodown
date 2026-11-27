@@ -81,7 +81,6 @@ module Nokodown
     OWN = "data-nokodown-own"
     OWN_PANEL = ""
     OWN_LINE = "line"
-    LEADING_BY = /\A#{MemberPanel::BY}/.freeze
     MORE = "+"
     # Nodes read from a member panel's line to the line written below it
     # for the same post.
@@ -622,7 +621,7 @@ module Nokodown
       return true if name.nil?
 
       text, = named
-      text.nil? || !Dom.squish(text).sub(LEADING_BY, "").casecmp?(Dom.squish(name))
+      text.nil? || !Dom.squish(text).sub(BY, "").casecmp?(Dom.squish(name))
     end
 
     # The account id a forum gives a name (XenForo's data-user-id): two

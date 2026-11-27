@@ -185,6 +185,8 @@ module Nokodown
     # content, as on base.
     def post_panel?(node)
       return false if node[PostAttribution::PANEL].to_s.empty? || !MemberPanel.panel?(node)
+      # One of a row of cards alike (a post's contributors) is a card.
+      return false if card_row?(node)
 
       ancestors = node.ancestors.select(&:element?)
       return false if ancestors.any? { |ancestor| ancestor.key?(PostAttribution::POST) }
@@ -192,6 +194,13 @@ module Nokodown
       owner = ancestors.find { |ancestor| ancestor.key?(PostAttribution::OWNER) }
       body = owner&.at_css("[#{PostAttribution::POST}]")
       body.nil? || Dom.key(node).to_i < Dom.key(body).to_i
+    end
+
+    def card_row?(node)
+      classes = base_classes(node["class"])
+      node.parent.element_children.any? do |sibling|
+        Dom.key(sibling) != Dom.key(node) && sibling.name == node.name && base_classes(sibling["class"]) == classes
+      end
     end
 
     # Fine print about the site is furniture, but a note on the content right

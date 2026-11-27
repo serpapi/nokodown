@@ -123,7 +123,7 @@ module Nokodown
     end
 
     def prune_article(root)
-      content_length = Dom.text(root).length
+      content_length = length_without_own(root)
       remove_secondary(root, content_length)
       remove_bylines(root)
       # A second pass without conditional cleaning keeps the lines, as
@@ -134,6 +134,16 @@ module Nokodown
       remove_stray_lines(root)
       clean_conditionally(root, content_length)
       root.css("h1, h2").each { |heading| remove(heading) if Scorer.cleaning_weight(heading).negative? }
+    end
+
+    # The root's length as it was before the poster's panels became lines:
+    # what each container is weighed against.
+    def length_without_own(root)
+      own = {}
+      root.css("[#{PostAttribution::OWN}]").each { |node| hold(own, node) if below?(node, root) }
+      Dom.text(root).length
+    ensure
+      release(taken(own), root)
     end
 
     # Boxes of links to other stories placed inside the body: "READ MORE:
@@ -257,15 +267,22 @@ module Nokodown
     # A container the check removes without the panels set aside, which it
     # kept with them before they were (a short post whose panel's line
     # outweighed its link, a reply named only by it), stays: held out while
-    # the share is read, as it was gone then, and put back after.
+    # the share is read, as it was gone then, and put back after. What a
+    # held container shown again holds is shown too.
     def kept_with_panels?(node, content_length, paragraph_keys)
-      aside = aside_in(node)
-      return false if aside.empty?
+      shown = []
+      loop do
+        aside = aside_in(node).reject { |_, place| shown.any? { |_, seen| seen == place } }
+        break if aside.empty?
 
-      aside.each { |panel, place| place.add_previous_sibling(panel) }
+        aside.each { |panel, place| place.add_previous_sibling(panel) }
+        shown.concat(aside)
+      end
+      return false if shown.empty?
+
       !ContainerCheck.new(node, content_length, paragraph_keys, { root: node }).remove?
     ensure
-      aside&.each { |panel, _| panel.unlink }
+      shown&.reverse_each { |panel, _| panel.unlink }
     end
 
     # A forum's thread is content.

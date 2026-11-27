@@ -21,6 +21,9 @@ module Nokodown
     LETTER = /\p{L}/.freeze
     PROFILE = /\b(?:profile|account)\b/i.freeze
     CONTACT = /contact/i.freeze
+    # An address in a link's text: a scheme, a "www.", a path, or a domain
+    # before a slash.
+    ADDRESS = %r{\S*(?:://|www\.)\S*|(?<!\S)\.{0,2}/\S*|\S*\.[a-z]{2,}/\S*}i.freeze
     MAX_NAME = 60
     MAX_DATE = 50
     # A post's title and by-line come first, within this many characters.
@@ -67,13 +70,14 @@ module Nokodown
     # another link says the name and goes elsewhere (a "Referred by" or
     # "Last visitor" of the same name), or several could be the profile.
     def profile_href(panel, name, source)
+      # The name's own link is its profile, wherever it sits.
+      link = link_around(source, panel) || source.css("a[href]").find { |inner| Dom.text(inner).casecmp?(name) }
       # A contact block's links (phpBB's "View Facebook Profile", a member
       # named Facebook's own Facebook) are ways to reach the member, not the
       # forum's profile.
       links = panel.css("a[href]").reject { |candidate| contact?(candidate, panel) }
-      return if links.empty?
+      return link && link["href"] if links.empty?
 
-      link = link_around(source, panel) || source.css("a[href]").find { |inner| Dom.text(inner).casecmp?(name) }
       # A count ("404" posts, by a member named 404) names no one.
       named = links.select { |candidate| Dom.text(candidate).casecmp?(name) && name.match?(LETTER) }.map { |candidate| candidate["href"] }
       return false if link.nil? && !named.empty?
@@ -102,9 +106,10 @@ module Nokodown
 
     # A link that says it is the profile: rel="author", or "View profile"
     # or "View account 41" in its text or label. An address shown as the
-    # text (phpBB's URL fields) says where it goes, not what it is.
+    # text (phpBB's URL fields) says where it goes, not what it is;
+    # "Profile/Account" is a label.
     def profile_link?(link)
-      words = "#{Dom.text(link)} #{link['aria-label']} #{link['title']}".gsub(%r{\S*/\S*}, "")
+      words = "#{Dom.text(link)} #{link['aria-label']} #{link['title']}".gsub(ADDRESS, "")
       link["rel"].to_s.downcase.split.include?("author") || words.match?(PROFILE)
     end
 

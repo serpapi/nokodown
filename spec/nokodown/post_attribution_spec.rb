@@ -268,8 +268,8 @@ RSpec.describe Nokodown::PostAttribution do
         "<a href='https://social.example/@wrenbakes' title='Mastodon account'><span class='contact-icon'>Mastodon account</span></a>" \
         "<a href='http://facebook.com/facebook/' title='Facebook'><span class='contact-icon'>Facebook</span></a></div></div></dd>"
     end
-    # A member may be named 404 and have 404 posts.
-    [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [contacts, "wren"], [contacts, "Facebook"]].each do |extra, first|
+    # A member may be named 404 and have 404 posts, or begin with "@".
+    [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [contacts, "wren"], [contacts, "Facebook"], ["", "@wren"]].each do |extra, first|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, contacts].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
@@ -283,9 +283,10 @@ RSpec.describe Nokodown::PostAttribution do
       end
       markdown = thread(posts, head: '<meta name="generator" content="phpBB">')
 
-      markdown.should include("**#{first}** · May 3, 2024\n\n#{question}")
+      # The post's line drops the "@" a handle is shown with.
+      markdown.should include("**#{first.delete_prefix('@')}** · May 3, 2024\n\n#{question}")
       markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
-      markdown.scan(/\*\*(?:#{first}|basil)\*\*/).size.should == 2
+      markdown.scan(/\*\*@?(?:#{first.delete_prefix('@')}|basil)\*\*/).size.should == 2
     end
   end
 
@@ -573,6 +574,35 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("[Daily temperature chart](/temperature.pdf)")
   end
 
+  # A group kept for the line it holds keeps the groups around it too.
+  it "keeps the files in groups around a group kept for its member panel's line" do
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><div id='wrap'><div id='outer'><div id='inner'><div class='user-info'>" \
+           "<a class='username' href='/u/contributor'>Basil Alexander Cunningham of West Lancashire</a></div><a href='/schedule.pdf'>PDF</a></div> " \
+           "<a href='/notes.pdf'>Log</a></div> <a href='/data.pdf'>CSV</a></div>" \
+           "<header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled in volume overnight after its second feeding on the kitchen counter.</p></article>" \
+           "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>A second feeding in a clean jar helped mine recover overnight too.</p></article></main></body></html>"
+
+    markdown = Nokodown.to_markdown(html)
+    markdown.should include("**Basil Alexander Cunningham of West Lancashire**\n\n[PDF](/schedule.pdf)\n\n[Log](/notes.pdf)\n\n[CSV](/data.pdf)")
+  end
+
+  # Each container is weighed against the post as it was before.
+  it "keeps a post's files that outweigh the rest without the lines" do
+    links = (0..3).map { |index| "<a href='/schedule#{index}.pdf'>#{['Rye starter protocol', 'Feeding timetable', 'Fermentation diary', 'Rye starter protocol'][index]} #{index}</a>" }
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><div class='user-info'><a class='username' href='/u/contributor'>Basil Alexander Cunningham of West Lancashire</a></div>" \
+           "<header><a class='username' href='/u/Wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled. </p><div class='files'><div>#{links.join(' ')}</div></div></article>" \
+           "<article class='message'><header><a class='username' href='/u/Fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+           "<p>Leave room in the jar.</p></article></main></body></html>"
+
+    markdown = Nokodown.to_markdown(html)
+    markdown.should include("[Rye starter protocol 0](/schedule0.pdf) [Feeding timetable 1](/schedule1.pdf)")
+  end
+
   # Pruning weighs the post as it did before the poster's panels became
   # lines: a panel that names someone else, however it mentions the
   # poster, or one in a quote, counts as kept.
@@ -647,19 +677,22 @@ RSpec.describe Nokodown::PostAttribution do
   end
 
   # A card whose role names the poster is still another member's.
+  # The first of a row of cards alike is a card too, the poster's own as well.
   it "keeps a member card above a post that names the poster in its role" do
-    cards = [["Aster", "Wren’s lab safety officer", "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
-             ["Lark", "Sample custodian", "Sample manifest"]].each_with_index.map do |(name, role, report), index|
-      "<div class='user-info'><a class='username' href='/members/#{87 + index}'>#{name}</a> <span>#{role} · <a href='/reports/#{87 + index}.pdf'>#{report}</a></span></div>"
-    end
-    rows = [["Wren", question], ["Fern", answer], ["Moss", answer]].map do |name, body|
-      "<article class='message'><header><a class='username' href='/u/#{name}'>#{name}</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{body}</p></article>"
-    end
-    contributors = "<section class='contributors'><h3>Contributors</h3>#{cards.join}</section>"
-    markdown = thread(["<div class='reply-row'>#{contributors}#{rows[0]}</div>", *rows.drop(1).map { |row| "<div class='reply-row'>#{row}</div>" }])
+    [["Aster", "Wren’s lab safety officer"], ["Wren", "Lab safety officer"]].each do |first, role|
+      cards = [[first, role, "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
+               ["Lark", "Sample custodian", "Sample manifest"]].each_with_index.map do |(name, title, report), index|
+        "<div class='user-info'><a class='username' href='/members/#{87 + index}'>#{name}</a> <span>#{title} · <a href='/reports/#{87 + index}.pdf'>#{report}</a></span></div>"
+      end
+      rows = [["Wren", question], ["Fern", answer], ["Moss", answer]].map do |name, body|
+        "<article class='message'><header><a class='username' href='/u/#{name}'>#{name}</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{body}</p></article>"
+      end
+      contributors = "<section class='contributors'><h3>Contributors</h3>#{cards.join}</section>"
+      markdown = thread(["<div class='reply-row'>#{contributors}#{rows[0]}</div>", *rows.drop(1).map { |row| "<div class='reply-row'>#{row}</div>" }])
 
-    markdown.should include("**Wren** · May 3, 2024\n\n#{question}")
-    markdown.should include("Wren’s lab safety officer · [Safety review](https://example.com/reports/87.pdf)")
+      markdown.should include("**Wren** · May 3, 2024\n\n#{question}")
+      markdown.should include("[#{first}](https://example.com/members/87) #{role} · [Safety review](https://example.com/reports/87.pdf)")
+    end
   end
 
   # A quoted panel's box, kept for its line, is no reason to settle for a
@@ -727,7 +760,13 @@ RSpec.describe Nokodown::PostAttribution do
        "Referred by <a href='/members/72' data-user-id='72'>@Wren</a></div>",
        "<span class='username' data-user-id='72'>Wren</span>"],
       ["<div class='user-info'>Contributed by <span class='username'>Wren</span><a rel='AUTHOR' href='/members/92'>Biographie</a></div>",
-       "<a class='username' href='/members/72'>Wren</a>"]
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # The name's own link counts in a contact block; "Profile/Account" is
+      # a label, not an address.
+      ["<div class='user-info'><span class='contact-panel'><a class='username' href='/members/41'>Wren</a></span></div>",
+       "<a class='username' href='/members/90'>Wren</a>"],
+      ["<div class='user-info'><span class='username'>Wren</span><a href='/members/41'>Profile/Account</a></div>",
+       "<a class='username' href='/members/90'>Wren</a>"]
     ].each do |panel, header|
       markdown = thread([
         "<article class='message'>#{panel}<header>#{header} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
