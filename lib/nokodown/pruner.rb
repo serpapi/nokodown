@@ -147,11 +147,13 @@ module Nokodown
     end
 
     # Runs a rule as main read the post, with the poster's nodes of these
-    # values held out, holding what the rule removes so each later check
-    # sees it gone. Everything goes back; what was removed is returned, or
-    # nil when none of the poster's nodes was there to hold out.
+    # values held out, and what an earlier rule spared (main had removed
+    # it), holding what the rule removes so each later check sees it gone.
+    # Everything goes back; what was removed is returned, or nil when none
+    # of the poster's nodes was there to hold out.
     def removed_without_own(root, *values)
       own = set_aside(root, *values)
+      root.css("[#{SPARED}]").each { |node| hold(own, node) if below?(node, root) }
       return if own.empty? && @lines.empty?
 
       gone = {}
@@ -244,13 +246,21 @@ module Nokodown
       return related_links(root, method(:remove)) unless removed
       return if removed.empty?
 
-      with_lines(root) { related_links(root, ->(node) { remove(node) if among?(removed, node) }) }
+      with_lines(root) { related_links(root, ->(node) { among?(removed, node) ? remove(node) : drop_spared(node) }) }
       spare(removed, root)
     end
 
     # What main's view removed that is still there stays, spared.
     def spare(removed, root)
       removed.each_value { |nodes| nodes.each { |node| node[SPARED] = "" if below?(node, root) } }
+    end
+
+    # Where base's view removes what main's keeps, what main's view removed
+    # before (spared) in it is gone both ways.
+    def drop_spared(node)
+      return remove(node) if node.key?(SPARED)
+
+      node.css("[#{SPARED}]").each { |spared| remove(spared) }
     end
 
     def related_links(root, act)
@@ -455,7 +465,7 @@ module Nokodown
       return link_clusters(root, method(:remove)) unless removed
       return if removed.empty?
 
-      link_clusters(root, ->(node) { remove(node) if among?(removed, node) })
+      link_clusters(root, ->(node) { among?(removed, node) ? remove(node) : drop_spared(node) })
       spare(removed, root)
     end
 

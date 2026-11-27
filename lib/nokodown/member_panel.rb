@@ -180,6 +180,8 @@ module Nokodown
     # An address has no spaces ("https://example.com/ View profile").
     def shown?(text, href)
       head, tail = text.split(" ... ", 2)
+      # An email link shows its address, not the subject or body after it.
+      href = href.sub(/\?.*/m, "") if href.match?(MAILTO)
       return href.end_with?(text) unless tail
       return false if head.match?(/\s/) || tail.match?(/\s/)
 

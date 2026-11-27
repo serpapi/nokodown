@@ -855,6 +855,28 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("[Reference measurements](/reference-control.pdf)")
   end
 
+  # Main's reading of the related links had the spared footer gone, as
+  # main removed it; base's reading drops it with the box.
+  it "keeps a post's note after a credited footer that main removed" do
+    html = lambda do |title|
+      "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+        "<article class='message'><header><a class='username' href='/u/Wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+        "<p>It doubled up.</p><h3>Read more</h3><section><footer><p>" +
+        (1..3).map { |index| "<a href='/chart#{index}.pdf'>Humidity and temperature observations before and after feeding #{index}</a>" }.join(" ") +
+        " <span class='user-info'><a class='username' href='/staff/basil'>Basil Cunningham</a> #{title}</span></p></footer>" \
+        "<p>We observed a level rise after feeding the starter. <a href='/witness.pdf'>Witness statement</a></p></section></article>" \
+        "<article class='message'><header><a class='username' href='/u/Fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+        "<p>Leave it room. We observed a level rise after feeding the starter. </p></article></main></body></html>"
+    end
+
+    markdown = Nokodown.to_markdown(html.call("The senior laboratory safety officer and verifier for this session"))
+    markdown.should include("[Witness statement](/witness.pdf)")
+    # Where both readings drop the footer, it goes; the note stays.
+    markdown = Nokodown.to_markdown(html.call("<a href='/qualifications.pdf'>The senior laboratory safety officer and verifier for this session</a>"))
+    markdown.should include("[Witness statement](/witness.pdf)")
+    markdown.should_not include("chart1.pdf")
+  end
+
   # Each container is weighed against the post as it was before.
   it "keeps a post's files that outweigh the rest without the lines" do
     links = (0..3).map { |index| "<a href='/schedule#{index}.pdf'>#{['Rye starter protocol', 'Feeding timetable', 'Fermentation diary', 'Rye starter protocol'][index]} #{index}</a>" }
@@ -1090,7 +1112,10 @@ RSpec.describe Nokodown::PostAttribution do
       # A co-author's own address beside one shared with the poster.
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><span class='contact-details'><a itemprop='email' href='mailto:wren.senior@example.com'>Email Wren</a>" \
        "<a href='mailto:wren.junior@example.com'>Email laboratory</a></span></div>",
-       "<a class='username' href='mailto:wren.junior@example.com'>Wren</a>"]
+       "<a class='username' href='mailto:wren.junior@example.com'>Wren</a>"],
+      # An email link's subject is not the address it shows.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small>Referred by <a href='mailto:Wren@example.org?subject=Wren'>Wren</a></small></div>",
+       "<span class='username'>Wren</span>"]
     ].each do |panel, header|
       markdown = thread([
         "<article class='message'>#{panel}<header>#{header} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
