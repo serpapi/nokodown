@@ -168,35 +168,44 @@ module Nokodown
         # In prosilver's own panel, a link showing its path below the
         # board's URL is the board's, wherever the censor or the board's
         # configured host and port put that URL. Elsewhere it is the
-        # board's only in the page's own folder, spelled alike.
+        # board's only in the page's own folder, spelled alike. phpBB's
+        # own link ("<!-- l -->") in its panel is the board's even where
+        # the censor changed its href alone ("fermentation/portfolio"
+        # shown as "profile").
         own = own_panel?(link)
-        if !text.empty? && rest.end_with?("/#{text}") && (own || spelled == "#{page}#{shown}")
+        if (own && link[MemberPanel::MADE] == "l") || (!text.empty? && rest.end_with?("/#{text}") && (own || spelled == "#{page}#{shown}"))
           link[MemberPanel::BOARD] = ""
         else
           # phpBB's own link ("<!-- l -->") goes below the board's URL, at
           # or above the page read; one elsewhere, or on another host or
           # port, or outside prosilver's panel, is a theme's.
-          link[MemberPanel::FOREIGN] = "" if !own || link[MemberPanel::MADE] == "l" || rest[%r{\A[^/]*}] != host
+          link[MemberPanel::FOREIGN] = "" if !own || rest[%r{\A[^/]*}] != host
         end
       end
       # A path shown by a link phpBB made of no board page goes to the
       # page's host; one to another host is a theme's ("profile/Wren.Baker"
-      # at a staff directory).
+      # at a staff directory), as is one to the same host outside the
+      # page's folder ("team/profile/wren" at ".../people/") but in
+      # prosilver's own panel.
       @body.css("a.postlink[href]").each do |link|
         next if link.key?(MemberPanel::MADE)
 
         rest = link["href"].strip.sub(%r{\Ahttps://([^/]*?):443(?=/|\z)}i, 'https://\1').sub(%r{\Ahttp://([^/]*?):80(?=/|\z)}i, 'http://\1')
-        next unless rest.match?(MemberPanel::SCHEME)
+        # phpBB writes its links' addresses in full; a relative one is a
+        # theme's ("/staff/profile/Wren.Baker").
+        next link[MemberPanel::FOREIGN] = "" unless rest.match?(MemberPanel::SCHEME)
 
-        link[MemberPanel::FOREIGN] = "" if rest.sub(MemberPanel::SCHEME, "")[%r{\A[^/]*}].downcase != host
+        spelled = rest.sub(MemberPanel::SCHEME, "").sub(%r{\A[^/]*}) { |authority| authority.downcase }
+        link[MemberPanel::FOREIGN] = "" if spelled[%r{\A[^/]*}] != host || (spelled != "#{page}#{Dom.text(link)}" && !own_panel?(link))
       end
     end
 
-    # prosilver's panel: dl.postprofile (or one known by that id).
+    # prosilver's panel: dl.postprofile. Its id is "profile<post>"; a
+    # theme's dl#postprofile ("Co-author") is not it.
     def own_panel?(link)
       node = link.parent
       while node&.element?
-        return true if node.name == "dl" && (node["class"].to_s.split.include?("postprofile") || node["id"] == "postprofile")
+        return true if node.name == "dl" && node["class"].to_s.split.include?("postprofile")
 
         node = node.parent
       end

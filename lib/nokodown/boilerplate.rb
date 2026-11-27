@@ -195,6 +195,9 @@ module Nokodown
 
       ancestors = node.ancestors.select(&:element?)
       return false if ancestors.any? { |ancestor| ancestor.key?(PostAttribution::POST) }
+      # A card in a list item that holds no post (vBulletin's post is its
+      # own <li>) is a roster's entry ("Lab safety officer · Safety review").
+      return false if ancestors.any? { |ancestor| ancestor.name == "li" && ancestor.at_css("[#{PostAttribution::POST}], [#{PostAttribution::OWNER}]").nil? }
 
       owner = ancestors.find { |ancestor| ancestor.key?(PostAttribution::OWNER) }
       body = owner&.at_css("[#{PostAttribution::POST}]")

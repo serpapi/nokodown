@@ -208,8 +208,10 @@ module Nokodown
       href = link["href"].to_s.strip
       text = Dom.text(link)
       # phpBB's "<!-- l -->" link goes below the board's URL; one that
-      # goes elsewhere (FOREIGN) is a theme's, whatever its comments.
-      return true if link.key?(MADE) && !link.key?(FOREIGN) && made_text?(text, href) && (made_row?(link) || field_row?(link, href, text))
+      # goes elsewhere (FOREIGN) is a theme's, whatever its comments. One
+      # the board's (BOARD) is its field whatever the censor did to it.
+      return true if link.key?(MADE) && !link.key?(FOREIGN) && ((link[MADE] == "l" && link.key?(BOARD)) || made_text?(text, href)) &&
+                     (made_row?(link) || field_row?(link, href, text))
 
       field_value?(link, href) || address_link?(link) || (href.match?(MAILTO) && shown?(Dom.text(link), href))
     end
@@ -282,9 +284,20 @@ module Nokodown
       starts = !head.empty? && (squeezed.start_with?(head) || bare.start_with?(head))
       ends = !tail.empty? && squeezed.end_with?(tail)
       return true if starts && ends
-      return false unless starts || ends
+      # The censor can change a word on both sides of the cut
+      # ("ext.example/x/catalog profile ... office account.01.pdf"): each
+      # side still keeps a piece of the address (".../", ".01.pdf").
+      kept = shared_address?(head.sub(SCHEME, ""), bare) && shared_address?(tail.reverse, squeezed.reverse)
+      return false unless starts || ends || kept
 
       text.match?(%r{\w[.:/@]+\w}) || [head, tail].none? { |part| part.match?(/\s/) }
+    end
+
+    # The two strings start alike up to an address character.
+    def shared_address?(one, other)
+      size = 0
+      size += 1 while size < one.length && size < other.length && one[size] == other[size]
+      one[0, size].match?(%r{[.:/@]})
     end
 
     def address_end?(whole, text)
@@ -505,9 +518,21 @@ module Nokodown
         next unless stamp?(stamp)
 
         text = Dom.text(widened(stamp, panel, name))
-        return [text, contact_icon?(stamp)] if date_text?(text, name) && !text.match?(MEMBER_DATE)
+        return [text, contact_icon?(stamp) && contact_menu?(stamp, panel)] if date_text?(text, name) && !text.match?(MEMBER_DATE)
       end
       nil
+    end
+
+    # prosilver's contact menu (".contact-icons" in its dropdown) hides
+    # the label; a theme's visible row of the same icon shows it.
+    def contact_menu?(node, panel)
+      node = node.parent
+      while node&.element? && Dom.key(node) != Dom.key(panel)
+        return true if node["class"].to_s.split.include?("contact-icons")
+
+        node = node.parent
+      end
+      false
     end
 
     # phpBB's contact menu names a field's icon by its ident
