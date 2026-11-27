@@ -31,6 +31,10 @@ module Nokodown
     # A container conditional cleaning held out and put back: kept for the
     # panels it was kept with, it was gone when the share was read.
     HELD = "data-nokodown-held"
+    # A node main removed and base kept, so it stays; gone when the share
+    # or the fallback read the article as main did.
+    SPARED = "data-nokodown-spared"
+    LEFT_OUT = "[#{PostAttribution::OWN}], [#{HELD}], [#{SPARED}]"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
@@ -80,7 +84,7 @@ module Nokodown
     # held one) takes at most its text and the two spaces around it.
     def self.length_at_least(nodes)
       nodes.sum do |root|
-        own = root.css("[#{PostAttribution::OWN}], [#{HELD}]").sum { |node| Dom.text(node).length + 2 }
+        own = root.css(LEFT_OUT).sum { |node| Dom.text(node).length + 2 }
         Dom.text(root).length - own
       end
     end
@@ -89,14 +93,44 @@ module Nokodown
     # (and without what was held out for them): what each container is
     # weighed against, and what the fallback reads as kept.
     def length_without_own(root)
+      without_own(root) { Dom.text(root).length }
+    end
+
+    private
+
+    # What the block answers with the poster's nodes (and what was held or
+    # spared) out of the root, as main read it.
+    def without_own(root)
       own = {}
-      root.css("[#{PostAttribution::OWN}], [#{HELD}]").each { |node| hold(own, node) if below?(node, root) }
-      Dom.text(root).length
+      root.css(LEFT_OUT).each { |node| hold(own, node) if below?(node, root) }
+      yield
     ensure
       release(taken(own), root)
     end
 
-    private
+    # What the block answers with the poster's lines set aside shown again
+    # in the node, as base read it.
+    def with_lines(node)
+      shown = []
+      unless @lines.empty?
+        node.xpath("descendant::comment()").each do |place|
+          line = @lines.fetch(Dom.key(place.parent), []).find { |_, held| held == place }
+          next unless line
+
+          place.add_previous_sibling(line.first)
+          shown << line.first
+        end
+      end
+      yield
+    ensure
+      shown&.each(&:unlink)
+    end
+
+    # A node a rule removes as main read the post goes only if it goes as
+    # base read it too; else it stays, marked as spared.
+    def remove_or_spare(node, base_removes)
+      base_removes ? remove(node) : node[SPARED] = ""
+    end
 
     # The member panels a post's line stood for before PostAttribution read
     # them (PostAttribution::OWN), and the lines they left, were gone before
@@ -119,7 +153,7 @@ module Nokodown
     # nil when none of the poster's nodes was there to hold out.
     def removed_without_own(root, *values)
       own = set_aside(root, *values)
-      return if own.empty?
+      return if own.empty? && @lines.empty?
 
       gone = {}
       removed = []
@@ -184,6 +218,7 @@ module Nokodown
 
     def prune_article(root)
       content_length = length_without_own(root)
+      @raw_length = Dom.text(root).length
       remove_secondary(root, content_length)
       remove_bylines(root)
       # A second pass without conditional cleaning keeps the lines, as
@@ -203,12 +238,20 @@ module Nokodown
     # Boxes of links to other stories placed inside the body: "READ MORE:
     # <link>", a "More:" label over a list of headlines, a paragraph of links.
     # The panels' links were gone when main read a paragraph of links, and
-    # there when base did: a box goes only if it is one both ways.
+    # there, with the lines they left, when base did: a box goes only if it
+    # is one both ways.
     def remove_related_links(root)
       removed = removed_without_own(root, PostAttribution::OWN_PANEL) { |gone| related_links(root, gone) }
       return related_links(root, method(:remove)) unless removed
+      return if removed.empty?
 
-      related_links(root, ->(node) { remove(node) if among?(removed, node) })
+      with_lines(root) { related_links(root, ->(node) { remove(node) if among?(removed, node) }) }
+      spare(removed, root)
+    end
+
+    # What main's view removed that is still there stays, spared.
+    def spare(removed, root)
+      removed.each_value { |nodes| nodes.each { |node| node[SPARED] = "" if below?(node, root) } }
     end
 
     def related_links(root, act)
@@ -279,16 +322,30 @@ module Nokodown
 
     # Readability drops footers, asides and share widgets inside the article;
     # asides holding real prose (side notes) stay.
+    # A footer or aside goes where it went as main read it (without the
+    # poster's panels and lines) and as base did (with them); where only
+    # main's view drops it, it stays, spared.
     def remove_article_furniture(root, content_length)
-      root.css("footer").each { |node| remove(node) if Dom.text(node).length <= content_length * 0.5 }
-      # A short aside is weighed without the poster's panels, as main did.
+      root.css("footer").each do |node|
+        furniture(node, content_length) { |total| Dom.text(node).length <= total * 0.5 }
+      end
       root.css("aside").each do |node|
-        remove(node) if length_without_own(node) < 200 || ContainerCheck.new(node, content_length, Set.new).remove?
+        furniture(node, content_length) { |total| Dom.text(node).length < 200 || ContainerCheck.new(node, total, Set.new).remove? }
       end
       Dom.elements(root).each do |node|
         next unless node.key?("class") || node.key?("id")
 
         remove(node) if Dom.signature(node).match?(SHARE) && Dom.text(node).length < 500
+      end
+    end
+
+    def furniture(node, content_length)
+      main = without_own(node) { yield(content_length) }
+      base = with_lines(node) { yield(@raw_length) }
+      if main && base
+        remove(node)
+      elsif main
+        node[SPARED] = ""
       end
     end
 
@@ -391,6 +448,7 @@ module Nokodown
       return if removed.empty?
 
       link_clusters(root, ->(node) { remove(node) if among?(removed, node) })
+      spare(removed, root)
     end
 
     def link_clusters(root, act)

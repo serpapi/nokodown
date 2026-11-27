@@ -204,17 +204,30 @@ module Nokodown
     def card_row?(node)
       holder = node
       depth = 0
-      while depth < 2 && holder.parent&.element? && holder.parent.element_children.size == 1
+      loop do
+        return false unless holder.parent&.element?
+        return true if holder.parent.element_children.any? do |sibling|
+          Dom.key(sibling) != Dom.key(holder) && lone_cards(sibling).any? { |card| alike_card?(node, card) }
+        end
+        break unless depth < 2 && holder.parent.element_children.size == 1
+
         holder = holder.parent
         depth += 1
       end
-      holder.parent.element_children.any? do |sibling|
-        next false if Dom.key(sibling) == Dom.key(holder)
+      false
+    end
 
-        card = sibling
-        depth.times { card = card.element_children.size == 1 ? card.first_element_child : nil if card }
-        card && alike_card?(node, card)
+    # A sibling and the element alone in it, two deep: cards in a row may
+    # sit in wrappers, some of them only.
+    def lone_cards(node)
+      cards = [node]
+      2.times do
+        children = cards.last.element_children
+        break unless children.size == 1
+
+        cards << children.first
       end
+      cards
     end
 
     def alike_card?(node, sibling)

@@ -274,6 +274,8 @@ RSpec.describe Nokodown::PostAttribution do
                                 ["Member journal", "#{long}/account/ab", "https://workshop.example/members/long-c ... account/ab"]])
     mail = field_set.call([["Workshop", "mailto:account@workshop.example", "account@workshop.example"],
                            ["Society", "mailto:profile@society.example", "profile@society.example"]])
+    # A member may be named as the board's own page a field links to.
+    index = field_set.call([["Home page", "https://example.com/index.php", "index.php", "postlink-local"]])
     # Contact fields are named as the board likes; one is the member's own.
     contacts = lambda do |_day|
       "<dd class='profile-contact'><strong>Contact:</strong><div class='dropdown'><div class='dropdown-contents contact-icons'>" \
@@ -283,7 +285,7 @@ RSpec.describe Nokodown::PostAttribution do
     end
     # A member may be named 404 and have 404 posts, or begin with "@".
     [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [local, "wren"], [scripts, "wren"], [shortened, "wren"], [mail, "wren"],
-     [contacts, "wren"], [contacts, "Facebook"], ["", "@wren"], ["", "@ wren"]].each do |extra, first|
+     [contacts, "wren"], [contacts, "Facebook"], ["", "@wren"], ["", "@ wren"], [index, "index.php"]].each do |extra, first|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, local, scripts, shortened, mail, contacts].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
@@ -764,6 +766,53 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("The mixture tripled in volume")
   end
 
+  # What only main's view removes stays, and the fallback reads the post
+  # without it, as main did.
+  it "keeps a box of files and a post's report and notes that main kept falling back" do
+    page = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled.</p><section class='attachments'><p><span class='user-info'><span class='username'>Basil Cunningham</span></span> " \
+           "<a href='/record-0.pdf'>Mixing log</a> <a href='/record-1.pdf'>Proofing notes</a> <a href='/record-2.pdf'>Temperature chart</a></p></section>" \
+           "<footer><a href='/lab.pdf'>Original laboratory report</a></footer>" \
+           "<aside><p>The second trial was conducted before noon on Friday after the original fermentation had slowed.</p></aside>" \
+           "<aside><p>Water and flour weighed separately on the laboratory scale before the mixture was recorded.</p></aside></article>" \
+           "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+           "<p>Leave room in the jar.</p></article></main></body></html>"
+    reduced = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+              "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+              "<p>The starter doubled.</p><p><span class='user-info'><span class='username'>Basil</span></span> " \
+              "<a href='/sample-a.pdf'>Sample A</a> <a href='/sample-b.pdf'>Sample B</a></p></article>" \
+              "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+              "<p>Leave room in the jar.</p></article></main></body></html>"
+
+    markdown = Nokodown.to_markdown(page, url: "https://example.com/t")
+    markdown.should include("[Temperature chart](https://example.com/record-2.pdf)")
+    markdown.should include("[Original laboratory report](https://example.com/lab.pdf)")
+    markdown.should include("Water and flour weighed separately")
+    Nokodown.to_markdown(reduced, url: "https://example.com/t").should include("**Basil**\n\n[Sample A](https://example.com/sample-a.pdf)")
+  end
+
+  # An aside goes only where it goes with the credit and without it.
+  it "keeps an aside with a member's credit that one reading kept" do
+    aside = lambda do |note, body|
+      "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+        "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+        "<p>#{body}</p><aside><p>We measured the mixture and logged the results. The reference temperature and humidity are in the notebook. #{note} " \
+        "Logged by <span class='user-info'><a class='username' href='/members/48'>Basil Alexander Cunningham of West Lancashire</a></span> " \
+        "<a href='/weighing.pdf'>Weighing sheet</a></p></aside></article>" \
+        "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+        "<p>Leave room in the jar so the mixture can expand. Clean the rim and write down the temperature.</p></article></main></body></html>"
+    end
+    short = aside.call("We will check the jar again tomorrow at noon.", "The starter doubled after its second feeding and held steady.")
+    long = aside.call("The next check is tomorrow after the second feeding. I left the jar on the counter.",
+                      "The starter doubled in volume after the second feeding and then held steady on the counter. I used the same flour " \
+                      "and a clean jar for both feedings. I kept the kitchen window closed all night while the mixture rested.")
+
+    [short, long].each do |html|
+      Nokodown.to_markdown(html, url: "https://example.com/t").should include("[Weighing sheet](https://example.com/weighing.pdf)")
+    end
+  end
+
   # Each container is weighed against the post as it was before.
   it "keeps a post's files that outweigh the rest without the lines" do
     links = (0..3).map { |index| "<a href='/schedule#{index}.pdf'>#{['Rye starter protocol', 'Feeding timetable', 'Fermentation diary', 'Rye starter protocol'][index]} #{index}</a>" }
@@ -857,11 +906,14 @@ RSpec.describe Nokodown::PostAttribution do
   # row long enough for base to take it for cards).
   it "keeps a member card above a post that names the poster in its role" do
     [["Aster", "Wren’s lab safety officer", "", "div"], ["Wren", "Lab safety officer", "", "div"], ["Wren", "Lab safety officer", " featured", "div"],
-     ["Wren", "Lab safety officer", "", "section"], ["Wren", "Lab safety officer", "", "li"]].each do |first, role, extra, tag|
+     ["Wren", "Lab safety officer", "", "section"], ["Wren", "Lab safety officer", "", "li"], ["Wren", "Lab safety officer", "", "slot"]].each do |first, role, extra, tag|
       cards = [[first, role, "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
                ["Lark", "Sample custodian", "Sample manifest"], ["Juniper", "Records custodian", "Batch journal"]].each_with_index.map do |(name, title, report), index|
-        name_tag = index.zero? && tag != "li" ? tag : "div"
+        name_tag = index.zero? && %w[div section].include?(tag) ? tag : "div"
         card = "<#{name_tag} class='user-info#{extra if index.zero?}'><a class='username' href='/members/#{87 + index}'>#{name}</a> <span>#{title} · <a href='/reports/#{87 + index}.pdf'>#{report}</a></span></#{name_tag}>"
+        # Only the featured card may sit in a wrapper of its own.
+        next "<section class='contributor-slot'>#{card}</section>" if tag == "slot" && index.zero?
+
         tag == "li" ? "<li>#{card}</li>" : card
       end
       rows = [["Wren", question], ["Fern", answer], ["Moss", answer]].map do |name, body|
@@ -954,6 +1006,9 @@ RSpec.describe Nokodown::PostAttribution do
       ["<div class='user-info'>Contributed by <span class='username'>Wren</span><span class='contact-details'><a rel='author' href='/members/92'>View profile</a></span></div>",
        "<a class='username' href='/members/72'>Wren</a>"],
       ["<div class='user-info'>Contributed by <span class='username'>Wren</span><a rel='author' href='mailto:wren@workshop.example'>Write</a></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # A theme's profile button may share phpBB's address-link class.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><a class='postlink' href='/members/92'>View profile</a></div>",
        "<a class='username' href='/members/72'>Wren</a>"]
     ].each do |panel, header|
       markdown = thread([

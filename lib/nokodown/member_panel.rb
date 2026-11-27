@@ -78,8 +78,11 @@ module Nokodown
       links = panel.css("a[href]").reject { |candidate| contact?(candidate, panel) && !author_rel?(candidate) }
       return link && link["href"] if links.empty?
 
-      # A count ("404" posts, by a member named 404) names no one.
-      named = links.select { |candidate| Dom.text(candidate).casecmp?(name) && name.match?(LETTER) }.map { |candidate| candidate["href"] }
+      # A count ("404" posts, by a member named 404) names no one, nor an
+      # address shown as itself (phpBB's "index.php", by a member of that name).
+      named = links.select do |candidate|
+        Dom.text(candidate).casecmp?(name) && name.match?(LETTER) && !address_link?(candidate)
+      end.map { |candidate| candidate["href"] }
       return false if link.nil? && !named.empty?
 
       hrefs = link ? [link["href"]] : links.select { |candidate| avatar_link?(candidate) || profile_link?(candidate) }.map { |candidate| candidate["href"] }
@@ -107,16 +110,29 @@ module Nokodown
     # A link that says it is the profile: rel="author", or "View profile"
     # or "View account 41" in its text or label. An address shown as the
     # text (phpBB's URL fields) says where it goes, not what it is;
-    # "Profile/Account" is a label. phpBB marks the addresses it made links
-    # of (postlink, postlink-local) and shows them as a board path
-    # ("ucp.php?i=profile"), or cut short ("https://example.org/m ...
-    # profile/ab"). An email link is no profile, whatever its address says.
+    # "Profile/Account" is a label. An email link is no profile, whatever
+    # its address says.
     def profile_link?(link)
       return author_rel?(link) if link["href"].to_s.strip.downcase.start_with?("mailto:")
 
-      text = link["class"].to_s.split.any? { |name| name.start_with?("postlink") } ? "" : Dom.text(link)
+      text = address_link?(link) ? "" : Dom.text(link)
       words = "#{text} #{link['aria-label']} #{link['title']}".gsub(ADDRESS, "")
       author_rel?(link) || words.match?(PROFILE)
+    end
+
+    # A link phpBB made of an address (postlink, postlink-local) shows the
+    # address: the end of its href (a board path, "ucp.php?i=profile"), or
+    # its start and end around " ... " where it is long. A theme's
+    # "View profile" button of that class says what it is.
+    def address_link?(link)
+      return false unless link["class"].to_s.split.any? { |name| name.start_with?("postlink") }
+
+      text = Dom.text(link)
+      href = link["href"].to_s.strip
+      return false if text.empty?
+
+      head, tail = text.split(" ... ", 2)
+      tail ? href.start_with?(head) && href.end_with?(tail) : href.end_with?(text)
     end
 
     def author_rel?(link)
