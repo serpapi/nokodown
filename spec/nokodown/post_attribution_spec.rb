@@ -248,6 +248,24 @@ RSpec.describe Nokodown::PostAttribution do
     end
   end
 
+  # A board without profiles names the poster in no link; the posts count
+  # links to a search, and a count names no other member.
+  it "writes one line where the member panel names the poster in no link beside a linked post count" do
+    posts = [["wren", 3, "Starter", question], ["basil", 5, "Re: Starter", answer]].map do |name, day, subject, body|
+      "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
+        "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
+        "<dd class='profile-posts'><strong>Posts:</strong> <a href='./search.php?author_id=#{day}&amp;sr=posts'>41</a></dd></dl>" \
+        "<div class='postbody'><h3><a href='#p#{day}'>#{subject}</a></h3>" \
+        "<p class='author'>by <strong><span class='username'>#{name}</span></strong> " \
+        "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></p><div class='content'>#{body}</div></div></div></div>"
+    end
+    markdown = thread(posts, head: '<meta name="generator" content="phpBB">')
+
+    markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
+    markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+  end
+
   # The rest of the panel's column (a rank, a post count) stands between the
   # panel's line and the post's, and may say whose it is.
   it "keeps the member panel's line when its column holds more" do
@@ -447,7 +465,9 @@ RSpec.describe Nokodown::PostAttribution do
       "<div class='edit'>Last edited by —</div><div class='message-inner'>#{panel}#{head}</div>" =>
         "Last edited by —\n\n**wren**\n\n**wren** · May 3, 2024",
       "#{panel}<h3>Verified by the above contributor</h3>#{head}" =>
-        "**wren**\n\n### Verified by the above contributor\n\n**wren** · May 3, 2024"
+        "**wren**\n\n### Verified by the above contributor\n\n**wren** · May 3, 2024",
+      "#{panel}<div role='blockquote'><h3>“Keep the lid loose.”</h3></div>#{head}" =>
+        "**wren**\n\n### “Keep the lid loose.”\n\n**wren** · May 3, 2024"
     }.each do |inner, shown|
       markdown = thread([
         "<article class='message'>#{inner}</article>",
@@ -477,6 +497,23 @@ RSpec.describe Nokodown::PostAttribution do
 
       markdown.should include(shown)
       markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+    end
+  end
+
+  # An account box between posts holds a panel of no post: it is judged as
+  # any other box, and the posts' files are kept.
+  it "keeps a post's files beside an account box between posts" do
+    user = "<div class='user-info'><a class='username' href='/u/wren'>Wren</a></div>"
+    report = "<div class='files'><div>Attachment</div><a href='/report.pdf'>Laboratory mixing log</a></div>"
+    ["", "<div class='attachment'>#{user}<ul><li><a href='/log.pdf'>Mixing log</a></li></ul></div>"].each do |card|
+      html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+             "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+             "<p>The starter doubled.</p>#{card}#{report}</article>" \
+             "<div class='member-controls'>#{user}<a href='/sign-up'>Register for member features</a> <a href='/pricing'>View the subscription plans</a></div>" \
+             "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+             "<p>Leave room in the jar.</p></article></main></body></html>"
+
+      Nokodown.to_markdown(html).should include("[Laboratory mixing log](/report.pdf)")
     end
   end
 

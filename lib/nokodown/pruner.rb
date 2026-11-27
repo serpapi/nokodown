@@ -20,9 +20,13 @@ module Nokodown
     # letter folds to these, so it answers as downcasing first would.
     BUTTON_WORD = /btn|button|cta/i.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
-    # A member panel's line (PostAttribution), and the blocks besides one
-    # that stop a div from reading as a paragraph.
-    PANEL_LINE = "descendant::*[@#{PostAttribution::REPEAT}][1]"
+    # A member panel's line (PostAttribution) of a post: numbered for one, or
+    # in a post's element. A panel outside every post (an account box between
+    # posts) is judged as any other box. And the blocks besides one that stop
+    # a div from reading as a paragraph.
+    POST_PANEL_LINES = "descendant::*[@#{PostAttribution::REPEAT}]" \
+                       "[@#{PostAttribution::REPEAT} != '' or ancestor::*[@#{PostAttribution::OWNER}]]"
+    PANEL_LINE = "#{POST_PANEL_LINES}[1]"
     OTHER_BREAKER = "descendant::*[#{Dom::PARAGRAPH_BREAKERS.map { |name| "self::#{name}" }.join(' or ')}]" \
                     "[not(@#{PostAttribution::REPEAT})][1]"
     # XPath finds a list of tags faster than CSS.
@@ -164,15 +168,22 @@ module Nokodown
     end
 
     # Turned off, it still drops unlabeled navigation, as page pruning does.
+    # The share kept leaves out the lines of posts' member panels, which
+    # stand where the post's header line stood before: a kept line would
+    # count as kept text and settle for a pass that took the post's files.
     def clean_conditionally(root, content_length)
       return remove_link_clusters(root) unless @conditional
 
-      text_before = Dom.text(root).length
+      text_before = Dom.text(root).length - panel_lines_length(root)
       links_before = link_text_length(root)
       remove_suspicious_containers(root, content_length)
       @conditional_seen += text_before
-      @conditional_kept += Dom.text(root).length
+      @conditional_kept += Dom.text(root).length - panel_lines_length(root)
       @conditional_removed_links += links_before - link_text_length(root)
+    end
+
+    def panel_lines_length(root)
+      root.xpath(POST_PANEL_LINES).to_a.sum { |line| Dom.text(line).length }
     end
 
     # Innermost containers first, so an outer one is judged on what is left.
@@ -202,7 +213,7 @@ module Nokodown
     # it was before the lines replaced the panels the header did: a file list
     # under the line reads as a list again, not as links.
     def kept_without_panel_lines?(node, content_length, paragraph_keys, memo)
-      lines = node.xpath("descendant::*[@#{PostAttribution::REPEAT}]").to_a
+      lines = node.xpath(POST_PANEL_LINES).to_a
       return false if lines.empty?
 
       places = lines.map { |line| [line, line.parent, line.next_sibling].tap { line.unlink } }

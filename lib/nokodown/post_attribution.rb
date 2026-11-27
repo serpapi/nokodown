@@ -490,9 +490,20 @@ module Nokodown
     def subjects(post, body)
       post.node.css(HEADINGS).reject do |heading|
         @authors.include?(Dom.key(heading)) || inside?(post.date, heading) || inside?(heading, body) ||
-          quoted?(heading) || repeated_title?(heading) ||
+          quoted?(heading) || in_quote?(heading, post.node) || repeated_title?(heading) ||
           heading.ancestors.any? { |ancestor| ancestor.element? && MemberPanel.panel?(ancestor) }
       end
+    end
+
+    # A quote by role or class ("role=blockquote", div.bbquote) below the
+    # post: a heading in it is quoted, not the post's subject.
+    def in_quote?(heading, post_node)
+      stop = Dom.key(post_node)
+      heading.ancestors.each do |ancestor|
+        break if !ancestor.element? || Dom.key(ancestor) == stop
+        return true if quote?(ancestor)
+      end
+      false
     end
 
     # Marked for the walk in finish, which steps over it as over a subject.
