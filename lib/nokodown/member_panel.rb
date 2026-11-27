@@ -164,16 +164,36 @@ module Nokodown
       return false unless mail || (href.match?(SCHEME) && link["class"].to_s.split.any? { |name| name.start_with?("postlink") })
 
       text = Dom.text(link)
-      return false if text.empty? || link.ancestors.none? { |ancestor| ancestor.element? && ancestor["class"].to_s.split.include?(FIELD) }
+      return false if text.empty?
+      return false if link.ancestors.none? { |ancestor| ancestor.element? && ancestor["class"].to_s.split.include?(FIELD) } && !field_copy?(link, href, text)
       # phpBB shows a long address around " ... ", where its word censor
       # may have put words with spaces ("link removed") at the cut.
       return shown?(text, href, field: true) if text.include?(" ... ")
 
       # Whole, an email is its address, a "www." address lacks the
-      # "http://" its href has, and a board's own page is its path.
+      # "http://" its href has, and a board's own page (postlink-local) is
+      # its path.
       return href.sub(MAILTO, "").casecmp?(text) if mail
 
-      href == text || href == "http://#{text}" || href.end_with?("/#{text}")
+      href == text || href == "http://#{text}" || (link["class"].to_s.split.include?("postlink-local") && href.end_with?("/#{text}"))
+    end
+
+    # prosilver prints a field named "field1" twice: in a plain row, then
+    # in its field row. A link beside a field row that holds the same link
+    # is that field's.
+    def field_copy?(link, href, text)
+      row = link.parent
+      2.times do
+        break unless row&.element? && row.parent&.element?
+
+        return true if row.parent.element_children.any? do |sibling|
+          sibling["class"].to_s.split.include?(FIELD) &&
+            sibling.css("a").any? { |other| other["href"].to_s.strip == href && Dom.text(other) == text }
+        end
+
+        row = row.parent
+      end
+      false
     end
 
     # A link phpBB made of an address (postlink, postlink-local) shows the
@@ -218,15 +238,21 @@ module Nokodown
       start = head.sub(SCHEME, "").downcase
       address = href.sub(SCHEME, "").downcase
       # phpBB cuts an address longer than 55, as shown: with its scheme,
-      # but not "http://" before "www." nor "mailto:".
-      return false if (scheme ? href : address).length <= PHPBB_LONG
+      # but not "http://" before "www." nor "mailto:". A field's href is
+      # the censored one, whose hidden middle the censor may have shortened.
+      return false if !field && (scheme ? href : address).length <= PHPBB_LONG
 
       host = lambda { |value| value.split(%r{[/?#]}, 2).first.to_s }
       # Cut inside the host (or an email's address), the start is its start,
       # cut where phpBB cuts: a whole host ("www.forum.org") is not the start
-      # of a longer one ("www.forum.org.au").
+      # of a longer one ("www.forum.org.au"). A field's is phpBB's own cut,
+      # where only the word at the cut may differ.
       cut = address[0, PHPBB_CUT - (head.length - start.length)].to_s
-      same = start.match?(%r{[/?#]}) ? host.call(start) == host.call(address) : (head.length == PHPBB_CUT && start == cut) || (field && censored_start?(start, cut))
+      exact = head.length == PHPBB_CUT && start == cut
+      same = if field then exact || censored_start?(start, cut)
+             elsif start.match?(%r{[/?#]}) then host.call(start) == host.call(address)
+             else exact
+             end
       # The end is phpBB's last 10 characters.
       ending = href[-PHPBB_END..].to_s
       !start.empty? && same && ((tail.length == PHPBB_END && tail == ending) || (field && censored_end?(tail, href)))
@@ -242,13 +268,17 @@ module Nokodown
       !kept.empty? && start.length > kept.length && start.start_with?(kept)
     end
 
-    # Or the end's first word, which the censor may have replaced in the
-    # href too, as a longer word: what follows it, from a character no
-    # word has ("/ab", ".co.uk"), is the href's end.
+    # Or the end's first word, cut from a longer one the censor may have
+    # replaced in the href too: what follows it, from a character no word
+    # has ("/ab", ".co.uk"), is the href's end, shorter than phpBB's 10.
+    # Where the cut fell inside the href's last word, all 10 are that
+    # word's end, which the censor may have replaced whole.
     def censored_end?(tail, href)
       text = tail.downcase
       address = href.downcase
-      (1...text.length).any? { |index| !text[index].match?(CENSOR_CHAR) && address.end_with?(text[index..]) }
+      return true if address[CENSOR_LAST].to_s.length > PHPBB_END
+
+      (1...text.length).any? { |index| !text[index].match?(CENSOR_CHAR) && text.length - index < PHPBB_END && address.end_with?(text[index..]) }
     end
 
     def author_rel?(link)
@@ -340,10 +370,11 @@ module Nokodown
       # A phpBB profile field ("Birthday", "Time zone") dates the member
       # where only its name ("profile-birthdate") says date; phpBB prints
       # its value as text, so a <time> in one is a theme's, and so is
-      # another class that says date ("post-date").
+      # another class or an id that says date ("post-date").
       classes = node["class"].to_s.split
       if node.name != "time" && !node.key?("datetime") && classes.include?(FIELD)
-        return false unless classes.any? { |name| !name.start_with?("profile-") && name.downcase.match?(DATE_CLASS) }
+        names = classes.reject { |name| name.start_with?("profile-") } << node["id"].to_s
+        return false unless names.any? { |name| name.downcase.match?(DATE_CLASS) }
       end
 
       !signature.match?(MEMBER_DATE_CLASS) && Dom.text(node).match?(/\d/)

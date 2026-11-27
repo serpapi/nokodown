@@ -302,6 +302,15 @@ RSpec.describe Nokodown::PostAttribution do
     censored_words = field_set.call([["Lab", "mailto:#{long_mail}@xrude.co.uk", "workshop-starter-baking-lab-calibration ... profile withheld.co.uk", ""],
                                      ["Website", "https://field.example/online/tools/spamfilter/directory/my-profile", "https://field.example/online/tools/link removed ... my-profile"],
                                      ["Portfolio", "https://example.com/account page", "account page", "postlink-local"]])
+    # The censor may shorten the href's hidden middle below phpBB's 55, or
+    # replace the whole shown tail, the end of a longer word.
+    censored_href = field_set.call([["Lab", "https://field.example/aaaaaaaaaaaaaaaa/x/my-profile", "https://field.example/aaaaaaaaaaaaaaaa/ ... my-profile"],
+                                    ["Lab", "https://field.example/aaaaaaaaaaaaaaaa/public-directory/mirror-spamsource", "https://field.example/aaaaaaaaaaaaaaaa/ ... profile withheld"]])
+    # prosilver prints a field named "field1" in a plain row as well.
+    field1 = lambda do |_day|
+      links = "<a class='postlink-local' href='https://example.com/profile'>profile</a> <a class='postlink-local' href='https://example.com/account'>account</a>"
+      "<dd><strong>Portfolio:</strong> #{links}</dd><dd class='profile-custom-field profile-field1'><strong>Portfolio:</strong> #{links}</dd>"
+    end
     # A field named as a date ("time_zone", "birthdate") dates the member.
     dated_fields = lambda do |_day|
       "<dd class='profile-custom-field profile-time_zone'><strong>Time zone:</strong> UTC+03:00</dd>" \
@@ -318,9 +327,9 @@ RSpec.describe Nokodown::PostAttribution do
     [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [local, "wren"], [scripts, "wren"], [shortened, "wren"], [shortened_www, "wren"],
      [mail, "wren"], [mail_shortened, "wren"], [own_mail, "wren@example.com"], [censored, "wren"], [contacts, "wren"], [contacts, "Facebook"],
      ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"], [local_words, "wren"], [local_words, "profile"],
-     [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"]].each do |extra, first|
+     [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"], [censored_href, "wren"], [field1, "wren"], [field1, "profile"]].each do |extra, first|
       # Longer posts, as the fields' links would outweigh short ones.
-      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -1189,7 +1198,15 @@ RSpec.describe Nokodown::PostAttribution do
       # A custom field named "contact" is not the contact block.
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field profile-contact'>Referred by " \
        "<a class='postlink' href='https://example.com/members/SeniorWren'>Wren</a></small></div>",
-       "<span class='username'>Wren</span>"]
+       "<span class='username'>Wren</span>"],
+      # In the field class, a shown start that is not phpBB's cut, and a
+      # full URL's one word ("profile"), which only a board's own page shows.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
+       "<a class='postlink' href='https://directory.example/lookup/member-calibration-registry/p/92?tab=about'>https://directory.example/people ... View profile /p/92?tab=about</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
+       "<a class='postlink' href='https://directory.example/members/92/profile'>profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"]
     ].each do |panel, header|
       markdown = thread([
         "<article class='message'>#{panel}<header>#{header} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
@@ -1345,7 +1362,8 @@ RSpec.describe Nokodown::PostAttribution do
   # A theme may style a quoted author's date with phpBB's field class.
   it "keeps a quoted author's date in an element of phpBB's field class" do
     ["<small class='profile-custom-field'><time datetime='2024-05-02'>May 2, 2024</time></small>",
-     "<span class='post-date profile-custom-field'>May 2, 2024</span>"].each do |date|
+     "<span class='post-date profile-custom-field'>May 2, 2024</span>",
+     "<span class='profile-custom-field' id='post-date-27'>May 2, 2024</span>"].each do |date|
       quote = "<blockquote><div id='user-info' aria-label='Original author'><span class='username'>Basil</span>#{date}</div><p>#{answer}</p></blockquote>"
       markdown = thread([
         "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
