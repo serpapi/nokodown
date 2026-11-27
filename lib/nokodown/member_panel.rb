@@ -34,8 +34,13 @@ module Nokodown
     # phpBB's container of a public profile field's value.
     FIELD = "profile-custom-field"
     # phpBB shows a long address as its first 39 characters, " ... " and
-    # its last 10.
+    # its last 10, where it is longer than 55.
     PHPBB_CUT = 39
+    PHPBB_END = 10
+    PHPBB_LONG = 55
+    # What phpBB's word censor takes for a word: it replaces a whole run.
+    CENSOR_CHAR = /[\p{Nd}\p{L}_-]/.freeze
+    CENSOR_LAST = /[\p{Nd}\p{L}_-]+\z/.freeze
     # An email address the panel gives for the member, which tells apart
     # only from another address, not from a profile.
     IDENTITY = "~"
@@ -123,7 +128,8 @@ module Nokodown
       key = Dom.key(panel)
       node = link.parent
       while node&.element? && Dom.key(node) != key
-        return true if Dom.signature(node).match?(CONTACT)
+        # A custom field named "contact" is a field, not the contact block.
+        return true if Dom.signature(node).match?(CONTACT) && !node["class"].to_s.split.include?(FIELD)
 
         node = node.parent
       end
@@ -154,15 +160,20 @@ module Nokodown
     end
 
     def field_value?(link, href)
-      return false unless href.match?(MAILTO) || (href.match?(SCHEME) && link["class"].to_s.split.any? { |name| name.start_with?("postlink") })
-      # phpBB shows the address, whole, as a board path, or around " ... ":
-      # no words ("View profile"), and nothing the href does not end with
-      # unless it looks like an address.
-      text = Dom.text(link)
-      return false if text.empty? || text.split(" ... ", 2).any? { |part| part.match?(/\s/) }
-      return false unless text.include?(" ... ") || text.match?(ADDRESS_TEXT) || href.sub(/\?.*/m, "").end_with?(text)
+      mail = href.match?(MAILTO)
+      return false unless mail || (href.match?(SCHEME) && link["class"].to_s.split.any? { |name| name.start_with?("postlink") })
 
-      link.ancestors.any? { |ancestor| ancestor.element? && ancestor["class"].to_s.split.include?(FIELD) }
+      text = Dom.text(link)
+      return false if text.empty? || link.ancestors.none? { |ancestor| ancestor.element? && ancestor["class"].to_s.split.include?(FIELD) }
+      # phpBB shows a long address around " ... ", where its word censor
+      # may have put words with spaces ("link removed") at the cut.
+      return shown?(text, href, field: true) if text.include?(" ... ")
+
+      # Whole, an email is its address, a "www." address lacks the
+      # "http://" its href has, and a board's own page is its path.
+      return href.sub(MAILTO, "").casecmp?(text) if mail
+
+      href == text || href == "http://#{text}" || href.end_with?("/#{text}")
     end
 
     # A link phpBB made of an address (postlink, postlink-local) shows the
@@ -186,8 +197,9 @@ module Nokodown
 
     # The text is the href's end, or its start and end around " ... ": the
     # start's host at least, as a word phpBB censors may differ in the rest.
-    # An address has no spaces ("https://example.com/ View profile").
-    def shown?(text, href)
+    # An address has no spaces ("https://example.com/ View profile"), but
+    # for the words phpBB's censor puts in a field's, where it cuts.
+    def shown?(text, href, field: false)
       head, tail = text.split(" ... ", 2)
       # An email link shows its address, not the subject or body after it.
       if href.match?(MAILTO)
@@ -196,19 +208,47 @@ module Nokodown
         return href.sub(MAILTO, "").casecmp?(text) || href.casecmp?(text) unless tail
       end
       return href.end_with?(text) unless tail
-      return false if head.match?(/\s/) || tail.match?(/\s/)
+      return false if !field && (head.match?(/\s/) || tail.match?(/\s/))
       # A scheme shown is the href's ("http://" is not "https://").
       scheme = head[SCHEME]
       return false if scheme && !href.downcase.start_with?(scheme.downcase)
+      # Shown without one, it is a "www." address, given "http://".
+      return false unless scheme || href.match?(MAILTO) || href.downcase.start_with?("http://")
 
       start = head.sub(SCHEME, "").downcase
       address = href.sub(SCHEME, "").downcase
+      # phpBB cuts an address longer than 55, as shown: with its scheme,
+      # but not "http://" before "www." nor "mailto:".
+      return false if (scheme ? href : address).length <= PHPBB_LONG
+
       host = lambda { |value| value.split(%r{[/?#]}, 2).first.to_s }
       # Cut inside the host (or an email's address), the start is its start,
       # cut where phpBB cuts: a whole host ("www.forum.org") is not the start
       # of a longer one ("www.forum.org.au").
-      same = start.match?(%r{[/?#]}) ? host.call(start) == host.call(address) : head.length == PHPBB_CUT && address.start_with?(start)
-      !start.empty? && same && href.end_with?(tail)
+      cut = address[0, PHPBB_CUT - (head.length - start.length)].to_s
+      same = start.match?(%r{[/?#]}) ? host.call(start) == host.call(address) : (head.length == PHPBB_CUT && start == cut) || (field && censored_start?(start, cut))
+      # The end is phpBB's last 10 characters.
+      ending = href[-PHPBB_END..].to_s
+      !start.empty? && same && ((tail.length == PHPBB_END && tail == ending) || (field && censored_end?(tail, href)))
+    end
+
+    # The censor replaced a whole word, the run of word characters at the
+    # cut: the start's last, which the href continues past the cut.
+    def censored_start?(start, cut)
+      word = cut[CENSOR_LAST]
+      return false unless word
+
+      kept = cut[0, cut.length - word.length]
+      !kept.empty? && start.length > kept.length && start.start_with?(kept)
+    end
+
+    # Or the end's first word, which the censor may have replaced in the
+    # href too, as a longer word: what follows it, from a character no
+    # word has ("/ab", ".co.uk"), is the href's end.
+    def censored_end?(tail, href)
+      text = tail.downcase
+      address = href.downcase
+      (1...text.length).any? { |index| !text[index].match?(CENSOR_CHAR) && address.end_with?(text[index..]) }
     end
 
     def author_rel?(link)
@@ -297,8 +337,14 @@ module Nokodown
     def stamp?(node)
       signature = Dom.signature(node)
       return false unless node.name == "time" || node.key?("datetime") || signature.match?(DATE_CLASS)
-      # A phpBB profile field ("Birthday", "Time zone") dates the member.
-      return false if [node, *node.ancestors].any? { |ancestor| ancestor.element? && ancestor["class"].to_s.split.include?(FIELD) }
+      # A phpBB profile field ("Birthday", "Time zone") dates the member
+      # where only its name ("profile-birthdate") says date; phpBB prints
+      # its value as text, so a <time> in one is a theme's, and so is
+      # another class that says date ("post-date").
+      classes = node["class"].to_s.split
+      if node.name != "time" && !node.key?("datetime") && classes.include?(FIELD)
+        return false unless classes.any? { |name| !name.start_with?("profile-") && name.downcase.match?(DATE_CLASS) }
+      end
 
       !signature.match?(MEMBER_DATE_CLASS) && Dom.text(node).match?(/\d/)
     end

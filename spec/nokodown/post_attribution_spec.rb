@@ -297,6 +297,11 @@ RSpec.describe Nokodown::PostAttribution do
     # A word the board censors at the cut ("rude" made "profile").
     censored_tail = field_set.call([["Lab", "mailto:#{long_mail}@xrude.co.uk", "workshop-starter-baking-lab-calibration ... profile.co.uk", ""],
                                     ["Lab", "mailto:#{long_mail}@xmean.co.uk", "workshop-starter-baking-lab-calibration ... account.co.uk", ""]])
+    # A censor's words may have spaces ("profile withheld"), at the cut of
+    # an address, or in a board's own page it shows as its path.
+    censored_words = field_set.call([["Lab", "mailto:#{long_mail}@xrude.co.uk", "workshop-starter-baking-lab-calibration ... profile withheld.co.uk", ""],
+                                     ["Website", "https://field.example/online/tools/spamfilter/directory/my-profile", "https://field.example/online/tools/link removed ... my-profile"],
+                                     ["Portfolio", "https://example.com/account page", "account page", "postlink-local"]])
     # A field named as a date ("time_zone", "birthdate") dates the member.
     dated_fields = lambda do |_day|
       "<dd class='profile-custom-field profile-time_zone'><strong>Time zone:</strong> UTC+03:00</dd>" \
@@ -313,9 +318,9 @@ RSpec.describe Nokodown::PostAttribution do
     [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [local, "wren"], [scripts, "wren"], [shortened, "wren"], [shortened_www, "wren"],
      [mail, "wren"], [mail_shortened, "wren"], [own_mail, "wren@example.com"], [censored, "wren"], [contacts, "wren"], [contacts, "Facebook"],
      ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"], [local_words, "wren"], [local_words, "profile"],
-     [censored_tail, "wren"], [dated_fields, "wren"]].each do |extra, first|
+     [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"]].each do |extra, first|
       # Longer posts, as the fields' links would outweigh short ones.
-      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -1157,7 +1162,34 @@ RSpec.describe Nokodown::PostAttribution do
        "<a href='mailto:office@portrait.art?subject=Introduction'>art</a></small></div>",
        "<span class='username'>art</span>"],
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><a class='postlink' href='https://www.forum.org.au/people/92/profile'>www.forum.org ... profile</a></div>",
-       "<a class='username' href='/members/72'>Wren</a>"]
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # In phpBB's field class too: a button the href only ends with, a
+      # shortened address of another scheme or host, an email's suffix.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
+       "<a class='postlink' href='https://example.com/members/92/viewProfile'>Profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
+       "<a class='postlink' href='https://lab.example/u/members/92/profile'>http://lab.example/u ... profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
+       "<a class='postlink' href='https://www.forum.org.au/people/92/profile'>www.forum.org ... profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>wren@example.org</span><small class='profile-custom-field'>Referred by " \
+       "<a href='mailto:senior-wren@example.org?subject=Starter'>wren@example.org</a></small></div>",
+       "<span class='username'>wren@example.org</span>"],
+      # phpBB keeps an address's last 10 characters, not the 7 after a
+      # 39-character host.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><a class='postlink' href='https://www.international-fermentation-labs.org.au/people/92/profile'>" \
+       "www.international-fermentation-labs.org ... profile</a></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # A "www." address phpBB shows goes to "http://" that, not "https://".
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><a class='postlink' href='https://www.international-fermentation-labs.org.au/people/92/my-profile'>" \
+       "www.international-fermentation-labs.org ... my-profile</a></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # A custom field named "contact" is not the contact block.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field profile-contact'>Referred by " \
+       "<a class='postlink' href='https://example.com/members/SeniorWren'>Wren</a></small></div>",
+       "<span class='username'>Wren</span>"]
     ].each do |panel, header|
       markdown = thread([
         "<article class='message'>#{panel}<header>#{header} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
@@ -1308,6 +1340,22 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("#{question}\n\nMay 3, 2024")
     markdown.should include("**carol** · May 3, 2024\n\nMay 3, 2024")
     markdown.should include("> Booked for May 3, 2024")
+  end
+
+  # A theme may style a quoted author's date with phpBB's field class.
+  it "keeps a quoted author's date in an element of phpBB's field class" do
+    ["<small class='profile-custom-field'><time datetime='2024-05-02'>May 2, 2024</time></small>",
+     "<span class='post-date profile-custom-field'>May 2, 2024</span>"].each do |date|
+      quote = "<blockquote><div id='user-info' aria-label='Original author'><span class='username'>Basil</span>#{date}</div><p>#{answer}</p></blockquote>"
+      markdown = thread([
+        "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+          "<p>#{question}</p>#{quote}</article>",
+        post("fern", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+      ])
+
+      markdown.should include("**Wren** · May 3, 2024")
+      markdown.should include("> **Basil** · May 2, 2024")
+    end
   end
 
   it "keeps the subject of each post when the header goes" do
