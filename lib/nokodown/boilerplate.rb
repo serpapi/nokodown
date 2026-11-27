@@ -16,7 +16,7 @@ module Nokodown
     # or beside labels ("Staff member").
     ROW_DEPTH = 3
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
-    BADGE_INLINE = Set.new(%w[img br wbr ruby rt rp div]).freeze
+    BADGE_INLINE = Set.new(%w[img picture source br wbr ruby rt rp div ins del label]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
     AD_ATTRIBUTE_SELECTORS = AD_ATTRIBUTES.map { |name| "[#{name}]" }.freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze

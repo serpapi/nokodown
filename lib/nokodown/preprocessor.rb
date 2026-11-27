@@ -154,29 +154,62 @@ module Nokodown
       return unless folder
 
       host = folder[%r{\A[^/]*}]
+      # The page's folder as its path is spelled (paths are case-sensitive).
+      page = board_folder(fold: false)
       @body.css("a.postlink-local[href], a[#{MemberPanel::MADE}='l'][href]").each do |link|
         # An explicit default port (":443" on https) is the same board; the
         # censor's words keep spaces in the href that the text folds.
         rest = link["href"].strip.sub(%r{\Ahttps://([^/]*?):443(?=/|\z)}i, 'https://\1').sub(%r{\Ahttp://([^/]*?):80(?=/|\z)}i, 'http://\1')
-        rest = rest.sub(MemberPanel::SCHEME, "").gsub(/[[:space:]]+/, " ").gsub("/ ", "/").downcase
-        text = Dom.text(link).downcase
-        if !text.empty? && rest.end_with?("/#{text}") && folder.start_with?(rest[0, rest.length - text.length])
+        spelled = rest.sub(MemberPanel::SCHEME, "").gsub(/[[:space:]]+/, " ").gsub("/ ", "/")
+        spelled = spelled.sub(%r{\A[^/]*}) { |authority| authority.downcase }
+        shown = Dom.text(link).gsub(/[[:space:]]+/, " ").gsub("/ ", "/")
+        rest = spelled.downcase
+        text = shown.downcase
+        # In prosilver's own panel, a link showing its path below the
+        # board's URL is the board's, wherever the censor or the board's
+        # configured host and port put that URL. Elsewhere it is the
+        # board's only in the page's own folder, spelled alike.
+        own = own_panel?(link)
+        if !text.empty? && rest.end_with?("/#{text}") && (own || spelled == "#{page}#{shown}")
           link[MemberPanel::BOARD] = ""
         else
           # phpBB's own link ("<!-- l -->") goes below the board's URL, at
           # or above the page read; one elsewhere, or on another host or
-          # port, is a theme's.
-          link[MemberPanel::FOREIGN] = "" if link[MemberPanel::MADE] == "l" || rest[%r{\A[^/]*}] != host
+          # port, or outside prosilver's panel, is a theme's.
+          link[MemberPanel::FOREIGN] = "" if !own || link[MemberPanel::MADE] == "l" || rest[%r{\A[^/]*}] != host
         end
+      end
+      # A path shown by a link phpBB made of no board page goes to the
+      # page's host; one to another host is a theme's ("profile/Wren.Baker"
+      # at a staff directory).
+      @body.css("a.postlink[href]").each do |link|
+        next if link.key?(MemberPanel::MADE)
+
+        rest = link["href"].strip.sub(%r{\Ahttps://([^/]*?):443(?=/|\z)}i, 'https://\1').sub(%r{\Ahttp://([^/]*?):80(?=/|\z)}i, 'http://\1')
+        next unless rest.match?(MemberPanel::SCHEME)
+
+        link[MemberPanel::FOREIGN] = "" if rest.sub(MemberPanel::SCHEME, "")[%r{\A[^/]*}].downcase != host
       end
     end
 
-    def board_folder
+    # prosilver's panel: dl.postprofile (or one known by that id).
+    def own_panel?(link)
+      node = link.parent
+      while node&.element?
+        return true if node.name == "dl" && (node["class"].to_s.split.include?("postprofile") || node["id"] == "postprofile")
+
+        node = node.parent
+      end
+      false
+    end
+
+    def board_folder(fold: true)
       uri = URI.parse(@url.to_s.strip)
       return unless uri.host && uri.path
 
-      host = uri.port && uri.port != uri.default_port ? "#{uri.host}:#{uri.port}" : uri.host
-      folder = "#{host}#{uri.path.sub(%r{[^/]*\z}, '')}".downcase
+      host = (uri.port && uri.port != uri.default_port ? "#{uri.host}:#{uri.port}" : uri.host).downcase
+      folder = "#{host}#{uri.path.sub(%r{[^/]*\z}, '')}"
+      folder = folder.downcase if fold
       folder.end_with?("/") ? folder : "#{folder}/"
     rescue URI::Error, ArgumentError
       nil

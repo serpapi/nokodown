@@ -81,9 +81,9 @@ module Nokodown
         date, loose = date(panel, name)
         line = line(panel.document, name, date)
         # Only prosilver's own panel (dl.postprofile) holds its contact
-        # menu; a contact label in a panel known by its id alone is the
-        # panel's own line.
-        line[LOOSE] = "" if loose && panel["class"].to_s.match?(Patterns::MEMBER_PANEL)
+        # menu; a contact label in a panel known by its id alone, or in a
+        # theme's <div class="message-user">, is the panel's own line.
+        line[LOOSE] = "" if loose && panel.name == "dl" && panel["class"].to_s.split.include?("postprofile")
         panel.add_previous_sibling(line)
         repeats(line, panel, name, source) if panel[PostAttribution::PANEL]
         line[PostAttribution::OWN] = PostAttribution::OWN_LINE if panel.key?(PostAttribution::OWN)
@@ -264,12 +264,34 @@ module Nokodown
       return true if text.empty?
 
       squeezed = href.gsub(/[[:space:]]+/, " ")
-      return true if squeezed.include?(text) || squeezed.gsub("/ ", "/").include?(text)
+      bare = squeezed.sub(SCHEME, "")
+      # Whole, or its start ("www."), or its end at a segment ("profile"
+      # of ".../profile"), not a word inside one ("profile" of
+      # "viewprofile", "Wren" of "/people/Wren.Baker/biography").
+      return true if squeezed.start_with?(text) || bare.start_with?(text) ||
+                     [squeezed, squeezed.gsub("/ ", "/")].any? { |whole| address_end?(whole, text) }
 
       # A cut address the censor changed ("contributors/hellr ... profile/ab")
-      # keeps a word of address, or no space, around the cut.
+      # keeps the address's start or end, and a word of address, or no
+      # space, around the cut.
       head, tail = text.split(" ... ", 2)
-      !tail.nil? && (text.match?(%r{\w[.:/@]+\w}) || [head, tail].none? { |part| part.match?(/\s/) })
+      return false if tail.nil?
+
+      # Cut whole ("archived profile/~wren-fermentation- ... research-1"):
+      # the href's start, past its scheme, and its end.
+      starts = !head.empty? && (squeezed.start_with?(head) || bare.start_with?(head))
+      ends = !tail.empty? && squeezed.end_with?(tail)
+      return true if starts && ends
+      return false unless starts || ends
+
+      text.match?(%r{\w[.:/@]+\w}) || [head, tail].none? { |part| part.match?(/\s/) }
+    end
+
+    def address_end?(whole, text)
+      return false unless whole.end_with?(text)
+
+      before = whole[-text.length - 1]
+      before.nil? || !before.match?(/[[:alnum:]]/) || !text[0].match?(/[[:alnum:]]/)
     end
 
     # Without phpBB's comments, a field's link shows its address as phpBB

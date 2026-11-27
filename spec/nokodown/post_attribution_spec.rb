@@ -313,6 +313,9 @@ RSpec.describe Nokodown::PostAttribution do
     # in the text's whole tail, a word's end.
     censored_cut = made.call(field_set.call([["Lab", "https://field.example/fermentation/x/ab/my-profile", "https://field.example/fermentation/emba ... my-profile"],
                                              ["Lab", "https://field.example/fermentation/x/ab/my-account", "https://field.example/fermentation/emba ... my-account"]]))
+    # A censored host's words with a path whose cut follows a "~".
+    censored_tilde = made.call(field_set.call([["Website", "http://archived profile/~wren-fermentation-notebooks-#{"a" * 24}-research-1", "archived profile/~wren-fermentation- ... research-1"],
+                                               ["Website", "http://archived profile/~wren-fermentation-notebooks-#{"b" * 24}-research-2", "archived profile/~wren-fermentation- ... research-2"]]))
     censored_word = made.call(field_set.call([["Lab", "https://field.example/labs/experiments/calibrations/xcontraband", "https://field.example/labs/experiments/ ... profile"],
                                              ["Lab", "https://field.example/labs/photographs/catalogue/xrestricted", "https://field.example/labs/photographs/ ... account"]]))
     # prosilver prints a field named "field1" in a plain row as well.
@@ -378,19 +381,32 @@ RSpec.describe Nokodown::PostAttribution do
     # spelt out, or read through a route below the board.
     on_port = ->(day) { stripped_deep.call(day).gsub("https://example.com/", "https://example.com:8443/") }
     default_port = ->(day) { stripped_deep.call(day).gsub("https://example.com/", "https://example.com:443/") }
+    # The censor may change the board's folder in the href, or leave a
+    # space after a slash in both; the board's URL may name another host
+    # than the page's.
+    deep_fields = lambda do |path, other|
+      lambda do |_day|
+        "<dd class='profile-custom-field profile-portfolio'><strong>Portfolio:</strong> <!-- l --><a class='postlink-local' href='https://#{path}/#{other[0]}'>#{other[0]}</a><!-- l --></dd>" \
+          "<dd class='profile-custom-field profile-journal'><strong>Journal:</strong> <!-- l --><a class='postlink-local' href='https://#{path}/#{other[1]}'>#{other[1]}</a><!-- l --></dd>"
+      end
+    end
+    censored_folder = deep_fields.call("example.com/community/culturing", %w[profile account])
+    censored_slash = deep_fields.call("example.com/community/fermentation", ["profile/ guide", "account/ settings"])
+    other_host = deep_fields.call("example.com/community/fermentation", %w[profile account])
     # A member may be named 404 and have 404 posts, or begin with "@".
     [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [local, "wren"], [scripts, "wren"], [shortened, "wren"], [shortened_www, "wren"],
      [mail, "wren"], [mail_shortened, "wren"], [own_mail, "wren@example.com"], [censored, "wren"], [contacts, "wren"], [contacts, "Facebook"],
      ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"], [local_words, "wren"], [local_words, "profile"],
-     [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"], [censored_href, "wren"], [field1, "wren"], [field1, "profile"], [censored_cut, "wren"], [censored_word, "wren"],
+     [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"], [censored_href, "wren"], [field1, "wren"], [field1, "profile"], [censored_cut, "wren"], [censored_word, "wren"], [censored_tilde, "wren"],
      [board_contacts, "wren"], [censored_whole, "wren"], [blanked, "wren"], [trigger, "profile"], [stripped_words, "wren"], [office, "wren"],
      [censored_page, "wren"], [stripped_deep, "wren", board], [numbered, "profile"], [censored_spaces, "wren"],
      [on_port, "wren", board.sub("example.com", "example.com:8443")], [default_port, "wren", board],
-     [stripped_deep, "wren", "https://example.com/community/fermentation/topic/starter.html"]].each do |extra, first, url|
+     [stripped_deep, "wren", "https://example.com/community/fermentation/topic/starter.html"], [censored_folder, "wren", board],
+     [censored_slash, "wren", board], [other_host, "wren", board.sub("example.com", "forum.example.com")]].each do |extra, first, url|
       # Longer posts, as the fields' links would outweigh short ones.
-      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word,
+      more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word, censored_tilde,
               board_contacts, censored_whole, blanked, stripped_words, office, censored_page, stripped_deep, numbered, censored_spaces, on_port,
-              default_port].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+              default_port, censored_folder, censored_slash, other_host].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -424,6 +440,15 @@ RSpec.describe Nokodown::PostAttribution do
         "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></p><div class='content'>#{body}</div></div></div></div>"
     end
     thread(posts, head: '<meta name="generator" content="phpBB">').should include("Office hours (UTC+3)")
+
+    # So does a theme's own panel, a post's second root, beside it.
+    markdown = thread([
+      "<article class='message'><div class='message-user'><a class='username' href='/members/87'>W. Baker</a>" \
+      "<span class='contact-icon office_time-icon'>Office hours 09:00–12:00 UTC</span></div><div class='article-content'>" \
+      "<header><a class='username' href='/members/87'>W. Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p><p>#{answer}</p><p>#{question}</p></div></article>",
+      post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+    ])
+    markdown.should include("Office hours 09:00–12:00 UTC")
   end
 
   # The rest of the panel's column (a rank, a post count) stands between the
@@ -1090,7 +1115,8 @@ RSpec.describe Nokodown::PostAttribution do
      ["Wren", "Lab safety officer", "", "linked-levels"], ["Wren", "Lab safety officer", "", "span-levels"],
      ["Wren", "Lab safety officer", "", "caption-levels"], ["Wren", "Lab safety officer", "", "badge-levels"],
      ["Wren", "Lab safety officer", "", "two-part-levels"], ["Wren", "Lab safety officer", "", "break-levels"],
-     ["Wren", "Lab safety officer", "", "boxed-levels"]].each do |first, role, extra, tag|
+     ["Wren", "Lab safety officer", "", "boxed-levels"], ["Wren", "Lab safety officer", "", "picture-levels"],
+     ["Wren", "Lab safety officer", "", "mark-levels"], ["Wren", "Lab safety officer", "", "label-levels"]].each do |first, role, extra, tag|
       cards = [[first, role, "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
                ["Lark", "Sample custodian", "Sample manifest"], ["Juniper", "Records custodian", "Batch journal"]].each_with_index.map do |(name, title, report), index|
         name_tag = index.zero? && %w[div section].include?(tag) ? tag : "div"
@@ -1123,14 +1149,20 @@ RSpec.describe Nokodown::PostAttribution do
         # Or a line break between the parts.
         next "<li>#{"<section><small><a href='/team'><b>Team</b><br><span>Staff directory</span></a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "break-levels" && index.zero?
         next "<li>#{"<section><small><a href='/team'><div><b>Team</b><span>Staff directory</span></div></a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "boxed-levels" && index.zero?
+        picture = "<picture><source srcset='/icons/team.webp' type='image/webp'><img src='/icons/team.png' alt='Team badge'></picture>"
+        next "<li>#{"<section><small><a href='/team'>#{picture}<span>Staff directory</span></a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "picture-levels" && index.zero?
+        # Or an editorial mark or a <label> beside the label's text.
+        next "<li>#{"<section><small><a href='/team'><del>Former</del><span>Safety staff</span></a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "mark-levels" && index.zero?
+        next "<li>#{"<section><small><a href='/team'><label>Team</label><span>Safety staff</span></a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "label-levels" && index.zero?
         next "<li>#{'<section><span>Fermentation team members listed in the laboratory directory</span>' * 4}#{card}#{'</section>' * 4}</li>" if tag == "caption-levels" && index.zero?
 
-        tag == "li" ? "<li>#{card}</li>" : card
+        # A badge's picture: the others in items of their own, as a roster lists them.
+        %w[li picture-levels mark-levels label-levels].include?(tag) ? "<li>#{card}</li>" : card
       end
       rows = [["Wren", question], ["Fern", answer], ["Moss", answer]].map do |name, body|
         "<article class='message'><header><a class='username' href='/u/#{name}'>#{name}</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{body}</p></article>"
       end
-      levels = %w[linked-levels span-levels caption-levels badge-levels two-part-levels break-levels boxed-levels]
+      levels = %w[linked-levels span-levels caption-levels badge-levels two-part-levels break-levels boxed-levels picture-levels mark-levels label-levels]
       listed = (%w[li badge deep shell badged-levels] + levels).include?(tag)
       list = listed ? "<ul>#{cards.join}</ul>" : cards.join
       contributors = "<section class='contributors'><h3>Contributors</h3>#{list}</section>"
@@ -1394,6 +1426,16 @@ RSpec.describe Nokodown::PostAttribution do
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><dl><dd class='profile-coauthor-directory'>Member directory: " \
        "<!-- l --><a class='postlink-local' href='https://example.com/Wren'>Wren</a><!-- l --></dd></dl></div>",
        "<a class='username' href='https://example.com/members/72'>Wren</a>"],
+      # A word inside the href's last segment, or a label around a cut.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><dl><dd class='profile-credit-field'>" \
+       "<!-- m --><a class='postlink' href='https://example.com/memberlist.php?mode=viewprofile&amp;u=92'>profile</a><!-- m --></dd></dl></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><dl><dd class='profile-custom-field'>" \
+       "<!-- m --><a class='postlink' href='/people/Wren.Baker/biography'>Wren</a><!-- m --></dd></dl></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><dl><dd class='profile-coauthor-field'>" \
+       "<!-- m --><a class='postlink' href='/members/92'>Profile ... Wren</a><!-- m --></dd></dl></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
       # A board-style link to another host, or in a theme's own <small>.
       ["<div class='user-info'>Co-author <span class='username'>A.J.</span><dl><dd class='profile-custom-field profile-coauthor'>" \
        "<!-- l --><a class='postlink-local' href='https://directory.example/A.J.'>A.J.</a><!-- l --></dd></dl></div>",
@@ -1404,6 +1446,21 @@ RSpec.describe Nokodown::PostAttribution do
       ["<div class='user-info'>Co-author <span class='username'>gallery/profile/wren</span><small class='profile-custom-field'>" \
        "<a class='postlink' href='https://directory.example/people/92/gallery/profile/wren'>gallery/profile/wren</a></small></div>",
        "<a class='username' href='/members/72'>gallery/profile/wren</a>"],
+      # A staff directory on the board's host outside its folder, or on
+      # another host, in a field row of a theme's panel.
+      ["<div class='user-info'>Co-author <span class='username'>Wren.Baker</span><dl><dd class='profile-custom-field profile-coauthor'>" \
+       "<a class='postlink-local' href='https://example.com/staff/Wren.Baker'>Wren.Baker</a></dd></dl></div>",
+       "<a class='username' href='/members/72'>Wren.Baker</a>"],
+      # Above the page's folder, or in it spelled in other case.
+      ["<div class='user-info'>Co-author <span class='username'>Wren.Baker</span><dl><dd class='profile-custom-field profile-coauthor'>" \
+       "<a class='postlink-local' href='https://example.com/Wren.Baker'>Wren.Baker</a></dd></dl></div>",
+       "<a class='username' href='/members/72'>Wren.Baker</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren.Baker</span><dl><dd>" \
+       "<a class='postlink-local' href='https://example.com/THREADS/Wren.Baker'>Wren.Baker</a></dd></dl></div>",
+       "<a class='username' href='/members/72'>Wren.Baker</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>profile/Wren.Baker</span><dl><dd class='profile-custom-field profile-coauthor'>" \
+       "<a class='postlink' href='https://people.example.net/staff/profile/Wren.Baker'>profile/Wren.Baker</a></dd></dl></div>",
+       "<a class='username' href='/members/72'>profile/Wren.Baker</a>"],
       # A menu's trigger that goes to the member.
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-contact'>" \
        "<a href='#member-92' class='dropdown-trigger' rel='author'><img src='/i/user.png' alt=''></a></small></div>",
