@@ -33,6 +33,9 @@ module Nokodown
     ADDRESS_TEXT = %r{[.?@:]|/.*/}.freeze
     # phpBB's container of a public profile field's value.
     FIELD = "profile-custom-field"
+    # The classes phpBB gives a link it makes of an address; a theme's
+    # "postlink-profile" is not one.
+    POSTLINKS = %w[postlink postlink-local].freeze
     # Set by Preprocessor on a link phpBB made of an address, which its
     # comments bracket.
     MADE = "data-nokodown-made"
@@ -297,11 +300,12 @@ module Nokodown
       text.match?(%r{\w[.:/@]+\w}) || [head, tail].none? { |part| part.match?(/\s/) }
     end
 
-    # The two strings start alike up to an address character.
+    # The two strings start alike up to an address character (a path's
+    # "/", a fragment's "#", a query's "?").
     def shared_address?(one, other)
       size = 0
       size += 1 while size < one.length && size < other.length && one[size] == other[size]
-      one[0, size].match?(%r{[.:/@]})
+      one[0, size].match?(%r{[.:/@#?]})
     end
 
     def address_end?(whole, text)
@@ -315,7 +319,7 @@ module Nokodown
     # prints it: whole, or cut at 39 and 10.
     def field_value?(link, href)
       mail = href.match?(MAILTO)
-      return false unless mail || (href.match?(SCHEME) && link["class"].to_s.split.any? { |name| name.start_with?("postlink") })
+      return false unless mail || (href.match?(SCHEME) && link["class"].to_s.split.any? { |name| POSTLINKS.include?(name) })
 
       text = Dom.text(link)
       return false if text.empty?
@@ -393,7 +397,7 @@ module Nokodown
     # "profile" button of that class says what it is.
     def address_link?(link)
       classes = link["class"].to_s.split
-      return false unless classes.any? { |name| name.start_with?("postlink") }
+      return false unless classes.any? { |name| POSTLINKS.include?(name) }
 
       text = Dom.text(link)
       href = link["href"].to_s.strip

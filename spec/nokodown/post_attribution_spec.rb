@@ -400,6 +400,11 @@ RSpec.describe Nokodown::PostAttribution do
     # The censor's words in the host and the path, after the shown start.
     censored_host = made.call(field_set.call([["Project", "https://legacy.example.net/ferments/archive/profile", "https://retiredlaboratoryfermentationar ... ed/profile"],
                                               ["Project", "https://legacy.example.net/calibration/archive/account", "https://retiredlaboratoryfermentationar ... ed/account"]]))
+    # The censor's words before a fragment or a query the cut keeps.
+    censored_fragment = made.call(field_set.call([["Projects", "https://photo.example.org/galleries/removed/weekly-exhibits/removed#profile", "https://photo.example.org/galleries/cas ... no#profile"],
+                                                  ["Projects", "https://photo.example.org/galleries/removed/previous-exhibits/removed#account", "https://photo.example.org/galleries/cas ... no#account"]]))
+    censored_query = made.call(field_set.call([["Website", "https://photo.example.org/galleries/archive/fermentation-notebooks/archive?profile", "https://photo.example.org/galleries/ret ... ed?profile"],
+                                               ["Project", "https://photo.example.org/galleries/archive/laboratory-logs/archive?account", "https://photo.example.org/galleries/ret ... ed?account"]]))
     board_href = deep_fields.call("example.com/community/fermentation", %w[portfolio archive]).then do |field|
       ->(day) { field.call(day).sub(">portfolio<", ">profile<").sub(">archive<", ">account<") }
     end
@@ -413,11 +418,11 @@ RSpec.describe Nokodown::PostAttribution do
      [on_port, "wren", board.sub("example.com", "example.com:8443")], [default_port, "wren", board],
      [stripped_deep, "wren", "https://example.com/community/fermentation/topic/starter.html"], [censored_folder, "wren", board],
      [censored_slash, "wren", board], [other_host, "wren", board.sub("example.com", "forum.example.com")], [censored_edges, "wren"],
-     [board_href, "wren", board], [board_href, "profile", board], [censored_host, "wren", board]].each do |extra, first, url|
+     [board_href, "wren", board], [board_href, "profile", board], [censored_host, "wren", board], [censored_fragment, "wren"], [censored_query, "wren"]].each do |extra, first, url|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word, censored_tilde,
               board_contacts, censored_whole, blanked, stripped_words, office, censored_page, stripped_deep, numbered, censored_spaces, on_port,
-              default_port, censored_folder, censored_slash, other_host, censored_edges, board_href, censored_host].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+              default_port, censored_folder, censored_slash, other_host, censored_edges, board_href, censored_host, censored_fragment, censored_query].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -1149,6 +1154,38 @@ RSpec.describe Nokodown::PostAttribution do
     markdown = Nokodown.to_markdown(html)
     markdown.should include("**Wren** · May 3, 2024\n\nThe starter doubled.")
     markdown.should include("Lab safety officer · [Report 87](/reports/87.pdf)")
+
+    # The content is chosen as base chose it, with the cards there: the
+    # second post stays beside the first post's listed card, and the
+    # opening post beside a card in sections.
+    card = lambda do |name, id, role, kind = ""|
+      "<div class='message-user#{kind}'><a class='username' href='/members/#{id}'>#{name}</a> <span>#{role} · <a href='/files/#{id}.pdf'>Report #{id}</a></span></div>"
+    end
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main><div class='reply-row'><article class='message'>" \
+           "<ul><li>#{card.call('Wren', 87, 'Safety officer for the fermentation project')}</li></ul>" \
+           "<header><a class='username' href='/members/87'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled overnight. I marked the height of the mixture before the second feeding and weighed the jar at the same hour the next morning. " \
+           "The other jar rose more slowly on the cooler side of the kitchen. I have attached the signed measurements.</p></article></div>" \
+           "<div class='reply-row'><div class='contributors'>#{card.call('Fern', 89, 'Lab technician')}</div><article class='message'>" \
+           "<header><a class='username' href='/members/89'>Fern</a> <time datetime='2024-05-04'>May 4, 2024</time></header>" \
+           "<p>A second reading confirmed the result. The starter in my jar also reached the mark by noon.</p></article></div>" \
+           "<footer><div class='contributors'>#{card.call('Morgan', 17, 'Records coordinator')}</div></footer></main></body></html>"
+    markdown = Nokodown.to_markdown(html)
+    markdown.should include("**Wren** · May 3, 2024\n\nThe starter doubled overnight.")
+    markdown.should include("**Fern** · May 4, 2024\n\nA second reading confirmed the result.")
+
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main><div class='reply-row'>" \
+           "<section aria-label='Contributors'><section>#{card.call('Wren', 87, 'Lab safety officer', ' reviewer').sub('message-user', 'user-info')}</section></section>" \
+           "<article class='message'><header><a class='username' href='/members/87'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled. I weighed the jar before and after the second feeding.</p></article>" \
+           "<article class='message'><header><span class='username'>Advertisement</span> <time datetime='2024-05-04'>May 4, 2024</time></header><p>Sponsored content.</p></article></div>" \
+           "<div class='reply-row'><article class='message'><header><a class='username' href='/u/Fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header><p>Leave room in the jar.</p></article>" \
+           "<section aria-label='Contributors'>#{[['Daisy', 187, 'Alternate recorder and steward of the signed instrumentation calibration notes for this laboratory'],
+                                                 ['Clover', 188, 'Senior international instrumentation and engineering representative, fermentation division'],
+                                                 ['Iris', 189, 'Custodian of the laboratory sample and certifications for the regional examination board']].map { |person| "<section>#{card.call(*person).sub('message-user', 'user-info')}</section>" }.join}</section></div></main></body></html>"
+    markdown = Nokodown.to_markdown(html)
+    markdown.should include("**Wren** · May 3, 2024\n\nThe starter doubled.")
+    markdown.should include("Lab safety officer · [Report 87](/files/87.pdf)")
   end
 
   # A card whose role names the poster is still another member's.
@@ -1518,6 +1555,10 @@ RSpec.describe Nokodown::PostAttribution do
       ["<div class='user-info'>Co-author <span class='username'>profile/Wren.Baker</span><dl><dd class='profile-custom-field profile-coauthor'>" \
        "<a class='postlink' href='/staff/profile/Wren.Baker'>profile/Wren.Baker</a></dd></dl></div>",
        "<a class='username' href='/members/72'>profile/Wren.Baker</a>"],
+      # A theme's class that only starts as phpBB's.
+      ["<div class='user-info'>Co-author <span class='username'>profile/Wren.Baker</span><dl><dd class='profile-custom-field profile-coauthor'>" \
+       "<a class='postlink-profile' href='https://directory.example.net/staff/profile/Wren.Baker'>profile/Wren.Baker</a></dd></dl></div>",
+       "<a class='username' href='/members/72'>profile/Wren.Baker</a>"],
       # A theme's panel known by the id "postprofile" (prosilver's is "profile<post>").
       ["<dl id='postprofile' aria-label='Co-author' itemprop='author'><dt>Co-author <span class='username'>Wren.Baker</span></dt><dd class='coauthor-directory'>" \
        "<a class='postlink-local' href='https://directory.example.net/staff/profile/Wren.Baker'>Wren.Baker</a></dd></dl>",
@@ -1540,6 +1581,15 @@ RSpec.describe Nokodown::PostAttribution do
       markdown.scan(/\*\*#{Regexp.escape(name)}\*\*/).size.should eq(2), panel
       markdown.should include("**#{name}** · May 3, 2024\n\n#{question}")
     end
+
+    # A relative postlink is a theme's without the page's URL as well.
+    markdown = thread([
+      "<article class='message'><div class='user-info'>Co-author <span class='username'>profile/Wren.Baker</span><dl><dd class='profile-custom-field profile-coauthor'>" \
+      "<a class='postlink' href='/staff/profile/Wren.Baker'>profile/Wren.Baker</a></dd></dl></div>" \
+      "<header><a class='username' href='/members/72'>profile/Wren.Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
+      post("basil", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+    ], url: nil)
+    markdown.scan(%r{\*\*profile/Wren\.Baker\*\*}).size.should eq(2)
   end
 
   # A panel in a link renders as the link to the member's profile.

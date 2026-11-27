@@ -150,6 +150,11 @@ module Nokodown
     # in a folder above it (a route's ".../topic/starter.html"), is a page
     # of the board, however deep the board sits.
     def mark_board_links
+      # phpBB writes its links' addresses in full; a relative one is a
+      # theme's ("/staff/profile/Wren.Baker"), with or without the page's URL.
+      @body.css("a.postlink[href]").each do |link|
+        link[MemberPanel::FOREIGN] = "" unless link.key?(MemberPanel::MADE) || link["href"].strip.match?(MemberPanel::SCHEME)
+      end
       folder = board_folder
       return unless folder
 
@@ -188,13 +193,9 @@ module Nokodown
       # page's folder ("team/profile/wren" at ".../people/") but in
       # prosilver's own panel.
       @body.css("a.postlink[href]").each do |link|
-        next if link.key?(MemberPanel::MADE)
+        next if link.key?(MemberPanel::MADE) || link.key?(MemberPanel::FOREIGN)
 
         rest = link["href"].strip.sub(%r{\Ahttps://([^/]*?):443(?=/|\z)}i, 'https://\1').sub(%r{\Ahttp://([^/]*?):80(?=/|\z)}i, 'http://\1')
-        # phpBB writes its links' addresses in full; a relative one is a
-        # theme's ("/staff/profile/Wren.Baker").
-        next link[MemberPanel::FOREIGN] = "" unless rest.match?(MemberPanel::SCHEME)
-
         spelled = rest.sub(MemberPanel::SCHEME, "").sub(%r{\A[^/]*}) { |authority| authority.downcase }
         link[MemberPanel::FOREIGN] = "" if spelled[%r{\A[^/]*}] != host || (spelled != "#{page}#{Dom.text(link)}" && !own_panel?(link))
       end

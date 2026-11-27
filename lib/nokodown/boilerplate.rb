@@ -37,6 +37,26 @@ module Nokodown
     # with new elements.
     attr_reader :stats
 
+    # A member panel base keeps among a run of cards, which this pass marks
+    # for its line after the content is chosen, as base chose it.
+    CARD = "data-nokodown-card"
+
+    # Replaces the marked panels with their lines, but one that is, or
+    # holds, a chosen node, or lies outside them all: base keeps it.
+    def reduce_cards(nodes)
+      return if @cards.nil? || @cards.empty?
+
+      chosen = nodes.map { |node| Dom.key(node) }.to_set
+      @cards.each do |card|
+        if chosen.include?(Dom.key(card)) || card.ancestors.none? { |ancestor| chosen.include?(Dom.key(ancestor)) }
+          card.remove_attribute(CARD)
+        else
+          MemberPanel.reduce(card)
+        end
+      end
+      Dom.assign_keys(@body)
+    end
+
     def initialize(body)
       @body = body
     end
@@ -64,6 +84,10 @@ module Nokodown
       @card_bases = @card_classes.map { |classes| base_classes(classes) }
       removals = []
       walk(@body, removals)
+      # Base keeps these as cards; they leave their lines once the content
+      # is chosen as base chose it, from the page with them.
+      cards, removals = removals.partition { |_, kind| kind == :card }
+      @cards = cards.map(&:first).each { |node| node[CARD] = "" }
       removals.delete(content_guess(removals)) if almost_empty_without?(removals)
       if removals.none? { |_, kind| kind == :panel }
         @stats.remove(removals.map(&:first))
@@ -93,7 +117,10 @@ module Nokodown
       while child
         unless Dom::CODE.include?(child.name)
           kind = removal(child)
-          kind ? removals << [child, kind] : walk(child, removals)
+          removals << [child, kind] if kind
+          # A card stays until the content is chosen: what base takes out
+          # of it goes now, as on base.
+          walk(child, removals) if kind.nil? || kind == :card
         end
         child = child.next_element
       end
@@ -122,7 +149,9 @@ module Nokodown
       return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
-      MemberPanel.panel?(node) ? :panel : :guess
+      return :guess unless MemberPanel.panel?(node)
+
+      !@card_bases.empty? && !advertising?(node) && !chrome_label?(node) && card?(node) ? :card : :panel
     end
 
     # A link or span in the middle of running text is part of that text,
@@ -200,6 +229,9 @@ module Nokodown
       return false if ancestors.any? { |ancestor| ancestor.name == "li" && ancestor.at_css("[#{PostAttribution::POST}], [#{PostAttribution::OWNER}]").nil? }
 
       owner = ancestors.find { |ancestor| ancestor.key?(PostAttribution::OWNER) }
+      # Outside every post (a roster beside the thread), a card base keeps.
+      return false unless owner
+
       body = owner&.at_css("[#{PostAttribution::POST}]")
       body.nil? || Dom.key(node).to_i < Dom.key(body).to_i
     end

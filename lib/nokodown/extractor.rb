@@ -98,12 +98,14 @@ module Nokodown
       attribution = PostAttribution.new(body).call if ContentLocator::DISCUSSIONS.include?(page_type)
       # ContentLocator reuses the counts Boilerplate kept, unless the page
       # changed after it.
-      stats = Boilerplate.new(body).call.stats
+      boilerplate = Boilerplate.new(body).call
+      stats = boilerplate.stats
       if product_page
         ProductReviews.new(body).call
         stats = nil
       end
       selection = ContentLocator.new(body, page_type: page_type, stats: stats).call
+      boilerplate.reduce_cards(selection.nodes)
       attribution&.write(selection.nodes)
       if selection.mode == :article
         lead = @title ? title_lead(selection.nodes) : []
