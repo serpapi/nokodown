@@ -255,8 +255,9 @@ RSpec.describe Nokodown::PostAttribution do
       "<dd class='profile-contact'><strong>Contact:</strong><a href='#' class='dropdown-trigger' title='Contact'><span class='sr-only'>Contact</span></a>" \
         "<a href='./ucp.php?i=pm&amp;mode=compose&amp;p=#{day}'><span class='contact-icon pm-icon'>Send private message</span></a></dd>"
     end
-    ["", contact].each do |extra|
-      posts = [["wren", 3, "Starter", question], ["basil", 5, "Re: Starter", answer]].map do |name, day, subject, body|
+    # A member may be named 404 and have 404 posts.
+    [["", "wren"], [contact, "wren"], ["", "41"]].each do |extra, first|
+      posts = [[first, 3, "Starter", question], ["basil", 5, "Re: Starter", answer]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
           "<dd class='profile-posts'><strong>Posts:</strong> <a href='./search.php?author_id=#{day}&amp;sr=posts'>41</a></dd>" \
@@ -267,9 +268,9 @@ RSpec.describe Nokodown::PostAttribution do
       end
       markdown = thread(posts, head: '<meta name="generator" content="phpBB">')
 
-      markdown.should include("**wren** · May 3, 2024\n\n#{question}")
+      markdown.should include("**#{first}** · May 3, 2024\n\n#{question}")
       markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
-      markdown.scan(/\*\*(?:wren|basil)\*\*/).size.should == 2
+      markdown.scan(/\*\*(?:#{first}|basil)\*\*/).size.should == 2
     end
   end
 
@@ -540,6 +541,59 @@ RSpec.describe Nokodown::PostAttribution do
     end
   end
 
+  # A member panel that names someone else (a source's supplier) is not
+  # the poster's: its line counts as kept text, as the panel did.
+  it "keeps a post's files beside a member panel that names another member" do
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<div class='sources'><div class='user-info'><a class='username' href='/members/48'>Basil Cunningham</a></div><p>Attached records</p>" \
+           "<a href='/schedule.pdf'>Original feeding schedule</a> <a href='/temperature.pdf'>Daily temperature chart</a></div>" \
+           "<p>The starter doubled.</p><div class='files'><p>Attachment</p><a href='/report.pdf'>Laboratory mixing log</a></div></article>" \
+           "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+           "<p>Leave room in the jar before mixing again.</p></article></main></body></html>"
+
+    markdown = Nokodown.to_markdown(html)
+    markdown.should include("**Basil Cunningham**")
+    markdown.should include("[Laboratory mixing log](/report.pdf)")
+    markdown.should include("[Daily temperature chart](/temperature.pdf)")
+  end
+
+  # The panel's line makes the div around it and its links a block, which
+  # main kept as a paragraph: it counts as kept text, so the pass that
+  # keeps it stands.
+  it "keeps the links beside the poster's member panel lower in the post" do
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled.</p><div class='files'><p>Attachment</p><a href='/report.pdf'>Laboratory mixing log</a></div>" \
+           "<div class='sources'><div class='user-info'><a class='username' href='/u/wren'>Wren</a></div>" \
+           "<a href='/first.pdf'>First trial data</a> <a href='/water.pdf'>Water measurements</a> <a href='/oven.pdf'>Oven temperature</a></div></article>" \
+           "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+           "<p>Leave room in the jar.</p></article></main></body></html>"
+
+    Nokodown.to_markdown(html).should include("[Oven temperature](/oven.pdf)")
+  end
+
+  # Cards after the post's first paragraph are its content, the poster's
+  # own among them.
+  it "keeps the member cards below a post's first paragraph" do
+    %w[Aster Wren].each do |first|
+      cards = [[first, "Lab safety officer", "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
+               ["Lark", "Sample custodian", "Sample manifest"]].each_with_index.map do |(name, role, report), index|
+        "<div class='user-info'><a class='username' href='/members/#{87 + index}'>#{name}</a> " \
+          "<span>#{role} · <a href='/reports/#{87 + index}.pdf'>#{report}</a></span></div>"
+      end
+      html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+             "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+             "<p>The starter doubled in volume overnight.</p><h3>Contributors</h3>#{cards.join}</article>" \
+             "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+             "<p>Leave some room in the jar for the next feeding.</p></article></main></body></html>"
+
+      markdown = Nokodown.to_markdown(html)
+      markdown.should include("Lab safety officer · [Safety review](/reports/87.pdf)")
+      markdown.should include("Sample custodian · [Sample manifest](/reports/89.pdf)")
+    end
+  end
+
   # A quoted panel's box, kept for its line, is no reason to settle for a
   # pass that took a post's files.
   it "keeps a post's files beside a quoted member panel" do
@@ -590,7 +644,13 @@ RSpec.describe Nokodown::PostAttribution do
        "<span class='username' data-user-id='90'>Wren</span>"],
       ["<div class='user-info' id='uploader'><span class='username'>Wren</span></div>" \
        "<div class='postbody'><h3 aria-describedby='uploader'><a href='/report.pdf'>Uploaded by the member at left</a></h3></div>",
-       "<a class='username' href='/members/wren'>Wren</a>"]
+       "<a class='username' href='/members/wren'>Wren</a>"],
+      # The profile link says so; the name's own id beats a referrer's.
+      ["<div class='user-info'>Contributed by <span class='username'>Wren</span><a rel='author' href='/members/92'>View profile</a></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Contributed by <span class='username' data-user-id='92'>Wren</span> · " \
+       "Referred by <a href='/members/72' data-user-id='72'>@Wren</a></div>",
+       "<span class='username' data-user-id='72'>Wren</span>"]
     ].each do |panel, header|
       markdown = thread([
         "<article class='message'>#{panel}<header>#{header} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",

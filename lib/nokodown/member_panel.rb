@@ -19,6 +19,7 @@ module Nokodown
     MEMBER_DATE_CLASS = /join|regist|last-?(?:seen|active|visit)|local-?time/.freeze
     BY = /(?:by|von|par|por)\s+/i.freeze
     LETTER = /\p{L}/.freeze
+    PROFILE = /\bprofile\b/i.freeze
     MAX_NAME = 60
     MAX_DATE = 50
     # A post's title and by-line come first, within this many characters.
@@ -68,10 +69,11 @@ module Nokodown
       return if links.empty?
 
       link = link_around(source, panel)
-      named = links.select { |candidate| Dom.text(candidate).casecmp?(name) }.map { |candidate| candidate["href"] }
+      # A count ("404" posts, by a member named 404) names no one.
+      named = links.select { |candidate| Dom.text(candidate).casecmp?(name) && name.match?(LETTER) }.map { |candidate| candidate["href"] }
       return false if link.nil? && !named.empty?
 
-      hrefs = link ? [link["href"]] : links.select { |candidate| avatar_link?(candidate) }.map { |candidate| candidate["href"] }
+      hrefs = link ? [link["href"]] : links.select { |candidate| avatar_link?(candidate) || profile_link?(candidate) }.map { |candidate| candidate["href"] }
       hrefs = (hrefs + named).uniq
       return if hrefs.empty?
 
@@ -80,6 +82,11 @@ module Nokodown
 
     def avatar_link?(link)
       Dom.text(link).empty? && !link["href"].to_s.strip.match?(/\A(?:#|javascript:)/i)
+    end
+
+    # A link that says it is the profile: rel="author", or "View profile".
+    def profile_link?(link)
+      link["rel"].to_s.split.include?("author") || Dom.text(link).match?(PROFILE)
     end
 
     def linked?(panel)

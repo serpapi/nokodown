@@ -29,6 +29,7 @@ module Nokodown
     PANEL_LINE = "#{POST_PANEL_LINES}[1]"
     # The lines that stand for a post's header line: numbered for a post.
     NUMBERED_LINES = "descendant::*[@#{PostAttribution::REPEAT} != '']"
+    IN_POST = "ancestor-or-self::*[@#{PostAttribution::OWNER}][1]"
     OTHER_BREAKER = "descendant::*[#{Dom::PARAGRAPH_BREAKERS.map { |name| "self::#{name}" }.join(' or ')}]" \
                     "[not(@#{PostAttribution::REPEAT})][1]"
     # XPath finds a list of tags faster than CSS.
@@ -218,8 +219,9 @@ module Nokodown
           kept = (!paragraph || numbered) && kept_without_panel_lines?(node, content_length, paragraph_keys, memo)
           if paragraph || kept
             # Spared for a line the check would remove it without counts as
-            # removed; a post's line in a list the check keeps, as kept.
-            spared << node unless kept && numbered
+            # removed; a post's line in a list the check keeps, as kept, as
+            # does a paragraph in the post that its line made a block.
+            spared << node unless numbered && (kept || (paragraph && !node.at_xpath(IN_POST).nil?))
             next
           end
 

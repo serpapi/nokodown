@@ -181,10 +181,17 @@ module Nokodown
 
     # A run of member panels beside a thread's posts (phpBB's postprofile)
     # repeats like cards, but PostAttribution has read whose post each is.
-    # A card inside a post's body is the post's content, as on base.
+    # A card in a post's body, or after the body starts, is the post's
+    # content, as on base.
     def post_panel?(node)
-      !node[PostAttribution::PANEL].to_s.empty? && MemberPanel.panel?(node) &&
-        node.ancestors.none? { |ancestor| ancestor.element? && ancestor.key?(PostAttribution::POST) }
+      return false if node[PostAttribution::PANEL].to_s.empty? || !MemberPanel.panel?(node)
+
+      ancestors = node.ancestors.select(&:element?)
+      return false if ancestors.any? { |ancestor| ancestor.key?(PostAttribution::POST) }
+
+      owner = ancestors.find { |ancestor| ancestor.key?(PostAttribution::OWNER) }
+      body = owner&.at_css("[#{PostAttribution::POST}]")
+      body.nil? || Dom.key(node).to_i < Dom.key(body).to_i
     end
 
     # Fine print about the site is furniture, but a note on the content right

@@ -548,11 +548,13 @@ module Nokodown
       posts = posts.reject { |post| in_panel?(post, panel_keys) }
       numbers = {}
       accounts = {}
+      names = {}
       posts.each_with_index do |post, index|
         post.placement.body[POST] = [index, href(post.author)].compact.join(" ")
         post.node[OWNER] = ""
         numbers[Dom.key(post.node)] = index.to_s
         accounts[index.to_s] = account(post.author)
+        names[index.to_s] = post.placement.body[AUTHOR]
       end
       rows = rows(posts, numbers)
       kinds = posts.flat_map { |post| post_kinds(post.node) }.to_set
@@ -564,9 +566,17 @@ module Nokodown
       described = described_ids
       panels.each do |panel|
         number = panel_number(panel, numbers, rows, kinds, owners, taken, column_keys, columns, holds)
-        number = nil if number && (other_account?(panel, accounts[number.chomp(MORE)]) || described?(panel, described))
+        post = number&.chomp(MORE)
+        number = nil if number && (other_name?(panel, names[post]) || other_account?(panel, accounts[post]) || described?(panel, described))
         panel[PANEL] = number || ""
       end
+    end
+
+    # A panel that does not say the poster's name names someone else (a
+    # source's supplier): its line can never repeat the post's, so it is
+    # not one the post's line replaces.
+    def other_name?(panel, name)
+      name.nil? || !Dom.text(panel).downcase.include?(name.downcase)
     end
 
     # The account id a forum gives a name (XenForo's data-user-id): two
@@ -579,9 +589,33 @@ module Nokodown
     def other_account?(panel, account)
       return false unless account
 
+      # The name's own id where it has one: a "Referred by" link in the
+      # panel has another member's.
+      _, source = MemberPanel.named(panel)
+      named = source && name_account(source, panel)
+      return named[ACCOUNT] != account if named
+
       ids = panel.css("[#{ACCOUNT}]").map { |node| node[ACCOUNT] }
       ids << panel[ACCOUNT] if panel.key?(ACCOUNT)
       !ids.empty? && !ids.include?(account)
+    end
+
+    # The element below the panel that gives the name's id: the name's,
+    # one in it, or one around it.
+    def name_account(source, panel)
+      return source if source.key?(ACCOUNT)
+
+      inner = source.at_css("[#{ACCOUNT}]")
+      return inner if inner
+
+      key = Dom.key(panel)
+      node = source.parent
+      while node&.element? && Dom.key(node) != key
+        return node if node.key?(ACCOUNT)
+
+        node = node.parent
+      end
+      nil
     end
 
     # Ids an element names as what describes or labels it: a panel so
