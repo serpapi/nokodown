@@ -36,6 +36,9 @@ module Nokodown
     # Set by Preprocessor on a link phpBB made of an address, which its
     # comments bracket.
     MADE = "data-nokodown-made"
+    # Set by Preprocessor on a board's own link to a page in the folder of
+    # the page read, the board's root.
+    BOARD = "data-nokodown-board"
     # phpBB shows a long address as its first 39 characters, " ... " and
     # its last 10, where it is longer than 55.
     PHPBB_CUT = 39
@@ -105,10 +108,10 @@ module Nokodown
       end.map { |candidate| candidate["href"] }
       return false if link.nil? && !named.empty?
 
-      # A menu's opener ("#", titled "Contact profile", its label read only
-      # by screen readers) goes nowhere; a "#" link that says it is the
-      # profile still names someone.
-      hrefs = link ? [link["href"]] : links.select { |candidate| !(nowhere?(candidate) && Dom.text(candidate).empty?) && (avatar_link?(candidate) || profile_link?(candidate)) }.map { |candidate| candidate["href"] }
+      # prosilver's contact menu opener ("#", titled "Contact profile")
+      # goes nowhere; another "#" link that says it is the profile (a
+      # member card's "#member-92") still names someone.
+      hrefs = link ? [link["href"]] : links.select { |candidate| !opener?(candidate) && (avatar_link?(candidate) || profile_link?(candidate)) }.map { |candidate| candidate["href"] }
       hrefs = (hrefs + named).uniq
       return identity(panel.css("a[href]")) if hrefs.empty?
 
@@ -131,6 +134,10 @@ module Nokodown
 
     def nowhere?(link)
       link["href"].to_s.strip.match?(/\A(?:#|javascript:)/i)
+    end
+
+    def opener?(link)
+      nowhere?(link) && link["class"].to_s.split.include?("dropdown-trigger")
     end
 
     def contact?(link, panel)
@@ -179,7 +186,8 @@ module Nokodown
     # censors in a shortened address.
     def shows_address?(link)
       href = link["href"].to_s.strip
-      return true if link.key?(MADE) && (field_row?(link, href, Dom.text(link)) || made_row?(link))
+      text = Dom.text(link)
+      return true if link.key?(MADE) && made_text?(text, href) && (field_row?(link, href, text) || made_row?(link))
 
       field_value?(link, href) || address_link?(link) || (href.match?(MAILTO) && shown?(Dom.text(link), href))
     end
@@ -200,6 +208,14 @@ module Nokodown
     # between the same comments sits in its own <small> or <div>.
     def made_row?(link)
       [link.parent, link.parent&.parent].any? { |node| node&.element? && node.name == "dd" }
+    end
+
+    # What phpBB shows of an address it made, censored or not: one word,
+    # the address's dots, colons, slashes or "@", or the board path the
+    # censor turned into words ("profile page"); not a theme's "View forum
+    # profile" between the same comments.
+    def made_text?(text, href)
+      !text.match?(/\s/) || text.match?(%r{[.:/@]}) || href.end_with?("/#{text}")
     end
 
     # Without phpBB's comments, a field's link shows its address as phpBB
@@ -228,7 +244,7 @@ module Nokodown
     # the plain copy); a co-author's ".../members/92/profile" is not.
     def board_word?(link, href, text)
       folders = href.sub(SCHEME, "").delete_suffix("/#{text}").split("/", -1).drop(1)
-      return false if folders.size > 1
+      return false if folders.size > 1 && !link.key?(BOARD)
 
       link.ancestors.none? { |node| node.element? && node["class"].to_s.split.include?(FIELD) } ||
         link.ancestors.any? { |node| node.element? && node["class"].to_s.split.include?(FIELD) && node["class"].to_s.split.any? { |name| name.match?(/\Aprofile-[a-z_]+\z/) } }
@@ -268,10 +284,11 @@ module Nokodown
       # the profile.
       local = classes.include?("postlink-local") && href.match?(SCHEME) && href.end_with?("/#{text}")
       return false unless (local && (text.match?(ADDRESS_TEXT) || (!text.match?(PROFILE) && field_row?(link, href, text)))) || text.match?(ADDRESS_TEXT)
-      # Outside a field row, another address phpBB shows whole ("www."
-      # without its "http://"), or cut: not the end of a directory's
-      # ".../@Wren.Baker".
-      return false unless local || text.include?(" ... ") || href == text || href == "http://#{text}" || href.sub(MAILTO, "").casecmp?(text) || field_row?(link, href, text)
+      # Another address phpBB shows whole ("www." without its "http://"),
+      # or cut, or a field row's path ("gallery/profile/wren"): not the end
+      # of a directory's ".../@Wren.Baker".
+      return false unless local || text.include?(" ... ") || href == text || href == "http://#{text}" || href.sub(MAILTO, "").casecmp?(text) ||
+                          (text.include?("/") && field_row?(link, href, text))
 
       shown?(text, href)
     end
@@ -403,8 +420,11 @@ module Nokodown
       # "profile-post-date" is not one.
       classes = node["class"].to_s.split
       # phpBB's contact menu names a field's icon by its ident
-      # ("office_time-icon") and labels it with the field's name.
-      return false if node.name != "time" && !node.key?("datetime") && classes.include?("contact-icon")
+      # ("office_time-icon") and labels it with the field's name; a
+      # theme's class or itemprop beside it ("quoted-date") still dates.
+      if node.name != "time" && !node.key?("datetime") && classes.include?("contact-icon")
+        return false if classes.all? { |name| name == "contact-icon" || name.match?(/\A[a-z_]+-icon\z/) } && !"#{node['id']} #{node['itemprop']}".match?(DATE_CLASS)
+      end
       if node.name != "time" && !node.key?("datetime") && classes.include?(FIELD)
         names = classes.reject { |name| name.match?(/\Aprofile-[a-z_]*\z/) } << node["id"].to_s << node["itemprop"].to_s
         return false unless names.any? { |name| name.downcase.match?(DATE_CLASS) }

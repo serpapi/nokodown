@@ -103,19 +103,29 @@ module Nokodown
 
     # full: the whole page, or a selection of it, is converted, so only what
     # a reader cannot see goes; forms, buttons, labels and open dialogs stay.
-    def initialize(body, full: false)
+    # url: the page's, whose folder is a phpBB board's root.
+    def initialize(body, full: false, url: nil)
       @body = body
       @full = full
+      @url = url
     end
 
     def call
       place_streamed_segments
-      closers = {}
+      # Pending closing comments, compared with == (a node's hash differs
+      # between lookups in some nokolexbor versions).
+      closers = []
       @body.xpath(".//comment()").to_a.each do |comment|
-        closer = mark_made_link(comment) unless closers.key?(comment)
-        closers[closer] = true if closer
+        index = closers.index { |closer| closer == comment }
+        if index
+          closers.delete_at(index)
+        else
+          closer = mark_made_link(comment)
+          closers << closer if closer
+        end
         comment.remove
       end
+      mark_board_links
       unwrap_noscript
       @body.css("img").to_a.each { |img| restore_lazy_image(img) }
       restore_picture_sources
@@ -134,6 +144,29 @@ module Nokodown
     end
 
     private
+
+    # A board's own link (postlink-local) to a page right in the folder of
+    # the page read ("profile" at ".../community/fermentation/profile") is
+    # a page of the board, however deep the board sits.
+    def mark_board_links
+      folder = board_folder
+      return unless folder
+
+      @body.css("a.postlink-local[href]").each do |link|
+        rest = link["href"].strip.sub(MemberPanel::SCHEME, "")
+        link[MemberPanel::BOARD] = "" if rest.casecmp?("#{folder}#{Dom.text(link)}")
+      end
+    end
+
+    def board_folder
+      uri = URI.parse(@url.to_s.strip)
+      return unless uri.host && uri.path
+
+      folder = "#{uri.host}#{uri.path.sub(%r{[^/]*\z}, '')}"
+      folder.end_with?("/") ? folder : "#{folder}/"
+    rescue URI::Error, ArgumentError
+      nil
+    end
 
     # The opening comment is read before it goes; the closing one it
     # returns opens nothing ("<!-- m -->…<!-- m --><a>View profile</a><!-- m -->").

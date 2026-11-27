@@ -246,13 +246,13 @@ module Nokodown
     end
 
     def chain?(node)
-      ROW_DEPTH.times do
+      # However deep: a badge nests its label in spans of its own.
+      loop do
         children = node.element_children
         return children.empty? if children.size != 1 || MemberPanel.panel?(children.first)
 
         node = children.first
       end
-      node.element_children.empty?
     end
 
     # A sibling and what it holds, three deep (a wrapper of one element

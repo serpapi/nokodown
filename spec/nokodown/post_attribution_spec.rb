@@ -1,12 +1,12 @@
 # frozen_string_literal: true
 
 RSpec.describe Nokodown::PostAttribution do
-  def thread(posts, head: '<meta name="generator" content="XenForo">')
+  def thread(posts, head: '<meta name="generator" content="XenForo">', url: "https://example.com/threads/starter")
     Nokodown.to_markdown(
       "<html><head>#{head}<title>Sourdough starter smells like acetone</title></head><body>" \
       "<nav><a href='/'>Forums</a> <a href='/baking'>Baking</a></nav><main><h1>Sourdough starter smells like acetone</h1>" \
       "<div class='posts'>#{posts.join}</div></main></body></html>",
-      url: "https://example.com/threads/starter"
+      url: url
     )
   end
 
@@ -353,6 +353,9 @@ RSpec.describe Nokodown::PostAttribution do
     stripped_words = lambda do |day|
       local_words.call(day).gsub(/<!-- m -->/, "").gsub("class='profile-custom-field'", "class='profile-custom-field profile-portfolio'")
     end
+    # Or the board two folders down, where the page read is.
+    board = "https://example.com/community/fermentation/viewtopic.php?t=25"
+    stripped_deep = ->(day) { stripped_words.call(day).gsub("https://example.com/", "https://example.com/community/fermentation/") }
     # A contact field's ident and name may say "time" and hold digits.
     office = lambda do |_day|
       "<dd class='profile-contact'><strong>Contact:</strong><div class='dropdown'><div class='dropdown-contents contact-icons'>" \
@@ -369,10 +372,10 @@ RSpec.describe Nokodown::PostAttribution do
      ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"], [local_words, "wren"], [local_words, "profile"],
      [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"], [censored_href, "wren"], [field1, "wren"], [field1, "profile"], [censored_cut, "wren"], [censored_word, "wren"],
      [board_contacts, "wren"], [censored_whole, "wren"], [blanked, "wren"], [trigger, "profile"], [stripped_words, "wren"], [office, "wren"],
-     [censored_page, "wren"]].each do |extra, first|
+     [censored_page, "wren"], [stripped_deep, "wren", board]].each do |extra, first, url|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word,
-              board_contacts, censored_whole, blanked, stripped_words, office, censored_page].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+              board_contacts, censored_whole, blanked, stripped_words, office, censored_page, stripped_deep].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -382,7 +385,7 @@ RSpec.describe Nokodown::PostAttribution do
           "<p class='author'>by <strong><span class='username'>#{name}</span></strong> " \
           "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></p><div class='content'>#{body}</div></div></div></div>"
       end
-      markdown = thread(posts, head: '<meta name="generator" content="phpBB">')
+      markdown = thread(posts, head: '<meta name="generator" content="phpBB">', url: url || "https://example.com/threads/starter")
 
       # The post's line drops the "@" a handle is shown with.
       shown = first.sub(/\A@\s*/, "")
@@ -1054,7 +1057,7 @@ RSpec.describe Nokodown::PostAttribution do
      ["Wren", "Lab safety officer", "", "lead-badge"], ["Wren", "Lab safety officer", "", "lead-caption"],
      ["Wren", "Lab safety officer", "", "shell"], ["Wren", "Lab safety officer", "", "badged-levels"],
      ["Wren", "Lab safety officer", "", "linked-levels"], ["Wren", "Lab safety officer", "", "span-levels"],
-     ["Wren", "Lab safety officer", "", "caption-levels"]].each do |first, role, extra, tag|
+     ["Wren", "Lab safety officer", "", "caption-levels"], ["Wren", "Lab safety officer", "", "badge-levels"]].each do |first, role, extra, tag|
       cards = [[first, role, "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
                ["Lark", "Sample custodian", "Sample manifest"], ["Juniper", "Records custodian", "Batch journal"]].each_with_index.map do |(name, title, report), index|
         name_tag = index.zero? && %w[div section].include?(tag) ? tag : "div"
@@ -1079,6 +1082,9 @@ RSpec.describe Nokodown::PostAttribution do
         next "<li>#{"<section><small><a href='/team'>Staff</a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "linked-levels" && index.zero?
         # Or a label whose link wraps its text, or a caption longer than a name.
         next "<li>#{"<section><small><a href='/team'><span>Staff</span></a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "span-levels" && index.zero?
+        # Or a badge that nests its label in spans of its own.
+        badge = "<span class='badge-visual'><span class='badge-inner'><span class='badge-label'>Staff</span></span></span>"
+        next "<li>#{"<section><small><a href='/team'>#{badge}</a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "badge-levels" && index.zero?
         next "<li>#{'<section><span>Fermentation team members listed in the laboratory directory</span>' * 4}#{card}#{'</section>' * 4}</li>" if tag == "caption-levels" && index.zero?
 
         tag == "li" ? "<li>#{card}</li>" : card
@@ -1086,13 +1092,13 @@ RSpec.describe Nokodown::PostAttribution do
       rows = [["Wren", question], ["Fern", answer], ["Moss", answer]].map do |name, body|
         "<article class='message'><header><a class='username' href='/u/#{name}'>#{name}</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{body}</p></article>"
       end
-      listed = %w[li badge deep shell badged-levels linked-levels span-levels caption-levels].include?(tag)
+      listed = %w[li badge deep shell badged-levels linked-levels span-levels caption-levels badge-levels].include?(tag)
       list = listed ? "<ul>#{cards.join}</ul>" : cards.join
       contributors = "<section class='contributors'><h3>Contributors</h3>#{list}</section>"
       markdown = thread(["<div class='reply-row'>#{contributors}#{rows[0]}</div>", *rows.drop(1).map { |row| "<div class='reply-row'>#{row}</div>" }])
 
       markdown.should include("**Wren** · May 3, 2024\n\n#{question}")
-      markdown.should include("#{'- ' if listed && !%w[linked-levels span-levels caption-levels].include?(tag)}[#{first}](https://example.com/members/87) #{role} · [Safety review](https://example.com/reports/87.pdf)")
+      markdown.should include("#{'- ' if listed && !%w[linked-levels span-levels caption-levels badge-levels].include?(tag)}[#{first}](https://example.com/members/87) #{role} · [Safety review](https://example.com/reports/87.pdf)")
     end
   end
 
@@ -1307,10 +1313,27 @@ RSpec.describe Nokodown::PostAttribution do
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-contact'>" \
        "<a class='postlink' href='https://example.com/members/92' aria-label='View forum profile'><span class='contact-icon'>◉</span></a></small></div>",
        "<a class='username' href='/members/72'>Wren</a>"],
+      # phpBB's comments in a plain <dd>: around addresses beside the
+      # theme's "View forum profile", or around that alone; and an
+      # icon-only "#member-92" that says it is the profile.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><dl><dd>" \
+       "<!-- m --><a class='postlink' href='https://lab.example/one'>https://lab.example/one</a><!-- m -->" \
+       "<!-- m --><a class='postlink' href='/members/92'>View forum profile</a><!-- m -->" \
+       "<!-- m --><a class='postlink' href='https://lab.example/two'>https://lab.example/two</a><!-- m --></dd></dl></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><dl><dd class='profile-custom-field profile-coauthor'><small><span>" \
+       "<!-- m --><a class='postlink' href='/members/92'>View forum profile</a><!-- m --></span></small></dd></dl></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-contact'>" \
+       "<a href='#member-92' class='postlink' aria-label='View forum profile'><svg aria-hidden='true' viewBox='0 0 8 8'><circle cx='4' cy='4' r='2'/></svg></a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
       # A directory link that ends with the member's name ("@Wren.Baker"),
       # or a board's own page phpBB made of it outside a field row.
       ["<div class='user-info'>Co-author <span class='username'>Wren.Baker</span><small>Member directory: " \
        "<a class='postlink' href='https://directory.example/users/92/@Wren.Baker'>Wren.Baker</a></small></div>",
+       "<a class='username' href='https://example.com/members/72'>Wren.Baker</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren.Baker</span><small class='profile-actions'>Member directory: " \
+       "<span class='profile-custom-field profile-coauthor'><a class='postlink' href='https://directory.example/users/92/@Wren.Baker'>Wren.Baker</a></span></small></div>",
        "<a class='username' href='https://example.com/members/72'>Wren.Baker</a>"],
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-actions'>Member directory: " \
        "<!-- l --><a class='postlink-local' href='https://example.com/Wren'>Wren</a><!-- l --></small></div>",
@@ -1477,7 +1500,9 @@ RSpec.describe Nokodown::PostAttribution do
      "<span class='post-date profile-custom-field'>May 2, 2024</span>",
      "<span class='profile-custom-field' id='post-date-27'>May 2, 2024</span>",
      "<span class='profile-custom-field profile-post-date'>May 2, 2024</span>",
-     "<span class='profile-custom-field profile-post_date' itemprop='datePublished'>May 2, 2024</span>"].each do |date|
+     "<span class='profile-custom-field profile-post_date' itemprop='datePublished'>May 2, 2024</span>",
+     # Or with phpBB's contact icon class, saying it is the date.
+     "<span class='contact-icon quoted-date' itemprop='datePublished'>May 2, 2024</span>"].each do |date|
       quote = "<blockquote><div id='user-info' aria-label='Original author'><span class='username'>Basil</span>#{date}</div><p>#{answer}</p></blockquote>"
       markdown = thread([
         "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
