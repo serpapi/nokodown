@@ -196,12 +196,15 @@ module Nokodown
       body.nil? || Dom.key(node).to_i < Dom.key(body).to_i
     end
 
-    # Alike as base's cards are: the same tag, and one's classes all among
-    # the other's (a featured card among plain ones).
+    # Alike as base's cards are: one's classes all among the other's (a
+    # featured card among plain ones), with the same tag, or another member
+    # card's with text (a contributor's section among divs, not phpBB's
+    # empty div beside the panel).
     def card_row?(node)
       classes = base_classes(node["class"])
       node.parent.element_children.any? do |sibling|
-        next false if Dom.key(sibling) == Dom.key(node) || sibling.name != node.name
+        next false if Dom.key(sibling) == Dom.key(node)
+        next false if sibling.name != node.name && (!MemberPanel.panel?(sibling) || Dom.text(sibling).empty?)
 
         others = base_classes(sibling["class"])
         others == classes || (!others.empty? && (others - classes).empty?) || (!classes.empty? && (classes - others).empty?)

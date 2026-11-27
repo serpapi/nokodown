@@ -50,7 +50,7 @@ module Nokodown
 
     def call
       @nodes.each do |root|
-        @mode == :article ? prune_article(root) : remove_link_clusters(root)
+        @mode == :article ? prune_article(root) : prune_page(root)
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
         release(taken(@lines), root)
@@ -153,10 +153,20 @@ module Nokodown
       # their text tells a source's links from a cluster of them.
       @lines = set_aside(root, PostAttribution::OWN_LINE) if @conditional
       remove_article_furniture(root, content_length)
+      # The panels' links were gone when main read a paragraph of links.
+      panels = set_aside(root, PostAttribution::OWN_PANEL)
       remove_related_links(root)
+      release(taken(panels), root)
       remove_stray_lines(root)
       clean_conditionally(root, content_length)
       root.css("h1, h2").each { |heading| remove(heading) if Scorer.cleaning_weight(heading).negative? }
+    end
+
+    # The panels' links were gone when main read the clusters.
+    def prune_page(root)
+      panels = set_aside(root, PostAttribution::OWN_PANEL)
+      remove_link_clusters(root)
+      release(taken(panels), root)
     end
 
     # Boxes of links to other stories placed inside the body: "READ MORE:

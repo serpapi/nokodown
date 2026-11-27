@@ -107,9 +107,15 @@ module Nokodown
     # A link that says it is the profile: rel="author", or "View profile"
     # or "View account 41" in its text or label. An address shown as the
     # text (phpBB's URL fields) says where it goes, not what it is;
-    # "Profile/Account" is a label.
+    # "Profile/Account" is a label. phpBB shows a board's own address as
+    # its path ("gallery/profile/wren"), which ends the link's address. An
+    # email link is no profile, whatever its address says.
     def profile_link?(link)
-      words = "#{Dom.text(link)} #{link['aria-label']} #{link['title']}".gsub(ADDRESS, "")
+      return false if link["href"].to_s.strip.downcase.start_with?("mailto:")
+
+      text = Dom.text(link)
+      text = "" if text.include?("/") && link["href"].to_s.downcase.end_with?(text.downcase)
+      words = "#{text} #{link['aria-label']} #{link['title']}".gsub(ADDRESS, "")
       author_rel?(link) || words.match?(PROFILE)
     end
 
