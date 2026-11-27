@@ -76,6 +76,15 @@ module Nokodown
       nodes.sum { |node| pruner.length_without_own(node) }
     end
 
+    # No more than length_without_own: each of the poster's nodes (or a
+    # held one) takes at most its text and the two spaces around it.
+    def self.length_at_least(nodes)
+      nodes.sum do |root|
+        own = root.css("[#{PostAttribution::OWN}], [#{HELD}]").sum { |node| Dom.text(node).length + 2 }
+        Dom.text(root).length - own
+      end
+    end
+
     # The root's length as it was before the poster's panels became lines
     # (and without what was held out for them): what each container is
     # weighed against, and what the fallback reads as kept.
@@ -97,10 +106,38 @@ module Nokodown
     # and each goes back where its place is still there. A comment holds
     # the place, as the page's own comments are gone. Grouped by the key of
     # what holds them.
-    def set_aside(root, value)
-      root.css("[#{PostAttribution::OWN}='#{value}']").each_with_object({}) do |node, aside|
+    def set_aside(root, *values)
+      selector = values.map { |value| "[#{PostAttribution::OWN}='#{value}']" }.join(", ")
+      root.css(selector).each_with_object({}) do |node, aside|
         hold(aside, node) if below?(node, root)
       end
+    end
+
+    # Runs a rule as main read the post, with the poster's nodes of these
+    # values held out, holding what the rule removes so each later check
+    # sees it gone. Everything goes back; what was removed is returned, or
+    # nil when none of the poster's nodes was there to hold out.
+    def removed_without_own(root, *values)
+      own = set_aside(root, *values)
+      return if own.empty?
+
+      gone = {}
+      removed = []
+      yield(lambda do |node|
+        next if Dom.in_code?(node)
+
+        removed << node
+        hold(gone, node) if below?(node, root)
+      end)
+      removed.group_by { |node| Dom.key(node) }
+    ensure
+      release(taken(gone), root) if gone
+      release(taken(own), root) if own
+    end
+
+    # Whether the node, or what holds it, was removed.
+    def among?(removed, node)
+      [node, *node.ancestors].any? { |held| held.element? && removed.fetch(Dom.key(held), []).include?(held) }
     end
 
     # What a store holds, in the order it was held (not grouped by what
@@ -153,31 +190,34 @@ module Nokodown
       # their text tells a source's links from a cluster of them.
       @lines = set_aside(root, PostAttribution::OWN_LINE) if @conditional
       remove_article_furniture(root, content_length)
-      # The panels' links were gone when main read a paragraph of links.
-      panels = set_aside(root, PostAttribution::OWN_PANEL)
       remove_related_links(root)
-      release(taken(panels), root)
       remove_stray_lines(root)
       clean_conditionally(root, content_length)
       root.css("h1, h2").each { |heading| remove(heading) if Scorer.cleaning_weight(heading).negative? }
     end
 
-    # The panels' links were gone when main read the clusters.
     def prune_page(root)
-      panels = set_aside(root, PostAttribution::OWN_PANEL)
       remove_link_clusters(root)
-      release(taken(panels), root)
     end
 
     # Boxes of links to other stories placed inside the body: "READ MORE:
     # <link>", a "More:" label over a list of headlines, a paragraph of links.
+    # The panels' links were gone when main read a paragraph of links, and
+    # there when base did: a box goes only if it is one both ways.
     def remove_related_links(root)
+      removed = removed_without_own(root, PostAttribution::OWN_PANEL) { |gone| related_links(root, gone) }
+      return related_links(root, method(:remove)) unless removed
+
+      related_links(root, ->(node) { remove(node) if among?(removed, node) })
+    end
+
+    def related_links(root, act)
       root.css("p, li, h2, h3, h4, h5, h6, strong, b").to_a.each do |node|
         text = Dom.text(node)
         if related_label?(text)
-          remove_with_link_box(node)
+          with_link_box(node).each { |box| act.call(box) }
         elsif related_box?(node, text)
-          remove(node)
+          act.call(node)
         end
       end
     end
@@ -189,13 +229,12 @@ module Nokodown
 
     # The label may sit in a wrapper of its own (Wikipedia's div.mw-heading),
     # so the box of links follows the wrapper.
-    def remove_with_link_box(label)
+    def with_link_box(label)
       text = Dom.text(label)
       holder = label
       holder = holder.parent while holder.next_element.nil? && holder.parent&.element? && Dom.text(holder.parent) == text
       following = holder.next_element
-      remove(following) if following && link_density(following) >= 0.6
-      remove(holder)
+      following && link_density(following) >= 0.6 ? [following, holder] : [holder]
     end
 
     # "READ MORE: <headline>", or a paragraph made of several headlines. A
@@ -242,8 +281,9 @@ module Nokodown
     # asides holding real prose (side notes) stay.
     def remove_article_furniture(root, content_length)
       root.css("footer").each { |node| remove(node) if Dom.text(node).length <= content_length * 0.5 }
+      # A short aside is weighed without the poster's panels, as main did.
       root.css("aside").each do |node|
-        remove(node) if Dom.text(node).length < 200 || ContainerCheck.new(node, content_length, Set.new).remove?
+        remove(node) if length_without_own(node) < 200 || ContainerCheck.new(node, content_length, Set.new).remove?
       end
       Dom.elements(root).each do |node|
         next unless node.key?("class") || node.key?("id")
@@ -256,9 +296,7 @@ module Nokodown
     # telling it without the poster's panels, as before they were read.
     def clean_conditionally(root, content_length)
       unless @conditional
-        @aside = set_aside(root, PostAttribution::OWN_PANEL)
-        remove_link_clusters(root)
-        return release(taken(@aside), root)
+        return remove_link_clusters(root)
       end
 
       @aside = set_aside(root, PostAttribution::OWN_PANEL)
@@ -344,13 +382,24 @@ module Nokodown
 
     # Navigation that survived as unlabeled markup: several links, almost no
     # other text, and no link long enough to be a headline.
+    # The poster's panels and lines were gone when main read the clusters,
+    # and there when base did: a container goes only if it is one both ways.
     def remove_link_clusters(root)
+      own = [PostAttribution::OWN_PANEL, PostAttribution::OWN_LINE]
+      removed = removed_without_own(root, *own) { |gone| link_clusters(root, gone) }
+      return link_clusters(root, method(:remove)) unless removed
+      return if removed.empty?
+
+      link_clusters(root, ->(node) { remove(node) if among?(removed, node) })
+    end
+
+    def link_clusters(root, act)
       clusters = root.css(CLUSTER_CONTAINERS).select { |node| link_cluster?(node) && !in_data_table?(node) }
       # Removal can only start at one of these, so none means nothing to remove.
       return if clusters.empty? || clusters_dominate?(root, clusters)
 
       root.css(CLUSTER_CONTAINERS).reverse_each do |node|
-        remove(node) if link_cluster?(node) && !in_data_table?(node)
+        act.call(node) if link_cluster?(node) && !in_data_table?(node)
       end
     end
 

@@ -171,7 +171,11 @@ module Nokodown
     end
 
     # Weighed without the poster's panels and lines, as before they were read.
+    # Taking a node out removes no more than its text and a space each
+    # side, so a long copy is known to be kept without taking them out.
     def almost_nothing_kept?(copies, nodes)
+      return false if Pruner.length_at_least(copies) >= MIN_ARTICLE_LENGTH
+
       kept = Pruner.length_without_own(copies)
       kept < MIN_ARTICLE_LENGTH && kept < Pruner.length_without_own(nodes) * 0.25
     end

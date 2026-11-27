@@ -199,16 +199,30 @@ module Nokodown
     # Alike as base's cards are: one's classes all among the other's (a
     # featured card among plain ones), with the same tag, or another member
     # card's with text (a contributor's section among divs, not phpBB's
-    # empty div beside the panel).
+    # empty div beside the panel). A card alone in its wrapper (a list
+    # item) is weighed against the cards alone in the wrapper's siblings.
     def card_row?(node)
-      classes = base_classes(node["class"])
-      node.parent.element_children.any? do |sibling|
-        next false if Dom.key(sibling) == Dom.key(node)
-        next false if sibling.name != node.name && (!MemberPanel.panel?(sibling) || Dom.text(sibling).empty?)
-
-        others = base_classes(sibling["class"])
-        others == classes || (!others.empty? && (others - classes).empty?) || (!classes.empty? && (classes - others).empty?)
+      holder = node
+      depth = 0
+      while depth < 2 && holder.parent&.element? && holder.parent.element_children.size == 1
+        holder = holder.parent
+        depth += 1
       end
+      holder.parent.element_children.any? do |sibling|
+        next false if Dom.key(sibling) == Dom.key(holder)
+
+        card = sibling
+        depth.times { card = card.element_children.size == 1 ? card.first_element_child : nil if card }
+        card && alike_card?(node, card)
+      end
+    end
+
+    def alike_card?(node, sibling)
+      classes = base_classes(node["class"])
+      return false if sibling.name != node.name && (!MemberPanel.panel?(sibling) || Dom.text(sibling).empty?)
+
+      others = base_classes(sibling["class"])
+      others == classes || (!others.empty? && (others - classes).empty?) || (!classes.empty? && (classes - others).empty?)
     end
 
     # Fine print about the site is furniture, but a note on the content right
