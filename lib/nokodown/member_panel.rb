@@ -58,22 +58,28 @@ module Nokodown
 
     # The profile link of the name: the link the name is read from is, or
     # is in ("Wren" and a "Pro" badge in one link), or, without one, the
-    # one link the panel holds, an avatar's. nil where the panel links
-    # nowhere; false where it is in doubt: another link says the name and
-    # goes elsewhere (a "Referred by" or "Last visitor" of the same name), or
-    # the name is read from no link and a link that says a word may be
-    # another member's. A count ("41", phpBB's posts to search) names no one.
+    # one link the panel holds that says nothing and goes to a page, an
+    # avatar's. nil where no link can be the profile ("Send private
+    # message", a post count, a menu's "#"); false where it is in doubt:
+    # another link says the name and goes elsewhere (a "Referred by" or
+    # "Last visitor" of the same name), or several could be the profile.
     def profile_href(panel, name, source)
       links = panel.css("a[href]").to_a
       return if links.empty?
 
       link = link_around(source, panel)
-      return false if link.nil? && links.any? { |candidate| Dom.text(candidate).match?(LETTER) }
-
       named = links.select { |candidate| Dom.text(candidate).casecmp?(name) }.map { |candidate| candidate["href"] }
-      hrefs = link ? [link["href"]] : links.map { |candidate| candidate["href"] }
+      return false if link.nil? && !named.empty?
+
+      hrefs = link ? [link["href"]] : links.select { |candidate| avatar_link?(candidate) }.map { |candidate| candidate["href"] }
       hrefs = (hrefs + named).uniq
+      return if hrefs.empty?
+
       hrefs.size == 1 ? hrefs.first : false
+    end
+
+    def avatar_link?(link)
+      Dom.text(link).empty? && !link["href"].to_s.strip.match?(/\A(?:#|javascript:)/i)
     end
 
     def linked?(panel)

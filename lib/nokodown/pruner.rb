@@ -27,6 +27,8 @@ module Nokodown
     POST_PANEL_LINES = "descendant::*[@#{PostAttribution::REPEAT}]" \
                        "[@#{PostAttribution::REPEAT} != '' or ancestor::*[@#{PostAttribution::OWNER}]]"
     PANEL_LINE = "#{POST_PANEL_LINES}[1]"
+    # The lines that stand for a post's header line: numbered for a post.
+    NUMBERED_LINES = "descendant::*[@#{PostAttribution::REPEAT} != '']"
     OTHER_BREAKER = "descendant::*[#{Dom::PARAGRAPH_BREAKERS.map { |name| "self::#{name}" }.join(' or ')}]" \
                     "[not(@#{PostAttribution::REPEAT})][1]"
     # XPath finds a list of tags faster than CSS.
@@ -171,34 +173,61 @@ module Nokodown
     # The share kept leaves out the lines of posts' member panels, which
     # stand where the post's header line stood before: a kept line would
     # count as kept text and settle for a pass that took the post's files.
+    # A container spared only for a line that numbers no post (a quoted
+    # panel) counts as removed, as it was before.
     def clean_conditionally(root, content_length)
       return remove_link_clusters(root) unless @conditional
 
       text_before = Dom.text(root).length - panel_lines_length(root)
       links_before = link_text_length(root)
-      remove_suspicious_containers(root, content_length)
+      spared = remove_suspicious_containers(root, content_length)
       @conditional_seen += text_before
-      @conditional_kept += Dom.text(root).length - panel_lines_length(root)
+      @conditional_kept += Dom.text(root).length - panel_lines_length(root) - spared_length(root, spared)
       @conditional_removed_links += links_before - link_text_length(root)
     end
 
     def panel_lines_length(root)
-      root.xpath(POST_PANEL_LINES).to_a.sum { |line| Dom.text(line).length }
+      # CSS finds attributes faster than XPath.
+      root.css("[#{PostAttribution::REPEAT}]").to_a.sum { |line| line[PostAttribution::REPEAT].empty? ? 0 : Dom.text(line).length }
+    end
+
+    # The outermost spared containers still on the page, less their lines.
+    def spared_length(root, spared)
+      return 0 if spared.empty?
+
+      keys = spared.map { |node| Dom.key(node) }.to_set
+      root_key = Dom.key(root)
+      spared.sum do |node|
+        above = node.ancestors.select(&:element?).map { |ancestor| Dom.key(ancestor) }
+        next 0 unless above.include?(root_key) && above.none? { |key| keys.include?(key) }
+
+        Dom.text(node).length - node.xpath(NUMBERED_LINES).to_a.sum { |line| Dom.text(line).length }
+      end
     end
 
     # Innermost containers first, so an outer one is judged on what is left.
     def remove_suspicious_containers(root, content_length)
       paragraph_keys = Dom.paragraph_keys(root)
       memo = { root: root }
+      spared = []
       ["form, fieldset", "table", "ul", "div"].each do |selector|
         root.css(selector).to_a.reverse_each do |node|
           next if paragraph_keys.include?(Dom.key(node)) || !ContainerCheck.new(node, content_length, paragraph_keys, memo).remove?
-          next if panel_paragraph?(node) || kept_without_panel_lines?(node, content_length, paragraph_keys, memo)
+          paragraph = panel_paragraph?(node)
+          numbered = !node.at_xpath("#{NUMBERED_LINES}[1]").nil?
+          kept = (!paragraph || numbered) && kept_without_panel_lines?(node, content_length, paragraph_keys, memo)
+          if paragraph || kept
+            # Spared for a line the check would remove it without counts as
+            # removed; a post's line in a list the check keeps, as kept.
+            spared << node unless kept && numbered
+            next
+          end
 
           ContainerCheck.forget(memo, node)
           remove(node)
         end
       end
+      spared
     end
 
     # The line a member panel leaves in a thread (PostAttribution) stands
@@ -216,11 +245,21 @@ module Nokodown
       lines = node.xpath(POST_PANEL_LINES).to_a
       return false if lines.empty?
 
+      check_memo = unlinked_memo(memo, lines)
       places = lines.map { |line| [line, line.parent, line.next_sibling].tap { line.unlink } }
-      # A memo of its own: the counts it holds are of the page as it is.
-      !ContainerCheck.new(node, content_length, paragraph_keys, { root: memo[:root] }).remove?
+      !ContainerCheck.new(node, content_length, paragraph_keys, check_memo).remove?
     ensure
       places&.reverse_each { |line, parent, following| following ? following.add_previous_sibling(line) : parent.add_child(line) }
+    end
+
+    # Posts' lengths count the lines, so they are counted again. Tables'
+    # verdicts hold while no line is in a table, and the tags the root
+    # lacks hold as lines hold none of them. Read before the lines go.
+    def unlinked_memo(memo, lines)
+      fresh = { root: memo[:root] }
+      return fresh if lines.any? { |line| Dom.ancestors_named(line, "table").any? }
+
+      fresh.merge(tables: (memo[:tables] ||= {}), absent: (memo[:absent] ||= {}))
     end
 
     # A forum's thread is content.

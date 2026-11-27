@@ -54,6 +54,10 @@ module Nokodown
     DATE = "data-nokodown-date"
     REPLACED = "data-nokodown-replaced"
     SUBJECT = "data-nokodown-subject"
+    # A subject's value where it is a heading quoted in the header.
+    QUOTED_SUBJECT = "quote"
+    # A member's account id on a name (XenForo).
+    ACCOUNT = "data-user-id"
     # A post's heading that repeats the thread's title, which stays in place.
     TITLE = "data-nokodown-title"
     HEADINGS = "h1, h2, h3, h4, h5, h6"
@@ -243,7 +247,7 @@ module Nokodown
       # from the panel's line (phpBB's postbody beside its postprofile).
       # One beside the line is a heading the post shows.
       def post_subject?(node, repeat)
-        return false unless node[SUBJECT] || node[TITLE]
+        return false unless node[SUBJECT] == "" || node[TITLE]
 
         key = Dom.key(node.parent)
         repeat.ancestors.none? { |ancestor| ancestor.element? && Dom.key(ancestor) == key }
@@ -478,7 +482,7 @@ module Nokodown
       shown = date_text(post.date)
       body[DATE] = shown if shown
       subjects = subjects(post, body)
-      subjects.each { |subject| subject[SUBJECT] = "" }
+      subjects.each { |subject| subject[SUBJECT] = in_quote?(subject, post.node) ? QUOTED_SUBJECT : "" }
       replaced(post, subjects).each { |node| node[REPLACED] = "" }
     end
 
@@ -490,13 +494,14 @@ module Nokodown
     def subjects(post, body)
       post.node.css(HEADINGS).reject do |heading|
         @authors.include?(Dom.key(heading)) || inside?(post.date, heading) || inside?(heading, body) ||
-          quoted?(heading) || in_quote?(heading, post.node) || repeated_title?(heading) ||
+          quoted?(heading) || repeated_title?(heading) ||
           heading.ancestors.any? { |ancestor| ancestor.element? && MemberPanel.panel?(ancestor) }
       end
     end
 
     # A quote by role or class ("role=blockquote", div.bbquote) below the
-    # post: a heading in it is quoted, not the post's subject.
+    # post: a heading in it is quoted, not the post's subject. It stays
+    # when the header goes, but the walk in finish does not step over it.
     def in_quote?(heading, post_node)
       stop = Dom.key(post_node)
       heading.ancestors.each do |ancestor|
@@ -542,10 +547,12 @@ module Nokodown
       panel_keys = panels.map { |panel| Dom.key(panel) }.to_set
       posts = posts.reject { |post| in_panel?(post, panel_keys) }
       numbers = {}
+      accounts = {}
       posts.each_with_index do |post, index|
         post.placement.body[POST] = [index, href(post.author)].compact.join(" ")
         post.node[OWNER] = ""
         numbers[Dom.key(post.node)] = index.to_s
+        accounts[index.to_s] = account(post.author)
       end
       rows = rows(posts, numbers)
       kinds = posts.flat_map { |post| post_kinds(post.node) }.to_set
@@ -554,9 +561,42 @@ module Nokodown
       column_keys = {}
       columns = {}
       holds = {}
+      described = described_ids
       panels.each do |panel|
-        panel[PANEL] = panel_number(panel, numbers, rows, kinds, owners, taken, column_keys, columns, holds) || ""
+        number = panel_number(panel, numbers, rows, kinds, owners, taken, column_keys, columns, holds)
+        number = nil if number && (other_account?(panel, accounts[number.chomp(MORE)]) || described?(panel, described))
+        panel[PANEL] = number || ""
       end
+    end
+
+    # The account id a forum gives a name (XenForo's data-user-id): two
+    # names alike with two ids are two members.
+    def account(author)
+      holder = author.key?(ACCOUNT) ? author : author.at_css("[#{ACCOUNT}]")
+      holder && holder[ACCOUNT]
+    end
+
+    def other_account?(panel, account)
+      return false unless account
+
+      ids = panel.css("[#{ACCOUNT}]").map { |node| node[ACCOUNT] }
+      ids << panel[ACCOUNT] if panel.key?(ACCOUNT)
+      !ids.empty? && !ids.include?(account)
+    end
+
+    # Ids an element names as what describes or labels it: a panel so
+    # named credits that element ("Uploaded by the member above"), not the
+    # post.
+    def described_ids
+      @body.css("[aria-describedby], [aria-labelledby]").each_with_object(Set.new) do |node, ids|
+        "#{node['aria-describedby']} #{node['aria-labelledby']}".split.each { |id| ids << id }
+      end
+    end
+
+    def described?(panel, described)
+      return false if described.empty?
+
+      described.include?(panel["id"]) || panel.css("[id]").any? { |node| described.include?(node["id"]) }
     end
 
     # The number a member panel's line is marked with, or nil where the line
