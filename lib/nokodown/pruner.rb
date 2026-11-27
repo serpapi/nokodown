@@ -34,6 +34,9 @@ module Nokodown
     # A node main removed and base kept, so it stays; gone when the share
     # or the fallback read the article as main did.
     SPARED = "data-nokodown-spared"
+    # A node base removed and main kept, so it stays; gone when a later
+    # rule reads the article as base did.
+    DROPPED = "data-nokodown-dropped"
     LEFT_OUT = "[#{PostAttribution::OWN}], [#{HELD}], [#{SPARED}]"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
@@ -129,6 +132,16 @@ module Nokodown
       yield
     ensure
       shown&.each(&:unlink)
+    end
+
+    # What the block answers as base read the root: the poster's lines
+    # shown, and what base alone removed before (dropped) out.
+    def as_base(root, &block)
+      gone = {}
+      root.css("[#{DROPPED}]").each { |node| hold(gone, node) if below?(node, root) }
+      with_lines(root, &block)
+    ensure
+      release(taken(gone), root) if gone
     end
 
     # The member panels a post's line stood for before PostAttribution read
@@ -246,13 +259,21 @@ module Nokodown
       return related_links(root, method(:remove)) unless removed
       return if removed.empty?
 
-      with_lines(root) { related_links(root, ->(node) { among?(removed, node) ? remove(node) : drop_spared(node) }) }
+      as_base(root) { related_links(root, ->(node) { among?(removed, node) ? remove(node) : drop_spared(node) }) }
       spare(removed, root)
     end
 
-    # What main's view removed that is still there stays, spared.
+    # What main's view removed that is still there stays, spared; what base
+    # removed before (dropped) in it is gone both ways.
     def spare(removed, root)
-      removed.each_value { |nodes| nodes.each { |node| node[SPARED] = "" if below?(node, root) } }
+      removed.each_value do |nodes|
+        nodes.each do |node|
+          next unless below?(node, root)
+
+          node[SPARED] = ""
+          node.css("[#{DROPPED}]").each { |dropped| remove(dropped) }
+        end
+      end
     end
 
     # Where base's view removes what main's keeps, what main's view removed
@@ -360,6 +381,8 @@ module Nokodown
         remove(node)
       elsif main
         node[SPARED] = ""
+      elsif base
+        node[DROPPED] = ""
       end
     end
 
@@ -465,7 +488,7 @@ module Nokodown
       return link_clusters(root, method(:remove)) unless removed
       return if removed.empty?
 
-      link_clusters(root, ->(node) { among?(removed, node) ? remove(node) : drop_spared(node) })
+      as_base(root) { link_clusters(root, ->(node) { among?(removed, node) ? remove(node) : drop_spared(node) }) }
       spare(removed, root)
     end
 

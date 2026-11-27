@@ -33,6 +33,9 @@ module Nokodown
     ADDRESS_TEXT = %r{[.?@:]|/.*/}.freeze
     # phpBB's container of a public profile field's value.
     FIELD = "profile-custom-field"
+    # phpBB shows a long address as its first 39 characters, " ... " and
+    # its last 10.
+    PHPBB_CUT = 39
     # An email address the panel gives for the member, which tells apart
     # only from another address, not from a profile.
     IDENTITY = "~"
@@ -151,7 +154,13 @@ module Nokodown
     end
 
     def field_value?(link, href)
-      return false unless href.match?(MAILTO) || link["class"].to_s.split.any? { |name| name.start_with?("postlink") }
+      return false unless href.match?(MAILTO) || (href.match?(SCHEME) && link["class"].to_s.split.any? { |name| name.start_with?("postlink") })
+      # phpBB shows the address, whole, as a board path, or around " ... ":
+      # no words ("View profile"), and nothing the href does not end with
+      # unless it looks like an address.
+      text = Dom.text(link)
+      return false if text.empty? || text.split(" ... ", 2).any? { |part| part.match?(/\s/) }
+      return false unless text.include?(" ... ") || text.match?(ADDRESS_TEXT) || href.sub(/\?.*/m, "").end_with?(text)
 
       link.ancestors.any? { |ancestor| ancestor.element? && ancestor["class"].to_s.split.include?(FIELD) }
     end
@@ -181,15 +190,24 @@ module Nokodown
     def shown?(text, href)
       head, tail = text.split(" ... ", 2)
       # An email link shows its address, not the subject or body after it.
-      href = href.sub(/\?.*/m, "") if href.match?(MAILTO)
+      if href.match?(MAILTO)
+        href = href.sub(/\?.*/m, "")
+        # Whole, it is the address itself, not the end of a longer one.
+        return href.sub(MAILTO, "").casecmp?(text) || href.casecmp?(text) unless tail
+      end
       return href.end_with?(text) unless tail
       return false if head.match?(/\s/) || tail.match?(/\s/)
+      # A scheme shown is the href's ("http://" is not "https://").
+      scheme = head[SCHEME]
+      return false if scheme && !href.downcase.start_with?(scheme.downcase)
 
       start = head.sub(SCHEME, "").downcase
       address = href.sub(SCHEME, "").downcase
       host = lambda { |value| value.split(%r{[/?#]}, 2).first.to_s }
-      # Cut inside the host (or an email's address), the start is its start.
-      same = start.match?(%r{[/?#]}) ? host.call(start) == host.call(address) : address.start_with?(start)
+      # Cut inside the host (or an email's address), the start is its start,
+      # cut where phpBB cuts: a whole host ("www.forum.org") is not the start
+      # of a longer one ("www.forum.org.au").
+      same = start.match?(%r{[/?#]}) ? host.call(start) == host.call(address) : head.length == PHPBB_CUT && address.start_with?(start)
       !start.empty? && same && href.end_with?(tail)
     end
 
@@ -279,6 +297,8 @@ module Nokodown
     def stamp?(node)
       signature = Dom.signature(node)
       return false unless node.name == "time" || node.key?("datetime") || signature.match?(DATE_CLASS)
+      # A phpBB profile field ("Birthday", "Time zone") dates the member.
+      return false if [node, *node.ancestors].any? { |ancestor| ancestor.element? && ancestor["class"].to_s.split.include?(FIELD) }
 
       !signature.match?(MEMBER_DATE_CLASS) && Dom.text(node).match?(/\d/)
     end

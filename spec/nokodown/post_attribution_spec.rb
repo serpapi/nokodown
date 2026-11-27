@@ -297,6 +297,11 @@ RSpec.describe Nokodown::PostAttribution do
     # A word the board censors at the cut ("rude" made "profile").
     censored_tail = field_set.call([["Lab", "mailto:#{long_mail}@xrude.co.uk", "workshop-starter-baking-lab-calibration ... profile.co.uk", ""],
                                     ["Lab", "mailto:#{long_mail}@xmean.co.uk", "workshop-starter-baking-lab-calibration ... account.co.uk", ""]])
+    # A field named as a date ("time_zone", "birthdate") dates the member.
+    dated_fields = lambda do |_day|
+      "<dd class='profile-custom-field profile-time_zone'><strong>Time zone:</strong> UTC+03:00</dd>" \
+        "<dd class='profile-custom-field profile-birthdate'><strong>Birthday:</strong> 12-05-1987</dd>"
+    end
     # Contact fields are named as the board likes; one is the member's own.
     contacts = lambda do |_day|
       "<dd class='profile-contact'><strong>Contact:</strong><div class='dropdown'><div class='dropdown-contents contact-icons'>" \
@@ -308,7 +313,7 @@ RSpec.describe Nokodown::PostAttribution do
     [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [local, "wren"], [scripts, "wren"], [shortened, "wren"], [shortened_www, "wren"],
      [mail, "wren"], [mail_shortened, "wren"], [own_mail, "wren@example.com"], [censored, "wren"], [contacts, "wren"], [contacts, "Facebook"],
      ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"], [local_words, "wren"], [local_words, "profile"],
-     [censored_tail, "wren"]].each do |extra, first|
+     [censored_tail, "wren"], [dated_fields, "wren"]].each do |extra, first|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
@@ -877,6 +882,23 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should_not include("chart1.pdf")
   end
 
+  # Base removed the footer as furniture before reading related links; its
+  # reading of the section has the footer gone, so the note stays.
+  it "keeps a post's note after a footer that only base removed as furniture" do
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><header><a class='username' href='/u/Wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>Initial test.</p><p>Reviewed by <span class='user-info'><a class='username' href='/staff/basil'>Basil Cunningham</a> Records officer</span>.</p>" \
+           "<h3>Read more</h3><section><footer><p><a href='/chart0.pdf'>Overnight humidity and temperature readings for the rye culture</a> " \
+           "<a href='/chart1.pdf'>Reference calibration from the independent sensor</a> <a href='/chart2.pdf'>Initial and final temperatures in the comparison batch</a></p></footer>" \
+           "<p>The reading was confirmed at noon. <a href='/witness.pdf'>Witness statement</a></p></section></article>" \
+           "<article class='message'><header><a class='username' href='/u/Fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+           "<p>Please allow room for the next feeding. </p></article></main></body></html>"
+
+    markdown = Nokodown.to_markdown(html)
+    markdown.should include("The reading was confirmed at noon. [Witness statement](/witness.pdf)")
+    markdown.should include("**Basil Cunningham**")
+  end
+
   # Each container is weighed against the post as it was before.
   it "keeps a post's files that outweigh the rest without the lines" do
     links = (0..3).map { |index| "<a href='/schedule#{index}.pdf'>#{['Rye starter protocol', 'Feeding timetable', 'Fermentation diary', 'Rye starter protocol'][index]} #{index}</a>" }
@@ -1115,7 +1137,27 @@ RSpec.describe Nokodown::PostAttribution do
        "<a class='username' href='mailto:wren.junior@example.com'>Wren</a>"],
       # An email link's subject is not the address it shows.
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><small>Referred by <a href='mailto:Wren@example.org?subject=Wren'>Wren</a></small></div>",
-       "<span class='username'>Wren</span>"]
+       "<span class='username'>Wren</span>"],
+      ["<div class='user-info'>Co-author <span class='username'>wren@example.org</span><small>Referred by " \
+       "<a href='mailto:senior-wren@example.org?subject=Starter'>wren@example.org</a></small></div>",
+       "<span class='username'>wren@example.org</span>"],
+      # A theme's button or referral inside phpBB's field class says what
+      # it is; a shortened address shows its own scheme.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
+       "<a class='postlink-local' href='https://example.com/members/92/profile'>View profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>Referred by " \
+       "<a class='postlink' href='/members/92'>Wren</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><a class='postlink' href='https://lab.example/u/members/92/profile'>http://lab.example/u ... profile</a></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # A mailto's text that ends its address ("art" of "portrait.art") is
+      # not the address; a whole host is not the start of a longer one.
+      ["<div class='user-info'>Co-author <span class='username'>art</span><small>Referred by " \
+       "<a href='mailto:office@portrait.art?subject=Introduction'>art</a></small></div>",
+       "<span class='username'>art</span>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><a class='postlink' href='https://www.forum.org.au/people/92/profile'>www.forum.org ... profile</a></div>",
+       "<a class='username' href='/members/72'>Wren</a>"]
     ].each do |panel, header|
       markdown = thread([
         "<article class='message'>#{panel}<header>#{header} <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
