@@ -270,7 +270,9 @@ module Nokodown
         own_name, own_date = parts(line)
         return false if name.nil? || own_name.nil?
 
-        name.sub(BY, "").strip.casecmp?(own_name) && (date.empty? || date.casecmp?(own_date))
+        # A contact's label read as the date ("Office hours (UTC+3)") is
+        # not the post's.
+        name.sub(BY, "").strip.casecmp?(own_name) && (date.empty? || repeat.key?(MemberPanel::LOOSE) || date.casecmp?(own_date))
       end
 
       # A line's post number and profile link; "" for a line that names no

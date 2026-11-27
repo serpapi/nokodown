@@ -240,9 +240,16 @@ module Nokodown
 
     def label?(node)
       # Elements that hold none (a link, an icon), or a chain of one in each
-      # (a link around a span): a caption, up to a heading's length.
-      !MemberPanel.panel?(node) && (node.element_children.all? { |child| child.element_children.empty? } || chain?(node)) &&
-        Dom.text(node).length <= MemberPanel::MAX_HEAD
+      # (a link around a span), or text-level elements only ("<b>Team</b>
+      # <span>Safety staff</span>" in a link): a caption, up to a heading's
+      # length.
+      return false if MemberPanel.panel?(node) || Dom.text(node).length > MemberPanel::MAX_HEAD
+
+      node.element_children.all? { |child| child.element_children.empty? } || chain?(node) || phrase?(node)
+    end
+
+    def phrase?(node)
+      node.css("*").all? { |inner| PHRASING.include?(inner.name) && !MemberPanel.panel?(inner) }
     end
 
     def chain?(node)

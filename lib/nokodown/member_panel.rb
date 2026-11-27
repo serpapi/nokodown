@@ -39,6 +39,9 @@ module Nokodown
     # Set by Preprocessor on a board's own link to a page in the folder of
     # the page read, the board's root.
     BOARD = "data-nokodown-board"
+    # Set on a plain <dd>: the links of the field rows after it that say
+    # the same, read once for all its links.
+    COPY = "data-nokodown-copy"
     # phpBB shows a long address as its first 39 characters, " ... " and
     # its last 10, where it is longer than 55.
     PHPBB_CUT = 39
@@ -47,6 +50,9 @@ module Nokodown
     # An email address the panel gives for the member, which tells apart
     # only from another address, not from a profile.
     IDENTITY = "~"
+    # Set on a line whose date is read from a contact icon's label
+    # ("Office hours (UTC+3)"): shown, but no date of the post's to match.
+    LOOSE = "data-nokodown-loose"
     MAX_NAME = 60
     MAX_DATE = 50
     # A post's title and by-line come first, within this many characters.
@@ -68,7 +74,9 @@ module Nokodown
     def reduce(panel)
       name, source = named(panel)
       if name && !bylined?(panel, name)
-        line = line(panel.document, name, date(panel, name))
+        date, loose = date(panel, name)
+        line = line(panel.document, name, date)
+        line[LOOSE] = "" if loose
         panel.add_previous_sibling(line)
         repeats(line, panel, name, source) if panel[PostAttribution::PANEL]
         line[PostAttribution::OWN] = PostAttribution::OWN_LINE if panel.key?(PostAttribution::OWN)
@@ -187,7 +195,7 @@ module Nokodown
     def shows_address?(link)
       href = link["href"].to_s.strip
       text = Dom.text(link)
-      return true if link.key?(MADE) && made_text?(text, href) && (field_row?(link, href, text) || made_row?(link))
+      return true if link.key?(MADE) && made_text?(text, href) && (made_row?(link) || field_row?(link, href, text))
 
       field_value?(link, href) || address_link?(link) || (href.match?(MAILTO) && shown?(Dom.text(link), href))
     end
@@ -204,10 +212,13 @@ module Nokodown
       [link.parent, link.parent&.parent].find { |node| node&.element? && node.name == "dd" && node["class"].to_s.strip.empty? }
     end
 
-    # prosilver prints its fields' values in <dd> rows; a theme's action
-    # between the same comments sits in its own <small> or <div>.
+    # prosilver prints its fields' values in <dd> rows, of no class or of
+    # its own ("profile-<ident>"); a theme's action between the same
+    # comments sits in its own <small>, <div>, or <dd class="coauthor-directory">.
     def made_row?(link)
-      [link.parent, link.parent&.parent].any? { |node| node&.element? && node.name == "dd" }
+      [link.parent, link.parent&.parent].any? do |node|
+        node&.element? && node.name == "dd" && node["class"].to_s.split.all? { |name| name.match?(/\Aprofile-[a-z0-9_-]+\z/) }
+      end
     end
 
     # What phpBB shows of an address it made, censored or not: one word,
@@ -243,11 +254,17 @@ module Nokodown
     # below ("/forum/"), in phpBB's own field row (its ident's class, or
     # the plain copy); a co-author's ".../members/92/profile" is not.
     def board_word?(link, href, text)
-      folders = href.sub(SCHEME, "").delete_suffix("/#{text}").split("/", -1).drop(1)
-      return false if folders.size > 1 && !link.key?(BOARD)
+      return false unless board_path?(link, href, text)
 
       link.ancestors.none? { |node| node.element? && node["class"].to_s.split.include?(FIELD) } ||
         link.ancestors.any? { |node| node.element? && node["class"].to_s.split.include?(FIELD) && node["class"].to_s.split.any? { |name| name.match?(/\Aprofile-[a-z_]+\z/) } }
+    end
+
+    # The text is the path below the board's URL: at the site's root or
+    # one folder below, or in the folder of the page read.
+    # ".../directory/92/A.J." is a directory's, not a board's.
+    def board_path?(link, href, text)
+      link.key?(BOARD) || href.sub(SCHEME, "").delete_suffix("/#{text}").split("/", -1).drop(1).size <= 1
     end
 
     # prosilver prints a field named "field1" twice: in a plain <dd>, then
@@ -258,14 +275,19 @@ module Nokodown
       row = plain_row(link)
       return false unless row
 
+      row[COPY] ||= copied_links(row)
+      row[COPY].include?("\n#{href}\t#{text}\n")
+    end
+
+    def copied_links(row)
       said = Dom.text(row)
+      links = []
       sibling = row.next_element
       while sibling && sibling["class"].to_s.split.include?(FIELD)
-        return true if Dom.text(sibling) == said && sibling.css("a").any? { |other| other["href"].to_s.strip == href && Dom.text(other) == text }
-
+        links.concat(sibling.css("a").map { |other| "#{other['href'].to_s.strip}\t#{Dom.text(other)}" }) if Dom.text(sibling) == said
         sibling = sibling.next_element
       end
-      false
+      "\n#{links.join("\n")}\n"
     end
 
     # A link phpBB made of an address (postlink, postlink-local) shows the
@@ -282,7 +304,7 @@ module Nokodown
       # A board's own link shows its path below the board's full URL: a
       # word ("wren") as well, in a field row, but not one that says it is
       # the profile.
-      local = classes.include?("postlink-local") && href.match?(SCHEME) && href.end_with?("/#{text}")
+      local = classes.include?("postlink-local") && href.match?(SCHEME) && href.end_with?("/#{text}") && board_path?(link, href, text)
       return false unless (local && (text.match?(ADDRESS_TEXT) || (!text.match?(PROFILE) && field_row?(link, href, text)))) || text.match?(ADDRESS_TEXT)
       # Another address phpBB shows whole ("www." without its "http://"),
       # or cut, or a field row's path ("gallery/profile/wren"): not the end
@@ -404,9 +426,18 @@ module Nokodown
         next unless stamp?(stamp)
 
         text = Dom.text(widened(stamp, panel, name))
-        return text if date_text?(text, name) && !text.match?(MEMBER_DATE)
+        return [text, contact_icon?(stamp)] if date_text?(text, name) && !text.match?(MEMBER_DATE)
       end
       nil
+    end
+
+    # phpBB's contact menu names a field's icon by its ident
+    # ("office_time-icon") and labels it with the field's name; a theme's
+    # class or itemprop beside it ("quoted-date") says it is a date.
+    def contact_icon?(node)
+      classes = node["class"].to_s.split
+      node.name != "time" && !node.key?("datetime") && classes.include?("contact-icon") &&
+        classes.all? { |name| name == "contact-icon" || name.match?(/\A[a-z_]+-icon\z/) } && !"#{node['id']} #{node['itemprop']}".match?(DATE_CLASS)
     end
 
     def stamp?(node)
@@ -419,12 +450,6 @@ module Nokodown
       # "datePublished"). phpBB names a field in [a-z_] ("profile-time_zone");
       # "profile-post-date" is not one.
       classes = node["class"].to_s.split
-      # phpBB's contact menu names a field's icon by its ident
-      # ("office_time-icon") and labels it with the field's name; a
-      # theme's class or itemprop beside it ("quoted-date") still dates.
-      if node.name != "time" && !node.key?("datetime") && classes.include?("contact-icon")
-        return false if classes.all? { |name| name == "contact-icon" || name.match?(/\A[a-z_]+-icon\z/) } && !"#{node['id']} #{node['itemprop']}".match?(DATE_CLASS)
-      end
       if node.name != "time" && !node.key?("datetime") && classes.include?(FIELD)
         names = classes.reject { |name| name.match?(/\Aprofile-[a-z_]*\z/) } << node["id"].to_s << node["itemprop"].to_s
         return false unless names.any? { |name| name.downcase.match?(DATE_CLASS) }
