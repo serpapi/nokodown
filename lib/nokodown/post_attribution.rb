@@ -270,7 +270,7 @@ module Nokodown
         own_name, own_date = parts(line)
         return false if name.nil? || own_name.nil?
 
-        name.sub(BY, "").casecmp?(own_name) && (date.empty? || date.casecmp?(own_date))
+        name.sub(BY, "").strip.casecmp?(own_name) && (date.empty? || date.casecmp?(own_date))
       end
 
       # A line's post number and profile link; "" for a line that names no
@@ -621,7 +621,7 @@ module Nokodown
       return true if name.nil?
 
       text, = named
-      text.nil? || !Dom.squish(text).sub(BY, "").casecmp?(Dom.squish(name))
+      text.nil? || !Dom.squish(Dom.squish(text).sub(BY, "")).casecmp?(Dom.squish(name))
     end
 
     # The account id a forum gives a name (XenForo's data-user-id): two

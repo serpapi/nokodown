@@ -269,7 +269,7 @@ RSpec.describe Nokodown::PostAttribution do
         "<a href='http://facebook.com/facebook/' title='Facebook'><span class='contact-icon'>Facebook</span></a></div></div></dd>"
     end
     # A member may be named 404 and have 404 posts, or begin with "@".
-    [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [contacts, "wren"], [contacts, "Facebook"], ["", "@wren"]].each do |extra, first|
+    [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [contacts, "wren"], [contacts, "Facebook"], ["", "@wren"], ["", "@ wren"]].each do |extra, first|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, contacts].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
@@ -284,9 +284,10 @@ RSpec.describe Nokodown::PostAttribution do
       markdown = thread(posts, head: '<meta name="generator" content="phpBB">')
 
       # The post's line drops the "@" a handle is shown with.
-      markdown.should include("**#{first.delete_prefix('@')}** · May 3, 2024\n\n#{question}")
+      shown = first.sub(/\A@\s*/, "")
+      markdown.should include("**#{shown}** · May 3, 2024\n\n#{question}")
       markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
-      markdown.scan(/\*\*@?(?:#{first.delete_prefix('@')}|basil)\*\*/).size.should == 2
+      markdown.scan(/\*\*(?:@\s*)?(?:#{shown}|basil)\*\*/).size.should == 2
     end
   end
 
@@ -620,6 +621,24 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("(https://example.com/raw.pdf)", "(https://example.com/mix.pdf)", "Note A.", "Note B.", "**Basil Cunningham**")
   end
 
+  # A container held out for its panels was gone when the share was read.
+  it "prunes like a page when what is kept is only a container held for its panels" do
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled.</p><div class='contributors'><div class='contributor'><div class='user-info'><a class='username' href='/members/48'>Basil Cunningham</a></div>" \
+           "<div><span>Measurements for both test jars</span> <a href='/raw.pdf'>Mixing log A</a></div></div>" \
+           "<div class='user-info'><a class='username' href='/members/49'>Aster Marshall</a></div></div>" \
+           "<footer><p>Original laboratory records.</p><a href='/mix.pdf'>Mixing log</a></footer>" \
+           "<aside><p>Note A. The starter was weighed at noon and entered into the batch record. We kept a copy.</p></aside>" \
+           "<aside><p>Note B. The water was weighed at noon and recorded alongside the flour.</p></aside></article>" \
+           "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+           "<p>Leave room in the jar.</p></article></main></body></html>"
+
+    markdown = Nokodown.to_markdown(html, url: "https://example.com/t")
+    markdown.should include("(https://example.com/raw.pdf)", "(https://example.com/mix.pdf)", "Note A.", "Note B.")
+    markdown.should_not include("nokodown")
+  end
+
   # The lighter pass tells a cluster of links without the panels, too.
   it "keeps a file beside member panels on the lighter pass" do
     credit = lambda do |id, member, name, file|
@@ -636,6 +655,22 @@ RSpec.describe Nokodown::PostAttribution do
 
     markdown = Nokodown.to_markdown(html, url: "https://example.com/t")
     markdown.should include("(https://example.com/trial-a.pdf)", "(https://example.com/trial-b.pdf)", "(https://example.com/trial-c.pdf)")
+  end
+
+  # Whether the clusters are the content is weighed without the lines too.
+  it "keeps a box of files that is most of a post without the lines on the lighter pass" do
+    html = "<html><head><meta name='generator' content='XenForo'></head><body><main>" \
+           "<article class='message'><header><a class='username' href='/u/wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>The starter doubled.</p><div><p>Files</p><a href='/evidence-0.pdf'>Laboratory mixing report</a> " \
+           "<a href='/evidence-1.pdf'>Fermentation observation</a> <a href='/evidence-2.pdf'>Temperature register</a> " \
+           "<a href='/evidence-3.pdf'>Ingredient weight report</a></div>" \
+           "<div class='user-info'><span class='username'>Basil Alexander Cunningham</span></div>" \
+           "<aside><p>The weighing procedure was recorded in the laboratory register before the batches were prepared.</p></aside></article>" \
+           "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+           "<p>Leave room in the jar.</p></article></main></body></html>"
+
+    markdown = Nokodown.to_markdown(html, url: "https://example.com/t")
+    markdown.should include("(https://example.com/evidence-0.pdf)", "(https://example.com/evidence-3.pdf)")
   end
 
   # Each container is weighed against the post as it was before.
@@ -727,11 +762,13 @@ RSpec.describe Nokodown::PostAttribution do
 
   # A card whose role names the poster is still another member's.
   # The first of a row of cards alike is a card too, the poster's own as well.
+  # A featured card, with a class the others lack, is one of them (in a
+  # row long enough for base to take it for cards).
   it "keeps a member card above a post that names the poster in its role" do
-    [["Aster", "Wren’s lab safety officer"], ["Wren", "Lab safety officer"]].each do |first, role|
+    [["Aster", "Wren’s lab safety officer", ""], ["Wren", "Lab safety officer", ""], ["Wren", "Lab safety officer", " featured"]].each do |first, role, extra|
       cards = [[first, role, "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
-               ["Lark", "Sample custodian", "Sample manifest"]].each_with_index.map do |(name, title, report), index|
-        "<div class='user-info'><a class='username' href='/members/#{87 + index}'>#{name}</a> <span>#{title} · <a href='/reports/#{87 + index}.pdf'>#{report}</a></span></div>"
+               ["Lark", "Sample custodian", "Sample manifest"], ["Juniper", "Records custodian", "Batch journal"]].each_with_index.map do |(name, title, report), index|
+        "<div class='user-info#{extra if index.zero?}'><a class='username' href='/members/#{87 + index}'>#{name}</a> <span>#{title} · <a href='/reports/#{87 + index}.pdf'>#{report}</a></span></div>"
       end
       rows = [["Wren", question], ["Fern", answer], ["Moss", answer]].map do |name, body|
         "<article class='message'><header><a class='username' href='/u/#{name}'>#{name}</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{body}</p></article>"

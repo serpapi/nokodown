@@ -28,6 +28,9 @@ module Nokodown
     CARD_KEYS = 8
     CardLinks = Struct.new(:links, :keys, :read)
     CALL_TO_ACTION_PARTS = "img, picture, h1, h2, h3, h4, h5, h6, table, ul, ol, p"
+    # A container conditional cleaning held out and put back: kept for the
+    # panels it was kept with, it was gone when the share was read.
+    HELD = "data-nokodown-held"
     # Inside these a button is a title, a term or a footnote marker.
     LABEL_HOLDERS = %w[h1 h2 h3 h4 h5 h6 dt th sup label summary].freeze
     MIN_INDEX_LENGTH = 80
@@ -73,11 +76,12 @@ module Nokodown
       nodes.sum { |node| pruner.length_without_own(node) }
     end
 
-    # The root's length as it was before the poster's panels became lines:
-    # what each container is weighed against.
+    # The root's length as it was before the poster's panels became lines
+    # (and without what was held out for them): what each container is
+    # weighed against, and what the fallback reads as kept.
     def length_without_own(root)
       own = {}
-      root.css("[#{PostAttribution::OWN}]").each { |node| hold(own, node) if below?(node, root) }
+      root.css("[#{PostAttribution::OWN}], [#{HELD}]").each { |node| hold(own, node) if below?(node, root) }
       Dom.text(root).length
     ensure
       release(taken(own), root)
@@ -270,6 +274,7 @@ module Nokodown
           if Dom.in_code?(node)
             next
           elsif kept_with_panels?(node, content_length, paragraph_keys)
+            node[HELD] = ""
             hold(@held, node)
           else
             remove(node)
@@ -342,12 +347,13 @@ module Nokodown
     # On an index page (an A-Z list, a category grid) the clusters are the
     # content, not navigation around it. A footer sitemap, or a few skip and
     # account links left in a root that missed the content, is no index.
+    # The root is weighed without the poster's lines, as before they were.
     def clusters_dominate?(root, clusters)
       index = outermost(clusters).reject do |node|
         %w[header footer].include?(node.name) || Dom.ancestors_named(node, "header", "footer").any?
       end
       length = index.sum { |node| Dom.text(node).length }
-      length >= MIN_INDEX_LENGTH && length >= Dom.text(root).length * 0.5
+      length >= MIN_INDEX_LENGTH && length >= length_without_own(root) * 0.5
     end
 
     def outermost(nodes)

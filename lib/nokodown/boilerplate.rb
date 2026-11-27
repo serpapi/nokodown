@@ -196,10 +196,15 @@ module Nokodown
       body.nil? || Dom.key(node).to_i < Dom.key(body).to_i
     end
 
+    # Alike as base's cards are: the same tag, and one's classes all among
+    # the other's (a featured card among plain ones).
     def card_row?(node)
       classes = base_classes(node["class"])
       node.parent.element_children.any? do |sibling|
-        Dom.key(sibling) != Dom.key(node) && sibling.name == node.name && base_classes(sibling["class"]) == classes
+        next false if Dom.key(sibling) == Dom.key(node) || sibling.name != node.name
+
+        others = base_classes(sibling["class"])
+        others == classes || (!others.empty? && (others - classes).empty?) || (!classes.empty? && (classes - others).empty?)
       end
     end
 
