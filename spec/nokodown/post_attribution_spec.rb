@@ -342,15 +342,37 @@ RSpec.describe Nokodown::PostAttribution do
     # whole shown tail; phpBB's comments say it made the links.
     censored_whole = made.call(field_set.call([["Lab", "https://lab.example/x/batch/calibration/archive/my-profile", "https://lab.example/x/batch/cali ... my-profile"],
                                                ["Lab", "https://lab.example/calibration/fermentation/records/removed", "https://lab.example/calibration/ferment ... no-account"]]))
+    # The censor may blank a field's text; the menu's opener is titled
+    # "Contact <name>" and goes nowhere.
+    blanked = made.call(field_set.call([["Lab", "https://lab.example/records/profile", ""], ["Lab", "https://lab.example/records/account", ""]]))
+    trigger = lambda do |_day|
+      "<dd class='profile-contact'><strong>Contact:</strong><a href='#' class='dropdown-trigger' title='Contact profile'><span class='sr-only'>Contact profile</span></a></dd>"
+    end
+    # Without its comments, a field row of phpBB's own ident shows the
+    # board's "/profile" and "/account" pages as their path.
+    stripped_words = lambda do |day|
+      local_words.call(day).gsub(/<!-- m -->/, "").gsub("class='profile-custom-field'", "class='profile-custom-field profile-portfolio'")
+    end
+    # A contact field's ident and name may say "time" and hold digits.
+    office = lambda do |_day|
+      "<dd class='profile-contact'><strong>Contact:</strong><div class='dropdown'><div class='dropdown-contents contact-icons'>" \
+        "<a href='https://booking.example/wren' title='Office hours (UTC+3)'><span class='contact-icon office_time-icon'>Office hours (UTC+3)</span></a></div></div></dd>"
+    end
+    # The censor may turn a board path in a classless row into words.
+    censored_page = lambda do |_day|
+      "<dd><strong>Portfolio:</strong> <!-- l --><a class='postlink-local' href='https://example.com/profile page'>profile page</a><!-- l --></dd>" \
+        "<dd><strong>Journal:</strong> <!-- l --><a class='postlink-local' href='https://example.com/account page'>account page</a><!-- l --></dd>"
+    end
     # A member may be named 404 and have 404 posts, or begin with "@".
     [["", "wren"], [contact, "wren"], ["", "41"], [fields, "wren"], [local, "wren"], [scripts, "wren"], [shortened, "wren"], [shortened_www, "wren"],
      [mail, "wren"], [mail_shortened, "wren"], [own_mail, "wren@example.com"], [censored, "wren"], [contacts, "wren"], [contacts, "Facebook"],
      ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"], [local_words, "wren"], [local_words, "profile"],
      [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"], [censored_href, "wren"], [field1, "wren"], [field1, "profile"], [censored_cut, "wren"], [censored_word, "wren"],
-     [board_contacts, "wren"], [censored_whole, "wren"]].each do |extra, first|
+     [board_contacts, "wren"], [censored_whole, "wren"], [blanked, "wren"], [trigger, "profile"], [stripped_words, "wren"], [office, "wren"],
+     [censored_page, "wren"]].each do |extra, first|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word,
-              board_contacts, censored_whole].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+              board_contacts, censored_whole, blanked, stripped_words, office, censored_page].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -366,7 +388,7 @@ RSpec.describe Nokodown::PostAttribution do
       shown = first.sub(/\A@\s*/, "")
       markdown.should include("**#{shown}** · May 3, 2024\n\n#{question}")
       markdown.should include("**basil** · May 5, 2024\n\n#{answer}")
-      markdown.scan(/\*\*(?:@\s*)?(?:#{shown}|basil)\*\*/).size.should == 2
+      markdown.scan(/\*\*(?:@\s*)?(?:#{shown}|basil)\*\*/).size.should eq(2), "#{extra.respond_to?(:call) ? extra.call(3) : extra} #{first}"
     end
   end
 
@@ -1031,7 +1053,8 @@ RSpec.describe Nokodown::PostAttribution do
      ["Wren", "Lab safety officer", "", "badge"], ["Wren", "Lab safety officer", "", "deep"],
      ["Wren", "Lab safety officer", "", "lead-badge"], ["Wren", "Lab safety officer", "", "lead-caption"],
      ["Wren", "Lab safety officer", "", "shell"], ["Wren", "Lab safety officer", "", "badged-levels"],
-     ["Wren", "Lab safety officer", "", "linked-levels"]].each do |first, role, extra, tag|
+     ["Wren", "Lab safety officer", "", "linked-levels"], ["Wren", "Lab safety officer", "", "span-levels"],
+     ["Wren", "Lab safety officer", "", "caption-levels"]].each do |first, role, extra, tag|
       cards = [[first, role, "Safety review"], ["Moss", "Instrumentation engineer", "Instrument calibration"],
                ["Lark", "Sample custodian", "Sample manifest"], ["Juniper", "Records custodian", "Batch journal"]].each_with_index.map do |(name, title, report), index|
         name_tag = index.zero? && %w[div section].include?(tag) ? tag : "div"
@@ -1054,19 +1077,22 @@ RSpec.describe Nokodown::PostAttribution do
         next "<li>#{'<section><span>Staff member</span>' * 3}#{card}#{'</section>' * 3}</li>" if tag == "badged-levels"
         # The featured card four sections deep, each beside a linked label.
         next "<li>#{"<section><small><a href='/team'>Staff</a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "linked-levels" && index.zero?
+        # Or a label whose link wraps its text, or a caption longer than a name.
+        next "<li>#{"<section><small><a href='/team'><span>Staff</span></a></small>" * 4}#{card}#{'</section>' * 4}</li>" if tag == "span-levels" && index.zero?
+        next "<li>#{'<section><span>Fermentation team members listed in the laboratory directory</span>' * 4}#{card}#{'</section>' * 4}</li>" if tag == "caption-levels" && index.zero?
 
         tag == "li" ? "<li>#{card}</li>" : card
       end
       rows = [["Wren", question], ["Fern", answer], ["Moss", answer]].map do |name, body|
         "<article class='message'><header><a class='username' href='/u/#{name}'>#{name}</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{body}</p></article>"
       end
-      listed = %w[li badge deep shell badged-levels linked-levels].include?(tag)
+      listed = %w[li badge deep shell badged-levels linked-levels span-levels caption-levels].include?(tag)
       list = listed ? "<ul>#{cards.join}</ul>" : cards.join
       contributors = "<section class='contributors'><h3>Contributors</h3>#{list}</section>"
       markdown = thread(["<div class='reply-row'>#{contributors}#{rows[0]}</div>", *rows.drop(1).map { |row| "<div class='reply-row'>#{row}</div>" }])
 
       markdown.should include("**Wren** · May 3, 2024\n\n#{question}")
-      markdown.should include("#{'- ' if listed && tag != 'linked-levels'}[#{first}](https://example.com/members/87) #{role} · [Safety review](https://example.com/reports/87.pdf)")
+      markdown.should include("#{'- ' if listed && !%w[linked-levels span-levels caption-levels].include?(tag)}[#{first}](https://example.com/members/87) #{role} · [Safety review](https://example.com/reports/87.pdf)")
     end
   end
 
@@ -1263,6 +1289,35 @@ RSpec.describe Nokodown::PostAttribution do
        "<a class='username' href='/members/72'>Wren</a>"],
       ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-custom-field'>" \
        "<a class='postlink-local' href='https://example.com/members/92/profile'>profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # A theme's profile action between two links phpBB made, or with a
+      # contact icon outside phpBB's contact menu, or between phpBB's
+      # comments ("View forum profile" is no address).
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-actions'>" \
+       "<!-- m --><a class='postlink' href='https://lab.example/my-profile'>https://lab.example/my-profile</a><!-- m -->" \
+       "<a href='/members/92'>View forum profile</a>" \
+       "<!-- m --><a class='postlink' href='https://lab.example/my-account'>https://lab.example/my-account</a><!-- m --></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-contact'>" \
+       "<a href='/members/92'><span class='contact-icon'></span>View forum profile</a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-contact'>" \
+       "<!-- m --><a class='postlink' href='/members/92'>View forum profile</a><!-- m --></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-contact'>" \
+       "<a class='postlink' href='https://example.com/members/92' aria-label='View forum profile'><span class='contact-icon'>◉</span></a></small></div>",
+       "<a class='username' href='/members/72'>Wren</a>"],
+      # A directory link that ends with the member's name ("@Wren.Baker"),
+      # or a board's own page phpBB made of it outside a field row.
+      ["<div class='user-info'>Co-author <span class='username'>Wren.Baker</span><small>Member directory: " \
+       "<a class='postlink' href='https://directory.example/users/92/@Wren.Baker'>Wren.Baker</a></small></div>",
+       "<a class='username' href='https://example.com/members/72'>Wren.Baker</a>"],
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-actions'>Member directory: " \
+       "<!-- l --><a class='postlink-local' href='https://example.com/Wren'>Wren</a><!-- l --></small></div>",
+       "<a class='username' href='https://example.com/members/72'>Wren</a>"],
+      # A control that goes nowhere but says it is the profile.
+      ["<div class='user-info'>Co-author <span class='username'>Wren</span><small class='profile-contact'>" \
+       "<a class='postlink' href='#'>View forum profile</a></small></div>",
        "<a class='username' href='/members/72'>Wren</a>"]
     ].each do |panel, header|
       markdown = thread([
@@ -1271,7 +1326,7 @@ RSpec.describe Nokodown::PostAttribution do
       ])
 
       name = header[/>([^<]+)</, 1]
-      markdown.scan(/\*\*#{name}\*\*/).size.should == 2
+      markdown.scan(/\*\*#{Regexp.escape(name)}\*\*/).size.should eq(2), panel
       markdown.should include("**#{name}** · May 3, 2024\n\n#{question}")
     end
   end

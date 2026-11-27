@@ -239,8 +239,20 @@ module Nokodown
     end
 
     def label?(node)
-      !MemberPanel.panel?(node) && node.element_children.all? { |child| child.element_children.empty? } &&
-        Dom.text(node).length <= MemberPanel::MAX_NAME
+      # Elements that hold none (a link, an icon), or a chain of one in each
+      # (a link around a span): a caption, up to a heading's length.
+      !MemberPanel.panel?(node) && (node.element_children.all? { |child| child.element_children.empty? } || chain?(node)) &&
+        Dom.text(node).length <= MemberPanel::MAX_HEAD
+    end
+
+    def chain?(node)
+      ROW_DEPTH.times do
+        children = node.element_children
+        return children.empty? if children.size != 1 || MemberPanel.panel?(children.first)
+
+        node = children.first
+      end
+      node.element_children.empty?
     end
 
     # A sibling and what it holds, three deep (a wrapper of one element

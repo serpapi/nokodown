@@ -110,8 +110,10 @@ module Nokodown
 
     def call
       place_streamed_segments
+      closers = {}
       @body.xpath(".//comment()").to_a.each do |comment|
-        mark_made_link(comment)
+        closer = mark_made_link(comment) unless closers.key?(comment)
+        closers[closer] = true if closer
         comment.remove
       end
       unwrap_noscript
@@ -133,15 +135,19 @@ module Nokodown
 
     private
 
-    # The opening comment is read before it goes, the closing one after.
+    # The opening comment is read before it goes; the closing one it
+    # returns opens nothing ("<!-- m -->…<!-- m --><a>View profile</a><!-- m -->").
     def mark_made_link(comment)
-      return unless comment.content.match?(MADE_LINK)
+      return nil unless comment.content.match?(MADE_LINK)
 
       link = comment.next_sibling
-      return unless link&.element? && link.name == "a"
+      return nil unless link&.element? && link.name == "a"
 
       after = link.next_sibling
-      link[MemberPanel::MADE] = "" if after&.comment? && after.content == comment.content
+      return nil unless after&.comment? && after.content == comment.content
+
+      link[MemberPanel::MADE] = ""
+      after
     end
 
     # Slots are found by id in a hash: an id put into a selector can break it

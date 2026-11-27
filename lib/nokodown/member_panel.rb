@@ -105,7 +105,10 @@ module Nokodown
       end.map { |candidate| candidate["href"] }
       return false if link.nil? && !named.empty?
 
-      hrefs = link ? [link["href"]] : links.select { |candidate| avatar_link?(candidate) || profile_link?(candidate) }.map { |candidate| candidate["href"] }
+      # A menu's opener ("#", titled "Contact profile", its label read only
+      # by screen readers) goes nowhere; a "#" link that says it is the
+      # profile still names someone.
+      hrefs = link ? [link["href"]] : links.select { |candidate| !(nowhere?(candidate) && Dom.text(candidate).empty?) && (avatar_link?(candidate) || profile_link?(candidate)) }.map { |candidate| candidate["href"] }
       hrefs = (hrefs + named).uniq
       return identity(panel.css("a[href]")) if hrefs.empty?
 
@@ -121,7 +124,13 @@ module Nokodown
     end
 
     def avatar_link?(link)
-      Dom.text(link).empty? && !link["href"].to_s.strip.match?(/\A(?:#|javascript:)/i)
+      # An address phpBB made shows its text, blank only where the censor
+      # blanked it: an address, not an avatar.
+      Dom.text(link).empty? && !nowhere?(link) && !link.key?(MADE)
+    end
+
+    def nowhere?(link)
+      link["href"].to_s.strip.match?(/\A(?:#|javascript:)/i)
     end
 
     def contact?(link, panel)
@@ -142,9 +151,12 @@ module Nokodown
       false
     end
 
-    # prosilver's contact menu: div.contact-icons, an icon span per entry.
+    # prosilver's contact menu entry: in div.contact-icons, a link of no
+    # class but its "last-cell", holding the entry's span.contact-icon. A
+    # theme's control (a postlink, or outside that menu) is not one.
     def menu_entry?(link)
-      link.at_css("span.contact-icon") || link.ancestors.any? { |node| node.element? && node["class"].to_s.split.include?("contact-icons") }
+      (link["class"].to_s.split - ["last-cell"]).empty? && link.at_css("span.contact-icon") &&
+        link.ancestors.any? { |node| node.element? && node["class"].to_s.split.include?("contact-icons") }
     end
 
     # A link that says it is the profile: rel="author", or "View profile"
@@ -166,10 +178,28 @@ module Nokodown
     # the board's own "/profile" page as "profile", or a word the board
     # censors in a shortened address.
     def shows_address?(link)
-      return true if link.key?(MADE)
-
       href = link["href"].to_s.strip
+      return true if link.key?(MADE) && (field_row?(link, href, Dom.text(link)) || made_row?(link))
+
       field_value?(link, href) || address_link?(link) || (href.match?(MAILTO) && shown?(Dom.text(link), href))
+    end
+
+    # prosilver makes links in a panel only of its fields' values: in a
+    # field row, or a plain <dd> as its "field1" row is. A theme's
+    # directory action made the same way ("Member directory: wren") names
+    # a member.
+    def field_row?(link, href, text)
+      link.ancestors.any? { |node| node.element? && node["class"].to_s.split.include?(FIELD) } || field_copy?(link, href, text)
+    end
+
+    def plain_row(link)
+      [link.parent, link.parent&.parent].find { |node| node&.element? && node.name == "dd" && node["class"].to_s.strip.empty? }
+    end
+
+    # prosilver prints its fields' values in <dd> rows; a theme's action
+    # between the same comments sits in its own <small> or <div>.
+    def made_row?(link)
+      [link.parent, link.parent&.parent].any? { |node| node&.element? && node.name == "dd" }
     end
 
     # Without phpBB's comments, a field's link shows its address as phpBB
@@ -180,7 +210,7 @@ module Nokodown
 
       text = Dom.text(link)
       return false if text.empty?
-      return false if link.ancestors.none? { |ancestor| ancestor.element? && ancestor["class"].to_s.split.include?(FIELD) } && !field_copy?(link, href, text)
+      return false unless field_row?(link, href, text)
       return shown?(text, href) if text.include?(" ... ")
 
       # Whole, an email is its address, a "www." address lacks the
@@ -189,21 +219,37 @@ module Nokodown
       return href.sub(MAILTO, "").casecmp?(text) if mail
 
       href == text || href == "http://#{text}" ||
-        (link["class"].to_s.split.include?("postlink-local") && text.match?(ADDRESS_TEXT) && href.end_with?("/#{text}"))
+        (link["class"].to_s.split.include?("postlink-local") && href.end_with?("/#{text}") && (text.match?(ADDRESS_TEXT) || board_word?(link, href, text)))
+    end
+
+    # A board's own page shown as a word ("profile", "account/settings")
+    # is phpBB's where the board sits at the site's root or one folder
+    # below ("/forum/"), in phpBB's own field row (its ident's class, or
+    # the plain copy); a co-author's ".../members/92/profile" is not.
+    def board_word?(link, href, text)
+      folders = href.sub(SCHEME, "").delete_suffix("/#{text}").split("/", -1).drop(1)
+      return false if folders.size > 1
+
+      link.ancestors.none? { |node| node.element? && node["class"].to_s.split.include?(FIELD) } ||
+        link.ancestors.any? { |node| node.element? && node["class"].to_s.split.include?(FIELD) && node["class"].to_s.split.any? { |name| name.match?(/\Aprofile-[a-z_]+\z/) } }
     end
 
     # prosilver prints a field named "field1" twice: in a plain <dd>, then
-    # in its field row, the same text. A link in such a <dd> beside a field
-    # row that says the same and holds the same link is that field's.
+    # in its field row among the field rows that follow it, the same text.
+    # A link in such a <dd> before a field row that says the same and holds
+    # the same link is that field's.
     def field_copy?(link, href, text)
-      row = [link.parent, link.parent&.parent].find { |node| node&.element? && node.name == "dd" }
-      return false unless row && row["class"].to_s.strip.empty? && row.parent&.element?
+      row = plain_row(link)
+      return false unless row
 
       said = Dom.text(row)
-      row.parent.element_children.any? do |sibling|
-        sibling["class"].to_s.split.include?(FIELD) && Dom.text(sibling) == said &&
-          sibling.css("a").any? { |other| other["href"].to_s.strip == href && Dom.text(other) == text }
+      sibling = row.next_element
+      while sibling && sibling["class"].to_s.split.include?(FIELD)
+        return true if Dom.text(sibling) == said && sibling.css("a").any? { |other| other["href"].to_s.strip == href && Dom.text(other) == text }
+
+        sibling = sibling.next_element
       end
+      false
     end
 
     # A link phpBB made of an address (postlink, postlink-local) shows the
@@ -218,9 +264,14 @@ module Nokodown
       text = Dom.text(link)
       href = link["href"].to_s.strip
       # A board's own link shows its path below the board's full URL: a
-      # word ("wren") as well, but not one that says it is the profile.
-      local = classes.include?("postlink-local") && href.match?(SCHEME) && href.end_with?("/#{text}") && !text.match?(PROFILE)
-      return false unless local || text.match?(ADDRESS_TEXT)
+      # word ("wren") as well, in a field row, but not one that says it is
+      # the profile.
+      local = classes.include?("postlink-local") && href.match?(SCHEME) && href.end_with?("/#{text}")
+      return false unless (local && (text.match?(ADDRESS_TEXT) || (!text.match?(PROFILE) && field_row?(link, href, text)))) || text.match?(ADDRESS_TEXT)
+      # Outside a field row, another address phpBB shows whole ("www."
+      # without its "http://"), or cut: not the end of a directory's
+      # ".../@Wren.Baker".
+      return false unless local || text.include?(" ... ") || href == text || href == "http://#{text}" || href.sub(MAILTO, "").casecmp?(text) || field_row?(link, href, text)
 
       shown?(text, href)
     end
@@ -351,6 +402,9 @@ module Nokodown
       # "datePublished"). phpBB names a field in [a-z_] ("profile-time_zone");
       # "profile-post-date" is not one.
       classes = node["class"].to_s.split
+      # phpBB's contact menu names a field's icon by its ident
+      # ("office_time-icon") and labels it with the field's name.
+      return false if node.name != "time" && !node.key?("datetime") && classes.include?("contact-icon")
       if node.name != "time" && !node.key?("datetime") && classes.include?(FIELD)
         names = classes.reject { |name| name.match?(/\Aprofile-[a-z_]*\z/) } << node["id"].to_s << node["itemprop"].to_s
         return false unless names.any? { |name| name.downcase.match?(DATE_CLASS) }
