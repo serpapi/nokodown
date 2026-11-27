@@ -20,6 +20,7 @@ module Nokodown
     BY = /(?:by|von|par|por)\s+/i.freeze
     LETTER = /\p{L}/.freeze
     PROFILE = /\b(?:profile|account)\b/i.freeze
+    CONTACT = /contact/i.freeze
     MAX_NAME = 60
     MAX_DATE = 50
     # A post's title and by-line come first, within this many characters.
@@ -44,6 +45,7 @@ module Nokodown
         line = line(panel.document, name, date(panel, name))
         panel.add_previous_sibling(line)
         repeats(line, panel, name, source) if panel[PostAttribution::PANEL]
+        line[PostAttribution::OWN] = PostAttribution::OWN_LINE if panel.key?(PostAttribution::OWN)
       end
       panel.remove
     end
@@ -65,10 +67,13 @@ module Nokodown
     # another link says the name and goes elsewhere (a "Referred by" or
     # "Last visitor" of the same name), or several could be the profile.
     def profile_href(panel, name, source)
-      links = panel.css("a[href]").to_a
+      # A contact block's links (phpBB's "View Facebook Profile", a member
+      # named Facebook's own Facebook) are ways to reach the member, not the
+      # forum's profile.
+      links = panel.css("a[href]").reject { |candidate| contact?(candidate, panel) }
       return if links.empty?
 
-      link = link_around(source, panel)
+      link = link_around(source, panel) || source.css("a[href]").find { |inner| Dom.text(inner).casecmp?(name) }
       # A count ("404" posts, by a member named 404) names no one.
       named = links.select { |candidate| Dom.text(candidate).casecmp?(name) && name.match?(LETTER) }.map { |candidate| candidate["href"] }
       return false if link.nil? && !named.empty?
@@ -84,10 +89,23 @@ module Nokodown
       Dom.text(link).empty? && !link["href"].to_s.strip.match?(/\A(?:#|javascript:)/i)
     end
 
+    def contact?(link, panel)
+      key = Dom.key(panel)
+      node = link.parent
+      while node&.element? && Dom.key(node) != key
+        return true if Dom.signature(node).match?(CONTACT)
+
+        node = node.parent
+      end
+      false
+    end
+
     # A link that says it is the profile: rel="author", or "View profile"
-    # or "View account 41" in its text or label.
+    # or "View account 41" in its text or label. An address shown as the
+    # text (phpBB's URL fields) says where it goes, not what it is.
     def profile_link?(link)
-      link["rel"].to_s.split.include?("author") || "#{Dom.text(link)} #{link['aria-label']} #{link['title']}".match?(PROFILE)
+      words = "#{Dom.text(link)} #{link['aria-label']} #{link['title']}".gsub(%r{\S*/\S*}, "")
+      link["rel"].to_s.downcase.split.include?("author") || words.match?(PROFILE)
     end
 
     def linked?(panel)
@@ -119,8 +137,15 @@ module Nokodown
     def named(panel)
       holders = panel.css(HOLDERS).select { |node| name_holder?(node) }
       # A holder around another ("avatar-username" around "username") can
-      # hold the name twice, as responsive copies.
-      holders.reject! { |holder| holder.css(HOLDERS).any? { |node| name_holder?(node) } }
+      # hold the name twice, as responsive copies. Each holder's ancestors
+      # up to the panel are marked once.
+      outer = Set.new
+      key = Dom.key(panel)
+      holders.each do |holder|
+        node = holder.parent
+        node = node.parent while node&.element? && Dom.key(node) != key && outer.add?(Dom.key(node))
+      end
+      holders.reject! { |holder| outer.include?(Dom.key(holder)) }
       holders.each do |holder|
         source = first_link(holder) || holder
         text = name_text(source)

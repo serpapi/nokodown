@@ -20,18 +20,6 @@ module Nokodown
     # letter folds to these, so it answers as downcasing first would.
     BUTTON_WORD = /btn|button|cta/i.freeze
     LINK_STYLED_BUTTON = /\A(?:btn|button)-link\z/.freeze
-    # A member panel's line (PostAttribution) of a post: numbered for one, or
-    # in a post's element. A panel outside every post (an account box between
-    # posts) is judged as any other box. And the blocks besides one that stop
-    # a div from reading as a paragraph.
-    POST_PANEL_LINES = "descendant::*[@#{PostAttribution::REPEAT}]" \
-                       "[@#{PostAttribution::REPEAT} != '' or ancestor::*[@#{PostAttribution::OWNER}]]"
-    PANEL_LINE = "#{POST_PANEL_LINES}[1]"
-    # The lines that stand for a post's header line: numbered for a post.
-    NUMBERED_LINES = "descendant::*[@#{PostAttribution::REPEAT} != '']"
-    IN_POST = "ancestor-or-self::*[@#{PostAttribution::OWNER}][1]"
-    OTHER_BREAKER = "descendant::*[#{Dom::PARAGRAPH_BREAKERS.map { |name| "self::#{name}" }.join(' or ')}]" \
-                    "[not(@#{PostAttribution::REPEAT})][1]"
     # XPath finds a list of tags faster than CSS.
     CALL_TO_ACTION_HOLDERS = ".//a|.//span|.//div|.//p"
     # Tables not inside another table. Listing what is under every table
@@ -52,6 +40,9 @@ module Nokodown
       @conditional_seen = 0
       @conditional_kept = 0
       @conditional_removed_links = 0
+      @lines = {}
+      @aside = {}
+      @held = {}
     end
 
     def call
@@ -59,6 +50,7 @@ module Nokodown
         @mode == :article ? prune_article(root) : remove_link_clusters(root)
         remove_boilerplate_text(root)
         remove_calls_to_action(root)
+        release(taken(@lines), root)
       end
       self
     end
@@ -76,10 +68,67 @@ module Nokodown
 
     private
 
+    # The member panels a post's line stood for before PostAttribution read
+    # them (PostAttribution::OWN), and the lines they left, were gone before
+    # pruning then. The lines are set aside once the by-lines are removed,
+    # until the root is pruned, and a panel left whole while conditional
+    # cleaning runs: each step weighs and keeps what it did without them,
+    # and each goes back where its place is still there. A comment holds
+    # the place, as the page's own comments are gone. Grouped by the key of
+    # what holds them.
+    def set_aside(root, value)
+      root.css("[#{PostAttribution::OWN}='#{value}']").each_with_object({}) do |node, aside|
+        hold(aside, node) if below?(node, root)
+      end
+    end
+
+    # What a store holds, in the order it was held, leaving it empty.
+    def taken(store)
+      held = store.values.flatten(1)
+      store.clear
+      held
+    end
+
+    # Last held first, so what was held inside a later one is back in it.
+    def release(held, root)
+      held.reverse_each do |node, place|
+        place.add_previous_sibling(node) if below?(place, root)
+        place.unlink
+      end
+    end
+
+    # What is set aside or held whose places are in the node.
+    def aside_in(node)
+      return [] if @lines.empty? && @aside.empty? && @held.empty?
+
+      node.xpath("descendant::comment()").to_a.filter_map do |place|
+        key = Dom.key(place.parent)
+        [@lines, @aside, @held].flat_map { |store| store.fetch(key, []) }.find { |_, held| held == place }
+      end
+    end
+
+    # Out of the root until it is put back, its place kept as a panel's is.
+    def hold(store, node)
+      place = node.document.create_comment("")
+      node.add_previous_sibling(place)
+      (store[Dom.key(node.parent)] ||= []) << [node, place]
+      node.unlink
+    end
+
+    def below?(node, root)
+      key = Dom.key(root)
+      node = node.parent
+      node = node.parent while node&.element? && Dom.key(node) != key
+      !node.nil? && node.element?
+    end
+
     def prune_article(root)
       content_length = Dom.text(root).length
       remove_secondary(root, content_length)
       remove_bylines(root)
+      # A second pass without conditional cleaning keeps the lines, as
+      # their text tells a source's links from a cluster of them.
+      @lines = set_aside(root, PostAttribution::OWN_LINE) if @conditional
       remove_article_furniture(root, content_length)
       remove_related_links(root)
       remove_stray_lines(root)
@@ -171,113 +220,52 @@ module Nokodown
     end
 
     # Turned off, it still drops unlabeled navigation, as page pruning does.
-    # The share kept leaves out the lines of posts' member panels, which
-    # stand where the post's header line stood before: a kept line would
-    # count as kept text and settle for a pass that took the post's files.
-    # A container spared only for a line that numbers no post (a quoted
-    # panel) counts as removed, as it was before.
     def clean_conditionally(root, content_length)
       return remove_link_clusters(root) unless @conditional
 
-      text_before = Dom.text(root).length - panel_lines_length(root)
+      @aside = set_aside(root, PostAttribution::OWN_PANEL)
+      text_before = Dom.text(root).length
       links_before = link_text_length(root)
-      spared = remove_suspicious_containers(root, content_length)
+      remove_suspicious_containers(root, content_length)
       @conditional_seen += text_before
-      @conditional_kept += Dom.text(root).length - panel_lines_length(root) - spared_length(root, spared)
+      @conditional_kept += Dom.text(root).length
       @conditional_removed_links += links_before - link_text_length(root)
-    end
-
-    def panel_lines_length(root)
-      # CSS finds attributes faster than XPath.
-      root.css("[#{PostAttribution::REPEAT}]").to_a.sum { |line| line[PostAttribution::REPEAT].empty? ? 0 : Dom.text(line).length }
-    end
-
-    # The outermost spared containers still on the page, less their lines.
-    def spared_length(root, spared)
-      return 0 if spared.empty?
-
-      keys = spared.map { |node| Dom.key(node) }.to_set
-      root_key = Dom.key(root)
-      spared.sum do |node|
-        above = node.ancestors.select(&:element?).map { |ancestor| Dom.key(ancestor) }
-        next 0 unless above.include?(root_key) && above.none? { |key| keys.include?(key) }
-
-        Dom.text(node).length - node.xpath(NUMBERED_LINES).to_a.sum { |line| Dom.text(line).length }
-      end
+      release(taken(@held), root)
+      release(taken(@aside), root)
     end
 
     # Innermost containers first, so an outer one is judged on what is left.
     def remove_suspicious_containers(root, content_length)
       paragraph_keys = Dom.paragraph_keys(root)
       memo = { root: root }
-      spared = []
       ["form, fieldset", "table", "ul", "div"].each do |selector|
         root.css(selector).to_a.reverse_each do |node|
           next if paragraph_keys.include?(Dom.key(node)) || !ContainerCheck.new(node, content_length, paragraph_keys, memo).remove?
-          paragraph = panel_paragraph?(node)
-          numbered = !node.at_xpath("#{NUMBERED_LINES}[1]").nil?
-          kept = (!paragraph || numbered) && kept_without_panel_lines?(node, content_length, paragraph_keys, memo)
-          if paragraph || kept
-            # Spared for a line the check would remove it without counts as
-            # removed; a post's line in a list the check keeps, as kept, as
-            # does a paragraph in the post that its line made a block, which
-            # the poster's panel was before (one that credits a box as well).
-            in_post = paragraph && !node.at_xpath(IN_POST).nil?
-            spared << node unless (numbered && (kept || in_post)) || (in_post && posters_line?(node))
-            next
-          end
 
           ContainerCheck.forget(memo, node)
-          remove(node)
+          if Dom.in_code?(node)
+            next
+          elsif kept_with_panels?(node, content_length, paragraph_keys)
+            hold(@held, node)
+          else
+            remove(node)
+          end
         end
       end
-      spared
     end
 
-    # The line a member panel leaves in a thread (PostAttribution) stands
-    # where the panel did, which the post's header line replaced before: a
-    # div that holds no other block (a quote's credit and its attachment) is
-    # still a paragraph. Asked only of a container about to go.
-    def panel_paragraph?(node)
-      node.name == "div" && !node.at_xpath(PANEL_LINE).nil? && node.at_xpath(OTHER_BREAKER).nil?
-    end
+    # A container the check removes without the panels set aside, which it
+    # kept with them before they were (a short post whose panel's line
+    # outweighed its link, a reply named only by it), stays: held out while
+    # the share is read, as it was gone then, and put back after.
+    def kept_with_panels?(node, content_length, paragraph_keys)
+      aside = aside_in(node)
+      return false if aside.empty?
 
-    # The line names the poster of the post it is in, outside a quote: the
-    # panel went before pruning, as the post's own.
-    def posters_line?(node)
-      line = node.at_xpath(PANEL_LINE)
-      return false if Dom.ancestors_named(line, "blockquote").any?
-
-      body = line.at_xpath(IN_POST)&.at_css("[#{PostAttribution::POST}]")
-      name = line.at_css("strong")
-      !body.nil? && !name.nil? && Dom.text(name).casecmp?(body[PostAttribution::AUTHOR].to_s)
-    end
-
-    # A container the check keeps once its panels' lines are out of it, as
-    # it was before the lines replaced the panels the header did: a file list
-    # under the line reads as a list again, not as links.
-    def kept_without_panel_lines?(node, content_length, paragraph_keys, memo)
-      lines = node.xpath(POST_PANEL_LINES).to_a
-      return false if lines.empty?
-
-      check_memo = unlinked_memo(memo, lines, node)
-      places = lines.map { |line| [line, line.parent, line.next_sibling].tap { line.unlink } }
-      !ContainerCheck.new(node, content_length, paragraph_keys, check_memo).remove?
+      aside.each { |panel, place| place.add_previous_sibling(panel) }
+      !ContainerCheck.new(node, content_length, paragraph_keys, { root: node }).remove?
     ensure
-      places&.reverse_each { |line, parent, following| following ? following.add_previous_sibling(line) : parent.add_child(line) }
-    end
-
-    # Posts' lengths count the lines, so they are counted again. Tables'
-    # verdicts hold but for the tables a line is in, and the tags the root
-    # lacks hold as lines hold none of them. With a line in a table, the
-    # node's own tables are read for the ones it holds, not the root's.
-    # Read before the lines go.
-    def unlinked_memo(memo, lines, node)
-      tables = (memo[:tables] ||= {})
-      holding = lines.flat_map { |line| Dom.ancestors_named(line, "table") }.map { |table| Dom.key(table) }.to_set
-      return { root: memo[:root], tables: tables, absent: (memo[:absent] ||= {}) } if holding.empty?
-
-      { root: node, tables: { verdicts: (tables[:verdicts] || {}).reject { |key, _| holding.include?(key) } } }
+      aside&.each { |panel, _| panel.unlink }
     end
 
     # A forum's thread is content.

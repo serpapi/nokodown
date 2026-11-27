@@ -73,6 +73,15 @@ module Nokodown
     REPEAT = "data-nokodown-repeat"
     # The element a numbered post is.
     OWNER = "data-nokodown-owner"
+    # A member panel in a post's element, outside its body and not around
+    # it, and outside a blockquote, and the line it leaves: the post's line
+    # stood for it before the panel was read, and the Pruner weighs what it
+    # keeps without it, as it did then. A panel's value is OWN_PANEL, the
+    # line's OWN_LINE.
+    OWN = "data-nokodown-own"
+    OWN_PANEL = ""
+    OWN_LINE = "line"
+    LEADING_BY = /\A#{MemberPanel::BY}/.freeze
     MORE = "+"
     # Nodes read from a member panel's line to the line written below it
     # for the same post.
@@ -544,6 +553,8 @@ module Nokodown
       panels = @body.css(PANEL_CANDIDATES).select { |node| MemberPanel.panel?(node) }
       return if panels.empty?
 
+      bodies = posts.group_by { |post| Dom.key(post.node) }.transform_values { |group| group.map { |post| post.placement.body } }
+      panels.each { |panel| panel[OWN] = "" if own_panel?(panel, bodies) }
       panel_keys = panels.map { |panel| Dom.key(panel) }.to_set
       posts = posts.reject { |post| in_panel?(post, panel_keys) }
       numbers = {}
@@ -567,16 +578,51 @@ module Nokodown
       panels.each do |panel|
         number = panel_number(panel, numbers, rows, kinds, owners, taken, column_keys, columns, holds)
         post = number&.chomp(MORE)
-        number = nil if number && (other_name?(panel, names[post]) || other_account?(panel, accounts[post]) || described?(panel, described))
+        named = number && MemberPanel.named(panel)
+        number = nil if number && (other_name?(named, names[post]) || other_account?(panel, named, accounts[post]) || described?(panel, described))
         panel[PANEL] = number || ""
       end
     end
 
-    # A panel that does not say the poster's name names someone else (a
-    # source's supplier): its line can never repeat the post's, so it is
-    # not one the post's line replaces.
-    def other_name?(panel, name)
-      name.nil? || !Dom.text(panel).downcase.include?(name.downcase)
+    # Climbs from the panel to the posts around it, each with the bodies
+    # it holds, and from a body to that post.
+    def own_panel?(panel, bodies)
+      return false if !panel.key?("class") || quoted?(panel)
+
+      panel_key = Dom.key(panel)
+      path = []
+      node = panel.parent
+      while node&.element?
+        path << node
+        node = node.parent
+      end
+      keys = path.map { |ancestor| Dom.key(ancestor) }.to_set << panel_key
+      path.any? do |ancestor|
+        key = Dom.key(ancestor)
+        bodies.fetch(key, []).any? { |body| !keys.include?(Dom.key(body)) && !below?(body, panel_key, key) }
+      end
+    end
+
+    # Whether the node is the element keyed inner, or below it, under the
+    # element keyed outer.
+    def below?(node, inner, outer)
+      until node.nil? || !node.element? || Dom.key(node) == outer
+        return true if Dom.key(node) == inner
+
+        node = node.parent
+      end
+      false
+    end
+
+    # A panel whose name is not the poster's names someone else (a source's
+    # supplier, Annette beside Ann, an officer whose role mentions the
+    # poster): its line can never repeat the post's, so it is not one the
+    # post's line replaces.
+    def other_name?(named, name)
+      return true if name.nil?
+
+      text, = named
+      text.nil? || !Dom.squish(text).sub(LEADING_BY, "").casecmp?(Dom.squish(name))
     end
 
     # The account id a forum gives a name (XenForo's data-user-id): two
@@ -586,12 +632,12 @@ module Nokodown
       holder && holder[ACCOUNT]
     end
 
-    def other_account?(panel, account)
+    def other_account?(panel, named, account)
       return false unless account
 
       # The name's own id where it has one: a "Referred by" link in the
       # panel has another member's.
-      _, source = MemberPanel.named(panel)
+      _, source = named
       named = source && name_account(source, panel)
       return named[ACCOUNT] != account if named
 
@@ -600,8 +646,9 @@ module Nokodown
       !ids.empty? && !ids.include?(account)
     end
 
-    # The element below the panel that gives the name's id: the name's,
-    # one in it, or one around it.
+    # The element that gives the name's id: the name's, one in it, one
+    # around it, or the panel's own (a "Referred by" link in it has another
+    # member's).
     def name_account(source, panel)
       return source if source.key?(ACCOUNT)
 
@@ -615,7 +662,7 @@ module Nokodown
 
         node = node.parent
       end
-      nil
+      panel if panel.key?(ACCOUNT)
     end
 
     # Ids an element names as what describes or labels it: a panel so
