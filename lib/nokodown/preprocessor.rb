@@ -155,8 +155,21 @@ module Nokodown
       @body.css("a.postlink[href]").each do |link|
         link[MemberPanel::FOREIGN] = "" unless link.key?(MemberPanel::MADE) || link["href"].strip.match?(MemberPanel::SCHEME)
       end
+      # phpBB's own link ("<!-- l -->") in its panel is the board's, with
+      # or without the page's URL, whatever the censor did to its href.
+      @body.css("a[#{MemberPanel::MADE}='l'][href]").each do |link|
+        link[MemberPanel::BOARD] = "" if own_panel?(link)
+      end
       folder = board_folder
-      return unless folder
+      # Without the page's URL no link shows it is in the page's folder:
+      # outside prosilver's own panel, a board's link is a theme's
+      # ("/staff/profile/Wren.Baker" in a co-author's box).
+      unless folder
+        @body.css("a.postlink-local[href], a.postlink[href], a[#{MemberPanel::MADE}='l'][href]").each do |link|
+          link[MemberPanel::FOREIGN] = "" unless own_panel?(link) || (link["class"].to_s.split.include?("postlink") && link.key?(MemberPanel::MADE))
+        end
+        return
+      end
 
       host = folder[%r{\A[^/]*}]
       # The page's folder as its path is spelled (paths are case-sensitive).

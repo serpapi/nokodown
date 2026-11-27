@@ -40,6 +40,20 @@ module Nokodown
     # A member panel base keeps among a run of cards, which this pass marks
     # for its line after the content is chosen, as base chose it.
     CARD = "data-nokodown-card"
+    # A copy's element's key in the page it was copied from.
+    WAS = "data-nokodown-was"
+
+    # The page with its marked cards in posts reduced, as a copy whose
+    # elements keep their keys in WAS; nil where no card stands in a post.
+    def reduced_copy
+      return if @cards.nil? || @cards.none? { |card| card.ancestors.any? { |ancestor| ancestor.element? && ancestor.key?(PostAttribution::OWNER) } }
+
+      copy = @body.dup
+      ([copy] + Dom.elements(copy)).each { |node| node[WAS] = Dom.key(node).to_s }
+      copy.css("[#{CARD}]").to_a.each { |card| MemberPanel.reduce(card) }
+      Dom.assign_keys(copy)
+      copy
+    end
 
     # Replaces the marked panels with their lines, but one that is, or
     # holds, a chosen node, or lies outside them all: base keeps it.
@@ -145,7 +159,10 @@ module Nokodown
       # Side notes inside an article are content whatever their class says.
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if chrome_element?(node) || chrome_role?(node)
-      return if dominant?(node)
+      # A post's own member panel, read as standing in for the post's line,
+      # goes as on main however long its fields ("About me"); another
+      # panel ("Reviewed by" a member) that holds the page stays.
+      return if dominant?(node) && !(node.key?(PostAttribution::OWN) && !node[PostAttribution::PANEL].to_s.empty?)
       return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 

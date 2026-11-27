@@ -289,23 +289,24 @@ module Nokodown
       return true if starts && ends
       # The censor can change a word on both sides of the cut
       # ("ext.example/x/catalog profile ... office account.01.pdf"): each
-      # side still keeps a piece of the address (".../", ".01.pdf"), or
-      # the head keeps the href's scheme ("https://retiredlab ... ed/profile"
-      # for "https://legacy.example.net/.../archive/profile").
+      # side still keeps a piece of the address (".../", ".01.pdf"). A head
+      # that keeps the href's scheme shows an address phpBB cut, whatever
+      # the censor did to the rest ("https://retiredlab ... my-profile" for
+      # "https://legacy.example.net/ferments/archived").
       scheme = head[SCHEME]
-      shown = (scheme && scheme.casecmp?(squeezed[SCHEME].to_s)) || shared_address?(head.sub(SCHEME, ""), bare)
-      kept = shown && shared_address?(tail.reverse, squeezed.reverse)
+      kept = (scheme && scheme.casecmp?(squeezed[SCHEME].to_s)) ||
+             (shared_address?(head.sub(SCHEME, ""), bare) && shared_address?(tail.reverse, squeezed.reverse))
       return false unless starts || ends || kept
 
       text.match?(%r{\w[.:/@]+\w}) || [head, tail].none? { |part| part.match?(/\s/) }
     end
 
     # The two strings start alike up to an address character (a path's
-    # "/", a fragment's "#", a query's "?").
+    # "/", a fragment's "#", a query's "?", "=" or "&").
     def shared_address?(one, other)
       size = 0
       size += 1 while size < one.length && size < other.length && one[size] == other[size]
-      one[0, size].match?(%r{[.:/@#?]})
+      one[0, size].match?(%r{[.:/@#?=&]})
     end
 
     def address_end?(whole, text)
@@ -532,14 +533,17 @@ module Nokodown
     end
 
     # prosilver's contact menu ("div.dropdown-contents.contact-icons" in
-    # its dropdown) hides the label; a theme's visible row of the same
-    # icon, even one styled "contact-icons", shows it.
+    # its "div.dropdown") hides the label; a theme's visible row of the
+    # same icon, even one styled "dropdown-contents contact-icons" but in
+    # no dropdown, shows it.
     def contact_menu?(node, panel)
       node = node.parent
+      menu = false
       while node&.element? && Dom.key(node) != Dom.key(panel)
         classes = node["class"].to_s.split
-        return true if classes.include?("contact-icons") && classes.include?("dropdown-contents")
+        return true if menu && classes.include?("dropdown")
 
+        menu ||= classes.include?("contact-icons") && classes.include?("dropdown-contents")
         node = node.parent
       end
       false
