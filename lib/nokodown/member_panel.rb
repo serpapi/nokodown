@@ -86,7 +86,8 @@ module Nokodown
         # Only prosilver's own panel (dl.postprofile) holds its contact
         # menu; a contact label in a panel known by its id alone, or in a
         # theme's <div class="message-user">, is the panel's own line.
-        line[LOOSE] = "" if loose && panel.name == "dl" && panel["class"].to_s.split.include?("postprofile")
+        line[LOOSE] = "" if loose && panel["class"].to_s.split.include?("postprofile") &&
+                            (panel.name == "dl" || (panel.name == "div" && panel["id"].to_s.match?(/\Aprofile\d+\z/)))
         panel.add_previous_sibling(line)
         repeats(line, panel, name, source) if panel[PostAttribution::PANEL]
         line[PostAttribution::OWN] = PostAttribution::OWN_LINE if panel.key?(PostAttribution::OWN)
@@ -177,6 +178,25 @@ module Nokodown
         node = node.parent
       end
       false
+    end
+
+    # bootlike's closed Bootstrap menu: "ul.dropdown-menu.dropdown-contents"
+    # beside its toggle alone in a "div.dropdown"; Bootstrap marks one it
+    # opens "show" and its toggle aria-expanded="true" (the cleanup may
+    # have taken the toggle).
+    def bootstrap_menu?(node, panel)
+      classes = node["class"].to_s.split
+      dropdown = node.parent
+      return false unless node.name == "ul" && classes.include?("dropdown-menu") && classes.include?("dropdown-contents") &&
+                          dropdown&.element? && dropdown.name == "div" && Dom.key(dropdown) != Dom.key(panel)
+
+      outer = dropdown["class"].to_s.split
+      toggles = dropdown.element_children.reject { |child| Dom.key(child) == Dom.key(node) }
+      outer.include?("dropdown") && !classes.include?("show") && !outer.include?("show") &&
+        !expanded?(node, classes) && !expanded?(dropdown, outer) && %w[id role aria-label].none? { |name| node.key?(name) } &&
+        toggles.size <= 1 && toggles.all? do |toggle|
+          toggle.name == "button" && toggle["class"].to_s.split.include?("dropdown-toggle") && toggle["aria-expanded"] != "true"
+        end
     end
 
     # prosilver's contact menu entry: in div.contact-icons, a link of no
@@ -278,9 +298,15 @@ module Nokodown
 
       # A cut address the censor changed ("contributors/hellr ... profile/ab")
       # keeps the address's start or end, and a word of address, or no
-      # space, around the cut.
-      head, tail = text.split(" ... ", 2)
+      # space, around the cut; a board may censor the cut itself ("..."
+      # to "…").
+      head, tail = text.split(/ (?:\.\.\.|…) /, 2)
       return false if tail.nil?
+      # phpBB cuts a "www." address it made at 39 and 10 characters; one
+      # cut so is its own whatever the censor made of the href
+      # ("https://archive.example.org/..."). A theme's caption between the
+      # same comments ("www.old.org ... staff account") is not cut so.
+      return true if made == "w" && head.length == PHPBB_CUT && tail.length == PHPBB_END && head.match?(/\Awww\./i)
 
       # Cut whole ("archived profile/~wren-fermentation- ... research-1"):
       # the href's start, past its scheme, and its end.
@@ -552,6 +578,8 @@ module Nokodown
       node = node.parent
       while node&.element? && Dom.key(node) != Dom.key(panel)
         classes = node["class"].to_s.split
+        return bootstrap_menu?(node, panel) if node.name == "ul" && classes.include?("dropdown-menu")
+
         # prosilver's menu is the dropdown's child and waits closed for its
         # trigger; a theme's group shown open ("open", aria-expanded,
         # display:block, <details open>), or set elsewhere in a dropdown, is
@@ -571,7 +599,7 @@ module Nokodown
           # display ("display: block") and marks its "div.dropdown-container"
           # "dropdown-visible"; a theme's dropdown shown so without that
           # mark ("display:flex" in a container of its own) is open.
-          return outer.include?("dropdown") && !expanded?(dropdown, outer, !container?(dropdown.parent))
+          return outer.include?("dropdown") && !expanded?(dropdown, outer, !opened?(dropdown))
         end
 
         node = node.parent
@@ -579,11 +607,21 @@ module Nokodown
       false
     end
 
-    def container?(node)
+    # phpBB's script opened the dropdown: it marks the container "visible"
+    # and "dropdown-visible" together and shows the dropdown with jQuery's
+    # toggle ("display: block"); the dropdown is unnamed (no id, role or
+    # label) and no control in the container says it is expanded, which
+    # phpBB's script never writes. A theme's button controlling "#hours",
+    # or a theme's container marked "dropdown-visible" alone showing its
+    # dropdown as a flex or grid, opens a group of its own.
+    def opened?(dropdown)
+      node = dropdown.parent
       return false unless node&.element? && node.name == "div"
 
       classes = node["class"].to_s.split
-      classes.include?("dropdown-container") && classes.include?("dropdown-visible")
+      (%w[dropdown-container dropdown-visible visible] - classes).empty? &&
+        dropdown["style"].to_s.match?(/\A\s*display\s*:\s*block\s*;?\s*\z/i) &&
+        %w[id role aria-label].none? { |name| dropdown.key?(name) } && !node.at_css("[aria-expanded=true]")
     end
 
     def alone?(menu, dropdown)
@@ -602,7 +640,9 @@ module Nokodown
     # class or itemprop beside it ("quoted-date") says it is a date.
     def contact_icon?(node)
       classes = node["class"].to_s.split
-      node.name != "time" && !node.key?("datetime") && classes.include?("contact-icon") &&
+      # bootlike prints the ident's icon alone in its menu's item.
+      item = node.name == "span" && node.parent&.element? && node.parent.name == "a" && node.parent["class"].to_s.split.include?("dropdown-item")
+      node.name != "time" && !node.key?("datetime") && (classes.include?("contact-icon") || (item && classes.size == 1)) &&
         classes.all? { |name| name == "contact-icon" || name.match?(/\A[a-z_]+-icon\z/) } && !"#{node['id']} #{node['itemprop']}".match?(DATE_CLASS)
     end
 
@@ -619,8 +659,8 @@ module Nokodown
       # review, April 27") in a box of its own is the theme's date, and so
       # is a row of that class in a theme's own list (a "dl#user-info", a
       # <dl> in a "div.user-info"): only phpBB's postprofile holds phpBB's
-      # rows, prosilver's dd in its dl, a style's div in its div
-      # (bootlike).
+      # rows, prosilver's dd in its dl, and bootlike's div in its div
+      # numbered for the post ("profile3"), not a theme's div of that class.
       classes = node["class"].to_s.split
       if own && !node.key?("datetime") && classes.include?(FIELD) && postprofile?(node)
         names = classes.reject { |name| name.match?(/\Aprofile-[a-z_]*\z/) } << node["id"].to_s << node["itemprop"].to_s
@@ -632,8 +672,9 @@ module Nokodown
 
     def postprofile?(row)
       list = row.parent
-      list&.element? && ((row.name == "dd" && list.name == "dl") || (row.name == "div" && list.name == "div")) &&
-        list["class"].to_s.split.include?("postprofile")
+      return false unless list&.element? && list["class"].to_s.split.include?("postprofile")
+
+      (row.name == "dd" && list.name == "dl") || (row.name == "div" && list.name == "div" && list["id"].to_s.match?(/\Aprofile\d+\z/))
     end
 
     # The outermost element around the date that stops short of the name,

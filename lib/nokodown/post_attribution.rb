@@ -153,9 +153,7 @@ module Nokodown
           elsif node.element? && (node[REPEAT] || post_subject?(node, repeat))
             node = following(node, nodes, roots)
           elsif node.element?
-            # A rule only parts the panel's column from the post's (a
-            # style's responsive <hr>); it names no one.
-            return false if SHOWN.include?(node.name) && node.name != "hr"
+            return false if SHOWN.include?(node.name) && !responsive_rule?(node)
 
             node = node.child || following(node, nodes, roots)
           else
@@ -170,6 +168,15 @@ module Nokodown
       # The panel held its column alone, with no reply or quote beside it.
       def alone?(repeat)
         !repeat[REPEAT].split(" ", 2).first.end_with?(MORE)
+      end
+
+      # A style's rule shown only on a narrow screen, to part the panel's
+      # column from the post's (bootlike's <hr> alone in a "d-md-none"
+      # div); a rule shown on every screen parts what it stands between.
+      def responsive_rule?(node)
+        holder = node.parent
+        node.name == "hr" && holder&.element? && holder.element_children.size == 1 &&
+          holder["class"].to_s.split.any? { |name| name.match?(/\Ad-(?:sm|md|lg|xl|xxl)-none\z/) }
       end
 
       # The line is in a table cell, or a list term or definition: without
