@@ -54,6 +54,12 @@ module Nokodown
     PHPBB_CUT = 39
     PHPBB_END = 10
     PHPBB_LONG = 55
+    # What names a menu as a theme's own group (its id, role or label).
+    NAMES = %w[id role aria-label aria-labelledby aria-describedby].freeze
+    # What phpBB's script writes on a dropdown it opens, beside its display.
+    PLACED = %w[margin-left margin-right left max-width].freeze
+    # What Popper writes on a Bootstrap menu it places.
+    POPPER = ["", "position", "inset", "left", "top", "right", "bottom", "margin", "transform"].freeze
     # An email address the panel gives for the member, which tells apart
     # only from another address, not from a profile.
     IDENTITY = "~"
@@ -163,6 +169,8 @@ module Nokodown
     end
 
     def contact?(link, panel)
+      return true if bootlike_entry?(link, panel)
+
       key = Dom.key(panel)
       node = link.parent
       while node&.element? && Dom.key(node) != key
@@ -192,11 +200,26 @@ module Nokodown
 
       outer = dropdown["class"].to_s.split
       toggles = dropdown.element_children.reject { |child| Dom.key(child) == Dom.key(node) }
-      outer.include?("dropdown") && !classes.include?("show") && !outer.include?("show") &&
-        !expanded?(node, classes) && !expanded?(dropdown, outer) && %w[id role aria-label].none? { |name| node.key?(name) } &&
-        toggles.size <= 1 && toggles.all? do |toggle|
-          toggle.name == "button" && toggle["class"].to_s.split.include?("dropdown-toggle") && toggle["aria-expanded"] != "true"
-        end
+      return false unless outer.include?("dropdown") && !outer.include?("show") && !expanded?(dropdown, outer) &&
+                          NAMES.none? { |name| node.key?(name) } && toggles.size <= 1
+
+      shown = bootstrap_open?(node, classes, toggles, panel)
+      (shown || (!classes.include?("show") && !expanded?(node, classes))) && toggles.all? do |toggle|
+        toggle.name == "button" && toggle["class"].to_s.split.include?("dropdown-toggle") && (shown || toggle["aria-expanded"] != "true")
+      end
+    end
+
+    # bootlike's Bootstrap opened its menu: in its panel ("div#profile3"),
+    # its list is marked "show", and Popper places it; its button, where
+    # the cleanup left it, is data-bs-toggle's, "show" and expanded. A
+    # theme's list shown so in a panel of its own ("dl.postprofile"), or
+    # by a button of its own, is its group.
+    def bootstrap_open?(menu, classes, toggles, panel)
+      panel.name == "div" && panel["id"].to_s.match?(/\Aprofile\d+\z/) && panel["class"].to_s.split.include?("postprofile") &&
+        classes.include?("show") && toggles.all? do |toggle|
+          toggle["data-bs-toggle"] == "dropdown" && toggle["aria-expanded"] == "true" && toggle["class"].to_s.split.include?("show")
+        end &&
+        menu["style"].to_s.split(";").all? { |pair| POPPER.include?(pair.split(":", 2).first.to_s.strip.downcase) }
     end
 
     # prosilver's contact menu entry: in div.contact-icons, a link of no
@@ -205,6 +228,20 @@ module Nokodown
     def menu_entry?(link)
       (link["class"].to_s.split - ["last-cell"]).empty? && link.at_css("span.contact-icon") &&
         link.ancestors.any? { |node| node.element? && node["class"].to_s.split.include?("contact-icons") }
+    end
+
+    # bootlike's entry: "a.dropdown-item" alone in an "li" of its contact
+    # menu, holding the field's "span.<field>-icon" ("Research profile"):
+    # a way to reach the member, whatever its field is called.
+    def bootlike_entry?(link, panel)
+      return false unless link["class"].to_s.split == ["dropdown-item"]
+
+      item = link.parent
+      menu = item&.parent
+      item&.element? && item.name == "li" && item.element_children.size == 1 && menu&.element? &&
+        link.element_children.size == 1 && link.element_children.first.name == "span" &&
+        link.element_children.first["class"].to_s.split.size == 1 && link.element_children.first["class"].to_s.end_with?("-icon") &&
+        bootstrap_menu?(menu, panel)
     end
 
     # A link that says it is the profile: rel="author", or "View profile"
@@ -296,17 +333,23 @@ module Nokodown
       return true if squeezed.start_with?(text) || bare.start_with?(text) ||
                      [squeezed, squeezed.gsub("/ ", "/")].any? { |whole| address_end?(whole, text) }
 
+      # phpBB cuts a "www." address it made at 39 and 10 characters; one
+      # cut so is its own whatever the censor made of the href
+      # ("https://archive.example.org/..."), of the cut's " ... " ("……",
+      # "⋯", "—", "[cut]") or of the tail, which a word replaced after the
+      # cut can lengthen ("member-profile"). A theme's caption between the
+      # same comments ("www.old.org ... staff account") is not cut so.
+      if made == "w" && text[PHPBB_CUT] == " " && text.match?(/\Awww\./i)
+        mark, rest = text[(PHPBB_CUT + 1)..].split(" ", 2)
+        return true if !mark.to_s.empty? && rest.to_s.length >= PHPBB_END
+      end
+
       # A cut address the censor changed ("contributors/hellr ... profile/ab")
       # keeps the address's start or end, and a word of address, or no
       # space, around the cut; a board may censor the cut itself ("..."
       # to "…").
       head, tail = text.split(/ (?:\.\.\.|…) /, 2)
       return false if tail.nil?
-      # phpBB cuts a "www." address it made at 39 and 10 characters; one
-      # cut so is its own whatever the censor made of the href
-      # ("https://archive.example.org/..."). A theme's caption between the
-      # same comments ("www.old.org ... staff account") is not cut so.
-      return true if made == "w" && head.length == PHPBB_CUT && tail.length == PHPBB_END && head.match?(/\Awww\./i)
 
       # Cut whole ("archived profile/~wren-fermentation- ... research-1"):
       # the href's start, past its scheme, and its end.
@@ -619,9 +662,17 @@ module Nokodown
       return false unless node&.element? && node.name == "div"
 
       classes = node["class"].to_s.split
-      (%w[dropdown-container dropdown-visible visible] - classes).empty? &&
-        dropdown["style"].to_s.match?(/\A\s*display\s*:\s*block\s*;?\s*\z/i) &&
-        %w[id role aria-label].none? { |name| dropdown.key?(name) } && !node.at_css("[aria-expanded=true]")
+      (%w[dropdown-container dropdown-visible visible] - classes).empty? && (classes & %w[dropdown-up dropdown-down]).any? &&
+        toggled?(dropdown["style"].to_s) && NAMES.none? { |name| dropdown.key?(name) } && !node.at_css("[aria-expanded=true]")
+    end
+
+    # jQuery's toggle shows the dropdown ("display: block"), and phpBB's
+    # script places it ("margin-left: -176px", "left", "max-width"); a
+    # theme's other declarations ("display:block; gap: 4px") are its own.
+    def toggled?(style)
+      declarations = style.split(";").map(&:strip).reject(&:empty?).map { |pair| pair.split(":", 2).map { |part| part.to_s.strip.downcase } }
+      declarations.include?(%w[display block]) &&
+        declarations.all? { |name, value| (name == "display" && value == "block") || PLACED.include?(name) }
     end
 
     def alone?(menu, dropdown)
@@ -673,6 +724,10 @@ module Nokodown
     def postprofile?(row)
       list = row.parent
       return false unless list&.element? && list["class"].to_s.split.include?("postprofile")
+      # phpBB prints its panel beside the post's body (prosilver's and
+      # bootlike's div.postbody, after it in phpBB 3.0); a theme's panel of
+      # that class in an aside, or in the post's text, is the theme's.
+      return false unless [list.previous_element, list.next_element].any? { |side| side && side["class"].to_s.split.include?("postbody") }
 
       (row.name == "dd" && list.name == "dl") || (row.name == "div" && list.name == "div" && list["id"].to_s.match?(/\Aprofile\d+\z/))
     end

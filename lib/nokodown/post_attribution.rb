@@ -172,11 +172,16 @@ module Nokodown
 
       # A style's rule shown only on a narrow screen, to part the panel's
       # column from the post's (bootlike's <hr> alone in a "d-md-none"
-      # div); a rule shown on every screen parts what it stands between.
+      # div, first in its "div.postbody"); a rule shown on every screen, or
+      # a theme's narrow-screen rule between two credits, parts what it
+      # stands between.
       def responsive_rule?(node)
         holder = node.parent
+        body = holder&.parent
         node.name == "hr" && holder&.element? && holder.element_children.size == 1 &&
-          holder["class"].to_s.split.any? { |name| name.match?(/\Ad-(?:sm|md|lg|xl|xxl)-none\z/) }
+          holder["class"].to_s.split.any? { |name| name.match?(/\Ad-(?:sm|md|lg|xl|xxl)-none\z/) } &&
+          body&.element? && body.name == "div" && body["class"].to_s.split.include?("postbody") &&
+          Dom.key(body.element_children.first) == Dom.key(holder)
       end
 
       # The line is in a table cell, or a list term or definition: without
