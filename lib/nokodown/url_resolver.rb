@@ -8,6 +8,8 @@ module Nokodown
   # tracking parameters, click redirectors and image resize options cost
   # tokens and tell a reader nothing.
   class UrlResolver
+    # From Ruby 3.4 URI::DEFAULT_PARSER is the RFC 3986 parser, whose unescape is obsolete.
+    URI_PARSER = defined?(URI::RFC2396_PARSER) ? URI::RFC2396_PARSER : URI::DEFAULT_PARSER
     TRACKING_PARAM = /\A(?:utm_[a-z_]+|fbclid|gclid|gclsrc|dclid|gbraid|wbraid|msclkid|yclid|igshid|mc_cid|mc_eid|_hsenc|_hsmi|mkt_tok|__s|
                        _gl|_ga|srsltid|trk|icid|cmpid|hsCtaTracking|ref_|pd_rd_[a-z]+|pf_rd_[a-z]+)\z/ix.freeze
     # Amazon session, search-rank and affiliate parameters; on other sites
@@ -17,19 +19,25 @@ module Nokodown
     AMAZON_PRODUCT = %r{\A.*?/(?:dp|gp/product|gp/aw/d)/[A-Z0-9]{10}(?![A-Za-z0-9])}.freeze
     # Bestseller links put the session id after the ref segment.
     AMAZON_REF = %r{/ref=[^/]*(?:/\d{3}-\d{7}-\d{7})?\z}.freeze
+    # Anchored once, so the regex engine rejects most hosts at the first
+    # character instead of trying every branch from every position. Outlook
+    # safelinks match at the end, in a pattern of their own: as a branch
+    # here they made the engine try every position after all.
     REDIRECTOR = %r{
-      \A(?:www\.)?google\.(?:com?\.)?[a-z]{2,3}/url\z |
-      \A(?:www\.)?youtube\.com/redirect\z |
-      \Alm?\.facebook\.com/l\.php\z |
-      \.safelinks\.protection\.outlook\.com/?\z |
-      \Ago\.(?:skimresources|redirectingat)\.com/?\z |
-      \Aredirect\.viglink\.com/?\z |
-      \Aclick\.linksynergy\.com/ |
-      \A(?:www\.)?avantlink\.com/click\.php\z |
-      \A[\w-]+\.(?:pxf|sjv)\.io/c/ |
-      \A(?:www\.)?(?:anrdoezrs\.net|dpbolvw\.net|jdoqocy\.com|kqzyfj\.com|tkqlhce\.com)/click- |
-      \Asteamcommunity\.com/linkfilter/?\z
+      \A(?:
+        (?:www\.)?google\.(?:com?\.)?[a-z]{2,3}/url\z |
+        (?:www\.)?youtube\.com/redirect\z |
+        lm?\.facebook\.com/l\.php\z |
+        go\.(?:skimresources|redirectingat)\.com/?\z |
+        redirect\.viglink\.com/?\z |
+        click\.linksynergy\.com/ |
+        (?:www\.)?avantlink\.com/click\.php\z |
+        [\w-]+\.(?:pxf|sjv)\.io/c/ |
+        (?:www\.)?(?:anrdoezrs\.net|dpbolvw\.net|jdoqocy\.com|kqzyfj\.com|tkqlhce\.com)/click- |
+        steamcommunity\.com/linkfilter/?\z
+      )
     }xi.freeze
+    SAFELINKS = %r{\.safelinks\.protection\.outlook\.com/?\z}i.freeze
     DESTINATION_PARAM = /\A(?:url|u|murl|q)\z/.freeze
     MAX_REDIRECTS = 3
     # Image CDN size, crop and format options; the default rendition shows the
@@ -56,40 +64,117 @@ module Nokodown
     PRIVATE_BUCKET = /\Abucketeer-/i.freeze
     WEB_URL = %r{\Ahttps?://}i.freeze
     UNSAFE = %r{[^A-Za-z0-9\-._~:/?#@!$&'()*+,;=%]}.freeze
+    # Schemes that run code or open a document built from the URL itself.
+    SCRIPT_SCHEME = /\A(?:javascript|vbscript|data):/i.freeze
+    # A browser ignores spaces and control characters around a URL, and tabs
+    # and line breaks anywhere in it ("java&#9;script:" is "javascript:").
+    VISIBLE = /[^\x00-\x20]/.freeze
+    # Path segments with nothing to encode, no dot segment to resolve, and
+    # no query or fragment to clean.
+    PLAIN_SEGMENTS = %r{(?:/(?!\.)(?:[A-Za-z0-9\-._~!$&'()*+,;=:@]|%\h\h)*+)*+}.freeze
+    PLAIN_URL = %r{\Ahttps?://([A-Za-z0-9\-.]++)#{PLAIN_SEGMENTS}\z}.freeze
+    PLAIN_PATH = %r{\A(?=/)(?!//)#{PLAIN_SEGMENTS}\z}.freeze
+
+    # The URL a browser would read from an attribute value. Trimmed by index:
+    # on Ruby 2.7 a regex for trailing controls rescans a run of spaces
+    # inside the URL from each of its characters. Most values start and end
+    # with a visible character, which two bytes show without a search.
+    def self.normalize(href)
+      href = href.to_s
+      edge = href.getbyte(0)
+      return href.delete("\t\n\r") if edge && edge > 32 && href.getbyte(-1) > 32
+
+      first = href.index(VISIBLE)
+      return "" unless first
+
+      href[first..href.rindex(VISIBLE)].delete("\t\n\r")
+    end
+
+    def self.script?(url)
+      url.match?(SCRIPT_SCHEME)
+    end
 
     def initialize(url, base_href = nil)
       @base = parse(url)
-      href = base_href.to_s.strip
-      @base = join(@base, href) || @base if !href.empty? && !href.start_with?("javascript:")
+      href = UrlResolver.normalize(base_href)
+      base = join(@base, href) unless href.empty? || UrlResolver.script?(href)
+      @base = base if base && !UrlResolver.script?(base.to_s)
+      # A page links to the same places many times, and content selection
+      # and rendering both resolve every link.
+      @links = {}
+      @images = {}
+      @same_page = {}
+      @targets = {}
     end
 
     def resolve(href)
-      absolute(href) { |uri| clean_link(uri) }
+      @links.fetch(href) { @links[href.dup.freeze] = link(href).freeze }
+    end
+
+    # The URL a link goes to, read against the page's, with its scheme and
+    # host in lower case, and left as written otherwise: where two links may
+    # differ only by what #resolve cleans off (an "icid" that names a
+    # member, not a campaign).
+    def target(href)
+      @targets.fetch(href) { @targets[href.dup.freeze] = absolute(href, &:normalize).freeze }
     end
 
     def resolve_image(src)
-      absolute(src) { |uri| clean_image(uri) }
+      @images.fetch(src) { @images[src.dup.freeze] = absolute(src) { |uri| clean_image(uri) }.freeze }
     end
 
     def same_page?(url)
-      return false unless @base
+      @same_page.fetch(url) { @same_page[url.dup.freeze] = page_anchor?(url) }
+    end
+
+    private
+
+    def link(href)
+      href = UrlResolver.normalize(href)
+      plain_link(href) || absolute(href) { |uri| clean_link(uri) }
+    end
+
+    # Most links are a plain web URL or a plain path from the site's root.
+    # Parsing and cleaning give those back as they are, the path after the
+    # page's origin, so they skip URI. Amazon's links are cleaned by path,
+    # and a base that is not a web page is left to URI.
+    def plain_link(href)
+      return unless @base.nil? || web?(@base)
+
+      if (match = PLAIN_URL.match(href))
+        href unless match[1].match?(AMAZON)
+      elsif href.match?(PLAIN_PATH)
+        "#{origin}#{href}" if origin
+      end
+    end
+
+    def origin
+      return @origin if defined?(@origin)
+
+      @origin = (@base.merge("/").to_s.chomp("/") if @base && !@base.host.match?(AMAZON))
+    end
+
+    # Only a URL with a fragment can be an anchor.
+    def page_anchor?(url)
+      return false unless @base && url.include?("#")
 
       uri = parse(url)
       return false unless uri
 
       @page ||= strip_fragment(clean_link(@base))
-      uri.fragment && strip_fragment(uri) == @page
+      !uri.fragment.nil? && strip_fragment(uri) == @page
     end
 
-    private
-
+    # Nothing that runs a script, before or after resolving: a <base> could
+    # lend its scheme to a relative path.
     def absolute(href)
-      href = href.to_s.strip.delete("\t\n\r")
-      return if href.empty?
-      return href if href.match?(/\A(?:mailto|tel|data):/i)
+      href = UrlResolver.normalize(href)
+      return if href.empty? || UrlResolver.script?(href)
+      return href if href.match?(/\A(?:mailto|tel):/i)
 
       uri = @base ? join(@base, href) : parse(href)
-      uri ? yield(uri).to_s : href
+      url = uri ? yield(uri).to_s : href
+      url unless UrlResolver.script?(url)
     end
 
     def parse(url)
@@ -109,6 +194,8 @@ module Nokodown
     end
 
     def encode(string)
+      return string unless string.match?(UNSAFE)
+
       string.gsub(UNSAFE) { |char| char.bytes.map { |byte| format("%%%02X", byte) }.join }
     end
 
@@ -125,7 +212,8 @@ module Nokodown
     end
 
     def redirect_target(uri)
-      return unless "#{uri.host}#{uri.path}".match?(REDIRECTOR)
+      location = "#{uri.host}#{uri.path}"
+      return unless location.match?(REDIRECTOR) || location.match?(SAFELINKS)
 
       param_values(uri, DESTINATION_PARAM).map { |value| parse(value) }.find { |target| web?(target) }
     end
@@ -223,7 +311,7 @@ module Nokodown
     end
 
     def unescape(value)
-      decoded = URI::DEFAULT_PARSER.unescape(value)
+      decoded = URI_PARSER.unescape(value)
       decoded if decoded.valid_encoding?
     end
 

@@ -14,6 +14,11 @@ module Nokodown
 
     # Elements that stop Readability from treating a div as a paragraph.
     PARAGRAPH_BREAKERS = Set.new(%w[blockquote dl div img ol p pre table ul]).freeze
+    PARAGRAPH_BREAKER_SELECTOR = PARAGRAPH_BREAKERS.to_a.join(", ").freeze
+
+    # The elements the HTML parser reopens after a block cuts them.
+    FORMATTING = Set.new(%w[a b big code em font i nobr s small strike strong tt u]).freeze
+    FORMATTING_XPATH = FORMATTING.map { |name| ".//#{name}" }.join("|").freeze
 
     CODE = %w[pre code].freeze
 
@@ -23,37 +28,122 @@ module Nokodown
     # Every character [[:space:]] matches. tr/squeeze is several times faster
     # than a regex gsub on large subtrees.
     UNICODE_SPACES = "\t\n\v\f\r\u0085\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000"
+    ASCII_SPACES = "\t\n\v\f\r"
+    # The other characters of UNICODE_SPACES, as UTF-8 bytes.
+    NON_ASCII_SPACE_BYTES = Regexp.new(
+      "\xC2[\x85\xA0]|\xE1\x9A\x80|\xE2\x80[\x80-\x8A\xA8\xA9\xAF]|\xE2\x81\x9F|\xE3\x80\x80".b, Regexp::NOENCODING
+    )
+    # The first bytes of those sequences, the share of a text's bytes past
+    # which they are replaced faster as characters, and the length below
+    # which counting them costs more than it saves.
+    SPACE_LEADS = ["\xC2".b, "\xE1".b, "\xE2".b, "\xE3".b].map(&:freeze).freeze
+    DENSE_LEADS = 20
+    DENSE_MIN = 16
+    # What squish can drop: spaces, and a NUL that strip takes off the end.
+    ASCII_BLANKS = "#{ASCII_SPACES} \0"
+    # Bytes that start no more characters than there are blanks among them:
+    # the ASCII blanks, and every first byte of a non-ASCII space.
+    BLANK_BYTES = [*ASCII_BLANKS.chars, *SPACE_LEADS].map { |byte| byte.b.freeze }.freeze
+    # What squish changes in ASCII text: a space other than a blank, two
+    # blanks in a row, or a blank or NUL at either end.
+    UNSQUISHED = /[\t\n\v\f\r]|  |\A[ \0]|[ \0]\z/.freeze
+    SHORT_TEXT = 96
+    SAMPLE_LIMITS = 8
 
     # Nokolexbor returns a new Ruby object every time a node is read, so nodes
     # cannot be hash keys. Elements get a numbered attribute to key on instead.
     KEY = "data-nokodown-key"
 
     UUID = /\h{8}-\h{4}-\h{4}-\h{4}-\h{12}/.freeze
-    ARBITRARY_VALUE = /\[[^\s\]]*\]/.freeze
+    # A shorter name cannot hold one, so it is not searched.
+    UUID_LENGTH = 36
+    # One level of brackets may nest ("[&>[data-slot=icon]]"). Possessive, so
+    # a run of unclosed "[" is not rescanned from each one.
+    ARBITRARY_VALUE = /\[(?:[^\s\[\]]|\[[^\s\[\]]*+\])*+\]/.freeze
     CSS_MODULE_HASH = /__(?=[\w-]{0,4}[A-Z\d])[\w-]{5}(?![\w-])/.freeze
+    CAMEL_CASE = /(?<=[a-z\d])(?=[A-Z])/.freeze
+    SIGNATURES = :nokodown_signatures
+    SECONDARY = :nokodown_secondary
+    WEIGHTS = :nokodown_weights
 
     # On a forum, the replies sit in containers named like a comment section.
     # ContentLocator marks them and everything inside them, so the mark
     # survives the copy that article cleaning works on.
     THREAD = "data-nokodown-thread"
 
+    ELEMENTS_XPATH = "descendant::*"
+
     # Set by HeadingAnchors on elements whose id is made from their heading.
     ANCHOR = "data-nokodown-anchor"
 
     module_function
 
-    def assign_keys(root)
+    # Numbers the elements in the order elements(root) lists them.
+    def assign_keys(root, elements = elements(root))
       root[KEY] = "0"
-      root.css("*").each_with_index { |node, index| node[KEY] = (index + 1).to_s }
+      elements.each_with_index { |node, index| node[KEY] = (index + 1).to_s }
     end
 
     def key(node)
       node[KEY]
     end
 
+    # The elements under root in document order, as css("*") lists them.
+    # Lexbor's selector engine takes several times longer, and a walk from
+    # Ruby twice as long. The axis is spelled out: ".//*" is evaluated as a
+    # stream that stops 10,000 levels down.
+    def elements(root)
+      root.xpath(ELEMENTS_XPATH).to_a
+    end
+
+    # A node's children, text included, as an Array. Nokolexbor builds a
+    # NodeSet and wraps every node again when it is read by index;
+    # following the sibling pointers reads each node once.
+    def children(node)
+      found = []
+      child = node.child
+      while child
+        found << child
+        child = child.next_sibling
+      end
+      found
+    end
+
+    # A node's element children as an Array, read through the element
+    # pointers like children above.
+    def element_children(node)
+      found = []
+      child = node.first_element_child
+      while child
+        found << child
+        child = child.next_element
+      end
+      found
+    end
+
+    # Root and the elements under it, children before their parent, in the
+    # order Node#traverse yields them. Walking the element pointers skips
+    # the text nodes and the NodeSet traverse builds for every element.
+    def elements_bottom_up(root)
+      found = []
+      stack = [[root, root.first_element_child]]
+      until stack.empty?
+        entry = stack.last
+        child = entry[1]
+        if child
+          entry[1] = child.next_element
+          stack << [child, child.first_element_child]
+        else
+          stack.pop
+          found << entry[0]
+        end
+      end
+      found
+    end
+
     def mark_as_thread(node)
       node[THREAD] = "1"
-      node.css("*").each { |descendant| descendant[THREAD] = "1" }
+      elements(node).each { |descendant| descendant[THREAD] = "1" }
     end
 
     def thread?(node)
@@ -61,28 +151,68 @@ module Nokodown
     end
 
     def thread_post?(node)
-      thread?(node) && signature(node).match?(Patterns::SECONDARY)
+      thread?(node) && secondary?(node)
     end
 
     # Keys of the <p>s and of the divs Readability would rewrite into <p>
-    # (no block-level descendants), found in one bottom-up pass.
+    # (no block-level descendants). Breakers are rare, so marking their
+    # ancestors, up to one already marked, is much faster than visiting every
+    # node. But Lexbor copies a formatting element that a block cuts
+    # (<a><div>…</a>) into elements sharing one attribute list, and so one
+    # key, and then which copy holds the block decides. A root with such
+    # copies keeps the bottom-up pass, which content selection and cleaning
+    # were tuned with: there the copy visited last decides. The lists are
+    # found with CSS rather than a faster XPath union: a CSS selector list
+    # numbers the document's nodes to sort its results, copies inherit those
+    # numbers, and later selector lists on a copy of the article return their
+    # results in the order those numbers give.
     def paragraph_keys(root)
+      return paragraph_keys_bottom_up(root) if shared_keys?(root)
+
+      broken = Set.new
+      root.css(PARAGRAPH_BREAKER_SELECTOR).to_a.each do |breaker|
+        ancestor = breaker.parent
+        ancestor = ancestor.parent while ancestor&.element? && broken.add?(key(ancestor))
+      end
+
+      candidates = root.css("p, div").to_a
+      candidates << root if root.name == "p" || root.name == "div"
+      candidates.each_with_object(Set.new) do |node, keys|
+        key = key(node)
+        keys << key if node.name == "p" || !broken.include?(key)
+      end
+    end
+
+    def paragraph_keys_bottom_up(root)
       keys = Set.new
       breaks = {}
-      root.traverse do |node|
-        next unless node.element?
-
+      elements_bottom_up(root).each do |node|
         key = key(node)
-        breaks[key] = node.element_children.any? { |child| PARAGRAPH_BREAKERS.include?(child.name) || breaks[key(child)] }
+        breaks[key] = element_children(node).any? { |child| PARAGRAPH_BREAKERS.include?(child.name) || breaks[key(child)] }
         keys << key if node.name == "p" || (node.name == "div" && !breaks[key])
       end
       keys
     end
 
+    # XPath, because Lexbor's CSS engine takes several times longer to
+    # match a list of tag names.
+    def shared_keys?(root)
+      keys = root.xpath(FORMATTING_XPATH).to_a.map { |node| key(node) }
+      keys << key(root) if FORMATTING.include?(root.name)
+      keys.uniq.size != keys.size
+    end
+
     # Nokolexbor answers ancestors(selector) by running CSS matching per
-    # ancestor, which dominated extraction time; compare tag names instead.
+    # ancestor, which dominated extraction time, and builds a NodeSet of
+    # every ancestor even without one; walk up and compare tag names instead.
     def ancestors_named(node, *names)
-      node.ancestors.select { |ancestor| ancestor.element? && names.include?(ancestor.name) }
+      found = []
+      ancestor = node.parent
+      while ancestor
+        found << ancestor if ancestor.element? && names.include?(ancestor.name)
+        ancestor = ancestor.parent
+      end
+      found
     end
 
     # Syntax highlighters wrap tokens in spans whose class ("token comment",
@@ -107,16 +237,101 @@ module Nokodown
       squish(node.content)
     end
 
-    def squish(string)
-      string.tr(UNICODE_SPACES, " ").squeeze(" ").strip
+    # Whether squish(string) is surely longer than limit. Squishing keeps
+    # every character other than a blank, so a start of the string with
+    # more than limit of those is enough. Reading no further than
+    # SAMPLE_LIMITS times the limit bounds what the check costs on long text
+    # that is mostly blanks, which then has to be squished anyway. In other
+    # UTF-8 a character counts as a blank when its first byte can start one,
+    # which overcounts blanks but counts bytes, not characters. Text squish
+    # would raise on is left to it.
+    def squishes_longer?(string, limit)
+      return false if string.bytesize <= limit
+
+      if string.ascii_only?
+        head = string.byteslice(0, SAMPLE_LIMITS * limit)
+        head.bytesize - head.count(ASCII_BLANKS) > limit
+      elsif string.encoding == Encoding::UTF_8 && string.valid_encoding?
+        head = string[0, SAMPLE_LIMITS * limit]
+        bytes = head.b
+        head.length - BLANK_BYTES.sum { |byte| bytes.count(byte) } > limit
+      else
+        false
+      end
     end
 
+    # Most texts an extraction reads are a few words with single spaces
+    # between them, which squishing gives back unchanged; one search finds
+    # those. Past SHORT_TEXT bytes the search takes longer than squishing.
+    def squish(string)
+      return string if string.bytesize <= SHORT_TEXT && string.ascii_only? && !string.frozen? && !string.match?(UNSQUISHED)
+
+      spaces_to_blanks(string).squeeze(" ").strip
+    end
+
+    # Most text is ASCII, where a shorter tr table is twice as fast. Other
+    # UTF-8 is changed in its bytes, which takes a third of the time tr
+    # takes to read it as characters. No byte of these sequences, nor an
+    # ASCII space, occurs inside another character's encoding. The search
+    # stops at every byte that starts one, so text full of those bytes
+    # (Japanese, or a space in every other word) goes through tr. Counting
+    # them costs more than it saves only in the shortest text.
+    def spaces_to_blanks(string)
+      return string.tr(ASCII_SPACES, " ") if string.ascii_only?
+      return string.tr(UNICODE_SPACES, " ") unless string.encoding == Encoding::UTF_8 && string.valid_encoding?
+
+      bytes = string.b
+      return string.tr(UNICODE_SPACES, " ") if bytes.bytesize > DENSE_MIN && SPACE_LEADS.sum { |lead| bytes.count(lead) } * DENSE_LEADS > bytes.bytesize
+
+      bytes.gsub!(NON_ASCII_SPACE_BYTES, " ")
+      bytes.tr!(ASCII_SPACES, " ")
+      bytes.force_encoding(Encoding::UTF_8)
+    end
+
+    # The cache is kept by class list, then by id, so a repeated element
+    # finds its signature without building the string it is made from. No
+    # rewrite of signature_of reaches across a space, so the class list is
+    # read once, and an id (most are unique) on its own.
     def signature(node)
       classes = node["class"]
       id = name_id(node)
       return "" if classes.nil? && id.nil?
 
-      signature_of("#{classes} #{id}")
+      signatures = Thread.current[SIGNATURES]
+      return signature_of("#{classes} #{id}") unless signatures
+
+      by_id = signatures[classes] ||= {}
+      by_id.fetch(id) do
+        classes_signature = by_id.fetch(:classes) { by_id[:classes] = signature_of(classes.to_s) }
+        by_id[id] = "#{classes_signature} #{id && signature_of(id)}".freeze
+      end
+    end
+
+    # Every stage reads the signatures of the same elements again, and a
+    # page repeats its class lists, so an extraction computes each one once.
+    # The cache lives only as long as the block, so pages share nothing.
+    def caching_signatures
+      outer = Thread.current[SIGNATURES]
+      outer_secondary = Thread.current[SECONDARY]
+      outer_weights = Thread.current[WEIGHTS]
+      Thread.current[SIGNATURES] = outer || {}
+      Thread.current[SECONDARY] = outer_secondary || {}
+      Thread.current[WEIGHTS] = outer_weights || {}
+      yield
+    ensure
+      Thread.current[SIGNATURES] = outer
+      Thread.current[SECONDARY] = outer_secondary
+      Thread.current[WEIGHTS] = outer_weights
+    end
+
+    # Whether the element is named like a secondary region. The stages ask
+    # it of the same names again, so the answer is kept with the signatures.
+    def secondary?(node)
+      signature = signature(node)
+      answers = Thread.current[SECONDARY]
+      return Patterns.secondary?(signature) unless answers
+
+      answers.fetch(signature) { answers[signature] = Patterns.secondary?(signature) }
     end
 
     # The id as a name for the element; a heading anchor only repeats the heading.
@@ -128,9 +343,9 @@ module Nokodown
       # A Tailwind arbitrary value ("lg:h-[calc(100vh-var(--nav-height))]") is CSS, not a name.
       value = value.gsub(ARBITRARY_VALUE, "") if value.include?("[")
       # Generated ids (Webflow "w-node-<uuid>") would otherwise read as words.
-      value = value.gsub(UUID, " ") if value.match?(UUID)
+      value = value.gsub(UUID, " ") if value.length >= UUID_LENGTH && value.match?(UUID)
       value = value.gsub(CSS_MODULE_HASH, "") if value.include?("__")
-      value = value.gsub(/([a-z\d])([A-Z])/, '\1-\2') if value.match?(/[a-z\d][A-Z]/)
+      value = value.gsub(CAMEL_CASE, "-") if value.match?(CAMEL_CASE)
       value.downcase
     end
 

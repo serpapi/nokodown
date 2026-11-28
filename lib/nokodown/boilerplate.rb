@@ -11,10 +11,18 @@ module Nokodown
     LANDMARKS = "main, [role=main], [itemprop~=articleBody]"
     CONTENT_ANCESTORS = %w[article main].freeze
     SECTIONING = %w[article aside main nav section].freeze
+    # Cards in a row sit this many wrappers deep at most, not counting a
+    # wrapper around one element only ("card-shell" around "card-content"),
+    # or beside labels ("Staff member").
+    ROW_DEPTH = 3
     PHRASING = Set.new(%w[a abbr b bdi bdo cite code data dfn em i kbd mark q s samp small span strong sub sup time u var]).freeze
+    BADGE_INLINE = Set.new(%w[img picture source br wbr ruby rt rp div ins del label]).freeze
     AD_ATTRIBUTES = %w[data-ad-slot data-ad-unit data-adunit data-ad-client data-google-query-id data-ad-format].freeze
+    AD_ATTRIBUTE_SELECTORS = AD_ATTRIBUTES.map { |name| "[#{name}]" }.freeze
     DRAWER = /(?<![a-z])drawer(?![a-z])/.freeze
-    TAXONOMY = /(?<![\w-])(?:tag|category|has)-[\w-]+/.freeze
+    # Terms WordPress (tag-*, category-*) and WooCommerce (product_cat-*,
+    # product_tag-*, product_brand-*) put on a post or product.
+    TAXONOMY = /(?<![\w-])(?:tag|category|has|product_(?:cat|tag|brand))-[\w-]+/.freeze
     MIN_CARD_RUN = 3
     MIN_LEFT = 200
     CARD_RUN_SHARE = 0.2
@@ -23,6 +31,31 @@ module Nokodown
     FOOTNOTE_MARK = /\A[*†‡§]+/.freeze
     # The word goes with its separators: "footer__disclaimer" without it is "footer", not "footer__".
     DISCLAIMER_WORD = /[-_]*#{Patterns::DISCLAIMER.source}[-_]*/.freeze
+    SIGNATURE_WORD = /[-_]*#{Patterns::SIGNATURE.source}[-_]*/.freeze
+
+    # The counts of the page left, or nil when member panels were replaced
+    # with new elements.
+    attr_reader :stats
+
+    # A member panel base keeps among a run of cards, which this pass marks
+    # for its line after the content is chosen, as base chose it.
+    CARD = "data-nokodown-card"
+
+    # Replaces the marked panels with their lines, but one that is, or
+    # holds, a chosen node, or lies outside them all: base keeps it.
+    def reduce_cards(nodes)
+      return if @cards.nil? || @cards.empty?
+
+      chosen = nodes.map { |node| Dom.key(node) }.to_set
+      @cards.each do |card|
+        if chosen.include?(Dom.key(card)) || card.ancestors.none? { |ancestor| chosen.include?(Dom.key(ancestor)) }
+          card.remove_attribute(CARD)
+        else
+          MemberPanel.reduce(card)
+        end
+      end
+      Dom.assign_keys(@body)
+    end
 
     def initialize(body)
       @body = body
@@ -32,19 +65,42 @@ module Nokodown
       @stats = Stats.new(@body)
       @total = @stats.text_chars(@body)
       @shielded = shielded_keys
-      # Card grids repeat the same class list hundreds of times.
-      @furniture = Hash.new { |cache, signature| cache[signature] = signature.match?(Patterns::PAGE_FURNITURE) }
+      # Few pages carry ad attributes; asking the page once per name (it also
+      # reads templates, which the walk skips) spares asking every element for
+      # each. A selector list would number the page's nodes for sorting, and
+      # copies made later would then list nodes in another order.
+      @ad_attributes = AD_ATTRIBUTE_SELECTORS.any? { |selector| !@body.at_css(selector).nil? }
+      # Card grids repeat the same class list hundreds of times, and class
+      # names repeat across lists. No furniture pattern spans a space, so a
+      # list is furniture when one of its names is.
+      @furniture_tokens = Hash.new { |cache, token| cache[token] = Patterns.furniture?(token) }
+      @furniture = Hash.new { |cache, signature| cache[signature] = signature.split.any? { |token| @furniture_tokens[token] } }
       @disclaimer_only = Hash.new { |cache, signature| cache[signature] = disclaimer_only?(signature) }
+      @signature_only = Hash.new { |cache, signature| cache[signature] = signature_only?(signature) }
+      @noise = Hash.new { |cache, signature| cache[signature] = signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE) }
       @notes = Set.new
       @prose_blocks = Set.new
       @card_classes = card_classes
       @card_bases = @card_classes.map { |classes| base_classes(classes) }
       removals = []
       walk(@body, removals)
+      # Base keeps these as cards; they leave their lines once the content
+      # is chosen as base chose it, from the page with them.
+      # A post's own panel that holds the page waits likewise: main chose
+      # the content with it whole, then took it out of the chosen content.
+      cards, removals = removals.partition { |_, kind| kind == :card || kind == :dominant }
+      @cards = cards.map { |node, kind| node[CARD] = kind == :dominant ? "dominant" : ""; node }
       removals.delete(content_guess(removals)) if almost_empty_without?(removals)
+      if removals.none? { |_, kind| kind == :panel }
+        @stats.remove(removals.map(&:first))
+        return self
+      end
+
       removals.each { |node, kind| kind == :panel ? MemberPanel.reduce(node) : node.remove }
       # The lines panels leave are new elements, and later passes measure by key.
-      Dom.assign_keys(@body) if removals.any? { |_, kind| kind == :panel }
+      Dom.assign_keys(@body)
+      @stats = nil
+      self
     end
 
     private
@@ -57,12 +113,18 @@ module Nokodown
     end
 
     # Code is never furniture, whatever classes its highlighter gives tokens.
+    # Nothing is removed during the walk, so the element pointers stay valid.
     def walk(node, removals)
-      node.element_children.each do |child|
-        next if Dom::CODE.include?(child.name)
-
-        kind = removal(child)
-        kind ? removals << [child, kind] : walk(child, removals)
+      child = node.first_element_child
+      while child
+        unless Dom::CODE.include?(child.name)
+          kind = removal(child)
+          removals << [child, kind] if kind
+          # A card stays until the content is chosen: what base takes out
+          # of it goes now, as on base.
+          walk(child, removals) if kind.nil? || kind == :card || kind == :dominant
+        end
+        child = child.next_element
       end
     end
 
@@ -85,11 +147,19 @@ module Nokodown
       # Side notes inside an article are content whatever their class says.
       return if node.name == "aside" && !aside_noise?(node)
       return :chrome if chrome_element?(node) || chrome_role?(node)
-      return if dominant?(node)
+      # A post's own member panel, read as standing in for the post's line,
+      # goes from the chosen content as on main however long its fields
+      # ("About me"); another panel ("Reviewed by" a member) that holds
+      # the page stays.
+      if dominant?(node)
+        return node.key?(PostAttribution::OWN) && !node[PostAttribution::PANEL].to_s.empty? && MemberPanel.panel?(node) ? :dominant : nil
+      end
       return unless advertising?(node) || chrome_label?(node) || class_noise?(node)
       return if inside_sentence?(node)
 
-      MemberPanel.panel?(node) ? :panel : :guess
+      return :guess unless MemberPanel.panel?(node)
+
+      !@card_bases.empty? && !advertising?(node) && !chrome_label?(node) && card?(node) ? :card : :panel
     end
 
     # A link or span in the middle of running text is part of that text,
@@ -136,7 +206,7 @@ module Nokodown
       return true if node.name == "ins" && node["class"].to_s.include?("adsbygoogle")
       return true if node["id"].to_s.start_with?("div-gpt-ad", "google_ads")
 
-      AD_ATTRIBUTES.any? { |name| node.key?(name) }
+      @ad_attributes && AD_ATTRIBUTES.any? { |name| node.key?(name) }
     end
 
     def chrome_label?(node)
@@ -148,7 +218,141 @@ module Nokodown
     def class_noise?(node)
       return false if !@prose_blocks.empty? && prose_part?(node)
 
-      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node))
+      furniture_class?(node) && !content_note?(node) && (@card_bases.empty? || !card?(node) || post_panel?(node))
+    end
+
+    # A run of member panels beside a thread's posts (phpBB's postprofile)
+    # repeats like cards, but PostAttribution has read whose post each is.
+    # A card in a post's body, or after the body starts, is the post's
+    # content, as on base.
+    def post_panel?(node)
+      return false if node[PostAttribution::PANEL].to_s.empty? || !MemberPanel.panel?(node)
+      # One of a row of cards alike (a post's contributors) is a card.
+      return false if card_row?(node)
+
+      ancestors = node.ancestors.select(&:element?)
+      return false if ancestors.any? { |ancestor| ancestor.key?(PostAttribution::POST) }
+      # A card in a list item that holds no post (vBulletin's post is its
+      # own <li>) is a roster's entry ("Lab safety officer · Safety review").
+      return false if ancestors.any? { |ancestor| ancestor.name == "li" && ancestor.at_css("[#{PostAttribution::POST}], [#{PostAttribution::OWNER}]").nil? }
+
+      owner = ancestors.find { |ancestor| ancestor.key?(PostAttribution::OWNER) }
+      # Outside every post (a roster beside the thread), a card base keeps.
+      return false unless owner
+
+      body = owner&.at_css("[#{PostAttribution::POST}]")
+      body.nil? || Dom.key(node).to_i < Dom.key(body).to_i
+    end
+
+    # Alike as base's cards are: one's classes all among the other's (a
+    # featured card among plain ones), with the same tag, or another member
+    # card's with text (a contributor's section among divs, not phpBB's
+    # empty div beside the panel). A card alone in its wrapper (a list
+    # item) is weighed against the cards alone in the wrapper's siblings.
+    def card_row?(node)
+      holder = node
+      depth = 0
+      loop do
+        return false unless holder.parent&.element?
+        return true if holder.parent.element_children.any? do |sibling|
+          Dom.key(sibling) != Dom.key(holder) && may_hold_card?(sibling, node) && row_cards(sibling).any? { |card, lone| row_card?(node, card, lone) }
+        end
+        children = holder.parent.element_children
+        break unless children.all? { |child| Dom.key(child) == Dom.key(holder) || badge?(child) }
+
+        single = wrapper?(children)
+        break unless single || depth < ROW_DEPTH
+
+        holder = holder.parent
+        depth += 1 unless single
+      end
+      false
+    end
+
+    # A card alike is of the node's tag, or a panel: a sibling holding
+    # neither (phpBB's postbody beside its postprofile) is not walked.
+    def may_hold_card?(sibling, node)
+      return true if sibling.name == node.name || MemberPanel.panel?(sibling)
+      # A tag no selector can name is walked as before.
+      return true unless node.name.match?(/\A[a-z][a-z\d-]*\z/)
+
+      sibling.css("#{node.name}, #{PostAttribution::PANEL_CANDIDATES}").any? { |inner| inner.name == node.name || MemberPanel.panel?(inner) }
+    end
+
+    # Beside a card in its wrapper, a badge or caption ("Staff member",
+    # "Lead contributor and laboratory archivist"): not a panel, and no
+    # post's body (phpBB's postbody beside its postprofile).
+    def badge?(node)
+      !MemberPanel.panel?(node) &&
+        !node.key?(PostAttribution::POST) && node.at_css("[#{PostAttribution::POST}], [#{PostAttribution::OWNER}]").nil?
+    end
+
+    # A wrapper around one element, beside labels at most: a badge, a
+    # caption, short, of elements that hold none (a link, an icon), and
+    # no panel.
+    def wrapper?(children)
+      others = 0
+      children.none? { |child| !label?(child) && (others += 1) > 1 }
+    end
+
+    def label?(node)
+      # Elements that hold none (a link, an icon), or a chain of one in each
+      # (a link around a span), or text-level elements only ("<b>Team</b>
+      # <span>Safety staff</span>" in a link): a caption, up to a heading's
+      # length. The text, read last, costs the most.
+      return false if MemberPanel.panel?(node)
+      return false unless node.element_children.all? { |child| child.element_children.empty? } || chain?(node) || phrase?(node)
+
+      Dom.text(node).length <= MemberPanel::MAX_HEAD
+    end
+
+    def phrase?(node)
+      # A badge's image counts among them, a name's line breaks and ruby,
+      # and the box a link draws around its parts.
+      node.css("*").all? { |inner| (PHRASING.include?(inner.name) || BADGE_INLINE.include?(inner.name)) && !MemberPanel.panel?(inner) }
+    end
+
+    def chain?(node)
+      # However deep: a badge nests its label in spans of its own.
+      loop do
+        children = node.element_children
+        return children.empty? if children.size != 1 || MemberPanel.panel?(children.first)
+
+        node = children.first
+      end
+    end
+
+    # A sibling and what it holds, three deep (a wrapper of one element
+    # adds none), each with whether it is alone in its wrappers: cards in
+    # a row may sit in wrappers, some of them only, and beside a badge
+    # ("Staff member").
+    def row_cards(node)
+      level = [[node, true, 0]]
+      cards = [[node, true]]
+      until level.empty?
+        level = level.flat_map do |parent, lone, depth|
+          children = parent.element_children
+          single = wrapper?(children)
+          next [] unless single || depth < ROW_DEPTH
+
+          children.map { |child| [child, lone && children.size == 1, single ? depth : depth + 1] }
+        end
+        level.each { |child, lone, _depth| cards << [child, lone] }
+      end
+      cards
+    end
+
+    # A card beside other elements in its wrapper is a member card with text.
+    def row_card?(node, card, lone)
+      alike_card?(node, card) && (lone || (MemberPanel.panel?(card) && !Dom.text(card).empty?))
+    end
+
+    def alike_card?(node, sibling)
+      classes = base_classes(node["class"])
+      return false if sibling.name != node.name && (!MemberPanel.panel?(sibling) || Dom.text(sibling).empty?)
+
+      others = base_classes(sibling["class"])
+      others == classes || (!others.empty? && (others - classes).empty?) || (!classes.empty? && (classes - others).empty?)
     end
 
     # Fine print about the site is furniture, but a note on the content right
@@ -184,7 +388,19 @@ module Nokodown
     # Only a signature that is furniture for its disclaimer name alone can be
     # a note; "ad-disclaimer" or "footer__disclaimer" stays furniture.
     def disclaimer_only?(signature)
-      signature.match?(Patterns::DISCLAIMER) && !signature.gsub(DISCLAIMER_WORD, " ").match?(Patterns::PAGE_FURNITURE)
+      signature.match?(Patterns::DISCLAIMER) && !Patterns.furniture?(signature.gsub(DISCLAIMER_WORD, " "))
+    end
+
+    # Furniture for its signature name alone ("signature", "member-signature").
+    def signature_only?(signature)
+      signature.match?(Patterns::SIGNATURE) && !Patterns.furniture?(signature.gsub(SIGNATURE_WORD, " "))
+    end
+
+    # A member's signature is named after the post ("message-signature") or
+    # sits in one; a function's signature in API docs does neither.
+    def forum_signature?(node, signature)
+      signature.gsub(SIGNATURE_WORD, " ").match?(Patterns::POST) ||
+        node.ancestors.any? { |ancestor| ancestor.element? && Dom.signature(ancestor).match?(Patterns::POST) }
     end
 
     def card?(node)
@@ -205,11 +421,12 @@ module Nokodown
       return false if signature.empty?
 
       chrome = @furniture[signature]
-      return site_header?(node) if !chrome && signature.match?(Patterns::HEADER)
-      return @stats.link_density(node) > 0.5 if !chrome && signature.match?(Patterns::MENU)
+      return site_header?(node) if !chrome && Patterns.site_header?(signature)
+      return @stats.link_density(node) > 0.5 if !chrome && Patterns.menu?(signature)
       return false unless chrome
+      return false if @signature_only[signature] && !forum_signature?(node, signature)
       return false if prose_section?(node, signature)
-      return true if signature.gsub(TAXONOMY, " ").match?(Patterns::NOISE)
+      return true if @noise[signature]
 
       !(signature.match?(Patterns::POSITIVE) && @stats.text_chars(node) >= 200)
     end
@@ -223,7 +440,7 @@ module Nokodown
       return false if signature.match?(Patterns::PLACE) || signature.gsub(DRAWER, " ").match?(Patterns::NOISE)
       return false if node.css("p").size < 2
 
-      @prose_blocks.merge(node["class"].to_s.split.select { |token| token.downcase.match?(Patterns::PAGE_FURNITURE) })
+      @prose_blocks.merge(node["class"].to_s.split.select { |token| @furniture_tokens[token.downcase] })
       true
     end
 
@@ -233,7 +450,7 @@ module Nokodown
     # is link text, so all characters count.
     def card_classes
       min_chars = @stats.chars(@body) * CARD_RUN_SHARE
-      runs = @body.css("[class]").group_by { |node| node["class"] }
+      runs = Dom.elements(@body).select { |node| node.key?("class") }.group_by { |node| node["class"] }
       runs.each_with_object(Set.new) do |(classes, nodes), cards|
         cards << classes if card_run?(classes, nodes, min_chars)
       end
@@ -252,7 +469,7 @@ module Nokodown
 
     def furniture_name?(classes)
       signature = Dom.signature_of("#{classes} ")
-      @furniture[signature] || signature.match?(Patterns::HEADER) || signature.match?(Patterns::MENU)
+      @furniture[signature] || Patterns.site_header?(signature) || Patterns.menu?(signature)
     end
 
     # Menus repeat their items too, so a run named after a place is never

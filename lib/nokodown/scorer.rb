@@ -13,7 +13,8 @@ module Nokodown
     SECTIONS_SHARE = 0.75
     SECTION_LINK_DENSITY = 0.25
     TOP_CANDIDATES = 5
-    COMMAS = /[,\u060C\uFE50\uFE10\uFE11\u2E41\u2E34\u2E32\uFF0C]/.freeze
+    # The commas Readability counts, for String#count.
+    COMMAS = ",\u060C\uFE50\uFE10\uFE11\u2E41\u2E34\u2E32\uFF0C"
 
     def self.class_weight(node)
       [node["class"], node["id"]].sum { |value| words_weight(value.to_s.downcase) }
@@ -23,9 +24,11 @@ module Nokodown
     # utility tokens and heading anchors ("media" in "h-social-media-tips").
     # Candidate scoring keeps Readability's weight, which some pages need to
     # pick the right candidate.
-    def self.cleaning_weight(node)
+    # Words matching ignore count for nothing.
+    def self.cleaning_weight(node, ignore: nil)
       [node["class"], Dom.name_id(node)].sum do |value|
         tokens = value.to_s.downcase.split.reject { |token| utility_class?(token) }
+        tokens = tokens.map { |token| token.gsub(ignore, "") } if ignore
         words_weight(tokens.join(" "))
       end
     end
@@ -35,12 +38,21 @@ module Nokodown
       token.rpartition(":").last.match?(Patterns::UTILITY_CLASS)
     end
 
+    # Pages repeat their class lists, so an extraction weighs each one once,
+    # in a cache kept and dropped with the signatures.
     def self.words_weight(value)
       return 0 if value.empty?
 
+      weights = Thread.current[Dom::WEIGHTS]
+      return weigh(value) unless weights
+
+      weights.fetch(value) { weights[value] = weigh(value) }
+    end
+
+    def self.weigh(value)
       (value.match?(Patterns::POSITIVE) ? 25 : 0) - (value.match?(Patterns::NEGATIVE) ? 25 : 0)
     end
-    private_class_method :utility_class?, :words_weight
+    private_class_method :utility_class?, :words_weight, :weigh
 
     def initialize(root, stats)
       @root = root
@@ -74,8 +86,7 @@ module Nokodown
 
     def score_paragraphs
       ignored = secondary_keys
-      @root.traverse do |node|
-        next unless node.element?
+      Dom.elements_bottom_up(@root).each do |node|
         next if ignored.include?(Dom.key(node))
 
         if SCORED.include?(node.name) || paragraph?(node)
@@ -90,17 +101,17 @@ module Nokodown
     # article. A thread holding most of the page (a forum) still counts.
     def secondary_keys
       limit = @stats.text_chars(@root) * 0.5
-      regions = @root.css("*").select do |node|
-        Dom.signature(node).match?(Patterns::SECONDARY) && @stats.text_chars(node) < limit
+      regions = Dom.elements(@root).select do |node|
+        Dom.secondary?(node) && @stats.text_chars(node) < limit
       end
-      regions.flat_map { |region| [region] + region.css("*").to_a }.map { |node| Dom.key(node) }.to_set
+      regions.flat_map { |region| [region] + Dom.elements(region) }.map { |node| Dom.key(node) }.to_set
     end
 
     # A div wrapping a single paragraph is that paragraph, as far as scoring goes.
     def scoring_parent(node)
       parent = node.parent
       return parent unless node.name == "p" && parent&.name == "div" && parent.element_children.size == 1
-      return parent unless parent.children.all? { |child| child.element? || child.content.strip.empty? }
+      return parent unless Dom.children(parent).all? { |child| child.element? || child.content.strip.empty? }
 
       parent.parent
     end
@@ -108,7 +119,7 @@ module Nokodown
     # Text sitting directly in a div between block children counts as paragraphs.
     def phrasing_runs(div)
       runs = [+""]
-      div.children.each do |child|
+      Dom.children(div).each do |child|
         if child.element? && (Dom::PARAGRAPH_BREAKERS.include?(child.name) || Dom.block?(child))
           runs << +""
         else
@@ -121,7 +132,8 @@ module Nokodown
     def add_score(text, parent)
       return if text.length < PARAGRAPH_MIN || parent.nil? || !within_root?(parent)
 
-      points = 1 + text.split(COMMAS, -1).size + [text.length / 100, 3].min
+      # Readability counts the pieces between commas; text here is never empty.
+      points = 2 + text.count(COMMAS) + [text.length / 100, 3].min
       ancestors_from(parent).each_with_index do |ancestor, level|
         key = Dom.key(ancestor)
         @nodes[key] ||= ancestor
@@ -150,8 +162,15 @@ module Nokodown
       list
     end
 
+    # A walk up the parents: Node#ancestors builds a NodeSet of every
+    # ancestor first, which cost more than the rest of the scoring.
     def within_root?(node)
-      Dom.key(node) == @root_key || node.ancestors.any? { |ancestor| ancestor.element? && Dom.key(ancestor) == @root_key }
+      while node
+        return true if node.element? && Dom.key(node) == @root_key
+
+        node = node.parent
+      end
+      false
     end
 
     def initial_score(node)
@@ -248,8 +267,8 @@ module Nokodown
 
     def best_score_within(node)
       best = -Float::INFINITY
-      node.traverse do |descendant|
-        value = descendant.element? && score(descendant)
+      Dom.elements_bottom_up(node).each do |descendant|
+        value = score(descendant)
         best = value if value && value > best
       end
       best
