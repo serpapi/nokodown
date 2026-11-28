@@ -56,6 +56,7 @@ module Nokodown
     PHPBB_LONG = 55
     # What names a menu as a theme's own group (its id, role or label).
     NAMES = %w[id role aria-label aria-labelledby aria-describedby].freeze
+    MICRODATA = %w[itemprop itemscope itemid itemtype].freeze
     # What phpBB's script writes on a dropdown it opens, beside its display.
     PLACED = %w[margin-left margin-right left max-width].freeze
     # What Popper writes on a Bootstrap menu it places.
@@ -128,7 +129,7 @@ module Nokodown
       # named Facebook's own Facebook) are ways to reach the member, not the
       # forum's profile, unless one says it is (rel="author").
       links = panel.css("a[href]").reject { |candidate| contact?(candidate, panel) && !author_rel?(candidate) }
-      return link ? link["href"] : identity(panel.css("a[href]")) if links.empty?
+      return link ? link["href"] : identity(panel.css("a[href]")) || person_id(panel) if links.empty?
 
       # A count ("404" posts, by a member named 404) names no one, nor an
       # address shown as itself (phpBB's "index.php", by a member of that name).
@@ -142,9 +143,17 @@ module Nokodown
       # member card's "#member-92") still names someone.
       hrefs = link ? [link["href"]] : links.select { |candidate| !opener?(candidate) && (avatar_link?(candidate) || profile_link?(candidate)) }.map { |candidate| candidate["href"] }
       hrefs = (hrefs + named).uniq
-      return identity(panel.css("a[href]")) if hrefs.empty?
+      return identity(panel.css("a[href]")) || person_id(panel) if hrefs.empty?
 
       hrefs.size == 1 ? hrefs.first : false
+    end
+
+    # A panel marked up as a schema.org Person with no profile link names
+    # its member by its itemid ("https://example.com/members/92"): an
+    # uploader's card beside a post by /members/72 is another member's.
+    def person_id(panel)
+      id = panel["itemid"].to_s.strip
+      id if panel.key?("itemscope") && panel["itemtype"].to_s.match?(%r{schema\.org/Person\z}i) && !id.empty?
     end
 
     # A panel's email links, contact ones too, where nothing else says who
@@ -204,8 +213,10 @@ module Nokodown
 
       outer = dropdown["class"].to_s.split
       toggles = dropdown.element_children.reject { |child| Dom.key(child) == Dom.key(node) }
+      # bootlike's group is unnamed; a theme's "Public office hours" group
+      # (role="group", a label) is the theme's.
       return false unless outer.include?("dropdown") && !outer.include?("show") && !expanded?(dropdown, outer) &&
-                          NAMES.none? { |name| node.key?(name) } && toggles.size <= 1
+                          NAMES.none? { |name| node.key?(name) || dropdown.key?(name) } && toggles.size <= 1
 
       shown = bootstrap_open?(node, classes, toggles, panel)
       (shown || (!classes.include?("show") && !expanded?(node, classes))) && toggles.all? do |toggle|
@@ -230,12 +241,15 @@ module Nokodown
 
     # bootlike's panel: "div#profile3.postprofile" just before the post's
     # "div.postbody"; a theme's card ("dl#user-info", a numbered div beside
-    # its "div.article-content") is the theme's.
+    # its "div.article-content") is the theme's, and so is one it marks up
+    # as a person ("Co-author" itemprop="author", an uploader's schema.org
+    # Person): bootlike's panel has no microdata.
     def bootlike_panel?(panel)
       body = panel.next_element
       row = panel.parent
       box = row&.parent
       panel.name == "div" && panel["id"].to_s.match?(/\Aprofile\d+\z/) && panel["class"].to_s.split.include?("postprofile") &&
+        MICRODATA.none? { |key| panel.key?(key) } &&
         body && body.name == "div" && body["class"].to_s.split.include?("postbody") &&
         # Bootlike's panel row always sits in the post's div.card-body.
         row.name == "div" && row["class"].to_s.split.include?("row") &&
@@ -654,15 +668,19 @@ module Nokodown
         unless stamp?(stamp, own)
           # phpBB's field ("Time zone") dates the member, not the post: the
           # line shows it as main does, loose, so the post's line repeats it.
-          field ||= stamp if own && stamp?(stamp, false)
+          # The first field that reads as a date does ("Joined May 2016"
+          # before it does not).
+          if !field && own && stamp?(stamp, false)
+            text = Dom.text(widened(stamp, panel, name))
+            field = text if date_text?(text, name) && !text.match?(MEMBER_DATE)
+          end
           next
         end
 
         text = Dom.text(widened(stamp, panel, name))
         return [text, contact_icon?(stamp) && contact_menu?(stamp, panel)] if date_text?(text, name) && !text.match?(MEMBER_DATE)
       end
-      text = field && Dom.text(widened(field, panel, name))
-      return [text, true] if text && date_text?(text, name) && !text.match?(MEMBER_DATE)
+      return [field, true] if field
 
       nil
     end
@@ -708,10 +726,12 @@ module Nokodown
     end
 
     # prosilver's contact menu sits in the panel's "dd.profile-contact".
+    # phpBB's row has that class alone and no name; a theme's "Public
+    # schedule" row ("dd.profile-contact.office-hours") is the theme's.
     def contact_row?(dropdown, panel)
       row = dropdown.parent&.parent
-      row&.element? && row.name == "dd" && row["class"].to_s.split.include?("profile-contact") &&
-        Dom.key(row.parent) == Dom.key(panel)
+      row&.element? && row.name == "dd" && row["class"].to_s.split == ["profile-contact"] &&
+        (NAMES + ["itemprop"]).none? { |name| row.key?(name) } && Dom.key(row.parent) == Dom.key(panel)
     end
 
     # phpBB's script opened the dropdown: it marks the container "visible"
@@ -745,6 +765,7 @@ module Nokodown
     def prosilver_panel?(panel)
       holder = panel.parent
       panel.name == "dl" && panel["class"].to_s.split.include?("postprofile") &&
+        MICRODATA.none? { |key| panel.key?(key) } &&
         [panel.previous_element, panel.next_element].any? { |side| side && side.name == "div" && side["class"].to_s.split.include?("postbody") } &&
         holder&.element? && holder.name == "div" && holder["class"].to_s.split.include?("inner") &&
         numbered?(panel, holder.parent, "post")
@@ -756,7 +777,14 @@ module Nokodown
     # "div.post" or "div.card-body" numbered for nothing) is the theme's.
     def numbered?(panel, box, name)
       number = panel["id"].to_s[/\Aprofile(\d+)\z/, 1]
-      !number.nil? && box&.element? && box.name == "div" && box["class"].to_s.split.include?(name) && box["id"] == "p#{number}"
+      return false unless !number.nil? && box&.element? && box.name == "div" && box["class"].to_s.split.include?(name)
+      return box["id"] == "p#{number}" if box.key?("id")
+
+      # bootlike's fixed navbar moves the number to an empty
+      # "div.hiddenanchor#p3" just before the card.
+      anchor = box.previous_element
+      !anchor.nil? && anchor.name == "div" && anchor["class"].to_s.split == ["hiddenanchor"] && anchor["id"] == "p#{number}" &&
+        anchor.children.empty?
     end
 
     def alone?(menu, dropdown)

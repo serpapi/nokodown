@@ -180,13 +180,37 @@ module Nokodown
 
         narrow = ->(element) { element["class"].to_s.split.any? { |name| name.match?(/\Ad-(?:sm|md|lg|xl|xxl)-none\z/) } }
         holder = node.parent
+        return true if header_rule?(holder)
+
         # bootlike 3: the rule is the narrow-screen element.
         holder, node = node, holder if narrow.call(node) && holder&.element? && holder["class"].to_s.split.include?("postbody")
         body = holder&.parent
         panel = body&.element? ? body.previous_element : nil
+        # bootlike 3.0.5 prints its wide-screen divider, an empty
+        # "div.vr.d-none.d-md-block", just before it.
+        first = body&.element? ? body.element_children.first : nil
+        first = first.next_element while first && first.name == "div" && first.element_children.empty? &&
+                                          Dom.text(first).empty? && first["class"].to_s.split.include?("vr") &&
+                                          first["class"].to_s.split.include?("d-none")
         holder&.element? && (holder.name == "hr" || holder.element_children.size == 1) && narrow.call(holder) &&
           body&.element? && body.name == "div" && body["class"].to_s.split.include?("postbody") &&
-          Dom.key(body.element_children.first) == Dom.key(holder) && panel && panel.key?(MemberPanel::BOOTLIKE)
+          first && Dom.key(first) == Dom.key(holder) && panel && panel.key?(MemberPanel::BOOTLIKE)
+      end
+
+      # bootlike 3.0.5's faint rule under the post's heading
+      # ("div.opacity-50 > hr.m-0"), first in its "div#post_content3" in
+      # the "div.postbody" beside a bootlike panel's line, once the heading
+      # is the post's line.
+      def header_rule?(holder)
+        content = holder&.element? ? holder.parent : nil
+        body = content&.element? ? content.parent : nil
+        panel = body&.element? ? body.previous_element : nil
+        holder&.element? && holder.name == "div" && holder["class"].to_s.split.include?("opacity-50") &&
+          holder.element_children.size == 1 && Dom.text(holder).empty? &&
+          content.name == "div" && content["id"].to_s.match?(/\Apost_content\d+\z/) &&
+          Dom.key(content.element_children.first) == Dom.key(holder) &&
+          body&.element? && body.name == "div" && body["class"].to_s.split.include?("postbody") &&
+          panel && panel.key?(MemberPanel::BOOTLIKE)
       end
 
       # The line is in a table cell, or a list term or definition: without

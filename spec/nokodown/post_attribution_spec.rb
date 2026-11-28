@@ -2403,4 +2403,60 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.scan(/\*\*(?:Wren|Basil)\*\*/).size.should eq(2)
     markdown.should include("**Wren** · May 3, 2024")
   end
+
+  # bootlike 3.0.5 prints a wide-screen divider before its narrow-screen
+  # rule, and a faint rule under the post's heading; a field that is no
+  # date ("Joined") before one that is ("Time zone") leaves the reply's;
+  # a theme's card of phpBB's shape that names a person (microdata) or an
+  # office-hours group of its own keeps its line.
+  it "writes one line per post on bootlike 3.0.5 and keeps what a theme's panel names" do
+    url = "https://example.com/community/fermentation/viewtopic.php?t=25"
+    card = lambda do |day, name, field, rule, body|
+      "<div id='p#{day}' class='card mb-2 mb-md-3 shadow-sm'><div class='card-body p-0'><div class='row m-0'>" \
+        "<div id='profile#{day}' class='postprofile col-lg-3 col-md-4 px-3 pb-3 bg2'><a href='./memberlist.php?mode=viewprofile&amp;u=7#{day}' class='username'>#{name}</a>#{field}</div>" \
+        "<div class='postbody col-lg-9 col-md-8 p-0 bg1'>#{rule}<div id='post_content#{day}'><div class='postbody-before'><a href='#p#{day}'>Starter</a> " \
+        "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></div><div class='opacity-50'><hr class='m-0'></div>" \
+        "<div class='px-3 py-2 bg1'><div class='content pb-2'>#{body}</div></div></div></div></div></div></div>"
+    end
+    opening = "The starter doubled in volume overnight after its second feeding. I used the original flour and a clean jar, then left it on the kitchen counter " \
+              "until the morning. I marked the level of both samples at eight in the evening, and the kitchen cooled down just before midnight."
+    later = "Leave some room in the jar for the next feeding. Mine also doubled in volume after two feedings, even though it had barely moved the previous evening."
+    rule = "<div class='vr h-100 float-end d-none d-md-block'></div><hr class='d-md-none m-0'>"
+    html = "<!DOCTYPE html><html><head><meta name='generator' content='phpBB'><title>Starter</title></head><body>" \
+           "#{card.call(3, 'Wren', '', rule, opening)}#{card.call(4, 'Basil', '', rule, later)}</body></html>"
+    markdown = Nokodown.to_markdown(html, url: url)
+    markdown.scan(/\*\*(?:Wren|Basil)\*\*/).size.should eq(2)
+    markdown.should include("**Basil** · May 4, 2024")
+
+    # The fixed navbar's anchor carries the post's number.
+    navbar = html.gsub(/<div id='p(\d)' class='card /, "<div id='p\\1' class='hiddenanchor'></div><div class='card ")
+    Nokodown.to_markdown(navbar, url: url).scan(/\*\*(?:Wren|Basil)\*\*/).size.should eq(2)
+
+    reply = "The second sample was colder.<br>I recorded the result. See the <a href='https://example.com/community/fermentation/pressure.pdf' class='postlink'>pressure report</a>."
+    fields = "<div class='profile-custom-field profile-club_date d-none d-md-block'>Joined May 2016</div>" \
+             "<div class='profile-custom-field profile-time_zone d-none d-md-block'>Time zone: UTC+03:00</div>"
+    html = "<!DOCTYPE html><html><head><meta name='generator' content='phpBB'><title>Starter</title></head><body>" \
+           "#{card.call(3, 'Wren', '', '', opening)}#{card.call(4, 'Basil', fields, '', reply)}</body></html>"
+    markdown = Nokodown.to_markdown(html, url: url)
+    markdown.should include("**Basil** · May 4, 2024")
+    markdown.should include("[pressure report](https://example.com/community/fermentation/pressure.pdf)")
+
+    post = "<div class='col postbody'><header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>We checked the pressure at dawn and at noon.</p></div>"
+    uploader = "<!doctype html><meta name='generator' content='phpBB'><main><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p>" \
+               "<div id='p3' class='card'><div class='card-body'><div class='row'><div class='postprofile' id='profile3' itemscope itemtype='https://schema.org/Person' " \
+               "itemid='https://example.com/members/92' aria-label='Attachment uploader'><div><b class='username' itemprop='name'>Wren Baker</b></div></div>" \
+               "#{post.sub("<header>", "<hr class='d-md-none m-0'><header>")}</div></div></div></main>"
+    Nokodown.to_markdown(uploader, url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*/)
+    # Without the narrow-screen rule, the Person's itemid names another member.
+    Nokodown.to_markdown(uploader.sub("<hr class='d-md-none m-0'>", ""), url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*/)
+
+    hours = "<!doctype html><meta name='generator' content='phpBB'><main><div class='post' id='p87'><div class='inner'><dl class='postprofile' id='profile87'>" \
+            "<dt><a class='username' href='/members/72'>Wren Baker</a></dt><dd class='profile-contact office-hours' aria-label='Public schedule'>" \
+            "<div class='dropdown-container dropdown-down dropdown-visible visible'><button class='dropdown-trigger' aria-expanded='true'>Contact details</button>" \
+            "<div class='dropdown' style='display: block; margin-left: -42px;'><div class='dropdown-contents contact-icons'><div>" \
+            "<a href='/schedule' class='last-cell' title='Office hours 09:00–12:00 UTC'><span class='contact-icon office_time-icon'>Office hours 09:00–12:00 UTC</span></a>" \
+            "</div></div></div></div></dd></dl>#{post}</div></div></main>"
+    Nokodown.to_markdown(hours, url: "https://example.com/threads/starter").should include("Office hours 09:00–12:00 UTC")
+  end
 end
