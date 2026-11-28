@@ -140,13 +140,20 @@ module Nokodown
     # > h3, ul.post-buttons, p.author, div.content): only the subject and
     # the buttons come before it. A quote's "Guest wrote:" inside the
     # body, or a credit after a theme's own name and date, does not.
+    # prosilver 3.1+ dates the post inside p.author (3.0 has no <time>): a
+    # .author with the date beside it, before it or after it at any level
+    # (a header "Wren, May 3" above a diagram's "Graph by Fern"), is a
+    # theme's.
     def own_author?(author, body)
+      undated = author.at_css("time").nil?
+      dated = ->(sibling) { sibling.name == "time" || !sibling.at_css("time").nil? }
       key = Dom.key(body)
       depth = 0
       node = author
       while node&.element? && Dom.key(node) != key
         return false if quote_like?(node)
-        return false if node.xpath("preceding-sibling::*").any? { |sibling| !heading_or_buttons?(sibling) }
+        return false if node.xpath("preceding-sibling::*").any? { |sibling| !heading_or_buttons?(sibling) || dated.call(sibling) }
+        return false if undated && node.xpath("following-sibling::*").any?(&dated)
 
         depth += 1 unless node == author
         node = node.parent
@@ -258,30 +265,58 @@ module Nokodown
       false
     end
 
-    # Whether the items holding the name, from the panel down to the
+    # Whether the elements holding the name, from the panel down to the
     # innermost holding it whole, relate two people: an RDFa subject and
     # object that differ (about="/members/72" rel="knows"
-    # resource="/members/92"), or two Persons' ids.
+    # resource="/members/92", or an untyped span rel="foaf:knows"
+    # resource="/members/92" inside Person 72), two Persons' ids (an
+    # untyped about too), or two Persons one of them unnumbered.
     def related?(node, panel)
       text = Dom.text(node)
-      items = node.css("[itemscope], [typeof]").select { |inner| Dom.text(inner) == text }
+      items = node.css("*").select { |inner| Dom.text(inner) == text }
       stop_key = Dom.key(panel)
       while node&.element?
-        items << node if node.key?("typeof") || node.key?("itemscope")
+        items << node
         break if Dom.key(node) == stop_key
 
         node = node.parent
       end
       ids = []
+      people = []
       items.each do |item|
         about = item["about"].to_s.strip
         object = (item["resource"] || item["href"]).to_s.strip
-        return true if item.key?("typeof") && !about.empty? && !object.empty? && about != object
+        if item.key?("typeof")
+          return true if !about.empty? && !object.empty? && about != object
+        else
+          relation = "#{item['rel']} #{item['rev']}".include?(":") || item.key?("property")
+          held = relation && !object.empty? && subject(item)
+          return true if held && !held.empty? && object != held
+          ids << about unless about.empty?
+        end
 
         id = microdata_person(item) || rdfa_person(item)
         ids << id if id
+        people << id if typed_person?(item)
       end
-      ids.uniq.size > 1
+      ids.uniq.size > 1 || (people.size > 1 && people.include?(nil))
+    end
+
+    # The RDFa subject above an element: the nearest about, or a typed
+    # item's resource.
+    def subject(node)
+      node.ancestors.each do |ancestor|
+        break unless ancestor.element?
+        return ancestor["about"].to_s.strip if ancestor.key?("about")
+        return ancestor["resource"].to_s.strip if ancestor.key?("typeof") && ancestor.key?("resource")
+      end
+      nil
+    end
+
+    # Whether the element is typed a Person, numbered or not.
+    def typed_person?(node)
+      (node.key?("itemscope") && node["itemtype"].to_s.split.any? { |type| type.match?(%r{/Person/?\z}i) }) ||
+        (node.key?("typeof") && node["typeof"].to_s.split.any? { |type| type.match?(%r{(?:\A|[:/])Person/?\z}i) })
     end
 
     # The Person of the nearest item around the node, below stop: nil where
@@ -337,7 +372,7 @@ module Nokodown
 
       # A CURIE ("member:wren", or safe "[member:wren]") is the address its
       # prefix binds there: two widgets' "member:wren" may be two people.
-      curie = id.match(/\A\[?([A-Za-z_][\w.-]*):([^\]]*)\]?\z/)
+      curie = id.match(/\A\[?([\p{L}_][\p{L}\p{N}\p{M}_.-]*):([^\]]*)\]?\z/)
       curie && bound.key?(curie[1].downcase) ? "#{bound[curie[1].downcase]}#{curie[2]}" : id
     end
 

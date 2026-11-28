@@ -70,6 +70,9 @@ module Nokodown
     # holds more than the panel ("3+"). One attribute each, as every one
     # more on the lines slows the pruning that reads them.
     POST = "data-nokodown-post"
+    # The post's name's profile, in doubt: no panel's is the same.
+    DOUBT = "nokodown:doubt"
+    INLINE_MARKS = %w[span b strong em i small a abbr].freeze
     LINE = "data-nokodown-line"
     PANEL = "data-nokodown-panel"
     REPEAT = "data-nokodown-repeat"
@@ -658,9 +661,11 @@ module Nokodown
       hrefs = {}
       authors = {}
       names = {}
+      nodes = {}
       posts.each_with_index do |post, index|
         hrefs[index.to_s] = href(post.author)
         authors[index.to_s] = post.author
+        nodes[index.to_s] = post.node
         post.placement.body[POST] = [index, hrefs[index.to_s]].compact.join(" ")
         post.node[OWNER] = ""
         numbers[Dom.key(post.node)] = index.to_s
@@ -681,7 +686,7 @@ module Nokodown
         named = number && MemberPanel.named(panel)
         number = nil if number && (other_name?(named, names[post]) || other_account?(panel, named, accounts[post]) ||
                                    other_kind?(panel, named, accounts[post], hrefs[post], authors[post]) || described?(panel, described) ||
-                                   other_post_inside?(panel))
+                                   other_post_inside?(panel, nodes[post]))
         panel[PANEL] = number || ""
       end
     end
@@ -690,29 +695,30 @@ module Nokodown
     # an element "#p57", a source it quotes): the name may be that post's
     # submitter, which the walk in finish cannot tell once the bookmark is
     # pruned.
-    def other_post_inside?(panel)
+    def other_post_inside?(panel, node = nil)
       post = panel.ancestors.find { |ancestor| ancestor.element? && ancestor["id"].to_s.match?(/\Ap\d+\z/) }
+      # Or, unnumbered, the post the panel stands beside.
+      post ||= node
       return false unless post
 
-      # Only a bookmark heading the post, above its own date: a quote in
-      # the post's text (bootlike's blockquote#p57 citing "./viewtopic.php
-      # ?p=57#p57") is the post's own content.
-      date = post.css("time").find { |time| !time.ancestors.include?(panel) }
-      above = ->(node) { date.nil? || Dom.key(node).to_i < Dom.key(date).to_i }
+      # Wherever it sits: a bookmark after the post's date still names
+      # another post, so both names stay.
       linked = post.css("a[href^='#p']").any? do |link|
         target = link["href"].to_s[1..]
-        target.match?(/\Ap\d+\z/) && target != post["id"] && above.call(link) &&
+        target.match?(/\Ap\d+\z/) && target != post["id"] &&
           link.ancestors.any? { |ancestor| ancestor.element? && ancestor["id"] == target }
       end
-      linked || post.css("[id^='p']").any? { |inner| above.call(inner) && bookmark?(inner, post, panel) }
+      linked || post.css("[id^='p']").any? { |inner| bookmark?(inner, post, panel) }
     end
 
     # Another post's bookmark (an aside, heading or box "#p57" holding a
-    # link to it, wherever that link points) inside this post, apart from
-    # the panel: not a reply nested in it, which has its own date.
+    # link to it, wherever that link points, or the link "#p57" itself)
+    # inside this post, apart from the panel: not a reply nested in it,
+    # which has its own date.
     def bookmark?(inner, post, panel)
       inner["id"].match?(/\Ap\d+\z/) && inner["id"] != post["id"] && !inner.at_css("time") &&
-        !inner.at_css("a[href]").nil? && !panel.ancestors.include?(inner) && !inner.ancestors.include?(panel)
+        ((inner.name == "a" && inner.key?("href")) || !inner.at_css("a[href]").nil?) &&
+        !panel.ancestors.include?(inner) && !inner.ancestors.include?(panel)
     end
 
     # Climbs from the panel to the posts around it, each with the bodies
@@ -812,7 +818,9 @@ module Nokodown
     # a panel's email link is one member.
     def other_kind?(panel, named, account, href, author)
       _, source = named
-      return false if source.nil? || author.nil? || (account && href)
+      return false if source.nil? || author.nil?
+      return true if href == DOUBT
+      return false if account && href
 
       panel_account = name_account(source, panel)
       return !panel_account.nil? && MemberPanel.link_around(source, panel).nil? if href
@@ -820,6 +828,7 @@ module Nokodown
       return true if panel_account || MemberPanel.person_id(panel, source).is_a?(String)
       return true if (account || marked?(author)) && MemberPanel.link_around(source, panel)
       return true if (account || marked?(author)) && !MemberPanel.identity(panel.css("a[href]")).nil?
+      return true if account && other_number?(panel, account)
 
       # The post's name has an id or an author mark and no link, the
       # panel's name no id: nothing says they are one member (an uploader
@@ -830,14 +839,31 @@ module Nokodown
       (account || marked?(author)) && !MemberPanel.prosilver_panel?(panel) && !MemberPanel.bootlike_panel?(panel)
     end
 
+    # The panel's links number members and none the post's name's id
+    # (phpBB's "memberlist.php?mode=viewprofile&u=92", "/members/92",
+    # "#member-92" beside data-member-id="72"): the panel's own number
+    # names the post, the links' the uploader.
+    def other_number?(panel, account)
+      numbers = panel.css("a[href]").filter_map do |link|
+        href = link["href"]
+        href[/[?&](?:u|user|member|id)=(\d+)(?:[&#]|\z)/i, 1] ||
+          href[%r{/(?:members?|users?)/(?:[^/?#]*\.)?(\d+)(?:[/?#]|\z)}i, 1] ||
+          href[/#(?:members?|users?)-?(\d+)\z/i, 1]
+      end
+      !numbers.empty? && (numbers & account.split).empty?
+    end
+
     # The post's name marked as its author (itemprop="author" around it,
     # RDFa's property="author" or "schema:creator", or rel="author").
     def marked?(author)
       text = Dom.text(author)
       node = author
       # The name alone, or with a short label beside it in the same mark
-      # ("North lab", "Member"), not the post around it.
-      while node&.element? && Dom.text(node).length <= text.length + 40 && node.css("p, time").empty?
+      # ("North lab", "Member since 2019"), even in a paragraph or a time,
+      # not the post around it; an inline mark ("span[property=author]")
+      # with a label of any length ("National Laboratory for Fermentation
+      # Research") and no paragraph or time in it.
+      while node&.element? && (Dom.text(node).length <= text.length + 40 || (INLINE_MARKS.include?(node.name) && node.css("p, time").empty?))
         props = "#{node['itemprop']} #{node['property']} #{node['rel']}".split.map { |prop| prop.sub(%r{\A.*[:/#]}, "").downcase }
         return true if props.any? { |prop| %w[author creator].include?(prop) }
 
@@ -1060,6 +1086,12 @@ module Nokodown
       link = source if source.name == "a" && source.key?("href")
       link ||= Dom.ancestors_named(source, "a").find { |node| node.key?("href") }
       link ||= source.css("a[href]").find { |candidate| !Dom.text(candidate).empty? }
+      # Or the one author link beside it in its line (an avatar or "Author
+      # profile" link with rel="author" next to span.username).
+      unless link
+        beside = name_region(source).css("a[href][rel~=author]").map { |candidate| candidate["href"] }.uniq
+        return beside.first if beside.size == 1
+      end
       link ? link["href"] : person_scope(source)
     end
 
@@ -1068,13 +1100,28 @@ module Nokodown
     # itemid="/members/72", or RDFa's typeof="Person" resource=...).
     def person_scope(source)
       # Or the name's own item inside its holder ("span.username" around
-      # span[typeof=Person][about=/members/72], the whole of its text).
-      unless MemberPanel.microdata_person(source) || MemberPanel.rdfa_person(source)
+      # span[typeof=Person][about=/members/72], the whole of its text); a
+      # holder that is a Person itself, numbered or not, is the name's.
+      holder = source
+      unless MemberPanel.typed_person?(source)
         text = Dom.text(source)
         inner = source.css("[itemscope], [typeof]").find { |node| Dom.text(node) == text }
         source = inner if inner
       end
+      # Around the name, as far as its line goes: a relation ("knows" 72),
+      # two people (an about="/members/72" holder around Person 92), or an
+      # unnumbered Person around another leave whose name it is in doubt.
+      return DOUBT if MemberPanel.related?(source, name_region(holder))
+
       MemberPanel.person_around(source)
+    end
+
+    # The name's holder and the elements around it holding little else
+    # (its line's date, a badge).
+    def name_region(node)
+      limit = Dom.text(node).length + MAX_LABELS
+      node = node.parent while node.parent&.element? && Dom.text(node.parent).length <= limit
+      node
     end
 
     # The names before the date, nearest first: a thread's header reads
