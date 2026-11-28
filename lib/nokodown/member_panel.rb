@@ -137,21 +137,31 @@ module Nokodown
     end
 
     # prosilver's p.author heads the post (div.postbody > div#post_contentN
-    # > h3, p.author, div.content); a quote's "Guest wrote:" inside the
-    # body, or a "Graph prepared by Fern." after its text, does not.
+    # > h3, ul.post-buttons, p.author, div.content): only the subject and
+    # the buttons come before it. A quote's "Guest wrote:" inside the
+    # body, or a credit after a theme's own name and date, does not.
     def own_author?(author, body)
-      return false if author.xpath("preceding-sibling::p | preceding-sibling::*[contains(concat(' ', normalize-space(@class), ' '), ' content ')]").any?
-
       key = Dom.key(body)
       depth = 0
-      node = author.parent
+      node = author
       while node&.element? && Dom.key(node) != key
-        return false if %w[blockquote q figure cite].include?(node.name) || node["class"].to_s.match?(/quote/i)
+        return false if quote_like?(node)
+        return false if node.xpath("preceding-sibling::*").any? { |sibling| !heading_or_buttons?(sibling) }
 
-        depth += 1
+        depth += 1 unless node == author
         node = node.parent
       end
       depth <= 1
+    end
+
+    def quote_like?(node)
+      %w[blockquote q figure cite footer].include?(node.name) || "#{node['class']} #{node['id']} #{node['role']}".match?(/quote/i)
+    end
+
+    # prosilver's subject (h3), post buttons (ul), or a hidden post's
+    # notice (div.ignore).
+    def heading_or_buttons?(node)
+      node.name.match?(/\A(h[1-6]|ul|ol)\z/) || node["class"].to_s.split.include?("ignore")
     end
 
     # A panel whose links leave the name's profile in doubt, or in a link,
@@ -207,10 +217,19 @@ module Nokodown
     # itemtype lists its types apart ("schema.org/Person schema.org/Thing").
     def person_id(panel, source)
       # A holder around the name ("span.username") with the name's own item
-      # inside it, the whole of its text: that item is the name's.
-      text = Dom.text(source)
-      inner = source.css("[itemscope], [typeof]").find { |node| Dom.text(node) == text }
-      source = inner if inner
+      # inside it, the whole of its text: that item is the name's. A holder
+      # that is a Person itself ("b[typeof=Person][about=/members/92]") is
+      # the name's, whatever it holds (a "foaf:knows" colleague's nick).
+      unless microdata_person(source) || rdfa_person(source)
+        text = Dom.text(source)
+        inner = source.css("[itemscope], [typeof]").find { |node| Dom.text(node) == text }
+        source = inner if inner
+      end
+      # Items between the name and the panel that name a relation ("knows",
+      # "colleague": about and resource two people) or two people: which
+      # one the name is is in doubt.
+      return false if related?(source, panel)
+
       # The Person the name is in (a "div[itemscope]" around it, RDFa's
       # typeof="Person" resource="/members/92", a colleague's inside the
       # panel's own), else the panel's own; not a Person elsewhere in it
@@ -237,6 +256,32 @@ module Nokodown
         node = node.parent
       end
       false
+    end
+
+    # Whether the items holding the name, from the panel down to the
+    # innermost holding it whole, relate two people: an RDFa subject and
+    # object that differ (about="/members/72" rel="knows"
+    # resource="/members/92"), or two Persons' ids.
+    def related?(node, panel)
+      text = Dom.text(node)
+      items = node.css("[itemscope], [typeof]").select { |inner| Dom.text(inner) == text }
+      stop_key = Dom.key(panel)
+      while node&.element?
+        items << node if node.key?("typeof") || node.key?("itemscope")
+        break if Dom.key(node) == stop_key
+
+        node = node.parent
+      end
+      ids = []
+      items.each do |item|
+        about = item["about"].to_s.strip
+        object = (item["resource"] || item["href"]).to_s.strip
+        return true if item.key?("typeof") && !about.empty? && !object.empty? && about != object
+
+        id = microdata_person(item) || rdfa_person(item)
+        ids << id if id
+      end
+      ids.uniq.size > 1
     end
 
     # The Person of the nearest item around the node, below stop: nil where
@@ -288,7 +333,12 @@ module Nokodown
         type.match?(%r{\Ahttps?://(?:schema\.org/|xmlns\.com/foaf/0\.1/)Person/?\z}i) || (schema && type.match?(/\APerson\z/i)) ||
           prefixes.any? { |prefix| type.casecmp?("#{prefix}:Person") }
       end
-      id if person && !id.empty?
+      return unless person && !id.empty?
+
+      # A CURIE ("member:wren", or safe "[member:wren]") is the address its
+      # prefix binds there: two widgets' "member:wren" may be two people.
+      curie = id.match(/\A\[?([A-Za-z_][\w.-]*):([^\]]*)\]?\z/)
+      curie && bound.key?(curie[1].downcase) ? "#{bound[curie[1].downcase]}#{curie[2]}" : id
     end
 
     # The vocabularies whose "Person" is one: schema.org's and FOAF's.

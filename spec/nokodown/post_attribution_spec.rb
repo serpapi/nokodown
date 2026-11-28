@@ -2758,4 +2758,71 @@ RSpec.describe Nokodown::PostAttribution do
            "<section><h2>Original submission</h2><p>The pressure report was first circulated to the lab here.</p></section></body>"
     Nokodown.to_markdown(html, url: url).should include("submitted by\n\n**Wren Baker**\n\n**Wren Baker** · May 3, 2024")
   end
+
+  it "keeps the uploader when the post's author mark also holds a short label" do
+    url = "https://example.com/threads/starter"
+    ["property='schema:author'", "vocab='https://schema.org/' itemprop='author'"].each do |mark|
+      html = "<!doctype html><html><head><meta name='generator' content='phpBB'></head><body><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p><div>" \
+             "<div class='postprofile'><b class='username'>Wren Baker</b><a href='mailto:wren@example.org'>Email uploader</a></div>" \
+             "<div class='col postbody'><span #{mark}><span property='schema:affiliation'>North lab</span><b class='username'>Wren Baker</b></span> " \
+             "<time>May 3, 2024</time><p>We checked the pressure at dawn and at noon.</p></div>" \
+             "<div class='col revision'><time>Last edited May 6, 2024</time></div></div></body></html>"
+      Nokodown.to_markdown(html, url: url).should include("submitted by\n\n**Wren Baker**\n\n**Wren Baker** · May 3, 2024"), mark
+    end
+  end
+
+  it "keeps a theme panel's signing date when a quote's or a footer's p.author sits in the post" do
+    url = "https://example.com/threads/starter"
+    ["<section role='blockquote'><p class='author'>Fern wrote:</p><p>The old gauge was calibrated at noon.</p></section>",
+     "<footer><p class='author'>Graph prepared by Fern.</p></footer>"].each do |inner|
+      html = "<!doctype html><meta name='generator' content='phpBB'><h1>Staff availability</h1><div class='post' id='p87'><div class='inner'>" \
+             "<dl class='postprofile' id='profile87'><dt><a href='/members/72'>Wren Baker</a></dt>" \
+             "<dd class='profile-custom-field profile-date_signed'>Signed April 27, 2024</dd></dl><div class='col postbody'>" \
+             "<a class='username'>Wren Baker</a> <time>May 3, 2024</time><p>We checked the pressure at dawn and at noon.</p>#{inner}</div>" \
+             "<div class='col revision'><time>Last edited May 6, 2024</time></div></div></div>"
+      Nokodown.to_markdown(html, url: url).should include("**Wren Baker** · Signed April 27, 2024\n\n**Wren Baker** · May 3, 2024"), inner
+    end
+  end
+
+  it "keeps the uploader above another post's source or quote whatever its link points to" do
+    url = "https://example.com/threads/starter"
+    [["", "<div id='p57'><h3><a class='post-title' rel='bookmark' href='./viewtopic.php?p=57#p57'>Original submission</a></h3></div>"],
+     ["aria-label='Attachment uploader' id='profile3'",
+      "<blockquote id='p92'><cite><a class='post-title' href='#p3'>Return to the discussion in post 3</a></cite></blockquote>"]].each do |attributes, source|
+      html = "<!doctype html><meta name='generator' content='phpBB'><body><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p>" \
+             "<div id='p3' class='card'><div class='card-body'><div class='row'><div class='postprofile' #{attributes}><b itemprop='name'>Wren Baker</b></div>" \
+             "<div class='col postbody'>#{source}<a class='username' href='/members/72'>Wren Baker</a> <time>May 3, 2024</time>" \
+             "<p>We checked the pressure at dawn and at noon.</p></div><div class='col revision'><time>Last edited May 6, 2024</time></div></div></div></div>" \
+             "<h2>Original submission</h2><p>The pressure report was first circulated to the lab here.</p></body>"
+      Nokodown.to_markdown(html, url: url).should include("submitted by\n\n**Wren Baker**"), source
+    end
+  end
+
+  it "keeps an uploader whose card relates two people, binds its own prefix, or has a profile button beside an account id" do
+    url = "https://example.com/threads/starter"
+    linked = "<a class='username' href='/members/72'>Wren Baker</a>"
+    cases = [
+      ["<b class='username' typeof='foaf:Person' about='/members/92' property='foaf:name' content='Wren Baker'>" \
+       "<span rel='foaf:knows' typeof='foaf:Person' resource='/members/72'><span property='foaf:nick'>Wren Baker</span></span></b>" \
+       "<a href='mailto:uploader@example.com'>uploader@example.com</a>", linked],
+      ["<span typeof='foaf:Person' about='/members/72' rel='foaf:knows' resource='/members/92'><span property='foaf:name' class='username'>Wren Baker</span></span>" \
+       "<a href='mailto:uploader@example.com'>uploader@example.com</a>", linked],
+      ["<b class='username' typeof='foaf:Person' prefix='member: https://uploads.example/members/' about='member:wren'><span property='foaf:name'>Wren Baker</span></b>" \
+       "<a href='mailto:uploader@example.com'>uploader@example.com</a>",
+       "<span typeof='foaf:Person' prefix='member: https://forum.example/users/' about='member:wren'><span class='username' property='foaf:name'>Wren Baker</span></span>"],
+      ["<b class='username'>Wren Baker</b><a href='/members/92'>View forum profile</a>",
+       "<span class='username'><span typeof='foaf:Person' about='/members/72'><span property='foaf:name'>Wren Baker</span></span></span>"],
+      ["<b class='username'>Wren Baker</b><a rel='author' href='#member-92'>View forum profile</a>", "<span data-member-id='72' class='username'>Wren Baker</span>"],
+      ["<b class='username'>Wren Baker</b><a href='/members/92' aria-label='View Wren Baker'><svg role='img' viewBox='0 0 16 16'><circle cx='8' cy='5' r='3'></circle></svg></a>",
+       "<span data-member-id='72' class='username'>Wren Baker</span>"],
+      ["<b class='username'>Wren Baker</b><a href='/members/92'>Member directory</a>", "<span data-member-id='72' class='username'>Wren Baker</span>"]
+    ]
+    cases.each do |panel, author|
+      html = "<!doctype html><html><head><meta name='generator' content='phpBB'></head><body><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p><div>" \
+             "<div class='postprofile'>#{panel}</div><div class='col postbody'>#{author} <time>May 3, 2024</time>" \
+             "<p>We checked the pressure at dawn and at noon.</p></div><div class='col revision'><time>Last edited May 6, 2024</time></div></div>" \
+             "<section id='member-92'><h2>Uploader directory</h2><p>Member 92 submitted the laboratory report.</p></section></body></html>"
+      Nokodown.to_markdown(html, url: url).should include("submitted by\n\n**Wren Baker**\n\n**Wren Baker** · May 3, 2024"), panel
+    end
+  end
 end

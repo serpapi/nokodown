@@ -694,10 +694,25 @@ module Nokodown
       post = panel.ancestors.find { |ancestor| ancestor.element? && ancestor["id"].to_s.match?(/\Ap\d+\z/) }
       return false unless post
 
-      post.css("a[href^='#p']").any? do |link|
+      # Only a bookmark heading the post, above its own date: a quote in
+      # the post's text (bootlike's blockquote#p57 citing "./viewtopic.php
+      # ?p=57#p57") is the post's own content.
+      date = post.css("time").find { |time| !time.ancestors.include?(panel) }
+      above = ->(node) { date.nil? || Dom.key(node).to_i < Dom.key(date).to_i }
+      linked = post.css("a[href^='#p']").any? do |link|
         target = link["href"].to_s[1..]
-        target.match?(/\Ap\d+\z/) && target != post["id"] && link.ancestors.any? { |ancestor| ancestor.element? && ancestor["id"] == target }
+        target.match?(/\Ap\d+\z/) && target != post["id"] && above.call(link) &&
+          link.ancestors.any? { |ancestor| ancestor.element? && ancestor["id"] == target }
       end
+      linked || post.css("[id^='p']").any? { |inner| above.call(inner) && bookmark?(inner, post, panel) }
+    end
+
+    # Another post's bookmark (an aside, heading or box "#p57" holding a
+    # link to it, wherever that link points) inside this post, apart from
+    # the panel: not a reply nested in it, which has its own date.
+    def bookmark?(inner, post, panel)
+      inner["id"].match?(/\Ap\d+\z/) && inner["id"] != post["id"] && !inner.at_css("time") &&
+        !inner.at_css("a[href]").nil? && !panel.ancestors.include?(inner) && !inner.ancestors.include?(panel)
     end
 
     # Climbs from the panel to the posts around it, each with the bodies
@@ -803,20 +818,16 @@ module Nokodown
       return !panel_account.nil? && MemberPanel.link_around(source, panel).nil? if href
       return false if account && panel_account
       return true if panel_account || MemberPanel.person_id(panel, source).is_a?(String)
+      return true if (account || marked?(author)) && MemberPanel.link_around(source, panel)
+      return true if (account || marked?(author)) && !MemberPanel.identity(panel.css("a[href]")).nil?
+
       # The post's name has an id or an author mark and no link, the
-      # panel's a profile link (around the name, or a "Profile" button
-      # beside it) and no id: an uploader at /members/92 beside
-      # data-member-id="72" or itemprop="author".
-      return true if (account || marked?(author)) && (MemberPanel.link_around(source, panel) || profile_button?(panel))
-
-      (account || marked?(author)) && !MemberPanel.identity(panel.css("a[href]")).nil?
-    end
-
-    def profile_button?(panel)
-      panel.css("a[href]").any? do |link|
-        !link["href"].to_s.strip.match?(MemberPanel::MAILTO) && !MemberPanel.nowhere?(link) &&
-          (MemberPanel.profile_link?(link) || (MemberPanel.avatar_link?(link) && link.at_css("img")))
-      end
+      # panel's name no id: nothing says they are one member (an uploader
+      # with a profile button, an avatar or a contact menu beside
+      # data-member-id="72" or itemprop="author"), so both stay, as base
+      # and main keep them; but phpBB's own panel (prosilver's, bootlike's,
+      # numbered for the post) is the poster's.
+      (account || marked?(author)) && !MemberPanel.prosilver_panel?(panel) && !MemberPanel.bootlike_panel?(panel)
     end
 
     # The post's name marked as its author (itemprop="author" around it,
@@ -824,7 +835,9 @@ module Nokodown
     def marked?(author)
       text = Dom.text(author)
       node = author
-      while node&.element? && Dom.text(node) == text
+      # The name alone, or with a short label beside it in the same mark
+      # ("North lab", "Member"), not the post around it.
+      while node&.element? && Dom.text(node).length <= text.length + 40 && node.css("p, time").empty?
         props = "#{node['itemprop']} #{node['property']} #{node['rel']}".split.map { |prop| prop.sub(%r{\A.*[:/#]}, "").downcase }
         return true if props.any? { |prop| %w[author creator].include?(prop) }
 
@@ -1054,6 +1067,13 @@ module Nokodown
     # item around it ("span[itemprop=author][itemscope]" with
     # itemid="/members/72", or RDFa's typeof="Person" resource=...).
     def person_scope(source)
+      # Or the name's own item inside its holder ("span.username" around
+      # span[typeof=Person][about=/members/72], the whole of its text).
+      unless MemberPanel.microdata_person(source) || MemberPanel.rdfa_person(source)
+        text = Dom.text(source)
+        inner = source.css("[itemscope], [typeof]").find { |node| Dom.text(node) == text }
+        source = inner if inner
+      end
       MemberPanel.person_around(source)
     end
 
