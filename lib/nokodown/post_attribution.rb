@@ -34,6 +34,11 @@ module Nokodown
     # the body. A modifier ("has-signature") names a body that has one.
     CLOSING = /(?<![a-z])(?<!has-|with-)(?:signature|footer)(?![a-z])/.freeze
     YEAR = /(?<!\d)(?:19|20)\d\d(?!\d)/.freeze
+    # A field read as a calendar date: a year beside a month's name or in a
+    # numeric date ("Signed April 27, 2024", "2024-04-27", "27/04/2024").
+    MONTH = /(?<![a-z])(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|
+              sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?![a-z])/xi.freeze
+    NUMERIC_DATE = %r{(?<!\d)\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}(?!\d)}.freeze
     ISO_DATE = /\A\d{4}-\d\d-\d\d/.freeze
     LETTER = /\p{L}/.freeze
     MAX_NAME = 60
@@ -56,8 +61,10 @@ module Nokodown
     SUBJECT = "data-nokodown-subject"
     # A subject's value where it is a heading quoted in the header.
     QUOTED_SUBJECT = "quote"
-    # A member's account id on a name (XenForo).
-    ACCOUNT = "data-user-id"
+    # A member's account id on a name (XenForo's data-user-id, a theme's
+    # data-member-id).
+    ACCOUNTS = %w[data-user-id data-member-id].freeze
+    ACCOUNT = ACCOUNTS.map { |attribute| "[#{attribute}]" }.join(", ")
     # A post's heading that repeats the thread's title, which stays in place.
     TITLE = "data-nokodown-title"
     HEADINGS = "h1, h2, h3, h4, h5, h6"
@@ -176,7 +183,7 @@ module Nokodown
       # itself first there); a rule shown on every screen, or a theme's
       # narrow-screen rule between two credits, parts what it stands between.
       def responsive_rule?(node)
-        return false unless node.name == "hr"
+        return false unless node.name == "hr" && !themed?(node)
 
         narrow = ->(element) { element["class"].to_s.split.any? { |name| name.match?(/\Ad-(?:sm|md|lg|xl|xxl)-none\z/) } }
         holder = node.parent
@@ -192,9 +199,15 @@ module Nokodown
         first = first.next_element while first && first.name == "div" && first.element_children.empty? &&
                                           Dom.text(first).empty? && first["class"].to_s.split.include?("vr") &&
                                           first["class"].to_s.split.include?("d-none")
-        holder&.element? && (holder.name == "hr" || holder.element_children.size == 1) && narrow.call(holder) &&
+        holder&.element? && (holder.name == "hr" || holder.element_children.size == 1) && narrow.call(holder) && !themed?(holder) &&
           body&.element? && body.name == "div" && body["class"].to_s.split.include?("postbody") &&
           first && Dom.key(first) == Dom.key(holder) && panel && panel.key?(MemberPanel::BOOTLIKE)
+      end
+
+      # A rule a theme names ("End of uploader credit") parts what it
+      # stands between; bootlike's carry no name.
+      def themed?(node)
+        MemberPanel::THEME.any? { |name| node.key?(name) }
       end
 
       # bootlike 3.0.5's faint rule under the post's heading
@@ -205,8 +218,10 @@ module Nokodown
         content = holder&.element? ? holder.parent : nil
         body = content&.element? ? content.parent : nil
         panel = body&.element? ? body.previous_element : nil
+        rule = holder&.element? ? holder.first_element_child : nil
         holder&.element? && holder.name == "div" && holder["class"].to_s.split.include?("opacity-50") &&
-          holder.element_children.size == 1 && Dom.text(holder).empty? &&
+          holder.element_children.size == 1 && Dom.text(holder).empty? && !themed?(holder) &&
+          rule.name == "hr" && rule["class"].to_s.split.include?("m-0") &&
           content.name == "div" && content["id"].to_s.match?(/\Apost_content\d+\z/) &&
           Dom.key(content.element_children.first) == Dom.key(holder) &&
           body&.element? && body.name == "div" && body["class"].to_s.split.include?("postbody") &&
@@ -314,8 +329,14 @@ module Nokodown
         return false if name.nil? || own_name.nil?
 
         # A contact's label read as the date ("Office hours (UTC+3)") is
-        # not the post's.
-        name.sub(BY, "").strip.casecmp?(own_name) && (date.empty? || repeat.key?(MemberPanel::LOOSE) || date.casecmp?(own_date))
+        # not the post's; a field's calendar date ("Signed April 27, 2024")
+        # is the member's own, kept as base and main keep it.
+        name.sub(BY, "").strip.casecmp?(own_name) &&
+          (date.empty? || (repeat.key?(MemberPanel::LOOSE) && (repeat[MemberPanel::LOOSE] == "dl" || !calendar?(date))) || date.casecmp?(own_date))
+      end
+
+      def calendar?(text)
+        text.match?(YEAR) && (text.match?(MONTH) || text.match?(NUMERIC_DATE))
       end
 
       # A line's post number and profile link; "" for a line that names no
@@ -685,8 +706,13 @@ module Nokodown
     # The account id a forum gives a name (XenForo's data-user-id): two
     # names alike with two ids are two members.
     def account(author)
-      holder = author.key?(ACCOUNT) ? author : author.at_css("[#{ACCOUNT}]")
-      holder && holder[ACCOUNT]
+      holder = account_of(author) ? author : author.at_css(ACCOUNT)
+      holder && account_of(holder)
+    end
+
+    def account_of(node)
+      ACCOUNTS.each { |attribute| return node[attribute] if node.key?(attribute) }
+      nil
     end
 
     def other_account?(panel, named, account)
@@ -696,10 +722,10 @@ module Nokodown
       # panel has another member's.
       _, source = named
       named = source && name_account(source, panel)
-      return named[ACCOUNT] != account if named
+      return account_of(named) != account if named
 
-      ids = panel.css("[#{ACCOUNT}]").map { |node| node[ACCOUNT] }
-      ids << panel[ACCOUNT] if panel.key?(ACCOUNT)
+      ids = panel.css(ACCOUNT).map { |node| account_of(node) }
+      ids << account_of(panel) if account_of(panel)
       !ids.empty? && !ids.include?(account)
     end
 
@@ -707,19 +733,19 @@ module Nokodown
     # around it, or the panel's own (a "Referred by" link in it has another
     # member's).
     def name_account(source, panel)
-      return source if source.key?(ACCOUNT)
+      return source if account_of(source)
 
-      inner = source.at_css("[#{ACCOUNT}]")
+      inner = source.at_css(ACCOUNT)
       return inner if inner
 
       key = Dom.key(panel)
       node = source.parent
       while node&.element? && Dom.key(node) != key
-        return node if node.key?(ACCOUNT)
+        return node if account_of(node)
 
         node = node.parent
       end
-      panel if panel.key?(ACCOUNT)
+      panel if account_of(panel)
     end
 
     # Ids an element names as what describes or labels it: a panel so
@@ -906,7 +932,16 @@ module Nokodown
       link = source if source.name == "a" && source.key?("href")
       link ||= Dom.ancestors_named(source, "a").find { |node| node.key?("href") }
       link ||= source.css("a[href]").find { |candidate| !Dom.text(candidate).empty? }
-      link && link["href"]
+      link ? link["href"] : person_scope(source)
+    end
+
+    # Without a link, the Person the name is the name of: the nearest
+    # itemscope around it ("span[itemprop=author][itemscope]" with
+    # itemid="/members/72").
+    def person_scope(source)
+      scope = source
+      scope = scope.parent while scope&.element? && !scope.key?("itemscope")
+      scope&.element? ? MemberPanel.microdata_person(scope) : nil
     end
 
     # The names before the date, nearest first: a thread's header reads

@@ -2394,6 +2394,15 @@ RSpec.describe Nokodown::PostAttribution do
     markdown = Nokodown.to_markdown(html, url: url)
     markdown.should include("**Basil** · May 4, 2024")
     markdown.should include("[pressure report](https://example.com/community/fermentation/pressure.pdf)")
+    # A closed contact menu's "24/7" after the time zone is not his date.
+    menu = "<div class='profile-custom-field profile-time_zone d-none d-md-block'>Time zone: UTC+03:00</div><div class='btn-group dropdown'>" \
+           "<ul class='dropdown-menu dropdown-contents'><li><a class='dropdown-item' href='/office'><span class='office_time-icon'>24/7</span></a></li></ul></div>"
+    html = "<!DOCTYPE html><html><head><meta name='generator' content='phpBB'><title>Starter</title></head><body>" \
+           "<div id='page-body' class='page-body' role='main'>#{card.call(3, 'Wren', '', '', opening)}" \
+           "#{card.call(4, 'Basil', menu, "<div class='opacity-50 d-md-none'><hr class='m-0'></div>", reply)}</div></body></html>"
+    markdown = Nokodown.to_markdown(html, url: url)
+    markdown.should include("**Basil** · May 4, 2024")
+    markdown.should include("[pressure report](https://example.com/community/fermentation/pressure.pdf)")
 
     later = "Leave some room in the jar for the next feeding. Mine also doubled in volume after two feedings, even though it had barely moved the previous evening."
     rule = "<hr class='d-md-none m-0'>"
@@ -2447,9 +2456,39 @@ RSpec.describe Nokodown::PostAttribution do
                "<div id='p3' class='card'><div class='card-body'><div class='row'><div class='postprofile' id='profile3' itemscope itemtype='https://schema.org/Person' " \
                "itemid='https://example.com/members/92' aria-label='Attachment uploader'><div><b class='username' itemprop='name'>Wren Baker</b></div></div>" \
                "#{post.sub("<header>", "<hr class='d-md-none m-0'><header>")}</div></div></div></main>"
-    Nokodown.to_markdown(uploader, url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*/)
+    Nokodown.to_markdown(uploader, url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*\n/)
     # Without the narrow-screen rule, the Person's itemid names another member.
-    Nokodown.to_markdown(uploader.sub("<hr class='d-md-none m-0'>", ""), url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*/)
+    Nokodown.to_markdown(uploader.sub("<hr class='d-md-none m-0'>", ""), url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*\n/)
+    # ... also when the itemtype lists another type beside Person.
+    typed = uploader.sub("<hr class='d-md-none m-0'>", "").sub("'https://schema.org/Person'", "'https://schema.org/Person https://schema.org/Thing'")
+                    .sub("</div></div></div></main>", "<div class='col revision'><time datetime='2024-05-06'>Last edited May 6, 2024</time></div></div></div></div></main>")
+    Nokodown.to_markdown(typed, url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*\n/)
+    # ... or when the Person is inside the panel, in RDFa, or a member id;
+    # and an unlinked author is the Person around the name.
+    plain = typed.sub(" itemscope itemtype='https://schema.org/Person https://schema.org/Thing' itemid='https://example.com/members/92'", "")
+    [plain.sub("<div><b", "<div itemscope itemtype='https://schema.org/Person' itemid='https://example.com/members/92'><b"),
+     plain.sub("id='profile3'", "id='profile3' vocab='https://schema.org/' typeof='Person' resource='/members/92'"),
+     plain.sub("<div><b", "<div data-member-id='92'><b").sub("<a class='username' href", "<a class='username' data-member-id='72' href"),
+     typed.sub("<a class='username' href='/members/72'>Wren Baker</a>",
+               "<span itemscope itemtype='https://schema.org/Person' itemid='https://example.com/members/72'><span class='username'>Wren Baker</span></span>")].each do |page|
+      Nokodown.to_markdown(page, url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*\n/)
+    end
+
+    # A labelled rule is the theme's separator, not bootlike's.
+    head = post.sub("<div class='col postbody'>", "").chomp("</div>")
+    credit = "<!doctype html><meta name='generator' content='phpBB'><main><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p>" \
+             "<div class='card' id='p3'><div class='card-body'><div class='row'><div class='postprofile' id='profile3'><div><b class='username'>Wren Baker</b></div>" \
+             "FIELD</div><div class='col postbody'>BODY</div><div class='col revision'><time datetime='2024-05-06'>Last edited May 6, 2024</time></div>" \
+             "</div></div></div></main>"
+    ["<div id='post_content3'><div class='opacity-50'><hr aria-label='End of uploader credit'></div>#{head}</div>",
+     "<div class='vr d-none d-md-block'></div><hr class='d-md-none' aria-label='End of uploader credit'>#{head}"].each do |body|
+      Nokodown.to_markdown(credit.sub("FIELD", "").sub("BODY", body), url: "https://example.com/threads/starter")
+              .should match(/submitted by\s+\*\*Wren Baker\*\*\s+---/)
+    end
+    # A date field the panel shows is the member's own, beside the navbar's anchor.
+    signed = credit.sub("<div class='card' id='p3'>", "<div class='hiddenanchor' id='p3'></div><div class='card'>").sub("BODY", head)
+                   .sub("FIELD", "<div class='profile-custom-field profile-date_signed d-none d-md-block'>Signed April 27, 2024</div>")
+    Nokodown.to_markdown(signed, url: "https://example.com/threads/starter").should include("**Wren Baker** · Signed April 27, 2024")
 
     hours = "<!doctype html><meta name='generator' content='phpBB'><main><div class='post' id='p87'><div class='inner'><dl class='postprofile' id='profile87'>" \
             "<dt><a class='username' href='/members/72'>Wren Baker</a></dt><dd class='profile-contact office-hours' aria-label='Public schedule'>" \
@@ -2458,5 +2497,18 @@ RSpec.describe Nokodown::PostAttribution do
             "<a href='/schedule' class='last-cell' title='Office hours 09:00–12:00 UTC'><span class='contact-icon office_time-icon'>Office hours 09:00–12:00 UTC</span></a>" \
             "</div></div></div></div></dd></dl>#{post}</div></div></main>"
     Nokodown.to_markdown(hours, url: "https://example.com/threads/starter").should include("Office hours 09:00–12:00 UTC")
+    # A theme's labelled container or microdata group is its own, too.
+    revision = "<div class='col revision'><time datetime='2024-05-06'>Last edited May 6, 2024</time></div>"
+    labelled = hours.sub(" office-hours' aria-label='Public schedule'", "'").sub("</dl>#{post}", "</dl>#{post}#{revision}")
+                    .sub("<div class='dropdown-container", "<div role='group' aria-label='Public office hours' class='dropdown-container")
+    Nokodown.to_markdown(labelled, url: "https://example.com/threads/starter").should include("Office hours 09:00–12:00 UTC")
+    boot = "<!doctype html><meta name='generator' content='phpBB'><main><div id='p87' class='card'><div class='card-body'><div class='row'>" \
+           "<div id='profile87' class='postprofile'><div><a class='username' href='/members/72'>Wren Baker</a></div>" \
+           "<div itemprop='contactPoint' itemscope itemtype='https://schema.org/ContactPoint' class='btn-group dropdown public-schedule'>" \
+           "<button data-bs-toggle='dropdown' class='dropdown-toggle show' type='button' aria-expanded='true'>Contact</button>" \
+           "<ul class='dropdown-menu dropdown-contents show' style='position:absolute; inset:0px auto auto 0px; margin:0; transform:translate(0px, 30px)'>" \
+           "<li><a href='/schedule' class='dropdown-item'><span class='office_time-icon'>Office hours 09:00–12:00 UTC</span></a></li></ul></div></div>" \
+           "#{post}#{revision}</div></div></div></main>"
+    Nokodown.to_markdown(boot, url: "https://example.com/threads/starter").should include("Office hours 09:00–12:00 UTC")
   end
 end
