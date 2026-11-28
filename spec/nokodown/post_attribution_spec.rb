@@ -2669,4 +2669,93 @@ RSpec.describe Nokodown::PostAttribution do
       Nokodown.to_markdown(html.sub("SIGNED", signed), url: url).should include("**Wren Baker** · #{signed}\n\n**Wren Baker** · May 3, 2024")
     end
   end
+
+  it "keeps an uploader whose identity differs from the poster's in RDFa, microdata or a profile button" do
+    url = "https://example.com/threads/starter"
+    tail = "<div class='col postbody'>AUTHOR <time>May 3, 2024</time><p>We checked the pressure at dawn and at noon.</p></div>" \
+           "<div class='col revision'><time>Last edited May 6, 2024</time></div></div></main>"
+    head = "<!doctype html><meta name='generator' content='phpBB'><main><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p><div>"
+    linked = "<a class='username' href='/members/72'>Wren Baker</a>"
+    panels = {
+      # The typed subject is the RDFa `about`, not the related `resource`.
+      "<div class='postprofile' aria-label='Attachment uploader'><span prefix='foaf: http://xmlns.com/foaf/0.1/' typeof='foaf:Person' " \
+      "about='/members/92' rel='foaf:knows' resource='/members/72'><b class='username' property='name'>Wren Baker</b></span>" \
+      "<a href='mailto:uploader@example.com'>Email uploader</a></div>" => linked,
+      # An anonymous colleague nested inside the poster's own Person.
+      "<div class='postprofile' itemscope itemtype='https://schema.org/Person' itemid='/members/72' aria-label='Attachment uploader'>" \
+      "<span itemprop='colleague' itemscope itemtype='https://schema.org/Person'><b itemprop='name'>Wren Baker</b></span></div>" => linked,
+      # A profile button beside a bare uploader, against a post that carries only an account id.
+      "<div class='postprofile' aria-label='Attachment uploader'><b class='username'>Wren Baker</b><a href='/members/92' rel='author'>Profile</a></div>" =>
+        "<span data-member-id='72' class='username'>Wren Baker</span>"
+    }
+    panels.each do |panel, author|
+      Nokodown.to_markdown(head + panel + tail.sub("AUTHOR", author), url: url)
+              .should include("submitted by\n\n**Wren Baker**\n\n**Wren Baker** · May 3, 2024"), panel
+    end
+  end
+
+  it "keeps a theme panel's field when only a quote in the post has prosilver's author line" do
+    url = "https://example.com/threads/starter"
+    html = "<!doctype html><meta name='generator' content='phpBB'><main><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p>" \
+           "<div class='post' id='p3'><div class='inner'><dl class='postprofile' id='profile3'><dt><b class='username'>Wren Baker</b></dt>" \
+           "<dd class='profile-custom-field profile-date_signed'>Signed April 27, 2024</dd></dl><div class='col postbody'>" \
+           "<header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<blockquote><p class='author'>Guest wrote:</p><p>The old gauge was calibrated at noon.</p></blockquote>" \
+           "<p>We checked the pressure at dawn and at noon.</p></div><div class='col revision'><time>Last edited May 6, 2024</time></div></div></div></main>"
+    Nokodown.to_markdown(html, url: url).should include("**Wren Baker** · Signed April 27, 2024\n\n**Wren Baker** · May 3, 2024")
+  end
+
+  it "keeps the uploader above a nested anchor to another post" do
+    url = "https://example.com/threads/starter"
+    html = "<!doctype html><meta name='generator' content='phpBB'><main><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p>" \
+           "<div class='card' id='p3'><div class='card-body'><div class='row'><div class='postprofile' id='profile3'><div><b class='username'>Wren Baker</b></div></div>" \
+           "<div class='col postbody'><div class='vr d-none d-md-block'></div><div id='p92'><a class='post-title' href='#p92'>Report submitter</a></div>" \
+           "<header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>We checked the pressure at dawn and at noon.</p></div><div class='col revision'><time datetime='2024-05-06'>Last edited May 6, 2024</time></div>" \
+           "</div></div></div></main>"
+    Nokodown.to_markdown(html, url: url).should include("submitted by\n\n**Wren Baker**\n\nReport submitter\n\n**Wren Baker** · May 3, 2024")
+  end
+
+  it "keeps an uploader named by a Person inside the name's holder, an avatar link, or a report's details on the card's wrapper" do
+    url = "https://example.com/threads/starter"
+    tail = "<div class='col postbody'>AUTHOR <time>May 3, 2024</time><p>We checked the pressure at dawn and at noon.</p></div>" \
+           "<div class='col revision'><time>Last edited May 6, 2024</time></div></div></body></html>"
+    head = "<!doctype html><html><head><meta name='generator' content='phpBB'></head><body><p><a LINK href='/pressure.pdf'>Pressure report</a> submitted by</p><div>"
+    cases = [
+      ["", "<div class='postprofile' itemscope itemtype='https://schema.org/Person' itemid='/members/72'><span class='username'>" \
+           "<span property='schema:colleague' typeof='foaf:Person' about='/members/92'><span property='foaf:name'>Wren Baker</span></span></span></div>",
+       "<a href='/members/72' class='username'>Wren Baker</a>"],
+      ["", "<div class='postprofile' aria-label='Attachment uploader'><b class='username'>Wren Baker</b><a href='/members/92'><img src='/92.jpg' alt=''></a></div>",
+       "<span data-member-id='72' class='username'>Wren Baker</span>"],
+      ["aria-details='profile3'", "<section id='profile3'><div class='postprofile' id='member92' aria-label='Attachment uploader'><b class='username'>Wren Baker</b>" \
+                                  "<a href='mailto:wren@example.org'>Email uploader</a></div></section>",
+       "<span class='username'>Wren Baker</span>"]
+    ]
+    cases.each do |link, panel, author|
+      Nokodown.to_markdown(head.sub("LINK", link) + panel + tail.sub("AUTHOR", author), url: url)
+              .should include("submitted by\n\n**Wren Baker**\n\n**Wren Baker** · May 3, 2024"), panel
+    end
+  end
+
+  it "keeps a theme panel's field when a p.author follows the post's text" do
+    url = "https://example.com/threads/starter"
+    html = "<!doctype html><meta name='generator' content='phpBB'><main><div class='post' id='p87'><div class='inner'>" \
+           "<dl class='postprofile' id='profile87'><dt><a class='username' href='/members/72'>Wren Baker</a></dt>" \
+           "<dd class='profile-custom-field profile-date_signed'>Signed April 27, 2024</dd></dl><div class='col postbody'>" \
+           "<header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>We checked the pressure at dawn and at noon.</p><p class='author'>Graph prepared by Fern.</p></div>" \
+           "<div class='col revision'><time datetime='2024-05-06'>Last edited May 6, 2024</time></div></div></div></main>"
+    Nokodown.to_markdown(html, url: url).should include("**Wren Baker** · Signed April 27, 2024\n\n**Wren Baker** · May 3, 2024")
+  end
+
+  it "keeps the uploader above another post's bookmark inside this one" do
+    url = "https://example.com/threads/starter"
+    html = "<!doctype html><meta name='generator' content='phpBB'><body><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p>" \
+           "<div id='p3' class='card'><div class='card-body'><div class='row'><div class='postprofile' id='profile3' aria-label='Attachment uploader'>" \
+           "<b itemprop='name'>Wren Baker</b></div><div class='col postbody'><aside id='p57'><a class='post-title' href='#p57' rel='bookmark'>Original submission</a></aside>" \
+           "<a class='username'>Wren Baker</a> <time>May 3, 2024</time><p>We checked the pressure at dawn and at noon.</p></div>" \
+           "<div class='col revision'><time>Last edited May 6, 2024</time></div></div></div></div>" \
+           "<section><h2>Original submission</h2><p>The pressure report was first circulated to the lab here.</p></section></body>"
+    Nokodown.to_markdown(html, url: url).should include("submitted by\n\n**Wren Baker**\n\n**Wren Baker** · May 3, 2024")
+  end
 end

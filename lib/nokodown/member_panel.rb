@@ -133,7 +133,25 @@ module Nokodown
     def prosilver_author?(panel)
       parent = panel.parent or return true
       bodies = parent.element_children.select { |node| node["class"].to_s.split.include?("postbody") }
-      bodies.empty? || bodies.any? { |body| body.at_css(".author") }
+      bodies.empty? || bodies.any? { |body| body.css(".author").any? { |author| own_author?(author, body) } }
+    end
+
+    # prosilver's p.author heads the post (div.postbody > div#post_contentN
+    # > h3, p.author, div.content); a quote's "Guest wrote:" inside the
+    # body, or a "Graph prepared by Fern." after its text, does not.
+    def own_author?(author, body)
+      return false if author.xpath("preceding-sibling::p | preceding-sibling::*[contains(concat(' ', normalize-space(@class), ' '), ' content ')]").any?
+
+      key = Dom.key(body)
+      depth = 0
+      node = author.parent
+      while node&.element? && Dom.key(node) != key
+        return false if %w[blockquote q figure cite].include?(node.name) || node["class"].to_s.match?(/quote/i)
+
+        depth += 1
+        node = node.parent
+      end
+      depth <= 1
     end
 
     # A panel whose links leave the name's profile in doubt, or in a link,
@@ -188,6 +206,11 @@ module Nokodown
     # uploader's card beside a post by /members/72 is another member's.
     # itemtype lists its types apart ("schema.org/Person schema.org/Thing").
     def person_id(panel, source)
+      # A holder around the name ("span.username") with the name's own item
+      # inside it, the whole of its text: that item is the name's.
+      text = Dom.text(source)
+      inner = source.css("[itemscope], [typeof]").find { |node| Dom.text(node) == text }
+      source = inner if inner
       # The Person the name is in (a "div[itemscope]" around it, RDFa's
       # typeof="Person" resource="/members/92", a colleague's inside the
       # panel's own), else the panel's own; not a Person elsewhere in it
@@ -195,12 +218,25 @@ module Nokodown
       around = person_around(source, panel)
       return around if around
 
+      # The name in an item of its own inside the panel's Person (an
+      # unnumbered "colleague") is not the panel's member: in doubt.
       own = microdata_person(panel) || rdfa_person(panel)
-      return own if own
+      return (item_below?(source, panel) ? false : own) if own
 
       # A Person elsewhere in it (a "Verified by" reviewer, a "Referral
       # contact") is someone else: the name's own is in doubt.
       false if panel.css("[itemscope], [typeof]").any? { |node| microdata_person(node) || rdfa_person(node) }
+    end
+
+    # Whether the node is in an item (microdata or RDFa) below stop.
+    def item_below?(node, stop)
+      stop_key = Dom.key(stop)
+      while node&.element? && Dom.key(node) != stop_key
+        return true if node.key?("itemscope") || node.key?("typeof")
+
+        node = node.parent
+      end
+      false
     end
 
     # The Person of the nearest item around the node, below stop: nil where
@@ -224,18 +260,26 @@ module Nokodown
     def rdfa_person(node)
       return unless node.key?("typeof")
 
-      id = (node["resource"] || node["about"]).to_s.strip
+      # The typed subject is "about" where given; "resource" is then the
+      # object of a relation or property ("knows" /members/72).
+      id = (node["about"] || node["resource"]).to_s.strip
       # schema.org's or FOAF's Person: by its prefix, its address, or the
       # vocab in force.
       vocab = ([node] + node.ancestors.to_a).find { |ancestor| ancestor.element? && ancestor.key?("vocab") }
       schema = vocab && vocab["vocab"].to_s.strip.match?(PERSON_VOCAB)
       # Or a prefix of the page's own for it (prefix="s: https://schema.org/"),
-      # as the nearest declaration of that prefix binds it.
+      # as the nearest declaration of that prefix binds it: an element's
+      # last, its "prefix" over its legacy "xmlns:foaf".
       bound = {}
       ([node] + node.ancestors.to_a).each do |ancestor|
-        next unless ancestor.element? && ancestor.key?("prefix")
+        next unless ancestor.element?
 
-        ancestor["prefix"].to_s.scan(/(\S+):\s+(\S+)/).each { |name, uri| bound[name.downcase] ||= uri }
+        own = {}
+        ancestor.attribute_nodes.each do |attribute|
+          own[attribute.name.downcase.delete_prefix("xmlns:")] = attribute.value.to_s.strip if attribute.name.downcase.start_with?("xmlns:")
+        end
+        ancestor["prefix"].to_s.scan(/(\S+):\s+(\S+)/).each { |name, uri| own[name.downcase] = uri } if ancestor.key?("prefix")
+        own.each { |name, uri| bound[name] ||= uri }
       end
       bound["schema"] ||= "https://schema.org/"
       bound["foaf"] ||= "http://xmlns.com/foaf/0.1/"

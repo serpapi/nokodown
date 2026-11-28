@@ -311,9 +311,21 @@ module Nokodown
       # One beside the line is a heading the post shows.
       def post_subject?(node, repeat)
         return false unless node[SUBJECT] == "" || node[TITLE] || bootlike_title?(node, repeat)
+        return false if other_post_link?(node, repeat)
 
         key = Dom.key(node.parent)
         repeat.ancestors.none? { |ancestor| ancestor.element? && Dom.key(ancestor) == key }
+      end
+
+      # A subject that links to another post ("#p57", a source the post
+      # quotes) is that post's, not this one's.
+      def other_post_link?(node, repeat)
+        links = node.name == "a" ? [node] : node.css("a[href^='#p']")
+        targets = links.map { |link| link["href"].to_s }.grep(/\A#p\d+\z/)
+        return false if targets.empty?
+
+        post = repeat.ancestors.find { |ancestor| ancestor.element? && ancestor["id"].to_s.match?(/\Ap\d+\z/) }
+        post.nil? || targets.any? { |target| target != "##{post['id']}" }
       end
 
       # bootlike 4.0.0 links the post's subject to the post
@@ -321,7 +333,9 @@ module Nokodown
       def bootlike_title?(node, repeat)
         return false unless repeat.key?(MemberPanel::BOOTLIKE) && node.name == "a" && node["class"].to_s.split == ["post-title"] && !themed?(node)
 
-        post = node.ancestors.find { |ancestor| ancestor.element? && ancestor["id"].to_s.match?(/\Ap\d+\z/) }
+        # The post is the one the panel's line is in, not an anchor of the
+        # body's own ("div#p92" around a contributor's caption).
+        post = repeat.ancestors.find { |ancestor| ancestor.element? && ancestor["id"].to_s.match?(/\Ap\d+\z/) }
         !post.nil? && node["href"].to_s == "##{post["id"]}"
       end
 
@@ -666,8 +680,23 @@ module Nokodown
         post = number&.chomp(MORE)
         named = number && MemberPanel.named(panel)
         number = nil if number && (other_name?(named, names[post]) || other_account?(panel, named, accounts[post]) ||
-                                   other_kind?(panel, named, accounts[post], hrefs[post], authors[post]) || described?(panel, described))
+                                   other_kind?(panel, named, accounts[post], hrefs[post], authors[post]) || described?(panel, described) ||
+                                   other_post_inside?(panel))
         panel[PANEL] = number || ""
+      end
+    end
+
+    # The panel's post (div#p3) holds another post's bookmark ("#p57" in
+    # an element "#p57", a source it quotes): the name may be that post's
+    # submitter, which the walk in finish cannot tell once the bookmark is
+    # pruned.
+    def other_post_inside?(panel)
+      post = panel.ancestors.find { |ancestor| ancestor.element? && ancestor["id"].to_s.match?(/\Ap\d+\z/) }
+      return false unless post
+
+      post.css("a[href^='#p']").any? do |link|
+        target = link["href"].to_s[1..]
+        target.match?(/\Ap\d+\z/) && target != post["id"] && link.ancestors.any? { |ancestor| ancestor.element? && ancestor["id"] == target }
       end
     end
 
@@ -775,11 +804,19 @@ module Nokodown
       return false if account && panel_account
       return true if panel_account || MemberPanel.person_id(panel, source).is_a?(String)
       # The post's name has an id or an author mark and no link, the
-      # panel's a profile link and no id: an uploader at /members/92
-      # beside data-member-id="72" or itemprop="author".
-      return true if (account || marked?(author)) && MemberPanel.link_around(source, panel)
+      # panel's a profile link (around the name, or a "Profile" button
+      # beside it) and no id: an uploader at /members/92 beside
+      # data-member-id="72" or itemprop="author".
+      return true if (account || marked?(author)) && (MemberPanel.link_around(source, panel) || profile_button?(panel))
 
       (account || marked?(author)) && !MemberPanel.identity(panel.css("a[href]")).nil?
+    end
+
+    def profile_button?(panel)
+      panel.css("a[href]").any? do |link|
+        !link["href"].to_s.strip.match?(MemberPanel::MAILTO) && !MemberPanel.nowhere?(link) &&
+          (MemberPanel.profile_link?(link) || (MemberPanel.avatar_link?(link) && link.at_css("img")))
+      end
     end
 
     # The post's name marked as its author (itemprop="author" around it,
@@ -827,7 +864,18 @@ module Nokodown
     def described?(panel, described)
       return false if described.empty?
 
-      described.include?(panel["id"]) || panel.css("[id]").any? { |node| described.include?(node["id"]) }
+      return true if described.include?(panel["id"]) || panel.css("[id]").any? { |node| described.include?(node["id"]) }
+
+      # Or a wrapper holding the card and nothing else ("div#profile3 >
+      # div.postprofile", a section around it).
+      text = Dom.text(panel)
+      node = panel.parent
+      while node&.element? && Dom.text(node) == text
+        return true if described.include?(node["id"])
+
+        node = node.parent
+      end
+      false
     end
 
     # The number a member panel's line is marked with, or nil where the line
