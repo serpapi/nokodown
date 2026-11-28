@@ -57,7 +57,7 @@ module Nokodown
     # What names a menu as a theme's own group (its id, role or label).
     NAMES = %w[id role aria-label aria-labelledby aria-describedby aria-description aria-details].freeze
     # Microdata, and RDFa's ("typeof", "property"), mark up a theme's items.
-    MICRODATA = %w[itemprop itemscope itemid itemtype typeof property vocab resource].freeze
+    MICRODATA = %w[itemprop itemscope itemid itemtype typeof property vocab resource about prefix].freeze
     # What marks an element as a theme's own (a "Public office hours"
     # group, an "End of uploader credit" rule): phpBB's carry none.
     THEME = (NAMES + %w[title] + MICRODATA).freeze
@@ -108,9 +108,15 @@ module Nokodown
         # prosilver's own fields ("Birthday: 12-05-1987") stand in for its
         # header as main reads them, as do those of a panel the post's name
         # was read from (stock bootlike's); a theme's are kept beside it.
+        # A theme that writes its own header in the post body (no
+        # prosilver p.author) keeps the field line as base does.
         if loose && panel["class"].to_s.split.include?("postprofile") &&
            (panel.name == "dl" || (panel.name == "div" && panel["id"].to_s.match?(/\Aprofile\d+\z/)))
-          line[LOOSE] = panel.key?(PostAttribution::REPLACED) ? SOURCE : panel.name
+          if panel.key?(PostAttribution::REPLACED)
+            line[LOOSE] = SOURCE
+          elsif prosilver_author?(panel)
+            line[LOOSE] = panel.name
+          end
         end
         panel.add_previous_sibling(line)
         line[BOOTLIKE] = "" if panel[PostAttribution::PANEL] && bootlike_panel?(panel)
@@ -118,6 +124,16 @@ module Nokodown
         line[PostAttribution::OWN] = PostAttribution::OWN_LINE if panel.key?(PostAttribution::OWN)
       end
       panel.remove
+    end
+
+    # Whether the post beside a prosilver panel reads its name in
+    # prosilver's own way: its div.postbody holds a p.author (or none is
+    # there to say otherwise). A theme's postbody that writes the name in
+    # a header of its own does not.
+    def prosilver_author?(panel)
+      parent = panel.parent or return true
+      bodies = parent.element_children.select { |node| node["class"].to_s.split.include?("postbody") }
+      bodies.empty? || bodies.any? { |body| body.at_css(".author") }
     end
 
     # A panel whose links leave the name's profile in doubt, or in a link,
@@ -172,14 +188,15 @@ module Nokodown
     # uploader's card beside a post by /members/72 is another member's.
     # itemtype lists its types apart ("schema.org/Person schema.org/Thing").
     def person_id(panel, source)
-      # The panel's own, or the Person the name is in (a "div[itemscope]"
-      # around it, RDFa's typeof="Person" resource="/members/92"); not a
-      # Person elsewhere in it (a "Verified by" reviewer's).
-      own = microdata_person(panel) || rdfa_person(panel)
-      return own if own
-
+      # The Person the name is in (a "div[itemscope]" around it, RDFa's
+      # typeof="Person" resource="/members/92", a colleague's inside the
+      # panel's own), else the panel's own; not a Person elsewhere in it
+      # (a "Verified by" reviewer's).
       around = person_around(source, panel)
       return around if around
+
+      own = microdata_person(panel) || rdfa_person(panel)
+      return own if own
 
       # A Person elsewhere in it (a "Verified by" reviewer, a "Referral
       # contact") is someone else: the name's own is in doubt.
@@ -208,19 +225,30 @@ module Nokodown
       return unless node.key?("typeof")
 
       id = (node["resource"] || node["about"]).to_s.strip
-      # schema.org's Person: by its prefix, its address, or the vocab in force.
+      # schema.org's or FOAF's Person: by its prefix, its address, or the
+      # vocab in force.
       vocab = ([node] + node.ancestors.to_a).find { |ancestor| ancestor.element? && ancestor.key?("vocab") }
-      schema = vocab && vocab["vocab"].to_s.strip.match?(%r{\Ahttps?://schema\.org/?\z}i)
-      # Or a prefix of the page's own for it (prefix="s: https://schema.org/").
-      prefixes = ([node] + node.ancestors.to_a).select { |ancestor| ancestor.element? && ancestor.key?("prefix") }.flat_map do |ancestor|
-        ancestor["prefix"].to_s.scan(%r{(\S+):\s+https?://schema\.org/?(?=\s|\z)}i).flatten
+      schema = vocab && vocab["vocab"].to_s.strip.match?(PERSON_VOCAB)
+      # Or a prefix of the page's own for it (prefix="s: https://schema.org/"),
+      # as the nearest declaration of that prefix binds it.
+      bound = {}
+      ([node] + node.ancestors.to_a).each do |ancestor|
+        next unless ancestor.element? && ancestor.key?("prefix")
+
+        ancestor["prefix"].to_s.scan(/(\S+):\s+(\S+)/).each { |name, uri| bound[name.downcase] ||= uri }
       end
+      bound["schema"] ||= "https://schema.org/"
+      bound["foaf"] ||= "http://xmlns.com/foaf/0.1/"
+      prefixes = bound.select { |_, uri| uri.match?(PERSON_VOCAB) }.keys
       person = node["typeof"].to_s.split.any? do |type|
-        type.match?(%r{\A(?:https?://schema\.org/|schema:)Person/?\z}i) || (schema && type.match?(/\APerson\z/i)) ||
+        type.match?(%r{\Ahttps?://(?:schema\.org/|xmlns\.com/foaf/0\.1/)Person/?\z}i) || (schema && type.match?(/\APerson\z/i)) ||
           prefixes.any? { |prefix| type.casecmp?("#{prefix}:Person") }
       end
       id if person && !id.empty?
     end
+
+    # The vocabularies whose "Person" is one: schema.org's and FOAF's.
+    PERSON_VOCAB = %r{\A(?:https?://schema\.org/?|https?://xmlns\.com/foaf/0\.1/?)\z}i.freeze
 
     # A panel's email links, contact ones too, where nothing else says who
     # the member is: a co-author's addresses beside a post linked to
@@ -747,10 +775,11 @@ module Nokodown
         next unless date_text?(text, name) && !text.match?(MEMBER_DATE)
 
         loose = contact_icon?(stamp) && contact_menu?(stamp, panel)
-        # A closed menu's label ("24/7") after a field the panel shows
-        # ("Time zone: UTC+03:00") stands behind it, as in main's line,
-        # whatever the theme names the menu ("Contact methods").
-        return [field, true] if field && contact_icon?(stamp) && (loose || closed_menu?(stamp, panel))
+        # A contact label ("24/7"), in a closed menu or an open one, after
+        # a field the panel shows ("Time zone: UTC+03:00") stands behind
+        # it, as in base's and main's line, whatever the theme names the
+        # menu ("Contact methods").
+        return [field, true] if field && contact_icon?(stamp)
 
         return [text, loose]
       end
@@ -881,25 +910,6 @@ module Nokodown
     def expanded?(node, classes, styled = true)
       node.name == "details" || node.key?("open") || classes.include?("open") || node["aria-expanded"] == "true" ||
         node["aria-hidden"] == "false" || (styled && node["style"].to_s.match?(/display\s*:\s*(?!none)\w/i))
-    end
-
-    # The node is in a dropdown's list that waits closed (no "show", not
-    # expanded, its button not pressed), named by the theme or not.
-    def closed_menu?(node, panel)
-      key = Dom.key(panel)
-      node = node.parent
-      while node&.element? && Dom.key(node) != key
-        classes = node["class"].to_s.split
-        if classes.include?("dropdown-menu") || (classes.include?("dropdown-contents") && classes.include?("contact-icons"))
-          dropdown = node.parent
-          outer = dropdown&.element? ? dropdown["class"].to_s.split : []
-          return outer.include?("dropdown") && !classes.include?("show") && !outer.include?("show") &&
-                 !expanded?(node, classes) && !expanded?(dropdown, outer) && !dropdown.at_css("[aria-expanded=true]")
-        end
-
-        node = node.parent
-      end
-      false
     end
 
     # phpBB's contact menu names a field's icon by its ident

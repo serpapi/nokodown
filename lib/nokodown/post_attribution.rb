@@ -34,15 +34,6 @@ module Nokodown
     # the body. A modifier ("has-signature") names a body that has one.
     CLOSING = /(?<![a-z])(?<!has-|with-)(?:signature|footer)(?![a-z])/.freeze
     YEAR = /(?<!\d)(?:19|20)\d\d(?!\d)/.freeze
-    ANY_YEAR = /(?<!\d)[12]\d{3}(?!\d)/.freeze
-    # A field read as a calendar date: a year beside a month's name or in a
-    # numeric date ("Signed April 27, 2024", "2024-04-27", "27/04/2024").
-    MONTH = /(?<![a-z])(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|
-              sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?![a-z])/xi.freeze
-    NUMERIC_DATE = %r{(?<!\d)\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}(?!\d)}.freeze
-    # Or a day of the month beside it, in a language whose months it does
-    # not name ("27 avril 2024", "2024年4月27日"); not a time ("08:45").
-    DAY_OF_MONTH = /(?<![\d:])(?:0?[1-9]|[12]\d|3[01])(?![\d:])/.freeze
     ISO_DATE = /\A\d{4}-\d\d-\d\d/.freeze
     LETTER = /\p{L}/.freeze
     MAX_NAME = 60
@@ -208,10 +199,12 @@ module Nokodown
           first && Dom.key(first) == Dom.key(holder) && panel && panel.key?(MemberPanel::BOOTLIKE)
       end
 
-      # A rule a theme names ("End of uploader credit") parts what it
-      # stands between; bootlike's carry no name.
+      # A rule a theme names ("End of uploader credit") or marks (a data-*
+      # attribute, not one of ours) parts what it stands between;
+      # bootlike's carry neither.
       def themed?(node)
-        MemberPanel::THEME.any? { |name| node.key?(name) }
+        MemberPanel::THEME.any? { |name| node.key?(name) } ||
+          node.attribute_nodes.any? { |attribute| attribute.name.start_with?("data-") && !attribute.name.start_with?("data-nokodown-") }
       end
 
       # bootlike 3.0.5's faint rule under the post's heading
@@ -324,10 +317,12 @@ module Nokodown
       end
 
       # bootlike 4.0.0 links the post's subject to the post
-      # ("a.post-title" to "#p4") above its date, beside its panel.
+      # ("a.post-title" to "#p4" in div#p4) above its date, beside its panel.
       def bootlike_title?(node, repeat)
-        repeat.key?(MemberPanel::BOOTLIKE) && node.name == "a" && node["class"].to_s.split == ["post-title"] &&
-          node["href"].to_s.match?(/\A#p\d+\z/) && !themed?(node)
+        return false unless repeat.key?(MemberPanel::BOOTLIKE) && node.name == "a" && node["class"].to_s.split == ["post-title"] && !themed?(node)
+
+        post = node.ancestors.find { |ancestor| ancestor.element? && ancestor["id"].to_s.match?(/\Ap\d+\z/) }
+        !post.nil? && node["href"].to_s == "##{post["id"]}"
       end
 
       def same_line?(repeat, line, urls)
@@ -339,19 +334,13 @@ module Nokodown
         own_name, own_date = parts(line)
         return false if name.nil? || own_name.nil?
 
-        # A contact's label read as the date ("Office hours (UTC+3)") is
-        # not the post's; a field's calendar date ("Signed April 27, 2024")
-        # is the member's own, kept as base and main keep it.
+        # A loose field read as the date is not the post's where the panel
+        # is the board's own (prosilver's dl.postprofile, a stock panel the
+        # author was read from); a theme's field ("Signed 27 avril", "Office
+        # hours") stays the member's own line, as base and main keep it.
         name.sub(BY, "").strip.casecmp?(own_name) &&
-          (date.empty? || (repeat.key?(MemberPanel::LOOSE) && (["dl", MemberPanel::SOURCE].include?(repeat[MemberPanel::LOOSE]) || !calendar?(date))) ||
+          (date.empty? || (repeat.key?(MemberPanel::LOOSE) && ["dl", MemberPanel::SOURCE].include?(repeat[MemberPanel::LOOSE])) ||
            date.casecmp?(own_date))
-      end
-
-      def calendar?(text)
-        # A month with a day or any year ("April 27", "27 Apr 1898"), or a
-        # recent year with a day ("2024-04-27", "27 avril 2024").
-        (text.match?(MONTH) && (text.match?(DAY_OF_MONTH) || text.match?(ANY_YEAR))) ||
-          (text.match?(YEAR) && (text.match?(NUMERIC_DATE) || text.match?(DAY_OF_MONTH)))
       end
 
       # A line's post number and profile link; "" for a line that names no
@@ -724,11 +713,13 @@ module Nokodown
     end
 
     # The account id a forum gives a name (XenForo's data-user-id): two
-    # names alike with two ids are two members.
+    # names alike with two ids are two members. A holder giving two ids
+    # that differ (data-user-id="92" data-member-id="72") gives both, and
+    # so matches no panel's one id.
     def account(author)
       holder = account_of(author) ? author : author.at_css(ACCOUNT)
       holder ||= account_around(author)
-      holder && account_of(holder)
+      holder && accounts_of(holder).join(" ")
     end
 
     # A wrapper that holds the name and nothing else ("span.member-ident"
@@ -783,16 +774,22 @@ module Nokodown
       return !panel_account.nil? && MemberPanel.link_around(source, panel).nil? if href
       return false if account && panel_account
       return true if panel_account || MemberPanel.person_id(panel, source).is_a?(String)
+      # The post's name has an id or an author mark and no link, the
+      # panel's a profile link and no id: an uploader at /members/92
+      # beside data-member-id="72" or itemprop="author".
+      return true if (account || marked?(author)) && MemberPanel.link_around(source, panel)
 
       (account || marked?(author)) && !MemberPanel.identity(panel.css("a[href]")).nil?
     end
 
-    # The post's name marked as its author (itemprop="author" around it).
+    # The post's name marked as its author (itemprop="author" around it,
+    # RDFa's property="author" or "schema:creator", or rel="author").
     def marked?(author)
       text = Dom.text(author)
       node = author
       while node&.element? && Dom.text(node) == text
-        return true if node["itemprop"].to_s.split.any? { |prop| %w[author creator].include?(prop) }
+        props = "#{node['itemprop']} #{node['property']} #{node['rel']}".split.map { |prop| prop.sub(%r{\A.*[:/#]}, "").downcase }
+        return true if props.any? { |prop| %w[author creator].include?(prop) }
 
         node = node.parent
       end
@@ -822,8 +819,8 @@ module Nokodown
     # named credits that element ("Uploaded by the member above"), not the
     # post.
     def described_ids
-      @body.css("[aria-describedby], [aria-labelledby]").each_with_object(Set.new) do |node, ids|
-        "#{node['aria-describedby']} #{node['aria-labelledby']}".split.each { |id| ids << id }
+      @body.css("[aria-describedby], [aria-labelledby], [aria-details]").each_with_object(Set.new) do |node, ids|
+        "#{node['aria-describedby']} #{node['aria-labelledby']} #{node['aria-details']}".split.each { |id| ids << id }
       end
     end
 

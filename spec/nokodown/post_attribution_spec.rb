@@ -2568,4 +2568,105 @@ RSpec.describe Nokodown::PostAttribution do
            "#{post}#{revision}</div></div></div></main>"
     Nokodown.to_markdown(boot, url: "https://example.com/threads/starter").should include("Office hours 09:00–12:00 UTC")
   end
+
+  # Round 42: what tells the uploader beside a post apart from its author,
+  # and what a theme's panel shows beside the post's line.
+  it "keeps an uploader whom the panel and the post identify apart" do
+    url = "https://example.com/threads/starter"
+    credit = "<!doctype html><meta name='generator' content='phpBB'><main><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p>" \
+             "<div><div class='postprofile' aria-label='Attachment uploader'>PANEL</div><div class='col postbody'>AUTHOR <time>May 3, 2024</time>" \
+             "<p>We checked the pressure at dawn and at noon.</p></div><div class='col revision'><time>Last edited May 6, 2024</time></div></div></main>"
+    linked = "<a class='username' href='/members/72'>Wren Baker</a>"
+    bare = "<b class='username'>Wren Baker</b>"
+    mail = "<b class='username'>Wren Baker</b><a href='mailto:wren@example.org'>Email uploader</a>"
+    cases = {
+      # A FOAF Person, as a schema.org one, names its member.
+      "<span vocab='http://xmlns.com/foaf/0.1/' typeof='Person' resource='/members/92'><b class='username' property='name'>Wren Baker</b></span>" => linked,
+      "<span prefix='foaf: http://xmlns.com/foaf/0.1/' typeof='foaf:Person' resource='/members/92'><b class='username'>Wren Baker</b></span>" => linked,
+      # A profile link in the panel beside an id or an author mark alone.
+      "<a href='/members/92'>Wren Baker</a>" => "<span data-member-id='72' class='username'>Wren Baker</span>",
+      "<a href='/members/92'>Wren Baker</a> " => "<span itemprop='author'><b class='username'>Wren Baker</b></span>",
+      # Two ids that differ on the post's name leave it in doubt.
+      "<div data-member-id='92'><b itemprop='name'>Wren Baker</b></div>" => "<span data-user-id='92' data-member-id='72'>#{linked}</span>",
+      # The name's own Person in the panel's (a colleague's).
+      "<span itemprop='colleague' itemscope itemtype='https://schema.org/Person' itemid='/members/92'><b itemprop='name'>Wren Baker</b></span>" => linked,
+      # A mailbox beside an RDFa or rel author mark.
+      mail => "<span vocab='https://schema.org/' property='author'>#{bare}</span>",
+      mail + " " => "<a rel='author' class='username'>Wren Baker</a>"
+    }
+    cases.each do |panel, author|
+      html = credit.sub("PANEL", panel).sub("AUTHOR", author)
+      markdown = Nokodown.to_markdown(html, url: url)
+      markdown.should include("submitted by\n\n**Wren Baker**\n\n**Wren Baker** · May 3, 2024"), "#{panel} / #{author}"
+    end
+    nested = credit.sub("<div class='postprofile' aria-label='Attachment uploader'>PANEL",
+                        "<div class='postprofile' itemscope itemtype='https://schema.org/Person' itemid='/members/72'>" \
+                        "<span itemprop='colleague' itemscope itemtype='https://schema.org/Person' itemid='/members/92'><b itemprop='name'>Wren Baker</b></span>")
+                   .sub("AUTHOR", linked)
+    Nokodown.to_markdown(nested, url: url).should include("submitted by\n\n**Wren Baker**\n\n**Wren Baker** · May 3, 2024")
+    # A link that names the panel's card by aria-details ties it to the report.
+    details = credit.sub("<a href='/pressure.pdf'>", "<a aria-details='profile3' href='/pressure.pdf'>")
+                    .sub("<div class='postprofile' aria-label='Attachment uploader'>", "<div class='postprofile' id='profile3'>")
+                    .sub("PANEL", mail).sub("AUTHOR", "<span class='username'>Wren Baker</span>")
+    Nokodown.to_markdown(details, url: url).should include("submitted by\n\n**Wren Baker**\n\n**Wren Baker** · May 3, 2024")
+    # The same Person on both sides is one member.
+    same = credit.sub("PANEL", "<span vocab='http://xmlns.com/foaf/0.1/' typeof='Person' resource='/members/72'><b class='username'>Wren Baker</b></span>")
+                 .sub("AUTHOR", linked)
+    Nokodown.to_markdown(same, url: url).scan(/^\*\*Wren Baker\*\*/).size.should eq(1)
+  end
+
+  it "keeps a theme panel's field beside a post whose header is the theme's" do
+    url = "https://example.com/threads/starter"
+    field = "<dd class='profile-custom-field profile-time_zone'><strong>Time zone:</strong> UTC+03:00</dd>"
+    menu = "<dd class='profile-contact'><div class='dropdown-container dropdown-down dropdown-visible visible'>" \
+           "<button class='dropdown-trigger' aria-expanded='true'>Contact details</button><div class='dropdown' aria-expanded='true'>" \
+           "<div class='dropdown-contents contact-icons'><div><a href='/schedule' class='last-cell' title='Office hours 09:00–12:00 UTC'>" \
+           "<span class='contact-icon office_time-icon'>Office hours 09:00–12:00 UTC</span></a></div></div></div></div></dd>"
+    html = "<!doctype html><meta name='generator' content='phpBB'><main><div class='post' id='p87'><div class='inner'>" \
+           "<dl class='postprofile' id='profile87'><dt><a class='username' href='/members/72'>Wren Baker</a></dt>#{field}#{menu}</dl>" \
+           "<div class='col postbody'><header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>We checked the pressure at dawn and at noon.</p></div><div class='col revision'><time datetime='2024-05-06'>Last edited May 6, 2024</time></div></div></div></main>"
+    # An open menu's label stands behind the field, as in base's and main's line.
+    Nokodown.to_markdown(html, url: url).should include("**Wren Baker** · Time zone: UTC+03:00\n\n**Wren Baker** · May 3, 2024")
+    # prosilver's own author line beside the panel: the field is the member's, not the post's.
+    stock = html.sub("<header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>",
+                     "<p class='author'><a href='#p87'>Post</a> by <strong><a class='username' href='/members/72'>Wren Baker</a></strong> » " \
+                     "<time datetime='2024-05-03'>May 3, 2024</time></p>").sub(menu, "")
+    Nokodown.to_markdown(stock, url: url).scan(/^\*\*Wren Baker\*\*/).size.should eq(1)
+  end
+
+  it "keeps the uploader above a theme's rule or a link to another post" do
+    url = "https://example.com/threads/starter"
+    base = "<!doctype html><meta name='generator' content='phpBB'><main><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p>" \
+           "<div class='card' id='p3'><div class='card-body'><div class='row'><div class='postprofile' id='profile3'><div><b class='username'>Wren Baker</b></div></div>" \
+           "<div class='col postbody'><div class='vr d-none d-md-block'></div>BETWEEN<header><a class='username' href='/members/72'>Wren Baker</a> " \
+           "<time datetime='2024-05-03'>May 3, 2024</time></header><p>We checked the pressure at dawn and at noon.</p></div>" \
+           "<div class='col revision'><time datetime='2024-05-06'>Last edited May 6, 2024</time></div></div></div></div></main>"
+    ["<hr class='d-md-none' data-menu='schedule'>", "<hr class='d-md-none' about='#rule'>", "<a class='post-title' href='#p92'>Report submitter</a>"].each do |between|
+      Nokodown.to_markdown(base.sub("BETWEEN", between), url: url).should include("submitted by\n\n**Wren Baker**\n\n"), between
+    end
+  end
+
+  it "reads a Person's RDFa prefix where it is declared nearest" do
+    url = "https://example.com/threads/starter"
+    html = "<!doctype html><meta name='generator' content='phpBB'><main prefix='s: https://schema.org/'><p><a href='/pressure.pdf'>Pressure report</a> submitted by</p>" \
+           "<div class='card' id='p3'><div class='card-body'><div class='row'><div class='postprofile' id='profile3' aria-label='Attachment uploader'><div>" \
+           "<b prefix='s: https://internal.example/' typeof='s:Person' resource='/members/92' class='username'>Wren Baker</b></div>" \
+           "<div class='profile-contact'><a href='mailto:uploader@example.com'>uploader@example.com</a></div></div>" \
+           "<div class='col postbody'><header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>We checked the pressure at dawn and at noon.</p></div><div class='col revision'><time datetime='2024-05-06'>Last edited May 6, 2024</time></div>" \
+           "</div></div></div></main>"
+    Nokodown.to_markdown(html, url: url).should include("submitted by\n\n**Wren Baker**\n\n**Wren Baker** · May 3, 2024")
+  end
+
+  it "keeps a theme panel's signing date in any form" do
+    url = "https://example.com/threads/starter"
+    html = "<!doctype html><meta name='generator' content='phpBB'><main><div class='hiddenanchor' id='p3'></div><div class='card'><div class='card-body'><div class='row'>" \
+           "<div class='postprofile' id='profile3'><b class='username'>Wren Baker</b><div class='profile-custom-field profile-date_signed d-none d-md-block'>SIGNED</div></div>" \
+           "<div class='col postbody'><a class='username'>Wren Baker</a> <time>May 3, 2024</time><p>We checked the pressure at dawn and at noon.</p></div>" \
+           "<div class='col revision'><time>Last edited May 6, 2024</time></div></div></div></div></main>"
+    ["Signé le 27/04/24", "Signed 27 avril", "Signed 1898-04-27", "Signed 12 Ramadan 1445"].each do |signed|
+      Nokodown.to_markdown(html.sub("SIGNED", signed), url: url).should include("**Wren Baker** · #{signed}\n\n**Wren Baker** · May 3, 2024")
+    end
+  end
 end
