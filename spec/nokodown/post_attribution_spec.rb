@@ -285,6 +285,28 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.should include("[Signed calibration report](https://example.com/files/5.pdf)")
   end
 
+  # phpBB's bootlike style prints the fields as divs in div.postprofile and
+  # a responsive rule between the panel and the post's header.
+  it "writes one line where a style's rule stands between the member panel and the post's line" do
+    body = "The starter doubled in volume overnight after its second feeding. I used the original flour and a clean jar."
+    ["", "<div class='profile-custom-field profile-time_zone d-none d-md-block'><strong>Time zone:</strong> UTC+03:00</div>"].each do |field|
+      posts = [["Wren", 3], ["Basil", 4]].map do |name, day|
+        "<div id='p#{day}' class='card mb-2'><div class='card-body p-0'><div class='row m-0'>" \
+          "<div id='profile#{day}' class='postprofile col-lg-3 bg2'><div class='text-center mb-2'><div class='mt-1'>" \
+          "<a href='./memberlist.php?mode=viewprofile&amp;u=7#{day}' class='username'>#{name}</a><br></div></div>#{field}</div>" \
+          "<div class='postbody col-lg-9 p-0'><div class='opacity-50 d-md-none'><hr class='m-0'></div><div id='post_content#{day}'>" \
+          "<div class='postbody-before d-flex'><div><a class='post-title' href='#p#{day}'>Re: Starter</a><br>" \
+          "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></div></div>" \
+          "<div class='px-3 py-2'><div class='content pb-2'>#{name} watched. #{body}</div></div></div></div></div></div></div>"
+      end
+      markdown = thread(posts, head: '<meta name="generator" content="phpBB">', url: "https://example.com/forum/viewtopic.php?t=25")
+
+      markdown.should include("**Wren** · May 3, 2024\n\nWren watched. #{body}")
+      markdown.should_not include("Time zone")
+      markdown.scan(/\*\*(?:Wren|Basil)\*\*/).size.should == 2
+    end
+  end
+
   # A board without profiles names the poster in no link; the posts count
   # links to a search, and a count or a contact menu names no other member.
   it "writes one line where the member panel names the poster in no link beside a linked post count" do

@@ -153,7 +153,9 @@ module Nokodown
           elsif node.element? && (node[REPEAT] || post_subject?(node, repeat))
             node = following(node, nodes, roots)
           elsif node.element?
-            return false if SHOWN.include?(node.name)
+            # A rule only parts the panel's column from the post's (a
+            # style's responsive <hr>); it names no one.
+            return false if SHOWN.include?(node.name) && node.name != "hr"
 
             node = node.child || following(node, nodes, roots)
           else

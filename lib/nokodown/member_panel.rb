@@ -618,10 +618,11 @@ module Nokodown
       # ("dd.profile-custom-field"); a theme's span of that class ("Signed
       # review, April 27") in a box of its own is the theme's date, and so
       # is a row of that class in a theme's own list (a "dl#user-info", a
-      # <dl> in a "div.user-info"): only prosilver's dl.postprofile holds
-      # phpBB's rows.
+      # <dl> in a "div.user-info"): only phpBB's postprofile holds phpBB's
+      # rows, prosilver's dd in its dl, a style's div in its div
+      # (bootlike).
       classes = node["class"].to_s.split
-      if own && node.name == "dd" && !node.key?("datetime") && classes.include?(FIELD) && postprofile?(node.parent)
+      if own && !node.key?("datetime") && classes.include?(FIELD) && postprofile?(node)
         names = classes.reject { |name| name.match?(/\Aprofile-[a-z_]*\z/) } << node["id"].to_s << node["itemprop"].to_s
         return false unless names.any? { |name| name.downcase.match?(DATE_CLASS) }
       end
@@ -629,8 +630,10 @@ module Nokodown
       !signature.match?(MEMBER_DATE_CLASS) && Dom.text(node).match?(/\d/)
     end
 
-    def postprofile?(node)
-      node&.element? && node.name == "dl" && node["class"].to_s.split.include?("postprofile")
+    def postprofile?(row)
+      list = row.parent
+      list&.element? && ((row.name == "dd" && list.name == "dl") || (row.name == "div" && list.name == "div")) &&
+        list["class"].to_s.split.include?("postprofile")
     end
 
     # The outermost element around the date that stops short of the name,
