@@ -55,14 +55,15 @@ module Nokodown
     PHPBB_END = 10
     PHPBB_LONG = 55
     # What names a menu as a theme's own group (its id, role or label).
-    NAMES = %w[id role aria-label aria-labelledby aria-describedby].freeze
-    MICRODATA = %w[itemprop itemscope itemid itemtype].freeze
+    NAMES = %w[id role aria-label aria-labelledby aria-describedby aria-description aria-details].freeze
+    # Microdata, and RDFa's ("typeof", "property"), mark up a theme's items.
+    MICRODATA = %w[itemprop itemscope itemid itemtype typeof property vocab resource].freeze
     # What marks an element as a theme's own (a "Public office hours"
     # group, an "End of uploader credit" rule): phpBB's carry none.
     THEME = (NAMES + %w[title] + MICRODATA).freeze
     # What names prosilver's "div.contact-icons" as a theme's own: stock
     # menus may carry aria-describedby or aria-labelledby, never these.
-    OWN_MENU = (%w[id role aria-label title] + MICRODATA).freeze
+    OWN_MENU = (%w[id role aria-label aria-description aria-details title] + MICRODATA).freeze
     # What phpBB's script writes on a dropdown it opens, beside its display.
     PLACED = %w[margin-left margin-right left max-width].freeze
     # What Popper writes on a Bootstrap menu it places.
@@ -73,6 +74,8 @@ module Nokodown
     # Set on a line whose date is read from a contact icon's label
     # ("Office hours (UTC+3)"): shown, but no date of the post's to match.
     LOOSE = "data-nokodown-loose"
+    # LOOSE's value for a panel the post's name was read from.
+    SOURCE = "source"
     # Set on the line of bootlike's panel (bootlike_panel?), whose post body
     # may open with its rule for narrow screens.
     BOOTLIKE = "data-nokodown-bootlike"
@@ -103,9 +106,12 @@ module Nokodown
         # menu; a contact label in a panel known by its id alone, or in a
         # theme's <div class="message-user">, is the panel's own line.
         # prosilver's own fields ("Birthday: 12-05-1987") stand in for its
-        # header as main reads them; bootlike's are kept beside it.
-        line[LOOSE] = panel.name if loose && panel["class"].to_s.split.include?("postprofile") &&
-                                    (panel.name == "dl" || (panel.name == "div" && panel["id"].to_s.match?(/\Aprofile\d+\z/)))
+        # header as main reads them, as do those of a panel the post's name
+        # was read from (stock bootlike's); a theme's are kept beside it.
+        if loose && panel["class"].to_s.split.include?("postprofile") &&
+           (panel.name == "dl" || (panel.name == "div" && panel["id"].to_s.match?(/\Aprofile\d+\z/)))
+          line[LOOSE] = panel.key?(PostAttribution::REPLACED) ? SOURCE : panel.name
+        end
         panel.add_previous_sibling(line)
         line[BOOTLIKE] = "" if panel[PostAttribution::PANEL] && bootlike_panel?(panel)
         repeats(line, panel, name, source) if panel[PostAttribution::PANEL]
@@ -137,7 +143,7 @@ module Nokodown
       # named Facebook's own Facebook) are ways to reach the member, not the
       # forum's profile, unless one says it is (rel="author").
       links = panel.css("a[href]").reject { |candidate| contact?(candidate, panel) && !author_rel?(candidate) }
-      return link ? link["href"] : person_id(panel) || identity(panel.css("a[href]")) if links.empty?
+      return link ? link["href"] : person_or_identity(panel, source) if links.empty?
 
       # A count ("404" posts, by a member named 404) names no one, nor an
       # address shown as itself (phpBB's "index.php", by a member of that name).
@@ -151,23 +157,45 @@ module Nokodown
       # member card's "#member-92") still names someone.
       hrefs = link ? [link["href"]] : links.select { |candidate| !opener?(candidate) && (avatar_link?(candidate) || profile_link?(candidate)) }.map { |candidate| candidate["href"] }
       hrefs = (hrefs + named).uniq
-      return person_id(panel) || identity(panel.css("a[href]")) if hrefs.empty?
+      return person_or_identity(panel, source) if hrefs.empty?
 
       hrefs.size == 1 ? hrefs.first : false
+    end
+
+    def person_or_identity(panel, source)
+      id = person_id(panel, source)
+      id.nil? ? identity(panel.css("a[href]")) : id
     end
 
     # A panel marked up as a schema.org Person with no profile link names
     # its member by its itemid ("https://example.com/members/92"): an
     # uploader's card beside a post by /members/72 is another member's.
     # itemtype lists its types apart ("schema.org/Person schema.org/Thing").
-    def person_id(panel)
-      # The panel's own, or the one Person in it (a "div[itemscope]" around
-      # the name, RDFa's typeof="Person" resource="/members/92").
+    def person_id(panel, source)
+      # The panel's own, or the Person the name is in (a "div[itemscope]"
+      # around it, RDFa's typeof="Person" resource="/members/92"); not a
+      # Person elsewhere in it (a "Verified by" reviewer's).
       own = microdata_person(panel) || rdfa_person(panel)
       return own if own
 
-      ids = panel.css("[itemscope], [typeof]").map { |node| microdata_person(node) || rdfa_person(node) }.compact.uniq
-      ids.first if ids.size == 1
+      around = person_around(source, panel)
+      return around if around
+
+      # A Person elsewhere in it (a "Verified by" reviewer, a "Referral
+      # contact") is someone else: the name's own is in doubt.
+      false if panel.css("[itemscope], [typeof]").any? { |node| microdata_person(node) || rdfa_person(node) }
+    end
+
+    # The Person of the nearest item around the node, below stop: nil where
+    # that item is something else.
+    def person_around(node, stop = nil)
+      stop_key = stop && Dom.key(stop)
+      while node&.element? && (stop_key.nil? || Dom.key(node) != stop_key)
+        return microdata_person(node) || rdfa_person(node) if node.key?("itemscope") || node.key?("typeof")
+
+        node = node.parent
+      end
+      nil
     end
 
     def microdata_person(node)
@@ -177,8 +205,20 @@ module Nokodown
     end
 
     def rdfa_person(node)
-      id = node["resource"].to_s.strip
-      person = node["typeof"].to_s.split.any? { |type| type.match?(%r{\A(?:https?://schema\.org/|schema:)?Person/?\z}i) }
+      return unless node.key?("typeof")
+
+      id = (node["resource"] || node["about"]).to_s.strip
+      # schema.org's Person: by its prefix, its address, or the vocab in force.
+      vocab = ([node] + node.ancestors.to_a).find { |ancestor| ancestor.element? && ancestor.key?("vocab") }
+      schema = vocab && vocab["vocab"].to_s.strip.match?(%r{\Ahttps?://schema\.org/?\z}i)
+      # Or a prefix of the page's own for it (prefix="s: https://schema.org/").
+      prefixes = ([node] + node.ancestors.to_a).select { |ancestor| ancestor.element? && ancestor.key?("prefix") }.flat_map do |ancestor|
+        ancestor["prefix"].to_s.scan(%r{(\S+):\s+https?://schema\.org/?(?=\s|\z)}i).flatten
+      end
+      person = node["typeof"].to_s.split.any? do |type|
+        type.match?(%r{\A(?:https?://schema\.org/|schema:)Person/?\z}i) || (schema && type.match?(/\APerson\z/i)) ||
+          prefixes.any? { |prefix| type.casecmp?("#{prefix}:Person") }
+      end
       id if person && !id.empty?
     end
 
@@ -708,8 +748,9 @@ module Nokodown
 
         loose = contact_icon?(stamp) && contact_menu?(stamp, panel)
         # A closed menu's label ("24/7") after a field the panel shows
-        # ("Time zone: UTC+03:00") stands behind it, as in main's line.
-        return [field, true] if loose && field
+        # ("Time zone: UTC+03:00") stands behind it, as in main's line,
+        # whatever the theme names the menu ("Contact methods").
+        return [field, true] if field && contact_icon?(stamp) && (loose || closed_menu?(stamp, panel))
 
         return [text, loose]
       end
@@ -740,7 +781,7 @@ module Nokodown
           # picker's button and list, is the panel's own line.
           return false if node.name != "div" || expanded?(node, classes) || !dropdown&.element? || dropdown.name != "div" ||
                           Dom.key(dropdown) == Dom.key(panel) || OWN_MENU.any? { |name| node.key?(name) } ||
-                          !alone?(node, dropdown)
+                          !alone?(node, dropdown) || named_menu?(dropdown, panel)
 
           outer = dropdown["class"].to_s.split
           # phpBB's own script opens its menu: it writes the dropdown's
@@ -765,6 +806,16 @@ module Nokodown
       row = dropdown.parent&.parent
       row&.element? && row.name == "dd" && row["class"].to_s.split == ["profile-contact"] &&
         THEME.none? { |name| row.key?(name) } && Dom.key(row.parent) == Dom.key(panel)
+    end
+
+    # prosilver names none of the dropdown, its container or its row; a
+    # theme's "Public office hours" group (role, label, title, RDFa or
+    # microdata on any of them) is the panel's own line.
+    def named_menu?(dropdown, panel)
+      key = Dom.key(panel)
+      [dropdown, dropdown.parent, dropdown.parent&.parent].any? do |node|
+        node&.element? && Dom.key(node) != key && THEME.any? { |name| node.key?(name) }
+      end
     end
 
     # phpBB's script opened the dropdown: it marks the container "visible"
@@ -832,6 +883,25 @@ module Nokodown
         node["aria-hidden"] == "false" || (styled && node["style"].to_s.match?(/display\s*:\s*(?!none)\w/i))
     end
 
+    # The node is in a dropdown's list that waits closed (no "show", not
+    # expanded, its button not pressed), named by the theme or not.
+    def closed_menu?(node, panel)
+      key = Dom.key(panel)
+      node = node.parent
+      while node&.element? && Dom.key(node) != key
+        classes = node["class"].to_s.split
+        if classes.include?("dropdown-menu") || (classes.include?("dropdown-contents") && classes.include?("contact-icons"))
+          dropdown = node.parent
+          outer = dropdown&.element? ? dropdown["class"].to_s.split : []
+          return outer.include?("dropdown") && !classes.include?("show") && !outer.include?("show") &&
+                 !expanded?(node, classes) && !expanded?(dropdown, outer) && !dropdown.at_css("[aria-expanded=true]")
+        end
+
+        node = node.parent
+      end
+      false
+    end
+
     # phpBB's contact menu names a field's icon by its ident
     # ("office_time-icon") and labels it with the field's name; a theme's
     # class or itemprop beside it ("quoted-date") says it is a date.
@@ -871,10 +941,10 @@ module Nokodown
       list = row.parent
       return false unless list&.element? && list["class"].to_s.split.include?("postprofile")
       # phpBB names neither its panel nor its rows (no role, label or
-      # itemprop; its panel's only id is "profile<post>"); a theme's
-      # "Review author" card, or its "Date the review was signed" row, is
-      # the theme's.
-      labels = NAMES - ["id"] + ["itemprop"]
+      # itemprop, RDFa or title; its panel's only id is "profile<post>"); a
+      # theme's "Review author" card, or its "Date the review was signed"
+      # row (property="schema:dateCreated"), is the theme's.
+      labels = THEME - ["id"]
       return false if labels.any? { |name| list.key?(name) } || (labels + ["id"]).any? { |name| row.key?(name) }
 
       # phpBB prints its panel beside the post's body (prosilver's and

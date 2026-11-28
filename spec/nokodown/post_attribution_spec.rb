@@ -2403,6 +2403,28 @@ RSpec.describe Nokodown::PostAttribution do
     markdown = Nokodown.to_markdown(html, url: url)
     markdown.should include("**Basil** · May 4, 2024")
     markdown.should include("[pressure report](https://example.com/community/fermentation/pressure.pdf)")
+    # ... nor when the theme names the menu.
+    titled = html.sub("<ul class='dropdown-menu dropdown-contents'>", "<ul class='dropdown-menu dropdown-contents' title='Contact methods'>")
+    markdown = Nokodown.to_markdown(titled, url: url)
+    markdown.should include("**Basil** · May 4, 2024")
+    markdown.should include("[pressure report](https://example.com/community/fermentation/pressure.pdf)")
+    # A date field in a panel the post's name is read from goes with it,
+    # as main reads it (bootlike 4.0.0's field loop and post header).
+    certified = "<div class='profile-custom-field profile-certification_date d-none d-md-block'><strong>Certification date:</strong> April 27, 2024</div>"
+    stock = lambda do |day, name, field, body|
+      "<div id='p#{day}' class='card mb-2 mb-md-3 shadow-sm'><div class='card-body p-0'><div class='row m-0'>" \
+        "<div id='profile#{day}' class='postprofile col-lg-3 col-md-4 px-3 pb-3 bg2'><div class='text-center mb-2'><div class='mt-1 float-start float-md-none'>" \
+        "<a href='./memberlist.php?mode=viewprofile&amp;u=7#{day}' class='username'>#{name}</a><br></div></div>#{field}</div>" \
+        "<div class='postbody col-lg-9 col-md-8 p-0 border-start'><div class='opacity-50 d-md-none'><hr class='m-0'></div><div id='post_content#{day}'>" \
+        "<div class='postbody-before d-flex px-3 py-2 justify-content-between align-items-center border-bottom bg1'><div><br>" \
+        "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></div></div>" \
+        "<div class='px-3 py-2 bg-white'><div class='content pb-2'>#{body}</div></div></div></div></div></div></div>"
+    end
+    html = "<!DOCTYPE html><html><head><meta name='generator' content='phpBB'><title>Starter</title></head><body>" \
+           "<div id='page-body' class='page-body' role='main'>#{stock.call(3, 'Wren', '', opening)}#{stock.call(4, 'Basil', certified, reply)}</div></body></html>"
+    markdown = Nokodown.to_markdown(html, url: url)
+    markdown.should_not include("Certification date")
+    markdown.scan("**Basil**").size.should eq(1)
 
     later = "Leave some room in the jar for the next feeding. Mine also doubled in volume after two feedings, even though it had barely moved the previous evening."
     rule = "<hr class='d-md-none m-0'>"
@@ -2489,6 +2511,36 @@ RSpec.describe Nokodown::PostAttribution do
     signed = credit.sub("<div class='card' id='p3'>", "<div class='hiddenanchor' id='p3'></div><div class='card'>").sub("BODY", head)
                    .sub("FIELD", "<div class='profile-custom-field profile-date_signed d-none d-md-block'>Signed April 27, 2024</div>")
     Nokodown.to_markdown(signed, url: "https://example.com/threads/starter").should include("**Wren Baker** · Signed April 27, 2024")
+    # ... in any language.
+    Nokodown.to_markdown(signed.sub("April 27, 2024", "27 avril 2024"), url: "https://example.com/threads/starter")
+            .should include("**Wren Baker** · Signed 27 avril 2024")
+    # A reviewer's Person elsewhere in the panel is not the uploader's.
+    reviewed = credit.sub("BODY", head).sub("FIELD", "<div class='profile-contact'><a href='mailto:uploader@example.com'>uploader@example.com</a></div>" \
+                                                     "<dl class='reference'><dt>Verified by</dt><dd><span itemscope itemtype='https://schema.org/Person' " \
+                                                     "itemid='/members/72'><span>Board reviewer</span></span></dd></dl>")
+    Nokodown.to_markdown(reviewed, url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*\n/)
+    # ... nor a referral contact's, with no mailbox for the uploader.
+    referral = credit.sub("BODY", head).sub("FIELD", "<small itemscope itemtype='https://schema.org/Person' itemid='/members/11' itemprop='knows'>" \
+                                                     "Referral contact: Robin</small>")
+    Nokodown.to_markdown(referral, url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*\n/)
+    # An account id on a wrapper around the post's name is the post's;
+    # one on the uploader's name beside a post that only links is another's.
+    wrapped = credit.sub("BODY", head.sub("<a class='username'", "<span class='member-ident' data-member-id='72'><a class='username'")
+                                     .sub("Wren Baker</a>", "Wren Baker</a></span>"))
+                    .sub("FIELD", "").sub("<div><b class='username'>", "<div data-member-id='92'><b class='username'>")
+    Nokodown.to_markdown(wrapped, url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*\n/)
+    Nokodown.to_markdown(credit.sub("BODY", head).sub("FIELD", "").sub("<div><b class='username'>", "<div data-member-id='92'><b class='username'>"),
+                         url: "https://example.com/threads/starter").should match(/submitted by\s+\*\*Wren Baker\*\*\n/)
+    # A theme's date row (RDFa) in a prosilver-shaped list, and a date
+    # with a month and no year, are the member's own.
+    listed = signed.sub("<div class='card'><div class='card-body'><div class='row'><div class='postprofile'", "<div class='post'><div class='inner'><dl class='postprofile'")
+                   .sub("<div><b class='username'>Wren Baker</b></div>", "<dt><b class='username'>Wren Baker</b></dt>")
+                   .sub("<div class='profile-custom-field profile-date_signed d-none d-md-block'>Signed April 27, 2024</div></div>",
+                        "<dd property='schema:dateCreated' content='2024-04-27' class='profile-custom-field profile-date_signed'>Signed April 27, 2024</dd></dl>")
+                   .sub("</div></div></div></main>", "</div></div></main>")
+    Nokodown.to_markdown(listed, url: "https://example.com/threads/starter").should include("**Wren Baker** · Signed April 27, 2024")
+    Nokodown.to_markdown(signed.sub("April 27, 2024", "27 Apr 1898"), url: "https://example.com/threads/starter")
+            .should include("**Wren Baker** · Signed 27 Apr 1898")
 
     hours = "<!doctype html><meta name='generator' content='phpBB'><main><div class='post' id='p87'><div class='inner'><dl class='postprofile' id='profile87'>" \
             "<dt><a class='username' href='/members/72'>Wren Baker</a></dt><dd class='profile-contact office-hours' aria-label='Public schedule'>" \
@@ -2502,6 +2554,11 @@ RSpec.describe Nokodown::PostAttribution do
     labelled = hours.sub(" office-hours' aria-label='Public schedule'", "'").sub("</dl>#{post}", "</dl>#{post}#{revision}")
                     .sub("<div class='dropdown-container", "<div role='group' aria-label='Public office hours' class='dropdown-container")
     Nokodown.to_markdown(labelled, url: "https://example.com/threads/starter").should include("Office hours 09:00–12:00 UTC")
+    # ... or its named row, shown by a stylesheet, not by phpBB's script.
+    row = hours.sub(" office-hours' aria-label='Public schedule'", "' role='group' aria-label='Public office hours'").sub("</dl>#{post}", "</dl>#{post}#{revision}")
+               .sub("dropdown-container dropdown-down dropdown-visible visible", "dropdown-container").sub("<button class='dropdown-trigger' aria-expanded='true'>Contact details</button>", "")
+               .sub(" style='display: block; margin-left: -42px;'", "")
+    Nokodown.to_markdown(row, url: "https://example.com/threads/starter").should include("Office hours 09:00–12:00 UTC")
     boot = "<!doctype html><meta name='generator' content='phpBB'><main><div id='p87' class='card'><div class='card-body'><div class='row'>" \
            "<div id='profile87' class='postprofile'><div><a class='username' href='/members/72'>Wren Baker</a></div>" \
            "<div itemprop='contactPoint' itemscope itemtype='https://schema.org/ContactPoint' class='btn-group dropdown public-schedule'>" \

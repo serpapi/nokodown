@@ -34,11 +34,15 @@ module Nokodown
     # the body. A modifier ("has-signature") names a body that has one.
     CLOSING = /(?<![a-z])(?<!has-|with-)(?:signature|footer)(?![a-z])/.freeze
     YEAR = /(?<!\d)(?:19|20)\d\d(?!\d)/.freeze
+    ANY_YEAR = /(?<!\d)[12]\d{3}(?!\d)/.freeze
     # A field read as a calendar date: a year beside a month's name or in a
     # numeric date ("Signed April 27, 2024", "2024-04-27", "27/04/2024").
     MONTH = /(?<![a-z])(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|
               sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?![a-z])/xi.freeze
     NUMERIC_DATE = %r{(?<!\d)\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}(?!\d)}.freeze
+    # Or a day of the month beside it, in a language whose months it does
+    # not name ("27 avril 2024", "2024年4月27日"); not a time ("08:45").
+    DAY_OF_MONTH = /(?<![\d:])(?:0?[1-9]|[12]\d|3[01])(?![\d:])/.freeze
     ISO_DATE = /\A\d{4}-\d\d-\d\d/.freeze
     LETTER = /\p{L}/.freeze
     MAX_NAME = 60
@@ -313,10 +317,17 @@ module Nokodown
       # from the panel's line (phpBB's postbody beside its postprofile).
       # One beside the line is a heading the post shows.
       def post_subject?(node, repeat)
-        return false unless node[SUBJECT] == "" || node[TITLE]
+        return false unless node[SUBJECT] == "" || node[TITLE] || bootlike_title?(node, repeat)
 
         key = Dom.key(node.parent)
         repeat.ancestors.none? { |ancestor| ancestor.element? && Dom.key(ancestor) == key }
+      end
+
+      # bootlike 4.0.0 links the post's subject to the post
+      # ("a.post-title" to "#p4") above its date, beside its panel.
+      def bootlike_title?(node, repeat)
+        repeat.key?(MemberPanel::BOOTLIKE) && node.name == "a" && node["class"].to_s.split == ["post-title"] &&
+          node["href"].to_s.match?(/\A#p\d+\z/) && !themed?(node)
       end
 
       def same_line?(repeat, line, urls)
@@ -332,11 +343,15 @@ module Nokodown
         # not the post's; a field's calendar date ("Signed April 27, 2024")
         # is the member's own, kept as base and main keep it.
         name.sub(BY, "").strip.casecmp?(own_name) &&
-          (date.empty? || (repeat.key?(MemberPanel::LOOSE) && (repeat[MemberPanel::LOOSE] == "dl" || !calendar?(date))) || date.casecmp?(own_date))
+          (date.empty? || (repeat.key?(MemberPanel::LOOSE) && (["dl", MemberPanel::SOURCE].include?(repeat[MemberPanel::LOOSE]) || !calendar?(date))) ||
+           date.casecmp?(own_date))
       end
 
       def calendar?(text)
-        text.match?(YEAR) && (text.match?(MONTH) || text.match?(NUMERIC_DATE))
+        # A month with a day or any year ("April 27", "27 Apr 1898"), or a
+        # recent year with a day ("2024-04-27", "27 avril 2024").
+        (text.match?(MONTH) && (text.match?(DAY_OF_MONTH) || text.match?(ANY_YEAR))) ||
+          (text.match?(YEAR) && (text.match?(NUMERIC_DATE) || text.match?(DAY_OF_MONTH)))
       end
 
       # A line's post number and profile link; "" for a line that names no
@@ -637,9 +652,13 @@ module Nokodown
       posts = posts.reject { |post| in_panel?(post, panel_keys) }
       numbers = {}
       accounts = {}
+      hrefs = {}
+      authors = {}
       names = {}
       posts.each_with_index do |post, index|
-        post.placement.body[POST] = [index, href(post.author)].compact.join(" ")
+        hrefs[index.to_s] = href(post.author)
+        authors[index.to_s] = post.author
+        post.placement.body[POST] = [index, hrefs[index.to_s]].compact.join(" ")
         post.node[OWNER] = ""
         numbers[Dom.key(post.node)] = index.to_s
         accounts[index.to_s] = account(post.author)
@@ -657,7 +676,8 @@ module Nokodown
         number = panel_number(panel, numbers, rows, kinds, owners, taken, column_keys, columns, holds)
         post = number&.chomp(MORE)
         named = number && MemberPanel.named(panel)
-        number = nil if number && (other_name?(named, names[post]) || other_account?(panel, named, accounts[post]) || described?(panel, described))
+        number = nil if number && (other_name?(named, names[post]) || other_account?(panel, named, accounts[post]) ||
+                                   other_kind?(panel, named, accounts[post], hrefs[post], authors[post]) || described?(panel, described))
         panel[PANEL] = number || ""
       end
     end
@@ -707,12 +727,32 @@ module Nokodown
     # names alike with two ids are two members.
     def account(author)
       holder = account_of(author) ? author : author.at_css(ACCOUNT)
+      holder ||= account_around(author)
       holder && account_of(holder)
+    end
+
+    # A wrapper that holds the name and nothing else ("span.member-ident"
+    # with data-member-id="72" around the username's link) gives its id.
+    def account_around(author)
+      text = Dom.text(author)
+      node = author.parent
+      while node&.element? && Dom.text(node) == text
+        return node if account_of(node)
+
+        node = node.parent
+      end
+      nil
     end
 
     def account_of(node)
       ACCOUNTS.each { |attribute| return node[attribute] if node.key?(attribute) }
       nil
+    end
+
+    # Every id the node gives: two that differ (data-member-id="92",
+    # data-user-id="72") leave it in doubt.
+    def accounts_of(node)
+      ACCOUNTS.filter_map { |attribute| node[attribute] if node.key?(attribute) }.uniq
     end
 
     def other_account?(panel, named, account)
@@ -722,11 +762,41 @@ module Nokodown
       # panel has another member's.
       _, source = named
       named = source && name_account(source, panel)
-      return account_of(named) != account if named
+      return accounts_of(named) != [account] if named
 
       ids = panel.css(ACCOUNT).map { |node| account_of(node) }
       ids << account_of(panel) if account_of(panel)
       !ids.empty? && !ids.include?(account)
+    end
+
+    # A name the panel and the post identify in different ways may be two
+    # members, as base and main read them: an unlinked uploader with
+    # data-member-id="92" beside a post linking to /members/72, an
+    # uploader's Person or mailbox beside a post's account id or a
+    # microdata author. A name phpBB prints bare (profiles hidden) beside
+    # a panel's email link is one member.
+    def other_kind?(panel, named, account, href, author)
+      _, source = named
+      return false if source.nil? || author.nil? || (account && href)
+
+      panel_account = name_account(source, panel)
+      return !panel_account.nil? && MemberPanel.link_around(source, panel).nil? if href
+      return false if account && panel_account
+      return true if panel_account || MemberPanel.person_id(panel, source).is_a?(String)
+
+      (account || marked?(author)) && !MemberPanel.identity(panel.css("a[href]")).nil?
+    end
+
+    # The post's name marked as its author (itemprop="author" around it).
+    def marked?(author)
+      text = Dom.text(author)
+      node = author
+      while node&.element? && Dom.text(node) == text
+        return true if node["itemprop"].to_s.split.any? { |prop| %w[author creator].include?(prop) }
+
+        node = node.parent
+      end
+      false
     end
 
     # The element that gives the name's id: the name's, one in it, one
@@ -936,12 +1006,10 @@ module Nokodown
     end
 
     # Without a link, the Person the name is the name of: the nearest
-    # itemscope around it ("span[itemprop=author][itemscope]" with
-    # itemid="/members/72").
+    # item around it ("span[itemprop=author][itemscope]" with
+    # itemid="/members/72", or RDFa's typeof="Person" resource=...).
     def person_scope(source)
-      scope = source
-      scope = scope.parent while scope&.element? && !scope.key?("itemscope")
-      scope&.element? ? MemberPanel.microdata_person(scope) : nil
+      MemberPanel.person_around(source)
     end
 
     # The names before the date, nearest first: a thread's header reads
