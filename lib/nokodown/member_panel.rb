@@ -213,7 +213,7 @@ module Nokodown
       # phpBB's "<!-- l -->" link goes below the board's URL; one that
       # goes elsewhere (FOREIGN) is a theme's, whatever its comments. One
       # the board's (BOARD) is its field whatever the censor did to it.
-      return true if link.key?(MADE) && !link.key?(FOREIGN) && ((link[MADE] == "l" && link.key?(BOARD)) || made_text?(text, href)) &&
+      return true if link.key?(MADE) && !link.key?(FOREIGN) && ((link[MADE] == "l" && link.key?(BOARD)) || made_text?(text, href, link[MADE])) &&
                      (made_row?(link) || field_row?(link, href, text))
 
       field_value?(link, href) || address_link?(link) || (href.match?(MAILTO) && shown?(Dom.text(link), href))
@@ -260,7 +260,7 @@ module Nokodown
     # the address's dots, colons, slashes or "@", or the board path the
     # censor turned into words ("profile page"); not a theme's "View forum
     # profile" between the same comments.
-    def made_text?(text, href)
+    def made_text?(text, href, made = nil)
       # phpBB shows the href itself, or its end, or its start and end
       # around " ... ", censored alike; the censor's words keep their
       # spaces in the href ("profile  page") that the text folds or strips
@@ -294,13 +294,13 @@ module Nokodown
       # the censor did to the rest ("https://retiredlab ... my-profile" for
       # "https://legacy.example.net/ferments/archived").
       scheme = head[SCHEME]
-      # phpBB's "www." links (<!-- w -->) show "www." where others show
-      # the scheme ("www.retiredlab ... my-profile" for
+      # phpBB's "www." links (<!-- w -->) go to "http://" and the address
+      # it cut ("www.retiredlab ... my-profile" for
       # "http://www.legacy.example.net/ferments/archived"), whatever the
-      # censor made of the rest ("www.[link removed] ... my-profile") or of
-      # "www" in both ("web.").
-      label = head[/\A[[:alnum:]][[:alnum:]-]*\./]
-      return true if label && bare.downcase.start_with?(label.downcase)
+      # censor made of either side ("www.[link removed] ... my-profile",
+      # "web." for "www", "media.test" for the whole host). A theme's
+      # caption between the same comments going to "https://" is not one.
+      return true if made == "w" && squeezed.start_with?("http://")
 
       kept = (scheme && scheme.casecmp?(squeezed[SCHEME].to_s)) ||
              (shared_address?(head.sub(SCHEME, ""), bare) && shared_address?(tail.reverse, squeezed.reverse))
@@ -568,8 +568,9 @@ module Nokodown
 
           outer = dropdown["class"].to_s.split
           # phpBB's own script opens its menu: it writes the dropdown's
-          # display ("display: block") in its "div.dropdown-container"; a
-          # theme's dropdown elsewhere shown so is open.
+          # display ("display: block") and marks its "div.dropdown-container"
+          # "dropdown-visible"; a theme's dropdown shown so without that
+          # mark ("display:flex" in a container of its own) is open.
           return outer.include?("dropdown") && !expanded?(dropdown, outer, !container?(dropdown.parent))
         end
 
@@ -579,7 +580,10 @@ module Nokodown
     end
 
     def container?(node)
-      node&.element? && node.name == "div" && node["class"].to_s.split.include?("dropdown-container")
+      return false unless node&.element? && node.name == "div"
+
+      classes = node["class"].to_s.split
+      classes.include?("dropdown-container") && classes.include?("dropdown-visible")
     end
 
     def alone?(menu, dropdown)
@@ -612,14 +616,21 @@ module Nokodown
       # "datePublished"). phpBB names a field in [a-z_] ("profile-time_zone");
       # "profile-post-date" is not one. phpBB prints a field as a row
       # ("dd.profile-custom-field"); a theme's span of that class ("Signed
-      # review, April 27") in a box of its own is the theme's date.
+      # review, April 27") in a box of its own is the theme's date, and so
+      # is a row of that class in a theme's own list (a "dl#user-info", a
+      # <dl> in a "div.user-info"): only prosilver's dl.postprofile holds
+      # phpBB's rows.
       classes = node["class"].to_s.split
-      if own && node.name == "dd" && !node.key?("datetime") && classes.include?(FIELD)
+      if own && node.name == "dd" && !node.key?("datetime") && classes.include?(FIELD) && postprofile?(node.parent)
         names = classes.reject { |name| name.match?(/\Aprofile-[a-z_]*\z/) } << node["id"].to_s << node["itemprop"].to_s
         return false unless names.any? { |name| name.downcase.match?(DATE_CLASS) }
       end
 
       !signature.match?(MEMBER_DATE_CLASS) && Dom.text(node).match?(/\d/)
+    end
+
+    def postprofile?(node)
+      node&.element? && node.name == "dl" && node["class"].to_s.split.include?("postprofile")
     end
 
     # The outermost element around the date that stops short of the name,

@@ -464,6 +464,8 @@ RSpec.describe Nokodown::PostAttribution do
     # or "www" itself censored in both ("web.").
     censored_www_words = ->(day) { censored_www.call(day).gsub("www.retiredlaboratoryfermentationarchiv", "www.[link removed]") }
     censored_www_prefix = ->(day) { censored_www.call(day).gsub("www.", "web.") }
+    # Or the censor's word for the whole host, in the href too ("media").
+    censored_www_host = ->(day) { censored_www.call(day).gsub("http://www.legacy.example.net/", "http://media.test/") }
     board_href = deep_fields.call("example.com/community/fermentation", %w[portfolio archive]).then do |field|
       ->(day) { field.call(day).sub(">portfolio<", ">profile<").sub(">archive<", ">account<") }
     end
@@ -480,12 +482,12 @@ RSpec.describe Nokodown::PostAttribution do
      [board_href, "wren", board], [board_href, "profile", board], [censored_host, "wren", board], [censored_fragment, "wren"], [censored_query, "wren"],
      [censored_tail_whole, "wren", board], [censored_tail_whole, "wren"], [censored_equals, "wren", board], [board_href, "profile"],
      [censored_www, "wren", board], [censored_www, "wren"],
-     [censored_www_words, "wren", board], [censored_www_prefix, "wren"]].each do |extra, first, url|
+     [censored_www_words, "wren", board], [censored_www_prefix, "wren"], [censored_www_host, "wren"]].each do |extra, first, url|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word, censored_tilde,
               board_contacts, censored_whole, blanked, stripped_words, office, office_open, censored_page, stripped_deep, numbered, censored_spaces, on_port,
               default_port, censored_folder, censored_slash, other_host, censored_edges, board_href, censored_host, censored_fragment, censored_query,
-              censored_tail_whole, censored_equals, censored_www, censored_www_words, censored_www_prefix].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+              censored_tail_whole, censored_equals, censored_www, censored_www_words, censored_www_prefix, censored_www_host].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -560,7 +562,11 @@ RSpec.describe Nokodown::PostAttribution do
      "<div class='dropdown'><button aria-controls='dept-menu' aria-expanded='false'>Choose department</button><ul id='dept-menu' hidden><li>Fermentation</li></ul>" \
        "#{menu.sub('<div', '<section').sub(%r{</div>\z}, '</section>')}</div>",
      # Or a div a button names and controls.
-     "<div class='dropdown'><button aria-controls='hours' aria-expanded='true'>Contact the lab</button>#{menu.sub("role='group'", "id='hours'")}</div>"].each do |group|
+     "<div class='dropdown'><button aria-controls='hours' aria-expanded='true'>Contact the lab</button>#{menu.sub("role='group'", "id='hours'")}</div>",
+     # Or prosilver's whole menu that a theme shows open in a container
+     # phpBB's script did not mark.
+     "<div class='dropdown-container dropdown-left'><a href='#' class='dropdown-trigger'><span class='sr-only'>Contact</span></a>" \
+       "<div class='dropdown' style='display:flex'>#{menu.sub(" role='group'", '')}</div></div>"].each do |group|
       markdown = thread([
         "<article class='message'><dl class='message-user postprofile'><dt><a class='username' href='/members/87'>W. Baker</a></dt>" \
         "<dd class='office-hours'>#{group}</dd></dl>" \
@@ -1273,18 +1279,21 @@ RSpec.describe Nokodown::PostAttribution do
 
     # A card left in place must not narrow the choice to the first row:
     # where the cards reduced would take in the next post, it stays.
+    # Nor where the aside's panel, in a theme's own list, names the poster.
     signer = ->(name, id) { "<div class='message-user'><strong class='username'>#{name}</strong> <span>Project steward · <a href='/record/#{id}.pdf'>Signed review #{id}</a></span></div>" }
-    html = "<html><head><meta name='generator' content='XenForo'></head><body><main><div class='reply-row'>#{signer.call('Wren', 1)}" \
-           "<article class='message'><header><a class='username' href='/u/Wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
-           "<p>The electrical current stayed within the specified range throughout this test. We repeated the run the next morning, when an independent " \
-           "observer measured the sealed jar and signed the report. The overnight data are in the original log. Gas production had slowed.</p></article></div>" \
-           "<div class='reply-row'><article class='message'><header><a class='username' href='/u/Fern'>Fern</a> <time datetime='2024-05-04'>May 4, 2024</time></header>" \
-           "<p>Fern measured the pressure. <a href='/fern-lab.pdf'>Pressure report</a>.</p><aside><div class='user-info'><span class='username'>Iris</span>" \
-           "<dl><dd class='profile-custom-field profile-time_zone'>Time zone: UTC+03:00 (Arabia Standard Time)</dd></dl></div></aside></article>" \
-           "#{signer.call('Fern', 2)}</div>#{signer.call('Morgan', 3)}</main></body></html>"
-    markdown = Nokodown.to_markdown(html, url: "https://example.com/threads/starter")
-    markdown.should include("**Fern** · May 4, 2024\n\nFern measured the pressure. [Pressure report](https://example.com/fern-lab.pdf).")
-    markdown.should include("[Signed review 3](https://example.com/record/3.pdf)")
+    %w[Iris Fern].each do |member|
+      html = "<html><head><meta name='generator' content='XenForo'></head><body><main><div class='reply-row'>#{signer.call('Wren', 1)}" \
+             "<article class='message'><header><a class='username' href='/u/Wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+             "<p>The electrical current stayed within the specified range throughout this test. We repeated the run the next morning, when an independent " \
+             "observer measured the sealed jar and signed the report. The overnight data are in the original log. Gas production had slowed.#{' The seal held overnight.' if member == 'Fern'}</p></article></div>" \
+             "<div class='reply-row'><article class='message'><header><a class='username' href='/u/Fern'>Fern</a> <time datetime='2024-05-04'>May 4, 2024</time></header>" \
+             "<p>Fern measured the pressure. <a href='/fern-lab.pdf'>Pressure report</a>.</p><aside><div class='user-info'><span class='username'>#{member}</span>" \
+             "<dl><dd class='profile-custom-field profile-time_zone'>Time zone: UTC+03:00 (Arabia Standard Time)</dd></dl></div></aside></article>" \
+             "#{signer.call('Fern', 2)}</div>#{signer.call('Morgan', 3)}</main></body></html>"
+      markdown = Nokodown.to_markdown(html, url: "https://example.com/threads/starter")
+      markdown.should include("**Fern** · May 4, 2024\n\nFern measured the pressure. [Pressure report](https://example.com/fern-lab.pdf)."), member
+      markdown.should include("[Signed review 3](https://example.com/record/3.pdf)")
+    end
   end
 
   # A card whose role names the poster is still another member's.
@@ -1857,15 +1866,20 @@ RSpec.describe Nokodown::PostAttribution do
     end
 
     # A theme's span of that class dates a reviewer the post's own panel
-    # names, linked elsewhere.
-    markdown = thread([
-      "<article class='message'><div id='user-info' aria-label='Review author'><a class='username' href='/members/73'>Wren Baker</a>" \
-        "<span class='profile-custom-field profile-review_date'>Signed review, April 27, 2024</span></div>" \
-        "<header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
-      post("fern", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
-    ])
-    markdown.should include("**Wren Baker** · Signed review, April 27, 2024")
-    markdown.should include("**Wren Baker** · May 3, 2024")
+    # names, linked elsewhere; so does a row of that class in a theme's
+    # own list.
+    ["<div id='user-info' aria-label='Review author'><a class='username' href='/members/73'>Wren Baker</a>" \
+       "<span class='profile-custom-field profile-review_date'>Signed review, April 27, 2024</span></div>",
+     "<dl id='user-info' aria-label='Review author'><dt><a class='username' href='/members/73'>Wren Baker</a></dt>" \
+       "<dd class='profile-custom-field profile-review_date'>Signed review, April 27, 2024</dd></dl>"].each do |panel|
+      markdown = thread([
+        "<article class='message'>#{panel}" \
+          "<header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
+        post("fern", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+      ])
+      markdown.should include("**Wren Baker** · Signed review, April 27, 2024"), panel
+      markdown.should include("**Wren Baker** · May 3, 2024")
+    end
   end
 
   it "keeps the subject of each post when the header goes" do
