@@ -296,9 +296,13 @@ module Nokodown
       scheme = head[SCHEME]
       # phpBB's "www." links (<!-- w -->) show "www." where others show
       # the scheme ("www.retiredlab ... my-profile" for
-      # "http://www.legacy.example.net/ferments/archived").
-      www = head.match?(/\Awww\./i) && bare.match?(/\Awww\./i)
-      kept = www || (scheme && scheme.casecmp?(squeezed[SCHEME].to_s)) ||
+      # "http://www.legacy.example.net/ferments/archived"), whatever the
+      # censor made of the rest ("www.[link removed] ... my-profile") or of
+      # "www" in both ("web.").
+      label = head[/\A[[:alnum:]][[:alnum:]-]*\./]
+      return true if label && bare.downcase.start_with?(label.downcase)
+
+      kept = (scheme && scheme.casecmp?(squeezed[SCHEME].to_s)) ||
              (shared_address?(head.sub(SCHEME, ""), bare) && shared_address?(tail.reverse, squeezed.reverse))
       return false unless starts || ends || kept
 
@@ -554,10 +558,19 @@ module Nokodown
         # the panel's own line.
         if classes.include?("contact-icons") && classes.include?("dropdown-contents")
           dropdown = node.parent
-          return false if expanded?(node, classes) || !dropdown&.element? || Dom.key(dropdown) == Dom.key(panel)
+          # prosilver's are two divs, the menu unnamed (no id, role or
+          # label) beside the dropdown's pointer alone; a theme's section,
+          # a group a button names and controls ("#hours"), or one beside a
+          # picker's button and list, is the panel's own line.
+          return false if node.name != "div" || expanded?(node, classes) || !dropdown&.element? || dropdown.name != "div" ||
+                          Dom.key(dropdown) == Dom.key(panel) || %w[id role aria-label].any? { |name| node.key?(name) } ||
+                          !alone?(node, dropdown)
 
           outer = dropdown["class"].to_s.split
-          return outer.include?("dropdown") && !expanded?(dropdown, outer)
+          # phpBB's own script opens its menu: it writes the dropdown's
+          # display ("display: block") in its "div.dropdown-container"; a
+          # theme's dropdown elsewhere shown so is open.
+          return outer.include?("dropdown") && !expanded?(dropdown, outer, !container?(dropdown.parent))
         end
 
         node = node.parent
@@ -565,9 +578,19 @@ module Nokodown
       false
     end
 
-    def expanded?(node, classes)
+    def container?(node)
+      node&.element? && node.name == "div" && node["class"].to_s.split.include?("dropdown-container")
+    end
+
+    def alone?(menu, dropdown)
+      dropdown.element_children.all? do |child|
+        Dom.key(child) == Dom.key(menu) || (child.name == "div" && child["class"].to_s.split.include?("pointer"))
+      end
+    end
+
+    def expanded?(node, classes, styled = true)
       node.name == "details" || node.key?("open") || classes.include?("open") || node["aria-expanded"] == "true" ||
-        node["aria-hidden"] == "false" || node["style"].to_s.match?(/display\s*:\s*(?!none)\w/i)
+        node["aria-hidden"] == "false" || (styled && node["style"].to_s.match?(/display\s*:\s*(?!none)\w/i))
     end
 
     # phpBB's contact menu names a field's icon by its ident
@@ -587,9 +610,11 @@ module Nokodown
       # its value as text, so a <time> in one is a theme's, and so is
       # another class, an id or an itemprop that says date ("post-date",
       # "datePublished"). phpBB names a field in [a-z_] ("profile-time_zone");
-      # "profile-post-date" is not one.
+      # "profile-post-date" is not one. phpBB prints a field as a row
+      # ("dd.profile-custom-field"); a theme's span of that class ("Signed
+      # review, April 27") in a box of its own is the theme's date.
       classes = node["class"].to_s.split
-      if own && node.name != "time" && !node.key?("datetime") && classes.include?(FIELD)
+      if own && node.name == "dd" && !node.key?("datetime") && classes.include?(FIELD)
         names = classes.reject { |name| name.match?(/\Aprofile-[a-z_]*\z/) } << node["id"].to_s << node["itemprop"].to_s
         return false unless names.any? { |name| name.downcase.match?(DATE_CLASS) }
       end

@@ -401,6 +401,12 @@ RSpec.describe Nokodown::PostAttribution do
       "<dd class='profile-contact'><strong>Contact:</strong><div class='dropdown'><div class='dropdown-contents contact-icons'>" \
         "<a href='https://booking.example/wren' title='Office hours (UTC+3)'><span class='contact-icon office_time-icon'>Office hours (UTC+3)</span></a></div></div></dd>"
     end
+    # phpBB's script opens the menu: its container shows it, and the
+    # dropdown's display is written in.
+    office_open = lambda do |day|
+      office.call(day).sub("<div class='dropdown'>", "<div class='dropdown-container dropdown-left visible dropdown-visible'><div class='dropdown' style='display: block;'>")
+                      .sub("</div></div></dd>", "</div></div></div></dd>")
+    end
     # The censor may turn a board path in a classless row into words.
     censored_page = lambda do |_day|
       "<dd><strong>Portfolio:</strong> <!-- l --><a class='postlink-local' href='https://example.com/profile page'>profile page</a><!-- l --></dd>" \
@@ -454,6 +460,10 @@ RSpec.describe Nokodown::PostAttribution do
           "www.retiredlaboratoryfermentationarchiv ... my-#{word}</a><!-- w --></dd>"
       end.join
     end
+    # Or the censor's words with a space in the host ("www.[link removed]"),
+    # or "www" itself censored in both ("web.").
+    censored_www_words = ->(day) { censored_www.call(day).gsub("www.retiredlaboratoryfermentationarchiv", "www.[link removed]") }
+    censored_www_prefix = ->(day) { censored_www.call(day).gsub("www.", "web.") }
     board_href = deep_fields.call("example.com/community/fermentation", %w[portfolio archive]).then do |field|
       ->(day) { field.call(day).sub(">portfolio<", ">profile<").sub(">archive<", ">account<") }
     end
@@ -462,19 +472,20 @@ RSpec.describe Nokodown::PostAttribution do
      [mail, "wren"], [mail_shortened, "wren"], [own_mail, "wren@example.com"], [censored, "wren"], [contacts, "wren"], [contacts, "Facebook"],
      ["", "@wren"], ["", "@ wren"], [index, "index.php"], [portfolio, "wren"], [local_words, "wren"], [local_words, "profile"],
      [censored_tail, "wren"], [censored_words, "wren"], [dated_fields, "wren"], [censored_href, "wren"], [field1, "wren"], [field1, "profile"], [censored_cut, "wren"], [censored_word, "wren"], [censored_tilde, "wren"],
-     [board_contacts, "wren"], [censored_whole, "wren"], [blanked, "wren"], [trigger, "profile"], [stripped_words, "wren"], [office, "wren"],
+     [board_contacts, "wren"], [censored_whole, "wren"], [blanked, "wren"], [trigger, "profile"], [stripped_words, "wren"], [office, "wren"], [office_open, "wren"],
      [censored_page, "wren"], [stripped_deep, "wren", board], [numbered, "profile"], [censored_spaces, "wren"],
      [on_port, "wren", board.sub("example.com", "example.com:8443")], [default_port, "wren", board],
      [stripped_deep, "wren", "https://example.com/community/fermentation/topic/starter.html"], [censored_folder, "wren", board],
      [censored_slash, "wren", board], [other_host, "wren", board.sub("example.com", "forum.example.com")], [censored_edges, "wren"],
      [board_href, "wren", board], [board_href, "profile", board], [censored_host, "wren", board], [censored_fragment, "wren"], [censored_query, "wren"],
      [censored_tail_whole, "wren", board], [censored_tail_whole, "wren"], [censored_equals, "wren", board], [board_href, "profile"],
-     [censored_www, "wren", board], [censored_www, "wren"]].each do |extra, first, url|
+     [censored_www, "wren", board], [censored_www, "wren"],
+     [censored_www_words, "wren", board], [censored_www_prefix, "wren"]].each do |extra, first, url|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word, censored_tilde,
-              board_contacts, censored_whole, blanked, stripped_words, office, censored_page, stripped_deep, numbered, censored_spaces, on_port,
+              board_contacts, censored_whole, blanked, stripped_words, office, office_open, censored_page, stripped_deep, numbered, censored_spaces, on_port,
               default_port, censored_folder, censored_slash, other_host, censored_edges, board_href, censored_host, censored_fragment, censored_query,
-              censored_tail_whole, censored_equals, censored_www].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+              censored_tail_whole, censored_equals, censored_www, censored_www_words, censored_www_prefix].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -544,7 +555,12 @@ RSpec.describe Nokodown::PostAttribution do
     [menu, "<div class='dropdown' style='display:block' aria-hidden='false'>#{menu}</div>", "<div class='dropdown open' aria-expanded='true'>#{menu}</div>",
      "<details class='dropdown' open><summary>Contact staff</summary>#{menu}</details>",
      "<div class='dropdown'><button aria-expanded='false'>Choose department</button><ul role='menu' hidden><li>Fermentation</li></ul>" \
-       "<section aria-label='Published schedule'>#{menu}</section></div>"].each do |group|
+       "<section aria-label='Published schedule'>#{menu}</section></div>",
+     # Or itself a section beside the picker's button and list.
+     "<div class='dropdown'><button aria-controls='dept-menu' aria-expanded='false'>Choose department</button><ul id='dept-menu' hidden><li>Fermentation</li></ul>" \
+       "#{menu.sub('<div', '<section').sub(%r{</div>\z}, '</section>')}</div>",
+     # Or a div a button names and controls.
+     "<div class='dropdown'><button aria-controls='hours' aria-expanded='true'>Contact the lab</button>#{menu.sub("role='group'", "id='hours'")}</div>"].each do |group|
       markdown = thread([
         "<article class='message'><dl class='message-user postprofile'><dt><a class='username' href='/members/87'>W. Baker</a></dt>" \
         "<dd class='office-hours'>#{group}</dd></dl>" \
@@ -1839,6 +1855,17 @@ RSpec.describe Nokodown::PostAttribution do
       markdown.should include("**Wren** · May 3, 2024")
       markdown.should include("> **Basil** · May 2, 2024")
     end
+
+    # A theme's span of that class dates a reviewer the post's own panel
+    # names, linked elsewhere.
+    markdown = thread([
+      "<article class='message'><div id='user-info' aria-label='Review author'><a class='username' href='/members/73'>Wren Baker</a>" \
+        "<span class='profile-custom-field profile-review_date'>Signed review, April 27, 2024</span></div>" \
+        "<header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>#{question}</p></article>",
+      post("fern", "<time datetime='2024-05-05T09:10:00Z'>May 5, 2024</time>", answer)
+    ])
+    markdown.should include("**Wren Baker** · Signed review, April 27, 2024")
+    markdown.should include("**Wren Baker** · May 3, 2024")
   end
 
   it "keeps the subject of each post when the header goes" do
