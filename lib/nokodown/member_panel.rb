@@ -239,7 +239,9 @@ module Nokodown
         body && body.name == "div" && body["class"].to_s.split.include?("postbody") &&
         # Bootlike's panel row always sits in the post's div.card-body.
         row.name == "div" && row["class"].to_s.split.include?("row") &&
-        box&.element? && box.name == "div" && box["class"].to_s.split.include?("card-body")
+        box&.element? && box.name == "div" && box["class"].to_s.split.include?("card-body") &&
+        # ... of the post's "div.card#p3".
+        numbered?(panel, box.parent, "card")
     end
 
     # prosilver's contact menu entry: in div.contact-icons, a link of no
@@ -647,12 +649,21 @@ module Nokodown
       # for a post's; any other panel's line keeps it, as base and main do
       # (a quoted post's "post_date", a reader's "Time zone").
       own = !panel[PostAttribution::PANEL].to_s.empty?
+      field = nil
       panel.css(STAMPS).each do |stamp|
-        next unless stamp?(stamp, own)
+        unless stamp?(stamp, own)
+          # phpBB's field ("Time zone") dates the member, not the post: the
+          # line shows it as main does, loose, so the post's line repeats it.
+          field ||= stamp if own && stamp?(stamp, false)
+          next
+        end
 
         text = Dom.text(widened(stamp, panel, name))
         return [text, contact_icon?(stamp) && contact_menu?(stamp, panel)] if date_text?(text, name) && !text.match?(MEMBER_DATE)
       end
+      text = field && Dom.text(widened(field, panel, name))
+      return [text, true] if text && date_text?(text, name) && !text.match?(MEMBER_DATE)
+
       nil
     end
 
@@ -735,7 +746,17 @@ module Nokodown
       holder = panel.parent
       panel.name == "dl" && panel["class"].to_s.split.include?("postprofile") &&
         [panel.previous_element, panel.next_element].any? { |side| side && side.name == "div" && side["class"].to_s.split.include?("postbody") } &&
-        holder&.element? && holder.name == "div" && holder["class"].to_s.split.include?("inner")
+        holder&.element? && holder.name == "div" && holder["class"].to_s.split.include?("inner") &&
+        numbered?(panel, holder.parent, "post")
+    end
+
+    # phpBB numbers a post's panel for its post: "profile3" in the post's
+    # own box "p3" (prosilver's div.post, bootlike's div.card). A theme's
+    # panel of phpBB's shape in a box of its own (an "article.message", a
+    # "div.post" or "div.card-body" numbered for nothing) is the theme's.
+    def numbered?(panel, box, name)
+      number = panel["id"].to_s[/\Aprofile(\d+)\z/, 1]
+      !number.nil? && box&.element? && box.name == "div" && box["class"].to_s.split.include?(name) && box["id"] == "p#{number}"
     end
 
     def alone?(menu, dropdown)
@@ -805,13 +826,13 @@ module Nokodown
       # ... and those in the post's own box: prosilver's "div.post" around
       # its "div.inner", bootlike's "div.card-body" around its "div.row"; a
       # theme's reply ("article.message > div.inner") is the theme's.
-      outer = holder&.element? ? holder.parent : nil
-      outer = outer&.element? && outer.name == "div" ? outer["class"].to_s.split : []
+      box = holder&.element? ? holder.parent : nil
       holder = holder&.element? && holder.name == "div" ? holder["class"].to_s.split : []
       # bootlike's row is responsive ("profile-custom-field profile-<ident>
       # d-none d-md-block"); a theme's numbered card's row is not.
-      (row.name == "dd" && list.name == "dl" && holder.include?("inner") && outer.include?("post")) ||
-        (row.name == "div" && list.name == "div" && list["id"].to_s.match?(/\Aprofile\d+\z/) && holder.include?("row") && outer.include?("card-body") &&
+      (row.name == "dd" && list.name == "dl" && holder.include?("inner") && numbered?(list, box, "post")) ||
+        (row.name == "div" && list.name == "div" && holder.include?("row") && box&.element? && box.name == "div" &&
+          box["class"].to_s.split.include?("card-body") && numbered?(list, box.parent, "card") &&
           (%w[d-none d-md-block] - row["class"].to_s.split).empty?)
     end
 

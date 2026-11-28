@@ -172,15 +172,19 @@ module Nokodown
 
       # A style's rule shown only on a narrow screen, to part the panel's
       # column from the post's (bootlike's <hr> alone in a "d-md-none"
-      # div, first in its "div.postbody"); a rule shown on every screen, or
-      # a theme's narrow-screen rule between two credits, parts what it
-      # stands between.
+      # div, first in its "div.postbody", or bootlike 3's "hr.d-md-none"
+      # itself first there); a rule shown on every screen, or a theme's
+      # narrow-screen rule between two credits, parts what it stands between.
       def responsive_rule?(node)
+        return false unless node.name == "hr"
+
+        narrow = ->(element) { element["class"].to_s.split.any? { |name| name.match?(/\Ad-(?:sm|md|lg|xl|xxl)-none\z/) } }
         holder = node.parent
+        # bootlike 3: the rule is the narrow-screen element.
+        holder, node = node, holder if narrow.call(node) && holder&.element? && holder["class"].to_s.split.include?("postbody")
         body = holder&.parent
         panel = body&.element? ? body.previous_element : nil
-        node.name == "hr" && holder&.element? && holder.element_children.size == 1 &&
-          holder["class"].to_s.split.any? { |name| name.match?(/\Ad-(?:sm|md|lg|xl|xxl)-none\z/) } &&
+        holder&.element? && (holder.name == "hr" || holder.element_children.size == 1) && narrow.call(holder) &&
           body&.element? && body.name == "div" && body["class"].to_s.split.include?("postbody") &&
           Dom.key(body.element_children.first) == Dom.key(holder) && panel && panel.key?(MemberPanel::BOOTLIKE)
       end

@@ -639,7 +639,7 @@ RSpec.describe Nokodown::PostAttribution do
               censored_www_short, censored_www_head, censored_www_unmarked, censored_https_dash, censored_www_spoken].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
-          "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
+          "<dl class='postprofile' id='profile#{day}'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
           "<dd class='profile-posts'><strong>Posts:</strong> <a href='./search.php?author_id=#{day}&amp;sr=posts'>41</a></dd>" \
           "#{extra.respond_to?(:call) ? extra.call(day) : extra}</dl>" \
           "<div class='postbody'><h3><a href='#p#{day}'>#{subject}</a></h3>" \
@@ -2320,5 +2320,87 @@ RSpec.describe Nokodown::PostAttribution do
     markdown = Nokodown.to_markdown(html, url: "https://example.com/threads/starter")
     markdown.should include("**Fern** · May 4, 2024")
     markdown.should include("[Pressure report](https://example.com/fern-lab.pdf)")
+  end
+
+  # phpBB numbers its panel for its post: "profile3" in the post's own
+  # "div.post#p3" (prosilver) or "div.card#p3" (bootlike). A theme's panel
+  # of those shapes in a box numbered for nothing is the theme's.
+  it "keeps what a theme's panel shows in a box of phpBB's classes not numbered for the post" do
+    url = "https://example.com/threads/starter"
+    coauthor = "<!doctype html><meta name='generator' content='phpBB'><main><div class='card-body'><div class='row'>" \
+               "<div class='postprofile' id='profile3' aria-label='Co-author' itemprop='author'><div>Co-author <span class='username'>Wren Baker</span></div>" \
+               "<div class='profile-custom-field profile-contributor'><!-- l --><a class='postlink-local' href='https://example.com/members/92'>View forum profile</a><!-- l --></div></div>" \
+               "<div class='col postbody'><header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+               "<p>We checked the pressure at dawn and at noon.</p></div><div class='col revision'><time datetime='2024-05-06'>Last edited May 6, 2024</time></div></div></div></main>"
+    Nokodown.to_markdown(coauthor, url: url).scan("**Wren Baker**").size.should eq(2)
+
+    hours = "<!doctype html><meta name='generator' content='XenForo'><title>Starter</title><main><article class='message'><div class='post'><div class='inner'>" \
+            "<dl class='postprofile'><dt><a class='username' href='/members/87'>W. Baker</a></dt><dd class='profile-contact' role='group' aria-label='Public office hours'>" \
+            "<div class='dropdown-container dropdown-left dropdown-down visible dropdown-visible'><a href='#' class='dropdown-trigger' title='Contact W. Baker'><span class='sr-only'>Contact W. Baker</span></a>" \
+            "<div class='dropdown' style='display:block; margin-left:-46px;'><div class='dropdown-contents contact-icons'><div><a href='/schedule' class='last-cell' title='Office hours 09:00–12:00 UTC'>" \
+            "<span class='contact-icon office_time-icon' itemprop='openingHours'>Office hours 09:00–12:00 UTC</span></a></div></div></div></div></dd></dl>" \
+            "<div class='postbody'><header><a class='username' href='/members/87'>W. Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+            "<p>The starter rose overnight. By seven in the morning it was above the elastic band, even though the kitchen had cooled down.</p>" \
+            "<p>I weighed the jar again after feeding. The new flour was drier, and it took an extra spoonful of water to mix the dough.</p>" \
+            "<p>I recorded the same measurement at noon. By then the smaller jar was nearly full, with bubbles across the top of the culture.</p></div></div></div></article>" \
+            "<article class='message'><header><a class='username' href='/members/89'>fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+            "<p>The starter fern fed overnight went on to double in volume by the next morning, even on a cool counter.</p></article></main>"
+    Nokodown.to_markdown(hours, url: url).should include("Office hours 09:00–12:00 UTC")
+
+    signed = "<!doctype html><meta name='generator' content='XenForo'><main><article class='message'><header><a class='username' href='/members/72'>Wren Baker</a> " \
+             "<time datetime='2024-05-03'>May 3, 2024</time></header><div class='message-content'><p>The starter doubled after the second feeding.</p><h4>Signed peer review</h4>" \
+             "<div class='post'><div class='inner'><dl id='profile73' class='postprofile'><dt><a class='username' href='/members/73'>Wren Baker</a></dt>" \
+             "<dd title='signature' class='profile-custom-field profile-review_date'>Signed review, April 27, 2024</dd></dl>" \
+             "<div class='postbody'><p>The reviewer explains how the jar was weighed and records the second feeding.</p></div></div></div>" \
+             "<p>The new flour was drier, and it took an extra spoonful of water before the dough came together.</p>" \
+             "<p><a href='/signed-review.pdf'>The signed review (PDF)</a>.</p></div></article>" \
+             "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+             "<p>Leave some room in the jar for the next feeding.</p></article></main>"
+    Nokodown.to_markdown(signed, url: url).should include("Signed review, April 27, 2024")
+
+    reply = "<!doctype html><meta name='generator' content='XenForo'><main><div class='reply-row'><article class='message'><header>" \
+            "<a class='username' href='/u/Wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>The starter rose overnight. I fed it with rye flour. " \
+            "At dawn it had doubled in volume. The glass weighed the same. I marked the level in pencil. The seal held overnight. The second sample was colder. " \
+            "It took an extra hour. I recorded the temperature. The measurements agreed. The starter was ready.</p></article></div>" \
+            "<div class='reply-row'><article class='message'><header><a class='username' href='/u/Fern'>Fern</a> <time datetime='2024-05-04'>May 4, 2024</time></header>" \
+            "<div class='card-body'><div class='row'><div id='profile73' class='postprofile'><div class='username'>Fern</div>" \
+            "<div class='profile-custom-field profile-time_zone d-none d-md-block'>Time zone: UTC+03:00 (Arabia Standard Time)</div></div>" \
+            "<div class='postbody'><p>The instrument ran for twenty minutes. Here is my report. <a href='/fern-lab.pdf'>Pressure report</a>.</p></div></div></div></article>" \
+            "<div class='message-user'><strong class='username'>Fern</strong> </div></div><div class='message-user'><strong class='username'>Morgan</strong> </div></main>"
+    markdown = Nokodown.to_markdown(reply, url: url)
+    markdown.should include("**Fern** · May 4, 2024")
+    markdown.should include("[Pressure report](https://example.com/fern-lab.pdf)")
+  end
+
+  # bootlike 4's panel shows a field ("Time zone") that dates the member,
+  # not the post; bootlike 3 puts its narrow-screen rule straight in the
+  # post body ("hr.d-md-none").
+  it "writes one line per post on bootlike 3 and keeps a short reply beside a bootlike field" do
+    url = "https://example.com/community/fermentation/viewtopic.php?t=25"
+    card = lambda do |day, name, field, rule, body|
+      "<div id='p#{day}' class='card mb-2 mb-md-3 shadow-sm'><div class='card-body p-0'><div class='row m-0'>" \
+        "<div id='profile#{day}' class='postprofile col-lg-3 col-md-4 px-3 pb-3 bg2'><a href='./memberlist.php?mode=viewprofile&amp;u=7#{day}' class='username'>#{name}</a>#{field}</div>" \
+        "<div class='postbody col-lg-9 col-md-8 p-0 border-start'>#{rule}#{field.empty? ? '' : "<a class='post-title' href='#p#{day}'>Re: Starter</a>"}" \
+        "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time>" \
+        "<div class='px-3 py-2 bg-white'><div class='content pb-2'>#{body}</div></div></div></div></div></div>"
+    end
+    opening = "The starter doubled in volume overnight after its second feeding. I used the original flour and a clean jar, then left it on the kitchen counter " \
+              "until the morning. I marked the level of both samples at eight in the evening, and the kitchen cooled down just before midnight. " \
+              "The jar by the window stayed below the line until breakfast."
+    reply = "The second sample was colder.<br>I recorded the result. See the <a href='https://example.com/community/fermentation/pressure.pdf' class='postlink'>pressure report</a>."
+    zone = "<div class='profile-custom-field profile-time_zone d-none d-md-block'>Time zone: UTC+03:00</div>"
+    html = "<!DOCTYPE html><html><head><meta name='generator' content='phpBB'><title>Starter</title></head><body><div id='page-body' class='page-body' role='main'>" \
+           "#{card.call(3, 'Wren', '', '', opening)}#{card.call(4, 'Basil', zone, "<div class='opacity-50 d-md-none'><hr class='m-0'></div>", reply)}</div></body></html>"
+    markdown = Nokodown.to_markdown(html, url: url)
+    markdown.should include("**Basil** · May 4, 2024")
+    markdown.should include("[pressure report](https://example.com/community/fermentation/pressure.pdf)")
+
+    later = "Leave some room in the jar for the next feeding. Mine also doubled in volume after two feedings, even though it had barely moved the previous evening."
+    rule = "<hr class='d-md-none m-0'>"
+    html = "<!DOCTYPE html><html><head><meta name='generator' content='phpBB'><title>Starter</title></head><body>" \
+           "#{card.call(3, 'Wren', '', rule, opening)}#{card.call(4, 'Basil', '', rule, later)}</body></html>"
+    markdown = Nokodown.to_markdown(html, url: url)
+    markdown.scan(/\*\*(?:Wren|Basil)\*\*/).size.should eq(2)
+    markdown.should include("**Wren** · May 3, 2024")
   end
 end
