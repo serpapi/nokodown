@@ -215,11 +215,15 @@ module Nokodown
     end
 
     # prosilver's panel: dl.postprofile. Its id is "profile<post>"; a
-    # theme's dl#postprofile ("Co-author") is not it.
+    # theme's dl#postprofile ("Co-author") is not it. bootlike's panel is
+    # its "div#profile3.postprofile" just before the post's "div.postbody"
+    # (MemberPanel.bootlike_panel?).
     def own_panel?(link)
       node = link.parent
       while node&.element?
-        return true if node.name == "dl" && node["class"].to_s.split.include?("postprofile")
+        if node["class"].to_s.split.include?("postprofile")
+          return true if node.name == "dl" || MemberPanel.bootlike_panel?(node)
+        end
 
         node = node.parent
       end

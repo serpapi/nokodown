@@ -214,12 +214,14 @@ module Nokodown
     end
 
     # bootlike's Bootstrap opened its menu: in its panel ("div#profile3"),
-    # its list is marked "show", and Popper places it; its button, where
-    # the cleanup left it, is data-bs-toggle's, "show" and expanded. A
-    # theme's list shown so in a panel of its own ("dl.postprofile"), or
-    # by a button of its own, is its group.
+    # right in its "div.btn-group.dropdown", its list is marked "show", and
+    # Popper places it; its button, where the cleanup left it, is
+    # data-bs-toggle's, "show" and expanded. A theme's list shown so in a
+    # panel of its own ("dl.postprofile"), in a row of its own
+    # ("div.office-hours"), or by a button of its own, is its group.
     def bootstrap_open?(menu, classes, toggles, panel)
-      bootlike_panel?(panel) &&
+      dropdown = menu.parent
+      bootlike_panel?(panel) && Dom.key(dropdown.parent) == Dom.key(panel) && dropdown["class"].to_s.split.include?("btn-group") &&
         classes.include?("show") && !menu.key?("aria-hidden") && toggles.all? do |toggle|
           toggle["data-bs-toggle"] == "dropdown" && toggle["aria-expanded"] == "true" && toggle["class"].to_s.split.include?("show")
         end &&
@@ -231,8 +233,13 @@ module Nokodown
     # its "div.article-content") is the theme's.
     def bootlike_panel?(panel)
       body = panel.next_element
+      row = panel.parent
+      box = row&.parent
       panel.name == "div" && panel["id"].to_s.match?(/\Aprofile\d+\z/) && panel["class"].to_s.split.include?("postprofile") &&
-        body && body.name == "div" && body["class"].to_s.split.include?("postbody")
+        body && body.name == "div" && body["class"].to_s.split.include?("postbody") &&
+        # Bootlike's panel row always sits in the post's div.card-body.
+        row.name == "div" && row["class"].to_s.split.include?("row") &&
+        box&.element? && box.name == "div" && box["class"].to_s.split.include?("card-body")
     end
 
     # prosilver's contact menu entry: in div.contact-icons, a link of no
@@ -295,10 +302,16 @@ module Nokodown
       field_value?(link, href) || address_link?(link) || (href.match?(MAILTO) && shown?(Dom.text(link), href))
     end
 
+    # phpBB's own panel, in the post's own box (prosilver's "div.post",
+    # bootlike's "div.card-body"), named by nothing but its "profile<post>"
+    # id; a theme's "Co-author" card in that shape is the theme's.
     def board_panel?(link)
       node = link.parent
       node = node.parent while node&.element? && !node["class"].to_s.split.include?("postprofile")
-      node&.element? ? (prosilver_panel?(node) || bootlike_panel?(node)) : false
+      return false unless node&.element? && (NAMES - ["id"] + ["itemprop"]).none? { |name| node.key?(name) }
+
+      outer = node.parent&.parent
+      (prosilver_panel?(node) && outer&.element? && outer.name == "div" && outer["class"].to_s.split.include?("post")) || bootlike_panel?(node)
     end
 
     # prosilver makes links in a panel only of its fields' values: in a
@@ -333,8 +346,13 @@ module Nokodown
         # An ident is one word ("profile-website", "profile-field1"); a
         # hyphened class is the field row's own ("profile-custom-field",
         # "profile-field-0"), not a theme's "profile-coauthor-directory".
-        node&.element? && node.name == "dd" &&
-          node["class"].to_s.split.all? { |name| name.match?(/\Aprofile-(?:[a-z0-9_]+|[a-z0-9_-]*field[a-z0-9_-]*)\z/) }
+        next false unless node&.element?
+
+        (node.name == "dd" &&
+          node["class"].to_s.split.all? { |name| name.match?(/\Aprofile-(?:[a-z0-9_]+|[a-z0-9_-]*field[a-z0-9_-]*)\z/) }) ||
+          # bootlike's "field1" row: "div.d-none.d-md-block" in its panel.
+          (node.name == "div" && node["class"].to_s.split.sort == %w[d-md-block d-none] && node.parent&.element? &&
+            node.parent["class"].to_s.split.include?("postprofile") && bootlike_panel?(node.parent))
       end
     end
 
@@ -667,13 +685,22 @@ module Nokodown
           # display ("display: block") and marks its "div.dropdown-container"
           # "dropdown-visible"; a theme's dropdown shown so without that
           # mark ("display:flex" in a container of its own), or in a panel
-          # of its own, is open.
-          return outer.include?("dropdown") && !expanded?(dropdown, outer, !(opened?(dropdown) && prosilver_panel?(panel)))
+          # of its own, or in a row of its own ("dd.office-hours"; prosilver's
+          # is its "dd.profile-contact"), is open.
+          return outer.include?("dropdown") &&
+                 !expanded?(dropdown, outer, !(opened?(dropdown) && prosilver_panel?(panel) && contact_row?(dropdown, panel)))
         end
 
         node = node.parent
       end
       false
+    end
+
+    # prosilver's contact menu sits in the panel's "dd.profile-contact".
+    def contact_row?(dropdown, panel)
+      row = dropdown.parent&.parent
+      row&.element? && row.name == "dd" && row["class"].to_s.split.include?("profile-contact") &&
+        Dom.key(row.parent) == Dom.key(panel)
     end
 
     # phpBB's script opened the dropdown: it marks the container "visible"
@@ -760,6 +787,13 @@ module Nokodown
     def postprofile?(row)
       list = row.parent
       return false unless list&.element? && list["class"].to_s.split.include?("postprofile")
+      # phpBB names neither its panel nor its rows (no role, label or
+      # itemprop; its panel's only id is "profile<post>"); a theme's
+      # "Review author" card, or its "Date the review was signed" row, is
+      # the theme's.
+      labels = NAMES - ["id"] + ["itemprop"]
+      return false if labels.any? { |name| list.key?(name) } || (labels + ["id"]).any? { |name| row.key?(name) }
+
       # phpBB prints its panel beside the post's body (prosilver's and
       # bootlike's div.postbody, after it in phpBB 3.0); a theme's panel of
       # that class in an aside, or in the post's text, is the theme's; and
@@ -768,9 +802,17 @@ module Nokodown
       return false unless [list.previous_element, list.next_element].any? { |side| side && side.name == "div" && side["class"].to_s.split.include?("postbody") }
 
       holder = list.parent
+      # ... and those in the post's own box: prosilver's "div.post" around
+      # its "div.inner", bootlike's "div.card-body" around its "div.row"; a
+      # theme's reply ("article.message > div.inner") is the theme's.
+      outer = holder&.element? ? holder.parent : nil
+      outer = outer&.element? && outer.name == "div" ? outer["class"].to_s.split : []
       holder = holder&.element? && holder.name == "div" ? holder["class"].to_s.split : []
-      (row.name == "dd" && list.name == "dl" && holder.include?("inner")) ||
-        (row.name == "div" && list.name == "div" && list["id"].to_s.match?(/\Aprofile\d+\z/) && holder.include?("row"))
+      # bootlike's row is responsive ("profile-custom-field profile-<ident>
+      # d-none d-md-block"); a theme's numbered card's row is not.
+      (row.name == "dd" && list.name == "dl" && holder.include?("inner") && outer.include?("post")) ||
+        (row.name == "div" && list.name == "div" && list["id"].to_s.match?(/\Aprofile\d+\z/) && holder.include?("row") && outer.include?("card-body") &&
+          (%w[d-none d-md-block] - row["class"].to_s.split).empty?)
     end
 
     # The outermost element around the date that stops short of the name,

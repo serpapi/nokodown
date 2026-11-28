@@ -341,6 +341,47 @@ RSpec.describe Nokodown::PostAttribution do
     markdown.scan(/\*\*(?:Wren|Basil)\*\*/).size.should eq(2)
   end
 
+  # bootlike's field row for wide screens (FIELD1's "d-none d-md-block")
+  # holds board-local links phpBB made ("<!-- l -->") that show words.
+  it "writes one line where bootlike's field row holds board-local links" do
+    posts = [["Wren", 3], ["Basil", 4]].map do |name, day|
+      field = name == "Wren" ? "<div class='d-none d-md-block'><strong>Projects:</strong> " \
+                               "<!-- l --><a class='postlink-local' href='https://example.com/forum/profile'>profile</a><!-- l --> " \
+                               "<!-- l --><a class='postlink-local' href='https://example.com/forum/account'>account</a><!-- l --></div>" : ""
+      "<div id='p#{day}' class='card'><div class='card-body'><div class='row'>" \
+        "<div id='profile#{day}' class='postprofile col-md-4'><div><strong><span class='username'>#{name}</span></strong></div>" \
+        "<div class='d-none d-md-block'><strong>Posts:</strong> <a href='./search.php?author_id=7#{day}'>41</a></div>#{field}</div>" \
+        "<div class='postbody'><div class='d-md-none'><hr></div><div id='post_content#{day}'><div class='postbody-before'>" \
+        "<time datetime='2024-05-0#{day}T08:45:00Z'>May #{day}, 2024</time></div>" \
+        "<div class='content'>#{name} watched. The starter doubled after its second feeding. I used the original flour and a clean jar, " \
+        "then checked it the next morning.</div></div></div></div></div></div>"
+    end
+    markdown = thread(posts, head: '<meta name="generator" content="phpBB">', url: "https://example.com/forum/viewtopic.php?t=25")
+
+    markdown.should include("**Wren** · May 3, 2024\n\nWren watched.")
+    markdown.scan(/\*\*(?:Wren|Basil)\*\*/).size.should eq(2)
+  end
+
+  # A co-author's card of bootlike's classes, in a theme's row and not
+  # bootlike's card body, links another member from its menu item.
+  it "keeps a co-author's card of bootlike's classes outside bootlike's card body" do
+    card = "<div class='postprofile' id='profile3' aria-label='Co-author' itemprop='author'><div>Co-author <span class='username'>Wren Baker</span></div>" \
+           "<div><div class='dropdown'><button type='button' class='dropdown-toggle'>Contributor actions</button><ul class='dropdown-menu dropdown-contents'>" \
+           "<li><a class='dropdown-item' href='/members/92' itemprop='url'><span class='person-icon'>View forum profile</span></a></li></ul></div></div></div>"
+    html = "<!doctype html><meta name='generator' content='phpBB'><title>Trial results</title><main><div class='row'>#{card}" \
+           "<div class='col postbody'><header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+           "<p>We recorded the pressure at dawn and checked the same jar again just before noon.</p></div>" \
+           "<div class='col revision'><time datetime='2024-05-06'>Last edited May 6, 2024</time></div></div><section class='replies'>" +
+           %w[Fern Kay].map do |name|
+             "<article class='message'><header><a class='username' href='/members/#{name}'>#{name}</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+               "<p>Leave some room in the jar for the next feeding. Mine nearly overflowed by noon.</p></article>"
+           end.join + "</section></main>"
+    markdown = Nokodown.to_markdown(html, url: "https://example.com/threads/starter")
+
+    markdown.should include("**Wren Baker** · May 3, 2024")
+    markdown.scan("**Wren Baker**").size.should eq(2)
+  end
+
   # A plain rule parts an original author's credit from the post's own line,
   # and so does a theme's rule for narrow screens, even first in a body of
   # phpBB's class beside no numbered panel of bootlike's.
@@ -561,6 +602,8 @@ RSpec.describe Nokodown::PostAttribution do
     end
     censored_www_head = ->(day) { censored_www_short.call(day).gsub("fermentationarchivalcatalogueonline ... profile", "old-project ... member-profile") }
     censored_www_unmarked = ->(day) { censored_www_short.call(day).gsub(" ... profile", "  member-profile") }
+    # Or the censor replaced the whole address with words.
+    censored_www_spoken = ->(day) { censored_www_short.call(day).gsub("www.fermentationarchivalcatalogueonline ... profile", "member profile") }
     censored_https_dash = lambda do |_day|
       "<dd class='profile-custom-field profile-projects'><strong>Projects:</strong> " +
         %w[spring autumn].map do |word|
@@ -586,14 +629,14 @@ RSpec.describe Nokodown::PostAttribution do
      [censored_www_words, "wren", board], [censored_www_prefix, "wren"], [censored_www_host, "wren"],
      [censored_www_ellipsis, "wren"], [censored_www_https, "wren", board], [office_placed, "wren"], [censored_www_longer, "wren"],
      *censored_www_marks.map { |mark| [mark, "wren"] }, [office_described, "wren"],
-     [censored_www_short, "wren"], [censored_www_head, "wren"], [censored_www_unmarked, "wren"], [censored_https_dash, "wren"]].each do |extra, first, url|
+     [censored_www_short, "wren"], [censored_www_head, "wren"], [censored_www_unmarked, "wren"], [censored_https_dash, "wren"], [censored_www_spoken, "wren"]].each do |extra, first, url|
       # Longer posts, as the fields' links would outweigh short ones.
       more = [fields, local, scripts, shortened, shortened_www, mail, mail_shortened, own_mail, censored, contacts, local_words, censored_tail, censored_words, censored_href, field1, censored_cut, censored_word, censored_tilde,
               board_contacts, censored_whole, blanked, stripped_words, office, office_open, censored_page, stripped_deep, numbered, censored_spaces, on_port,
               default_port, censored_folder, censored_slash, other_host, censored_edges, board_href, censored_host, censored_fragment, censored_query,
               censored_tail_whole, censored_equals, censored_www, censored_www_words, censored_www_prefix, censored_www_host, censored_www_ellipsis,
               censored_www_https, office_placed, censored_www_longer, *censored_www_marks, office_described,
-              censored_www_short, censored_www_head, censored_www_unmarked, censored_https_dash].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
+              censored_www_short, censored_www_head, censored_www_unmarked, censored_https_dash, censored_www_spoken].include?(extra) ? " I fed it at the same hour each day, kept it in a clean jar on the kitchen counter, and used the same flour throughout." : ""
       posts = [[first, 3, "Starter", question + more], ["basil", 5, "Re: Starter", answer + more]].map do |name, day, subject, body|
         "<div id='p#{day}' class='post has-profile'><div class='inner'>" \
           "<dl class='postprofile'><dt><strong><span class='username'>#{name}</span></strong></dt>" \
@@ -2236,5 +2279,46 @@ RSpec.describe Nokodown::PostAttribution do
            "<time datetime='2024-05-03T08:45:00Z'>May 3, 2024</time></div><p>#{question}</p><p>#{answer}</p></article></body></html>"
 
     Nokodown.to_markdown(html).should_not include("**Mara Lindqvist**")
+  end
+
+  # A theme's panel of prosilver's or bootlike's shapes, outside the post's
+  # div.post or bootlike's card body, keeps what it shows as main does: a
+  # signed review's date, open office hours, and a reply after it.
+  it "keeps what a theme's panel of phpBB's shapes shows outside phpBB's post box" do
+    later = "<article class='message'><header><a class='username' href='/u/fern'>Fern</a> <time datetime='2024-05-05'>May 5, 2024</time></header>" \
+            "<p>Leave some room in the jar for the next feeding.</p></article>"
+    signed = "<article class='message'><header><a class='username' href='/members/72'>Wren Baker</a> <time datetime='2024-05-03'>May 3, 2024</time></header>" \
+             "<div class='message-content'><p>The starter doubled after the second feeding.</p><h4>Signed peer review</h4><div class='inner'>" \
+             "<dl id='profile73' class='postprofile' aria-label='Review author'><dt><a class='username' href='/members/73'>Wren Baker</a></dt>" \
+             "<dd class='profile-custom-field profile-review_date' aria-label='Date the review was signed'>Signed review, April 27, 2024</dd></dl>" \
+             "<div class='postbody'><p>The reviewer explains how the jar was weighed and records the second feeding.</p></div></div>" \
+             "<p>The new flour was drier, and it took an extra spoonful of water before the dough came together.</p>" \
+             "<p><a href='/signed-review.pdf'>The signed review (PDF)</a>.</p></div></article>"
+    thread([signed, later]).should include("**Wren Baker** · Signed review, April 27, 2024")
+
+    paragraphs = "<p>The starter rose overnight. By seven in the morning it was above the elastic band, even though the kitchen had cooled down.</p>" \
+                 "<p>I weighed the jar again after feeding. The new flour was drier, and it took an extra spoonful of water to mix the dough.</p>" \
+                 "<p>I recorded the same measurement at noon. By then the smaller jar was nearly full, with bubbles across the top of the culture.</p>"
+    visible = "<article class='message'><div class='inner'><dl class='postprofile'><dt><a class='username' href='/members/87'>W. Baker</a></dt>" \
+              "<dd class='office-hours'><div class='dropdown-container dropdown-left dropdown-down visible dropdown-visible'>" \
+              "<a href='#' class='dropdown-trigger' title='Contact W. Baker'><span class='sr-only'>Contact W. Baker</span></a>" \
+              "<div class='dropdown' style='display:block; margin-left:-46px;'><div class='dropdown-contents contact-icons'><div>" \
+              "<a href='/schedule' class='last-cell' title='Office hours 09:00–12:00 UTC'><span class='contact-icon office_time-icon' itemprop='openingHours'>" \
+              "Office hours 09:00–12:00 UTC</span></a></div></div></div></div></dd></dl><div class='postbody'><header><a class='username' href='/members/87'>W. Baker</a> " \
+              "<time datetime='2024-05-03'>May 3, 2024</time></header>#{paragraphs}</div></div></article>"
+    thread([visible, later]).should include("**W. Baker** · Office hours 09:00–12:00 UTC")
+
+    html = "<!doctype html><meta name='generator' content='XenForo'><main><div class='reply-row'><article class='message'><header>" \
+           "<a class='username' href='/u/Wren'>Wren</a> <time datetime='2024-05-03'>May 3, 2024</time></header><p>The starter rose overnight. I fed it with rye flour. At dawn it had doubled in volume. The glass weighed the same. " \
+           "I marked the level in pencil. The seal held overnight. The second sample was colder. It took an extra hour. I recorded the temperature. " \
+           "The measurements agreed. The starter was ready.</p></article></div>" \
+           "<div class='reply-row'><article class='message'><header><a class='username' href='/u/Fern'>Fern</a> <time datetime='2024-05-04'>May 4, 2024</time></header>" \
+           "<div class='inner'><dl id='profile73' class='postprofile'><dt class='username'>Fern</dt><dd class='profile-custom-field profile-time_zone'>" \
+           "Time zone: UTC+03:00 (Arabia Standard Time)</dd></dl><div class='postbody'><p>The instrument ran for twenty minutes. Here is my report. " \
+           "<a href='/fern-lab.pdf'>Pressure report</a>.</p></div></div></article><div class='message-user'><strong class='username'>Fern</strong> </div></div>" \
+           "<div class='message-user'><strong class='username'>Morgan</strong> </div></main>"
+    markdown = Nokodown.to_markdown(html, url: "https://example.com/threads/starter")
+    markdown.should include("**Fern** · May 4, 2024")
+    markdown.should include("[Pressure report](https://example.com/fern-lab.pdf)")
   end
 end
