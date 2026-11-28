@@ -178,10 +178,11 @@ module Nokodown
       def responsive_rule?(node)
         holder = node.parent
         body = holder&.parent
+        panel = body&.element? ? body.previous_element : nil
         node.name == "hr" && holder&.element? && holder.element_children.size == 1 &&
           holder["class"].to_s.split.any? { |name| name.match?(/\Ad-(?:sm|md|lg|xl|xxl)-none\z/) } &&
           body&.element? && body.name == "div" && body["class"].to_s.split.include?("postbody") &&
-          Dom.key(body.element_children.first) == Dom.key(holder)
+          Dom.key(body.element_children.first) == Dom.key(holder) && panel && panel.key?(MemberPanel::BOOTLIKE)
       end
 
       # The line is in a table cell, or a list term or definition: without
